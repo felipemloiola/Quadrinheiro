@@ -1,3 +1,29 @@
 <resources>
     <string name="app_name">Quadrinheiro</string>
+    <string name="auth_brand_subtitle">Seu catálogo, diário cronológico e guia de leitura definitivo.</string>
+    <string name="auth_brand_subtitle_linking">Vincule sua conta para sincronizar todo o seu acervo local na nuvem.</string>
+    <string name="auth_tab_login">Entrar</string>
+    <string name="auth_tab_register">Criar Conta</string>
+    <string name="auth_field_name_label">Seu Nome ou Apelido</string>
+    <string name="auth_field_name_placeholder">Ex: Felipe Colecionador</string>
+    <string name="auth_field_email_label">E-mail</string>
+    <string name="auth_field_email_placeholder">seu@email.com</string>
+    <string name="auth_field_password_label">Senha</string>
+    <string name="auth_field_password_placeholder">Mínimo de 6 caracteres</string>
+    <string name="auth_field_confirm_password_label">Confirmar Senha</string>
+    <string name="auth_field_confirm_password_placeholder">Repita sua senha</string>
+    <string name="auth_forgot_password">Esqueci minha senha</string>
+    <string name="auth_submit_login">Entrar na Coleção</string>
+    <string name="auth_submit_register">Criar Minha Conta</string>
+    <string name="auth_submitting">Autenticando...</string>
+    <string name="auth_divider_or">ou acesse rapidamente com</string>
+    <string name="auth_continue_google">Continuar com o Google</string>
+    <string name="auth_continue_guest">Explorar como Convidado (Offline)</string>
+    <string name="auth_continue_guest_linking">Continuar no Modo Convidado por enquanto</string>
+    <string name="auth_guest_subtitle">Seus quadrinhos ficam salvos no aparelho e você pode vincular uma conta quando quiser.</string>
+    <string name="auth_cd_show_password">Mostrar senha</string>
+    <string name="auth_cd_hide_password">Ocultar senha</string>
+    <string name="auth_cd_close_modal">Fechar janela de autenticação</string>
+    <string name="auth_cd_brand_emblem">Emblema do Quadrinheiro</string>
 </resources>
+

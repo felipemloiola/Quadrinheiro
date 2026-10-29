@@ -698,3 +698,78 @@ sealed interface AuthUiState {
     data object Unauthenticated : AuthUiState
 }
 
+@Immutable
+enum class AuthFeedbackType {
+    ERROR,
+    SUCCESS,
+    INFO
+}
+
+@Immutable
+data class AuthFeedbackBanner(
+    val message: String,
+    val type: AuthFeedbackType = AuthFeedbackType.ERROR,
+    val id: Long = System.currentTimeMillis()
+) {
+    val isError: Boolean get() = type == AuthFeedbackType.ERROR
+}
+
+/**
+ * Validador centralizado e reutilizável para formulários de autenticação (UI + Camada de Dados).
+ */
+object AuthFormValidator {
+    private val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+
+    fun isValidEmail(email: String): Boolean {
+        val clean = email.trim()
+        return clean.length in 5..120 && EMAIL_REGEX.matches(clean)
+    }
+
+    fun validateName(name: String): String? {
+        val clean = name.trim()
+        return when {
+            clean.length < 2 -> "Informe seu nome ou apelido (mínimo de 2 caracteres)."
+            clean.length > 60 -> "O nome pode ter no máximo 60 caracteres."
+            else -> null
+        }
+    }
+
+    fun validateEmail(email: String): String? {
+        val clean = email.trim()
+        return when {
+            clean.isBlank() -> "Informe seu endereço de e-mail."
+            !isValidEmail(clean) -> "Digite um endereço de e-mail válido (ex: nome@dominio.com)."
+            else -> null
+        }
+    }
+
+    fun validatePassword(password: String, requireComplexity: Boolean = false): String? {
+        return when {
+            password.length < 6 -> "A senha deve ter pelo menos 6 caracteres."
+            password.length > 128 -> "A senha excede o limite de caracteres."
+            requireComplexity && password.none { it.isLetterOrDigit() } ->
+                "A senha deve conter letras ou números válidos."
+            else -> null
+        }
+    }
+
+    fun validateForm(
+        mode: AuthMode,
+        name: String,
+        email: String,
+        password: String,
+        confirmPassword: String
+    ): String? {
+        if (mode == AuthMode.REGISTER) {
+            validateName(name)?.let { return it }
+        }
+        validateEmail(email)?.let { return it }
+        validatePassword(password, requireComplexity = mode == AuthMode.REGISTER)?.let { return it }
+        if (mode == AuthMode.REGISTER && password != confirmPassword) {
+            return "As senhas digitadas não coincidem. Verifique a confirmação."
+        }
+        return null
+    }
+}
+
+

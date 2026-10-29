@@ -122,14 +122,7 @@ class QuadrinheiroAuthManager(
     }
 
     private fun isValidEmail(email: String): Boolean {
-        val clean = email.trim()
-        if (clean.isEmpty()) return false
-        return try {
-            Patterns.EMAIL_ADDRESS?.matcher(clean)?.matches()
-                ?: Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$").matches(clean)
-        } catch (_: Throwable) {
-            Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$").matches(clean)
-        }
+        return com.example.model.AuthFormValidator.isValidEmail(email)
     }
 
     /**
@@ -137,11 +130,11 @@ class QuadrinheiroAuthManager(
      */
     suspend fun signInWithEmail(email: String, pass: String): Result<UserProfile> = withContext(Dispatchers.IO) {
         val cleanEmail = email.trim().lowercase()
-        if (!isValidEmail(cleanEmail)) {
-            return@withContext Result.failure(IllegalArgumentException("Digite um endereço de e-mail válido."))
+        com.example.model.AuthFormValidator.validateEmail(cleanEmail)?.let { errMsg ->
+            return@withContext Result.failure(IllegalArgumentException(errMsg))
         }
-        if (pass.length < 6) {
-            return@withContext Result.failure(IllegalArgumentException("A senha deve ter pelo menos 6 caracteres."))
+        com.example.model.AuthFormValidator.validatePassword(pass)?.let { errMsg ->
+            return@withContext Result.failure(IllegalArgumentException(errMsg))
         }
 
         val localResult = storage.authenticateLocalEmailAccount(cleanEmail, pass)
@@ -165,14 +158,14 @@ class QuadrinheiroAuthManager(
         val cleanName = name.trim()
         val cleanEmail = email.trim().lowercase()
 
-        if (cleanName.length < 2) {
-            return@withContext Result.failure(IllegalArgumentException("Informe seu nome ou apelido (mínimo de 2 letras)."))
+        com.example.model.AuthFormValidator.validateName(cleanName)?.let { errMsg ->
+            return@withContext Result.failure(IllegalArgumentException(errMsg))
         }
-        if (!isValidEmail(cleanEmail)) {
-            return@withContext Result.failure(IllegalArgumentException("Digite um endereço de e-mail válido."))
+        com.example.model.AuthFormValidator.validateEmail(cleanEmail)?.let { errMsg ->
+            return@withContext Result.failure(IllegalArgumentException(errMsg))
         }
-        if (pass.length < 6) {
-            return@withContext Result.failure(IllegalArgumentException("A senha deve ter pelo menos 6 caracteres."))
+        com.example.model.AuthFormValidator.validatePassword(pass, requireComplexity = true)?.let { errMsg ->
+            return@withContext Result.failure(IllegalArgumentException(errMsg))
         }
 
         val regResult = storage.registerLocalEmailAccount(cleanName, cleanEmail, pass)
