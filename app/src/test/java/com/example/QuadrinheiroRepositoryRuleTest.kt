@@ -116,4 +116,114 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
             assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, e.code)
         }
     }
+
+    @Test
+    fun `test strict firestore rules reject oversized diary moment note and invalid data types`() = runTest {
+        signInAs("user_alpha")
+        val oversizedNote = "A".repeat(2500) // > 2000 chars allowed by isValidComicMomentItem
+        val invalidMomentMap = mapOf(
+            "id" to "m-1",
+            "page" to 12,
+            "tag" to "⚡ Momento Épico",
+            "note" to oversizedNote,
+            "date" to "2026-10-14",
+            "isSpoiler" to false
+        )
+        val rawDoc = mapOf(
+            "ownerId" to "user_alpha",
+            "externalId" to "hq-invalid-moment",
+            "title" to "Watchmen",
+            "titlePtBr" to "Watchmen",
+            "authors" to "Alan Moore",
+            "publisher" to "DC / Vertigo",
+            "genre" to "DC / Vertigo",
+            "format" to "Edição Definitiva",
+            "releaseYear" to 1987,
+            "pageCount" to 416,
+            "currentPage" to 416,
+            "status" to "READ",
+            "rating" to 5.0,
+            "favorite" to true,
+            "rereadCount" to 0,
+            "tags" to listOf("Clássico"),
+            "review" to "Resenha válida",
+            "readDate" to "2026-10-14",
+            "addedAt" to "2026-10-14T10:00:00Z",
+            "isbn" to "9781779501127",
+            "coverUrl" to "",
+            "synopsis" to "Sinopse",
+            "synopsisPtBr" to "Sinopse",
+            "sourceLabel" to "Catálogo Base",
+            "moments" to listOf(invalidMomentMap),
+            "updatedAtMillis" to 1700000000000L,
+            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+        )
+        try {
+            db.collection("users").document("user_alpha")
+                .collection("comics").document("hq-invalid-moment")
+                .set(rawDoc).await()
+            fail("Expected PERMISSION_DENIED when diary moment note exceeds 2000 characters")
+        } catch (e: FirebaseFirestoreException) {
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, e.code)
+        }
+    }
+
+    @Test
+    fun `test hybrid sync conflict resolution keeps largest updatedAt and only syncs dirty items`() = runTest {
+        val localCleanOlder = ComicEntry(
+            id = "hq-1",
+            externalId = "hq-1",
+            title = "Batman: Ano Um",
+            authors = "Frank Miller",
+            publisher = "DC Comics",
+            currentPage = 20,
+            status = ReadingStatus.READING,
+            updatedAt = 1000L,
+            isDirty = false
+        )
+        val localDirtyNewer = ComicEntry(
+            id = "hq-2",
+            externalId = "hq-2",
+            title = "Sandman: Prelúdios",
+            authors = "Neil Gaiman",
+            publisher = "DC / Vertigo",
+            currentPage = 160,
+            status = ReadingStatus.READ,
+            rating = 5f,
+            updatedAt = 5000L,
+            isDirty = true
+        )
+        val remoteNewerForHq1 = localCleanOlder.copy(
+            currentPage = 80,
+            updatedAt = 3000L,
+            isDirty = false
+        )
+        val remoteOlderForHq2 = localDirtyNewer.copy(
+            currentPage = 45,
+            status = ReadingStatus.READING,
+            rating = 0f,
+            updatedAt = 2000L,
+            isDirty = false
+        )
+
+        val (merged, dirtyToPush) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+            localComics = listOf(localCleanOlder, localDirtyNewer),
+            remoteComics = listOf(remoteNewerForHq1, remoteOlderForHq2)
+        )
+
+        assertEquals(2, merged.size)
+        val resolvedHq1 = merged.first { it.id == "hq-1" }
+        val resolvedHq2 = merged.first { it.id == "hq-2" }
+
+        // hq-1: remote had larger updatedAt (3000L > 1000L), so remote wins
+        assertEquals(80, resolvedHq1.currentPage)
+        assertEquals(3000L, resolvedHq1.updatedAt)
+
+        // hq-2: local was dirty and had larger updatedAt (5000L > 2000L), so local wins and is queued for cloud push
+        assertEquals(160, resolvedHq2.currentPage)
+        assertEquals(ReadingStatus.READ, resolvedHq2.status)
+        assertEquals(1, dirtyToPush.size)
+        assertEquals("hq-2", dirtyToPush.first().id)
+    }
 }
+

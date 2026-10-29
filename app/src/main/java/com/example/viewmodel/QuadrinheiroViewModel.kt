@@ -20,13 +20,16 @@ import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -181,6 +184,9 @@ class QuadrinheiroViewModel(
     private val _onlineSequencePool = MutableStateFlow<List<ComicEntry>>(emptyList())
     val onlineSequencePool: StateFlow<List<ComicEntry>> = _onlineSequencePool.asStateFlow()
 
+    // Fluxo com debounce(800L) para evitar múltiplas escritas no Firestore/SafeStorage enquanto o usuário arrasta o LiquidSlider
+    private val _debouncedReadingPageUpdates = MutableSharedFlow<ComicEntry>(extraBufferCapacity = 32)
+
     private var searchJob: Job? = null
     private var sequenceJob: Job? = null
     private var toastJob: Job? = null
@@ -201,6 +207,26 @@ class QuadrinheiroViewModel(
     }
 
     init {
+        PortugueseComicTranslator.onTranslationPersisted = { translatedComic ->
+            persistTranslatedComic(translatedComic)
+        }
+
+        @OptIn(FlowPreview::class)
+        viewModelScope.launch(Dispatchers.IO) {
+            _debouncedReadingPageUpdates
+                .debounce(800L)
+                .collectLatest { target ->
+                    storage.saveState(_comics.value, _profile.value, _appSettings.value)
+                    val uid = _cloudUser.value?.uid
+                    val repo = cloudRepo
+                    if (uid != null && repo != null) {
+                        runCatching { repo.saveComic(uid, target) }.onSuccess {
+                            markComicsCleanInMemoryAndStorage(setOf(target.id, target.externalId), target.updatedAt)
+                        }
+                    }
+                }
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             // Defer non-critical background work until after initial Activity SurfaceSyncGroup transaction completes
             delay(600)
@@ -248,7 +274,7 @@ class QuadrinheiroViewModel(
                 } else {
                     comic
                 }
-                val localized = PortugueseComicTranslator.localizeComic(withCover)
+                val localized = PortugueseComicTranslator.localizeComicMetadataOnly(withCover)
                 if (localized != withCover) {
                     updatedAny = true
                 }
@@ -280,6 +306,38 @@ class QuadrinheiroViewModel(
         }
     }
 
+    private fun markComicsCleanInMemoryAndStorage(syncedIds: Set<String>, syncedAtMillis: Long = System.currentTimeMillis()) {
+        val validIds = syncedIds.filter { it.isNotBlank() }.toSet()
+        if (validIds.isEmpty()) return
+        var changed = false
+        val cleaned = _comics.value.map { c ->
+            if (c.isDirty && (validIds.contains(c.id) || validIds.contains(c.externalId))) {
+                changed = true
+                c.copy(
+                    isDirty = false,
+                    updatedAt = if (c.updatedAt > 0L) c.updatedAt else syncedAtMillis
+                )
+            } else {
+                c
+            }
+        }
+        if (changed) {
+            _comics.value = cleaned
+        }
+        storage.markComicsSynced(validIds, syncedAtMillis)
+    }
+
+    private fun markProfileCleanInMemoryAndStorage(syncedAtMillis: Long = System.currentTimeMillis()) {
+        val cur = _profile.value
+        if (cur.isDirty) {
+            _profile.value = cur.copy(
+                isDirty = false,
+                updatedAt = if (cur.updatedAt > 0L) cur.updatedAt else syncedAtMillis
+            )
+        }
+        storage.markProfileSynced(syncedAtMillis)
+    }
+
     private fun startOrStopCloudListeners(user: CloudAuthUser?) {
         cloudProfileJob?.cancel()
         cloudComicsJob?.cancel()
@@ -291,13 +349,24 @@ class QuadrinheiroViewModel(
                 .catch { }
                 .collectLatest { remoteProfile ->
                     if (remoteProfile != null && remoteProfile.ownerId == user.uid) {
-                        val merged = remoteProfile.toReaderProfile(_profile.value.avatarUrl)
-                        if (merged != _profile.value) {
-                            _profile.value = merged
+                        val (resolvedProfile, shouldPushLocal) = QuadrinheiroCloudRepository.mergeLocalAndRemoteProfile(
+                            localProfile = _profile.value,
+                            remoteProfile = remoteProfile
+                        )
+                        if (resolvedProfile != _profile.value) {
+                            _profile.value = resolvedProfile
                             persistAll()
                         }
+                        if (shouldPushLocal) {
+                            runCatching { repo.saveUserProfile(user.uid, resolvedProfile) }.onSuccess {
+                                markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt)
+                            }
+                        }
                     } else {
-                        runCatching { repo.saveUserProfile(user.uid, _profile.value) }
+                        val localProf = _profile.value
+                        runCatching { repo.saveUserProfile(user.uid, localProf) }.onSuccess {
+                            markProfileCleanInMemoryAndStorage(localProf.updatedAt)
+                        }
                     }
                 }
         }
@@ -307,14 +376,112 @@ class QuadrinheiroViewModel(
                 .catch { }
                 .collectLatest { remoteComics ->
                     if (remoteComics.isNotEmpty()) {
-                        if (remoteComics != _comics.value) {
-                            _comics.value = remoteComics
+                        PortugueseComicTranslator.seedPersistedTranslations(
+                            remoteComics,
+                            storage.loadTranslationCache()
+                        )
+                        val (mergedList, dirtyWinners) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                            localComics = _comics.value,
+                            remoteComics = remoteComics
+                        )
+                        if (mergedList != _comics.value) {
+                            _comics.value = mergedList
                             persistAll()
                         }
+                        if (dirtyWinners.isNotEmpty()) {
+                            runCatching {
+                                repo.syncDirtyComicsBatch(user.uid, dirtyWinners)
+                            }.onSuccess { syncedIds ->
+                                markComicsCleanInMemoryAndStorage(syncedIds)
+                            }
+                        }
                     } else if (_comics.value.isNotEmpty()) {
-                        runCatching { repo.syncAllComicsBatch(user.uid, _comics.value) }
+                        // Caso a nuvem esteja vazia no primeiro login, envia itens sujos ou o acervo inicial em lote
+                        val dirtyOnly = _comics.value.filter { it.isDirty }
+                        val batchToPush = dirtyOnly.ifEmpty { _comics.value }
+                        runCatching {
+                            repo.syncAllComicsBatch(user.uid, batchToPush)
+                        }.onSuccess { syncedIds ->
+                            markComicsCleanInMemoryAndStorage(syncedIds)
+                        }
                     }
                 }
+        }
+    }
+
+    private fun persistTranslatedComic(translated: ComicEntry) {
+        val sPt = translated.synopsisPtBr.trim()
+        val tPt = translated.titlePtBr.trim().ifBlank { translated.title.trim() }
+        if (sPt.isEmpty() && tPt.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            // 1. Persiste imediatamente no SafeStorage
+            storage.saveComicTranslation(translated)
+
+            // 2. Atualiza o cache em memória do MultiApiSearchEngine e a lista atual de resultados
+            searchEngine.updateCachedComicTranslation(translated)
+            val currentRemote = _remoteResults.value
+            if (currentRemote.isNotEmpty()) {
+                var remoteUpdated = false
+                val nextRemote = currentRemote.map { item ->
+                    if ((translated.id.isNotBlank() && item.id == translated.id) ||
+                        (translated.externalId.isNotBlank() && item.externalId == translated.externalId)
+                    ) {
+                        if (item.synopsisPtBr != sPt || item.titlePtBr != tPt) {
+                            remoteUpdated = true
+                            item.copy(
+                                title = tPt.ifBlank { item.title },
+                                titlePtBr = tPt.ifBlank { item.titlePtBr },
+                                synopsis = sPt.ifBlank { item.synopsis },
+                                synopsisPtBr = sPt.ifBlank { item.synopsisPtBr }
+                            )
+                        } else {
+                            item
+                        }
+                    } else {
+                        item
+                    }
+                }
+                if (remoteUpdated) {
+                    _remoteResults.value = nextRemote
+                }
+            }
+
+            // 3. Se o quadrinho pertence à estante do usuário, atualiza o objeto em _comics, SafeStorage e Firestore
+            var matchedShelfComic: ComicEntry? = null
+            val nowMs = System.currentTimeMillis()
+            val currentShelf = _comics.value
+            val nextShelf = currentShelf.map { c ->
+                val isSame = (translated.id.isNotBlank() && c.id == translated.id) ||
+                    (translated.externalId.isNotBlank() && c.externalId == translated.externalId)
+                if (isSame && (c.synopsisPtBr != sPt || c.titlePtBr != tPt)) {
+                    c.copy(
+                        title = tPt.ifBlank { c.title },
+                        titlePtBr = tPt.ifBlank { c.titlePtBr },
+                        synopsis = sPt.ifBlank { c.synopsis },
+                        synopsisPtBr = sPt.ifBlank { c.synopsisPtBr },
+                        updatedAt = nowMs,
+                        isDirty = true
+                    ).also { matchedShelfComic = it }
+                } else {
+                    c
+                }
+            }
+            val updatedShelfItem = matchedShelfComic
+            if (updatedShelfItem != null) {
+                _comics.value = nextShelf
+                storage.saveState(nextShelf, _profile.value, _appSettings.value)
+                val uid = _cloudUser.value?.uid
+                val repo = cloudRepo
+                if (uid != null && repo != null) {
+                    runCatching { repo.saveComic(uid, updatedShelfItem) }.onSuccess {
+                        markComicsCleanInMemoryAndStorage(
+                            setOf(updatedShelfItem.id, updatedShelfItem.externalId),
+                            nowMs
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -369,11 +536,25 @@ class QuadrinheiroViewModel(
         if (_isSyncingCloud.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSyncingCloud.value = true
+            val dirtyComics = _comics.value.filter { it.isDirty }
             runCatching {
-                repo.saveUserProfile(user.uid, _profile.value)
-                repo.syncAllComicsBatch(user.uid, _comics.value)
+                if (_profile.value.isDirty || _profile.value.updatedAt == 0L) {
+                    repo.saveUserProfile(user.uid, _profile.value)
+                    markProfileCleanInMemoryAndStorage()
+                }
+                val syncedIds = if (dirtyComics.isNotEmpty()) {
+                    repo.syncDirtyComicsBatch(user.uid, _comics.value)
+                } else {
+                    repo.syncAllComicsBatch(user.uid, _comics.value)
+                }
+                markComicsCleanInMemoryAndStorage(syncedIds)
             }.onSuccess {
-                showNotice("Acervo sincronizado na nuvem (${_comics.value.size} obras)")
+                val countMsg = if (dirtyComics.isNotEmpty()) {
+                    "${dirtyComics.size} alterações pendentes sincronizadas"
+                } else {
+                    "${_comics.value.size} obras sincronizadas"
+                }
+                showNotice("Acervo sincronizado na nuvem ($countMsg)")
             }.onFailure {
                 showNotice("Falha ao sincronizar com a nuvem")
             }
@@ -506,14 +687,20 @@ class QuadrinheiroViewModel(
     }
 
     fun updateProfile(transform: (ReaderProfile) -> ReaderProfile) {
-        val next = transform(_profile.value)
+        val nowMs = System.currentTimeMillis()
+        val next = transform(_profile.value).copy(
+            updatedAt = nowMs,
+            isDirty = true
+        )
         _profile.value = next
         persistAll()
         val uid = _cloudUser.value?.uid
         val repo = cloudRepo
         if (uid != null && repo != null) {
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching { repo.saveUserProfile(uid, next) }
+                runCatching { repo.saveUserProfile(uid, next) }.onSuccess {
+                    markProfileCleanInMemoryAndStorage(nowMs)
+                }
             }
         }
     }
@@ -662,35 +849,49 @@ class QuadrinheiroViewModel(
 
     fun openInfoSynopsisModal(comic: ComicEntry?) {
         _selectedComic.value = null
-        val localized = comic?.let { PortugueseComicTranslator.localizeComic(it, allowNetworkTranslation = false) }
+        if (comic == null) {
+            _infoModalComic.value = null
+            loadSequenceIssuesForComic(null)
+            _isSheetExpanded.value = false
+            return
+        }
+        val localized = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = false)
         _infoModalComic.value = localized
         loadSequenceIssuesForComic(localized)
-        if (localized == null) {
-            _isSheetExpanded.value = false
-        } else {
+        if (localized.synopsisPtBr.isBlank()) {
             viewModelScope.launch(Dispatchers.IO) {
-                val enriched = PortugueseComicTranslator.localizeComic(localized, allowNetworkTranslation = true)
-                if (enriched != localized && _infoModalComic.value?.id == localized.id) {
+                val enriched = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = true)
+                persistTranslatedComic(enriched)
+                if (_infoModalComic.value?.id == comic.id) {
                     _infoModalComic.value = enriched
                 }
             }
+        } else {
+            persistTranslatedComic(localized)
         }
     }
 
     fun selectComicForSheet(comic: ComicEntry?) {
         _infoModalComic.value = null
-        val localized = comic?.let { PortugueseComicTranslator.localizeComic(it, allowNetworkTranslation = false) }
+        if (comic == null) {
+            _selectedComic.value = null
+            loadSequenceIssuesForComic(null)
+            _isSheetExpanded.value = false
+            return
+        }
+        val localized = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = false)
         _selectedComic.value = localized
         loadSequenceIssuesForComic(localized)
-        if (localized == null) {
-            _isSheetExpanded.value = false
-        } else {
+        if (localized.synopsisPtBr.isBlank()) {
             viewModelScope.launch(Dispatchers.IO) {
-                val enriched = PortugueseComicTranslator.localizeComic(localized, allowNetworkTranslation = true)
-                if (enriched != localized && _selectedComic.value?.id == localized.id) {
+                val enriched = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = true)
+                persistTranslatedComic(enriched)
+                if (_selectedComic.value?.id == comic.id) {
                     _selectedComic.value = enriched
                 }
             }
+        } else {
+            persistTranslatedComic(localized)
         }
     }
 
@@ -808,10 +1009,28 @@ class QuadrinheiroViewModel(
             normPub
         )
 
+        val resolvedSynopsisPtBr = itemData.synopsisPtBr.ifBlank {
+            val cached = PortugueseComicTranslator.getCachedTranslationForComicId(uniqueId)
+                ?: PortugueseComicTranslator.getCachedTranslationForComicId(extId)
+            cached?.synopsisPtBr?.ifBlank {
+                if (itemData.synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(itemData.synopsis)) {
+                    itemData.synopsis
+                } else {
+                    ""
+                }
+            } ?: if (itemData.synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(itemData.synopsis)) {
+                itemData.synopsis
+            } else {
+                ""
+            }
+        }
+
+        val nowMs = System.currentTimeMillis()
         val entry = itemData.copy(
             id = uniqueId,
             externalId = extId,
             title = normTitle,
+            titlePtBr = normTitle,
             authors = itemData.authors.trim().ifBlank { "Autor Desconhecido" },
             publisher = normPub,
             genre = normGenre,
@@ -826,7 +1045,11 @@ class QuadrinheiroViewModel(
             tags = itemData.tags,
             review = if (isRead) itemData.review else "",
             readDate = if (isRead) itemData.readDate.ifBlank { today } else "",
-            addedAt = itemData.addedAt.ifBlank { nowIso }
+            addedAt = itemData.addedAt.ifBlank { nowIso },
+            synopsis = resolvedSynopsisPtBr.ifBlank { itemData.synopsis },
+            synopsisPtBr = resolvedSynopsisPtBr,
+            updatedAt = nowMs,
+            isDirty = true
         )
 
         val currentList = _comics.value.toMutableList()
@@ -845,7 +1068,9 @@ class QuadrinheiroViewModel(
         val repo = cloudRepo
         if (uid != null && repo != null) {
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching { repo.saveComic(uid, entry) }
+                runCatching { repo.saveComic(uid, entry) }.onSuccess {
+                    markComicsCleanInMemoryAndStorage(setOf(entry.id, entry.externalId), nowMs)
+                }
             }
         }
 
@@ -888,22 +1113,22 @@ class QuadrinheiroViewModel(
         val total = comicItem.pageCount.coerceAtLeast(1)
         val clamped = nextPage.coerceIn(0, total)
         val nextStatus = if (clamped >= total) ReadingStatus.READ else ReadingStatus.READING
+        val nowMs = System.currentTimeMillis()
         var updatedComic: ComicEntry? = null
         _comics.value = _comics.value.map { c ->
             if (c.id == comicItem.id) {
-                c.copy(currentPage = clamped, status = nextStatus).also { updatedComic = it }
+                c.copy(
+                    currentPage = clamped,
+                    status = nextStatus,
+                    updatedAt = nowMs,
+                    isDirty = true
+                ).also { updatedComic = it }
             } else {
                 c
             }
         }
-        persistAll()
-        val uid = _cloudUser.value?.uid
-        val repo = cloudRepo
-        val target = updatedComic
-        if (uid != null && repo != null && target != null) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { repo.saveComic(uid, target) }
-            }
+        updatedComic?.let { target ->
+            _debouncedReadingPageUpdates.tryEmit(target)
         }
     }
 
@@ -941,6 +1166,16 @@ class QuadrinheiroViewModel(
             _comics.value = restored.comics
             _profile.value = restored.profile
             _appSettings.value = restored.settings
+            val uid = _cloudUser.value?.uid
+            val repo = cloudRepo
+            if (uid != null && repo != null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching {
+                        repo.saveUserProfile(uid, restored.profile)
+                        repo.syncAllComicsBatch(uid, restored.comics)
+                    }
+                }
+            }
             showNotice("Backup restaurado com sucesso")
             true
         } else {

@@ -1,6 +1,7 @@
 package com.example.model
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 enum class ReadingStatus(val key: String, val label: String, val shortLabel: String) {
@@ -541,11 +542,13 @@ data class ComicMoment(
     val isSpoiler: Boolean = false
 )
 
+@Stable
 @Immutable
 data class ComicEntry(
     val id: String,
     val externalId: String,
     val title: String,
+    val titlePtBr: String = "",
     val authors: String,
     val publisher: String,
     val genre: String = "Graphic Novel",
@@ -564,11 +567,14 @@ data class ComicEntry(
     val isbn: String = "",
     val coverUrl: String = "",
     val synopsis: String = "",
+    val synopsisPtBr: String = "",
     val sourceLabel: String = "Catálogo Base",
     val isOnlineResult: Boolean = false,
     val moments: List<ComicMoment> = emptyList(),
     val seriesName: String = "",
-    val issueNumber: Int = 0
+    val issueNumber: Int = 0,
+    val updatedAt: Long = 0L,
+    val isDirty: Boolean = false
 )
 
 @Immutable
@@ -581,9 +587,12 @@ data class ReaderProfile(
     val avatarPreset: String = "indigo",
     val yearlyGoal: Int = 24,
     val dailyPagesGoal: Int = 30,
-    val showGoalOnHome: Boolean = true
+    val showGoalOnHome: Boolean = true,
+    val updatedAt: Long = 0L,
+    val isDirty: Boolean = false
 )
 
+@Stable
 @Immutable
 data class AppSettings(
     val themeId: String = "midnightSlate",
@@ -653,6 +662,7 @@ data class ApiEndpointStatus(
     val ms: Long
 )
 
+@Stable
 @Immutable
 data class ApiDiagnosticsReport(
     val testedAt: String,

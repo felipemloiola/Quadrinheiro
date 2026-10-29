@@ -20,9 +20,13 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ServerTimestamp
 import kotlinx.coroutines.channels.awaitClose
@@ -36,6 +40,7 @@ enum class OperationType {
     CREATE, UPDATE, DELETE, LIST, GET, WRITE
 }
 
+@Immutable
 data class CloudAuthUser(
     val uid: String,
     val email: String?,
@@ -43,6 +48,7 @@ data class CloudAuthUser(
     val photoUrl: String?
 )
 
+@Immutable
 data class CloudUserProfile(
     @DocumentId val id: String = "",
     val ownerId: String = "",
@@ -54,8 +60,13 @@ data class CloudUserProfile(
     val yearlyGoal: Int = 24,
     val dailyPagesGoal: Int = 30,
     val showGoalOnHome: Boolean = true,
+    val updatedAtMillis: Long = 0L,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
+    fun resolvedUpdatedAtMillis(): Long {
+        return if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+    }
+
     fun toReaderProfile(existingAvatarUrl: String = ""): ReaderProfile {
         return ReaderProfile(
             name = name.ifBlank { "Leitor" },
@@ -66,12 +77,15 @@ data class CloudUserProfile(
             avatarPreset = avatarPreset.ifBlank { "indigo" },
             yearlyGoal = yearlyGoal.coerceIn(1, 1000),
             dailyPagesGoal = dailyPagesGoal.coerceIn(1, 2000),
-            showGoalOnHome = showGoalOnHome
+            showGoalOnHome = showGoalOnHome,
+            updatedAt = resolvedUpdatedAtMillis(),
+            isDirty = false
         )
     }
 
     companion object {
         fun fromReaderProfile(uid: String, profile: ReaderProfile): CloudUserProfile {
+            val tsMillis = if (profile.updatedAt > 0L) profile.updatedAt else System.currentTimeMillis()
             return CloudUserProfile(
                 id = uid,
                 ownerId = uid,
@@ -83,12 +97,14 @@ data class CloudUserProfile(
                 yearlyGoal = profile.yearlyGoal.coerceIn(1, 1000),
                 dailyPagesGoal = profile.dailyPagesGoal.coerceIn(1, 2000),
                 showGoalOnHome = profile.showGoalOnHome,
+                updatedAtMillis = tsMillis,
                 updatedAt = null
             )
         }
     }
 }
 
+@Immutable
 data class CloudComicMoment(
     val id: String = "",
     val page: Int = 0,
@@ -118,11 +134,14 @@ data class CloudComicMoment(
     }
 }
 
+@Stable
+@Immutable
 data class CloudComicDocument(
     @DocumentId val id: String = "",
     val ownerId: String = "",
     val externalId: String = "",
     val title: String = "",
+    val titlePtBr: String = "",
     val authors: String = "",
     val publisher: String = "",
     val genre: String = "Graphic Novel",
@@ -141,16 +160,27 @@ data class CloudComicDocument(
     val isbn: String = "",
     val coverUrl: String = "",
     val synopsis: String = "",
+    val synopsisPtBr: String = "",
     val sourceLabel: String = "Catálogo Base",
     val moments: List<CloudComicMoment> = emptyList(),
+    val updatedAtMillis: Long = 0L,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
+    fun resolvedUpdatedAtMillis(): Long {
+        return if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+    }
+
     fun toComicEntry(): ComicEntry {
         val docId = id.ifBlank { externalId.ifBlank { "hq-cloud" } }
+        val resolvedTitlePtBr = titlePtBr.ifBlank { title }
+        val resolvedSynopsisPtBr = synopsisPtBr.ifBlank {
+            if (synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(synopsis)) synopsis else ""
+        }
         return ComicEntry(
             id = docId,
             externalId = externalId.ifBlank { docId },
-            title = title.ifBlank { "Sem Título" },
+            title = resolvedTitlePtBr.ifBlank { "Sem Título" },
+            titlePtBr = resolvedTitlePtBr,
             authors = authors.ifBlank { "Autor Desconhecido" },
             publisher = publisher.ifBlank { "Editora" },
             genre = genre.ifBlank { "Graphic Novel" },
@@ -168,10 +198,13 @@ data class CloudComicDocument(
             addedAt = addedAt,
             isbn = isbn,
             coverUrl = coverUrl,
-            synopsis = synopsis,
+            synopsis = resolvedSynopsisPtBr.ifBlank { synopsis },
+            synopsisPtBr = resolvedSynopsisPtBr,
             sourceLabel = sourceLabel.ifBlank { "Catálogo Base" },
             isOnlineResult = false,
-            moments = moments.map { it.toComicMoment() }
+            moments = moments.map { it.toComicMoment() },
+            updatedAt = resolvedUpdatedAtMillis(),
+            isDirty = false
         )
     }
 
@@ -180,11 +213,21 @@ data class CloudComicDocument(
             val safeId = comic.id.ifBlank { comic.externalId.ifBlank { "hq-${System.currentTimeMillis()}" } }
                 .replace("/", "_")
             val safePages = comic.pageCount.coerceIn(1, 20000)
+            val resolvedTitle = comic.titlePtBr.ifBlank { comic.title }.trim().ifBlank { "Sem Título" }.take(300)
+            val resolvedSynopsisPtBr = comic.synopsisPtBr.ifBlank {
+                if (comic.synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(comic.synopsis)) {
+                    comic.synopsis
+                } else {
+                    ""
+                }
+            }.take(5000)
+            val tsMillis = if (comic.updatedAt > 0L) comic.updatedAt else System.currentTimeMillis()
             return CloudComicDocument(
                 id = safeId,
                 ownerId = uid,
                 externalId = comic.externalId.ifBlank { safeId }.take(200),
-                title = comic.title.trim().ifBlank { "Sem Título" }.take(300),
+                title = resolvedTitle,
+                titlePtBr = resolvedTitle,
                 authors = comic.authors.trim().take(300),
                 publisher = comic.publisher.trim().take(160),
                 genre = comic.genre.take(120),
@@ -202,9 +245,11 @@ data class CloudComicDocument(
                 addedAt = comic.addedAt.take(60),
                 isbn = comic.isbn.take(60),
                 coverUrl = comic.coverUrl.take(2000),
-                synopsis = comic.synopsis.take(5000),
+                synopsis = resolvedSynopsisPtBr.ifBlank { comic.synopsis }.take(5000),
+                synopsisPtBr = resolvedSynopsisPtBr,
                 sourceLabel = comic.sourceLabel.take(120),
                 moments = comic.moments.map { CloudComicMoment.fromComicMoment(it) },
+                updatedAtMillis = tsMillis,
                 updatedAt = null
             )
         }
@@ -260,6 +305,20 @@ class QuadrinheiroCloudRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     private val appContext = context.applicationContext
+
+    init {
+        // Habilita Offline Persistence do Firestore (PersistentCacheSettings) para que leituras repetidas
+        // venham do cache local sem custo de rede ou consumo desnecessário da cota diária.
+        runCatching {
+            val cacheSettings = PersistentCacheSettings.newBuilder()
+                .setSizeBytes(100L * 1024L * 1024L) // 100 MB de cache persistente local
+                .build()
+            val settings = FirebaseFirestoreSettings.Builder(db.firestoreSettings)
+                .setLocalCacheSettings(cacheSettings)
+                .build()
+            db.firestoreSettings = settings
+        }
+    }
 
     fun currentAuthUser(): CloudAuthUser? {
         return auth.currentUser?.toCloudAuthUser()
@@ -463,21 +522,129 @@ class QuadrinheiroCloudRepository(
         }
     }
 
-    suspend fun syncAllComicsBatch(userId: String, comics: List<ComicEntry>) {
+    suspend fun syncAllComicsBatch(userId: String, comics: List<ComicEntry>): Set<String> {
+        if (comics.isEmpty()) return emptySet()
         val path = "users/$userId/comics"
+        val syncedIds = mutableSetOf<String>()
         try {
-            val chunks = comics.chunked(400)
+            // Firestore suporta até 500 operações por lote em runBatch
+            val chunks = comics.chunked(450)
+            val colRef = db.collection("users").document(userId).collection("comics")
             for (chunk in chunks) {
-                val batch = db.batch()
-                val colRef = db.collection("users").document(userId).collection("comics")
-                for (comic in chunk) {
-                    val cloudDoc = CloudComicDocument.fromComicEntry(userId, comic)
-                    batch.set(colRef.document(cloudDoc.id), cloudDoc)
-                }
-                batch.commit().await()
+                db.runBatch { batch ->
+                    for (comic in chunk) {
+                        val cloudDoc = CloudComicDocument.fromComicEntry(userId, comic)
+                        batch.set(colRef.document(cloudDoc.id), cloudDoc)
+                        syncedIds.add(comic.id)
+                        if (comic.externalId.isNotBlank()) syncedIds.add(comic.externalId)
+                        syncedIds.add(cloudDoc.id)
+                    }
+                }.await()
             }
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
+        }
+        return syncedIds
+    }
+
+    /**
+     * Sincronização Híbrida: envia apenas os quadrinhos marcados com `isDirty = true`.
+     */
+    suspend fun syncDirtyComicsBatch(userId: String, localComics: List<ComicEntry>): Set<String> {
+        val dirtyItems = localComics.filter { it.isDirty }
+        if (dirtyItems.isEmpty()) return emptySet()
+        return syncAllComicsBatch(userId, dirtyItems)
+    }
+
+    companion object {
+        /**
+         * Resolve conflitos entre a lista local (`SafeStorage`) e a lista remota (`Firestore`)
+         * mantendo sempre o registro com o maior `updatedAt` (timestamp).
+         * Retorna `Pair(mergedList, dirtyWinnersToPushToCloud)`.
+         */
+        fun mergeLocalAndRemoteComics(
+            localComics: List<ComicEntry>,
+            remoteComics: List<ComicEntry>
+        ): Pair<List<ComicEntry>, List<ComicEntry>> {
+            if (remoteComics.isEmpty()) {
+                val dirtyOrAll = localComics.filter { it.isDirty }.ifEmpty { localComics }
+                return localComics to dirtyOrAll
+            }
+
+            val remoteById = LinkedHashMap<String, ComicEntry>()
+            val remoteByExtId = HashMap<String, ComicEntry>()
+            for (remote in remoteComics) {
+                val cleanRemote = remote.copy(isDirty = false)
+                remoteById[cleanRemote.id] = cleanRemote
+                if (cleanRemote.externalId.isNotBlank()) {
+                    remoteByExtId[cleanRemote.externalId] = cleanRemote
+                }
+            }
+
+            val mergedById = LinkedHashMap<String, ComicEntry>(remoteById)
+            val dirtyWinners = mutableListOf<ComicEntry>()
+
+            for (local in localComics) {
+                val safeId = local.id.replace("/", "_")
+                val remoteMatch = remoteById[local.id]
+                    ?: remoteById[safeId]
+                    ?: (if (local.externalId.isNotBlank()) remoteByExtId[local.externalId] else null)
+
+                if (remoteMatch == null) {
+                    // Item existe apenas localmente: se foi editado/criado offline (isDirty), deve subir para a nuvem
+                    if (local.isDirty) {
+                        mergedById[local.id] = local
+                        dirtyWinners.add(local)
+                    }
+                } else {
+                    // Conflito entre versão local e versão remota: vence o maior updatedAt
+                    val localWins = local.isDirty && local.updatedAt >= remoteMatch.updatedAt
+                    val localNewerTimestamp = local.updatedAt > remoteMatch.updatedAt && local.updatedAt > 0L
+                    if (localWins || localNewerTimestamp) {
+                        val winner = local.copy(
+                            id = remoteMatch.id,
+                            titlePtBr = local.titlePtBr.ifBlank { remoteMatch.titlePtBr },
+                            synopsisPtBr = local.synopsisPtBr.ifBlank { remoteMatch.synopsisPtBr }
+                        )
+                        mergedById[remoteMatch.id] = winner
+                        if (local.isDirty) {
+                            dirtyWinners.add(winner)
+                        }
+                    } else {
+                        // Remoto vence (maior updatedAt ou local não está sujo), preservando tradução local se já existir
+                        val mergedRemote = remoteMatch.copy(
+                            titlePtBr = remoteMatch.titlePtBr.ifBlank { local.titlePtBr },
+                            synopsisPtBr = remoteMatch.synopsisPtBr.ifBlank { local.synopsisPtBr },
+                            synopsis = remoteMatch.synopsisPtBr.ifBlank {
+                                local.synopsisPtBr.ifBlank { remoteMatch.synopsis }
+                            },
+                            isDirty = false
+                        )
+                        mergedById[remoteMatch.id] = mergedRemote
+                    }
+                }
+            }
+
+            val mergedList = mergedById.values.sortedByDescending { it.updatedAt }
+            return mergedList to dirtyWinners
+        }
+
+        /**
+         * Resolve conflito de perfil entre `SafeStorage` e `Firestore` pelo maior `updatedAt`.
+         * Retorna `Pair(resolvedProfile, shouldPushLocalToCloud)`.
+         */
+        fun mergeLocalAndRemoteProfile(
+            localProfile: ReaderProfile,
+            remoteProfile: CloudUserProfile
+        ): Pair<ReaderProfile, Boolean> {
+            val remoteMapped = remoteProfile.toReaderProfile(localProfile.avatarUrl)
+            val localWins = (localProfile.isDirty && localProfile.updatedAt >= remoteMapped.updatedAt) ||
+                (localProfile.updatedAt > remoteMapped.updatedAt && localProfile.updatedAt > 0L)
+            return if (localWins) {
+                localProfile to localProfile.isDirty
+            } else {
+                remoteMapped.copy(isDirty = false) to false
+            }
         }
     }
 }

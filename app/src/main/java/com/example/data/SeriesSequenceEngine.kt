@@ -1,8 +1,11 @@
 package com.example.data
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.Normalizer
 
 @Immutable
@@ -10,9 +13,11 @@ data class SequenceIssueItem(
     val comic: ComicEntry,
     val issueNumber: Int,
     val isSavedInLibrary: Boolean,
-    val savedEntry: ComicEntry?
+    val savedEntry: ComicEntry?,
+    val fractionalSubIssue: Int = 0
 )
 
+@Stable
 @Immutable
 data class SeriesSequenceGroup(
     val sequenceKey: String,
@@ -20,7 +25,8 @@ data class SeriesSequenceGroup(
     val primaryAuthor: String,
     val displayTitle: String,
     val issues: List<SequenceIssueItem>,
-    val nextIssueNumber: Int
+    val nextIssueNumber: Int,
+    val missingIssueNumbers: List<Int> = emptyList()
 ) {
     val savedCount: Int get() = issues.count { it.isSavedInLibrary }
     val readCount: Int get() = issues.count { it.savedEntry?.status == ReadingStatus.READ }
@@ -42,10 +48,12 @@ object SeriesSequenceEngine {
         "dez" to 10, "ten" to 10, "x" to 10
     )
 
-    // Regexes to detect issue/volume numbers in comic titles
-    private val hashIssueRegex = Regex("""#\s*0*(\d{1,4})\b""")
+    // Todas as expressões regulares pré-compiladas como constantes private val no topo do objeto
+    // (evitando recriar instâncias de Regex dentro de .map {} ou .sortedWith {} a cada recomposição)
+    private val hashIssueRegex = Regex("""#\s*0*(\d{1,4})(?:\.(\d{1,2}))?\b""")
+    private val annualIssueRegex = Regex("""(?i)\b(?:anual|annual)\s*#?\s*0*(\d{1,3})\b""")
     private val volIssueRegex = Regex(
-        """(?i)\b(?:vol\.?|volume|livro|book|ed\.?|edi[cç][aã]o|issue|parte|part|tomo|cap[ií]tulo|bd\.?|band|n[º°.]?)\s*0*(\d{1,4})\b"""
+        """(?i)\b(?:vol\.?|volume|livro|book|ed\.?|edi[cç][aã]o|issue|parte|part|tomo|cap[ií]tulo|bd\.?|band|n[º°.]?)\s*#?\s*0*(\d{1,4})(?:\.(\d{1,2}))?\b"""
     )
     private val wordVolRegex = Regex(
         """(?i)\b(?:vol\.?|volume|livro|book|parte|part)\s+(um|uma|dois|duas|tr[eê]s|quatro|cinco|seis|sete|oito|nove|dez|one|two|three|four|five|six|seven|eight|nine|ten|i|ii|iii|iv|v|vi|vii|viii|ix|x)\b"""
@@ -60,6 +68,7 @@ object SeriesSequenceEngine {
     )
     private val nonAlphaNumSpaceRegex = Regex("""[^a-z0-9\s]""")
     private val whitespaceRegex = Regex("""\s+""")
+    private val authorDelimiterRegex = Regex("""[,;&/]|(?i)\s+e\s+|\s+and\s+""")
 
     private val ignoredAuthorTokens = setOf(
         "autor desconhecido",
@@ -84,7 +93,7 @@ object SeriesSequenceEngine {
     }
 
     fun extractPrimaryAuthor(authors: String): String {
-        val first = authors.split(",", ";", "&", "/", " e ", " and ")
+        val first = authors.split(authorDelimiterRegex)
             .map { it.trim() }
             .firstOrNull { candidate ->
                 candidate.isNotBlank() && !ignoredAuthorTokens.contains(candidate.lowercase())
@@ -97,6 +106,13 @@ object SeriesSequenceEngine {
         return inferIssueNumber(comic.title)
     }
 
+    fun inferFractionalSubIssue(rawTitle: String): Int {
+        val title = PortugueseComicTranslator.translateTitleToPtBr(rawTitle).trim()
+        hashIssueRegex.find(title)?.groupValues?.getOrNull(2)?.toIntOrNull()?.let { return it }
+        volIssueRegex.find(title)?.groupValues?.getOrNull(2)?.toIntOrNull()?.let { return it }
+        return 0
+    }
+
     fun inferIssueNumber(rawTitle: String): Int {
         val title = PortugueseComicTranslator.translateTitleToPtBr(rawTitle).trim()
 
@@ -104,6 +120,9 @@ object SeriesSequenceEngine {
             if (it > 0) return it
         }
         volIssueRegex.find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let {
+            if (it > 0) return it
+        }
+        annualIssueRegex.find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let {
             if (it > 0) return it
         }
         wordVolRegex.find(title)?.groupValues?.getOrNull(1)?.lowercase()?.let { word ->
@@ -252,7 +271,7 @@ object SeriesSequenceEngine {
         catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog,
         extraOnlineComics: List<ComicEntry> = emptyList()
     ): SeriesSequenceGroup {
-        val localizedTarget = PortugueseComicTranslator.localizeComic(target)
+        val localizedTarget = PortugueseComicTranslator.localizeComicMetadataOnly(target)
         val baseTitle = inferBaseSeriesTitle(localizedTarget)
         val primaryAuthor = extractPrimaryAuthor(localizedTarget.authors)
         val seqKey = buildSequenceKey(localizedTarget)
@@ -268,7 +287,7 @@ object SeriesSequenceEngine {
         } else {
             extraOnlineComics
                 .filter { !PortugueseComicTranslator.isUnwantedForeignOrBundleResult(it.title, it.synopsis) }
-                .map { PortugueseComicTranslator.localizeComic(it) }
+                .map { PortugueseComicTranslator.localizeComicMetadataOnly(it) }
                 .filter { isSameSequence(localizedTarget, it) }
         }
 
@@ -294,7 +313,7 @@ object SeriesSequenceEngine {
         val byCanonicalWorkKey = LinkedHashMap<String, SequenceIssueItem>()
 
         for (rawCandidate in combinedPool) {
-            val candidate = PortugueseComicTranslator.localizeComic(rawCandidate)
+            val candidate = PortugueseComicTranslator.localizeComicMetadataOnly(rawCandidate)
             val issueNum = inferIssueNumber(candidate)
             val workKey = PortugueseComicTranslator.canonicalWorkKey(candidate.title)
 
@@ -312,16 +331,18 @@ object SeriesSequenceEngine {
             }
 
             val effectiveComic = if (savedMatch != null) {
-                PortugueseComicTranslator.localizeComic(savedMatch)
+                PortugueseComicTranslator.localizeComicMetadataOnly(savedMatch)
             } else {
                 candidate
             }
 
+            val fracNum = inferFractionalSubIssue(candidate.title)
             val item = SequenceIssueItem(
                 comic = effectiveComic,
                 issueNumber = issueNum,
                 isSavedInLibrary = savedMatch != null,
-                savedEntry = savedMatch
+                savedEntry = savedMatch,
+                fractionalSubIssue = fracNum
             )
 
             if (issueNum > 0) {
@@ -349,11 +370,13 @@ object SeriesSequenceEngine {
 
         val mergedUnique = if (hasNumberedSequence && byIssueKey.isNotEmpty()) {
             val list = byIssueKey.values.toMutableList()
+            val existingWorkKeys = list.mapTo(HashSet()) { PortugueseComicTranslator.canonicalWorkKey(it.comic.title) }
             // Se o próprio item aberto não tinha número mas pertence ao grupo, mantém apenas ele sem duplicar
             byCanonicalWorkKey.values.forEach { unnumbered ->
+                val unnumberedKey = PortugueseComicTranslator.canonicalWorkKey(unnumbered.comic.title)
                 if (unnumbered.issueNumber <= 0 &&
                     (unnumbered.comic.id == localizedTarget.id || unnumbered.isSavedInLibrary) &&
-                    list.none { PortugueseComicTranslator.canonicalWorkKey(it.comic.title) == PortugueseComicTranslator.canonicalWorkKey(unnumbered.comic.title) }
+                    existingWorkKeys.add(unnumberedKey)
                 ) {
                     list.add(unnumbered)
                 }
@@ -366,12 +389,21 @@ object SeriesSequenceEngine {
         val sortedIssues = mergedUnique.sortedWith(
             compareBy<SequenceIssueItem> { if (it.issueNumber > 0) 0 else 1 }
                 .thenBy { if (it.issueNumber > 0) it.issueNumber else Int.MAX_VALUE }
+                .thenBy { it.fractionalSubIssue }
                 .thenBy { it.comic.releaseYear }
                 .thenBy { it.comic.title }
         ).take(12)
 
         val maxIssue = sortedIssues.maxOfOrNull { it.issueNumber } ?: targetIssue
-        val nextIssueNumber = if (maxIssue > 0) maxIssue + 1 else (sortedIssues.size + 1)
+        val savedIssuesSet = sortedIssues.filter { it.isSavedInLibrary && it.issueNumber > 0 }.mapTo(HashSet()) { it.issueNumber }
+        val missingIssues = if (maxIssue > 1) {
+            (1..maxIssue).filter { it !in savedIssuesSet }
+        } else {
+            emptyList()
+        }
+        // Sugere a primeira edição faltante ("buraco" na coleção) ou a edição seguinte à última
+        val nextIssueNumber = missingIssues.firstOrNull()
+            ?: if (maxIssue > 0) maxIssue + 1 else (sortedIssues.size + 1)
 
         val displayTitle = if (primaryAuthor.isNotBlank() && !primaryAuthor.equals("Autor Desconhecido", ignoreCase = true)) {
             "$baseTitle • $primaryAuthor"
@@ -385,8 +417,50 @@ object SeriesSequenceEngine {
             primaryAuthor = primaryAuthor,
             displayTitle = displayTitle,
             issues = sortedIssues,
-            nextIssueNumber = nextIssueNumber
+            nextIssueNumber = nextIssueNumber,
+            missingIssueNumbers = missingIssues
         )
+    }
+
+    private val sequenceCache = java.util.concurrent.ConcurrentHashMap<String, SeriesSequenceGroup>()
+
+    fun buildCacheKey(
+        target: ComicEntry,
+        userComicsCount: Int,
+        extraOnlineCount: Int
+    ): String {
+        val idPart = target.externalId.ifBlank { target.id }.trim().lowercase()
+        val titlePart = target.title.trim().lowercase()
+        return "$idPart|$titlePart|${target.seriesName.trim().lowercase()}|${target.issueNumber}|$userComicsCount|$extraOnlineCount"
+    }
+
+    fun getCachedSequenceForComic(
+        target: ComicEntry,
+        userComics: List<ComicEntry>,
+        extraOnlineComics: List<ComicEntry> = emptyList()
+    ): SeriesSequenceGroup? {
+        return sequenceCache[buildCacheKey(target, userComics.size, extraOnlineComics.size)]
+    }
+
+    /**
+     * Executa o cálculo pesado de sequência cronológica explicitamente fora da Main Thread (Dispatchers.Default).
+     */
+    suspend fun findSequenceForComicAsync(
+        target: ComicEntry,
+        userComics: List<ComicEntry>,
+        catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog,
+        extraOnlineComics: List<ComicEntry> = emptyList()
+    ): SeriesSequenceGroup = withContext(Dispatchers.Default) {
+        val key = buildCacheKey(target, userComics.size, extraOnlineComics.size)
+        sequenceCache[key]?.let { return@withContext it }
+        findSequenceForComic(
+            target = target,
+            userComics = userComics,
+            catalogComics = catalogComics,
+            extraOnlineComics = extraOnlineComics
+        ).also { computed ->
+            sequenceCache[key] = computed
+        }
     }
 
     fun createNextIssueTemplate(
@@ -473,6 +547,19 @@ object SeriesSequenceEngine {
             compareByDescending<SeriesSequenceGroup> { it.issues.size > 1 }
                 .thenByDescending { it.savedCount }
                 .thenBy { it.displayTitle }
+        )
+    }
+
+    /**
+     * Agrupa o acervo do usuário por sequências cronológicas explicitamente em Dispatchers.Default.
+     */
+    suspend fun groupLibraryBySequencesAsync(
+        userComics: List<ComicEntry>,
+        catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog
+    ): List<SeriesSequenceGroup> = withContext(Dispatchers.Default) {
+        groupLibraryBySequences(
+            userComics = userComics,
+            catalogComics = catalogComics
         )
     }
 }

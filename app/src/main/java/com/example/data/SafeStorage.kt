@@ -24,6 +24,7 @@ class SafeStorage(context: Context) {
 
     companion object {
         const val STORAGE_KEY = "quadrinheiro_apple_hig_liquid_v10"
+        const val TRANSLATION_CACHE_KEY = "quadrinheiro_ptbr_translation_cache_v1"
         private val memoryFallback = mutableMapOf<String, String>()
     }
 
@@ -49,21 +50,157 @@ class SafeStorage(context: Context) {
         val settings: AppSettings
     )
 
+    fun loadTranslationCache(): Map<String, Pair<String, String>> {
+        val raw = getItem(TRANSLATION_CACHE_KEY) ?: return emptyMap()
+        return try {
+            val root = JSONObject(raw)
+            val out = mutableMapOf<String, Pair<String, String>>()
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val obj = root.optJSONObject(k) ?: continue
+                val tPt = obj.optString("titlePtBr", "")
+                val sPt = obj.optString("synopsisPtBr", "")
+                if (tPt.isNotBlank() || sPt.isNotBlank()) {
+                    out[k] = tPt to sPt
+                }
+            }
+            out
+        } catch (_: Throwable) {
+            emptyMap()
+        }
+    }
+
+    @Synchronized
+    fun saveComicTranslation(translated: ComicEntry) {
+        val tPt = translated.titlePtBr.ifBlank { translated.title }
+        val sPt = translated.synopsisPtBr.ifBlank { translated.synopsis }
+        if (sPt.isBlank() && tPt.isBlank()) return
+
+        // 1. Salva no mapa de cache persistente por comicId / externalId
+        try {
+            val rawCache = getItem(TRANSLATION_CACHE_KEY)
+            val cacheRoot = if (!rawCache.isNullOrBlank()) JSONObject(rawCache) else JSONObject()
+            val entryObj = JSONObject().apply {
+                put("titlePtBr", tPt)
+                put("synopsisPtBr", sPt)
+            }
+            if (translated.id.isNotBlank()) {
+                cacheRoot.put(translated.id, entryObj)
+            }
+            if (translated.externalId.isNotBlank()) {
+                cacheRoot.put(translated.externalId, entryObj)
+            }
+            setItem(TRANSLATION_CACHE_KEY, cacheRoot.toString())
+        } catch (_: Throwable) {
+        }
+
+        // 2. Se o quadrinho já estiver salvo no estado principal do SafeStorage, atualiza diretamente o objeto
+        try {
+            val rawState = getItem(STORAGE_KEY) ?: return
+            val root = JSONObject(rawState)
+            val comicsArr = root.optJSONArray("comics") ?: return
+            var updatedAny = false
+            for (i in 0 until comicsArr.length()) {
+                val obj = comicsArr.optJSONObject(i) ?: continue
+                val idVal = obj.optString("id", "")
+                val extIdVal = obj.optString("externalId", "")
+                val isMatch = (translated.id.isNotBlank() && idVal == translated.id) ||
+                    (translated.externalId.isNotBlank() && extIdVal == translated.externalId)
+                if (isMatch) {
+                    if (sPt.isNotBlank() && obj.optString("synopsisPtBr", "") != sPt) {
+                        obj.put("synopsisPtBr", sPt)
+                        obj.put("synopsis", sPt)
+                        obj.put("updatedAt", System.currentTimeMillis())
+                        obj.put("isDirty", true)
+                        updatedAny = true
+                    }
+                    if (tPt.isNotBlank() && obj.optString("titlePtBr", "") != tPt) {
+                        obj.put("titlePtBr", tPt)
+                        obj.put("title", tPt)
+                        obj.put("updatedAt", System.currentTimeMillis())
+                        obj.put("isDirty", true)
+                        updatedAny = true
+                    }
+                }
+            }
+            if (updatedAny) {
+                setItem(STORAGE_KEY, root.toString())
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    @Synchronized
+    fun markComicsSynced(syncedIds: Set<String>, syncedAtMillis: Long = System.currentTimeMillis()) {
+        if (syncedIds.isEmpty()) return
+        try {
+            val rawState = getItem(STORAGE_KEY) ?: return
+            val root = JSONObject(rawState)
+            val comicsArr = root.optJSONArray("comics") ?: return
+            var updatedAny = false
+            for (i in 0 until comicsArr.length()) {
+                val obj = comicsArr.optJSONObject(i) ?: continue
+                val idVal = obj.optString("id", "")
+                val extIdVal = obj.optString("externalId", "")
+                if (syncedIds.contains(idVal) || syncedIds.contains(extIdVal)) {
+                    if (obj.optBoolean("isDirty", false)) {
+                        obj.put("isDirty", false)
+                        if (obj.optLong("updatedAt", 0L) <= 0L) {
+                            obj.put("updatedAt", syncedAtMillis)
+                        }
+                        updatedAny = true
+                    }
+                }
+            }
+            if (updatedAny) {
+                setItem(STORAGE_KEY, root.toString())
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    @Synchronized
+    fun markProfileSynced(syncedAtMillis: Long = System.currentTimeMillis()) {
+        try {
+            val rawState = getItem(STORAGE_KEY) ?: return
+            val root = JSONObject(rawState)
+            val profObj = root.optJSONObject("profile") ?: return
+            if (profObj.optBoolean("isDirty", false)) {
+                profObj.put("isDirty", false)
+                if (profObj.optLong("updatedAt", 0L) <= 0L) {
+                    profObj.put("updatedAt", syncedAtMillis)
+                }
+                setItem(STORAGE_KEY, root.toString())
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
     fun loadState(): StoredState {
-        val raw = getItem(STORAGE_KEY) ?: return StoredState(
-            comics = CuratedCatalog.initialUserCollection,
-            profile = ReaderProfile(),
-            settings = AppSettings()
-        )
+        val persistedTranslations = loadTranslationCache()
+        val raw = getItem(STORAGE_KEY)
+        if (raw == null) {
+            val starter = CuratedCatalog.initialUserCollection
+            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
+            return StoredState(
+                comics = starter,
+                profile = ReaderProfile(),
+                settings = AppSettings()
+            )
+        }
         return try {
             val root = JSONObject(raw)
             val comicsArr = root.optJSONArray("comics")
             val comics = if (comicsArr != null && comicsArr.length() > 0) parseComics(comicsArr) else CuratedCatalog.initialUserCollection
+            PortugueseComicTranslator.seedPersistedTranslations(comics, persistedTranslations)
             val profile = root.optJSONObject("profile")?.let { parseProfile(it) } ?: ReaderProfile()
             val settings = root.optJSONObject("settings")?.let { parseSettings(it) } ?: AppSettings()
             StoredState(comics, profile, settings)
         } catch (_: Throwable) {
-            StoredState(CuratedCatalog.initialUserCollection, ReaderProfile(), AppSettings())
+            val starter = CuratedCatalog.initialUserCollection
+            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
+            StoredState(starter, ReaderProfile(), AppSettings())
         }
     }
 
@@ -292,6 +429,7 @@ class SafeStorage(context: Context) {
             obj.put("id", c.id)
             obj.put("externalId", c.externalId)
             obj.put("title", c.title)
+            obj.put("titlePtBr", c.titlePtBr.ifBlank { c.title })
             obj.put("authors", c.authors)
             obj.put("publisher", c.publisher)
             obj.put("genre", c.genre)
@@ -311,7 +449,8 @@ class SafeStorage(context: Context) {
             obj.put("addedAt", c.addedAt)
             obj.put("isbn", c.isbn)
             obj.put("coverUrl", c.coverUrl)
-            obj.put("synopsis", c.synopsis)
+            obj.put("synopsis", c.synopsisPtBr.ifBlank { c.synopsis })
+            obj.put("synopsisPtBr", c.synopsisPtBr)
             obj.put("sourceLabel", c.sourceLabel)
             val momentsArr = JSONArray()
             c.moments.forEach { m ->
@@ -327,6 +466,8 @@ class SafeStorage(context: Context) {
             obj.put("moments", momentsArr)
             obj.put("seriesName", c.seriesName)
             obj.put("issueNumber", c.issueNumber)
+            obj.put("updatedAt", c.updatedAt)
+            obj.put("isDirty", c.isDirty)
             arr.put(obj)
         }
         return arr
@@ -382,11 +523,21 @@ class SafeStorage(context: Context) {
                 catalogMatch != null -> catalogMatch.coverUrl
                 else -> ""
             }
+            val savedTitlePtBr = obj.optString("titlePtBr", "")
+            val savedSynopsis = obj.optString("synopsis", "")
+            val savedSynopsisPtBr = obj.optString("synopsisPtBr", "").ifBlank {
+                if (savedSynopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(savedSynopsis)) {
+                    savedSynopsis
+                } else {
+                    ""
+                }
+            }
             out.add(
                 ComicEntry(
                     id = idVal,
                     externalId = extIdVal,
-                    title = titleVal,
+                    title = savedTitlePtBr.ifBlank { titleVal },
+                    titlePtBr = savedTitlePtBr,
                     authors = obj.optString("authors", "Autor Desconhecido"),
                     publisher = obj.optString("publisher", "Editora"),
                     genre = obj.optString("genre", "Graphic Novel"),
@@ -404,11 +555,14 @@ class SafeStorage(context: Context) {
                     addedAt = obj.optString("addedAt", ""),
                     isbn = isbnVal,
                     coverUrl = resolvedCover,
-                    synopsis = obj.optString("synopsis", ""),
+                    synopsis = savedSynopsisPtBr.ifBlank { savedSynopsis },
+                    synopsisPtBr = savedSynopsisPtBr,
                     sourceLabel = obj.optString("sourceLabel", "Catálogo Base"),
                     moments = momentsList,
                     seriesName = obj.optString("seriesName", ""),
-                    issueNumber = obj.optInt("issueNumber", 0)
+                    issueNumber = obj.optInt("issueNumber", 0),
+                    updatedAt = obj.optLong("updatedAt", 0L),
+                    isDirty = obj.optBoolean("isDirty", false)
                 )
             )
         }
@@ -425,6 +579,8 @@ class SafeStorage(context: Context) {
         put("yearlyGoal", p.yearlyGoal)
         put("dailyPagesGoal", p.dailyPagesGoal)
         put("showGoalOnHome", p.showGoalOnHome)
+        put("updatedAt", p.updatedAt)
+        put("isDirty", p.isDirty)
     }
 
     private fun parseProfile(obj: JSONObject): ReaderProfile {
@@ -438,7 +594,9 @@ class SafeStorage(context: Context) {
             avatarPreset = obj.optString("avatarPreset", def.avatarPreset),
             yearlyGoal = obj.optInt("yearlyGoal", def.yearlyGoal).coerceAtLeast(1),
             dailyPagesGoal = obj.optInt("dailyPagesGoal", def.dailyPagesGoal).coerceAtLeast(5),
-            showGoalOnHome = obj.optBoolean("showGoalOnHome", def.showGoalOnHome)
+            showGoalOnHome = obj.optBoolean("showGoalOnHome", def.showGoalOnHome),
+            updatedAt = obj.optLong("updatedAt", 0L),
+            isDirty = obj.optBoolean("isDirty", false)
         )
     }
 

@@ -120,621 +120,6 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Interactive Apple iOS Mini Calendar Picker for selecting `readDate` (`YYYY-MM-DD`).
- */
-@Composable
-fun AppleMiniCalendarPicker(
-    selectedDateStr: String,
-    onSelectDate: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-
-    val parsedParts = remember(selectedDateStr) {
-        val parts = selectedDateStr.trim().split("-")
-        val now = Calendar.getInstance()
-        val y = parts.getOrNull(0)?.toIntOrNull() ?: now.get(Calendar.YEAR)
-        val m = (parts.getOrNull(1)?.toIntOrNull() ?: (now.get(Calendar.MONTH) + 1)).coerceIn(1, 12)
-        val d = (parts.getOrNull(2)?.toIntOrNull() ?: now.get(Calendar.DAY_OF_MONTH)).coerceIn(1, 31)
-        Triple(y, m, d)
-    }
-
-    var viewYear by remember(parsedParts.first) { mutableIntStateOf(parsedParts.first) }
-    var viewMonth by remember(parsedParts.second) { mutableIntStateOf(parsedParts.second) } // 1..12
-
-    val monthNames = listOf(
-        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-    )
-    val weekDays = listOf("D", "S", "T", "Q", "Q", "S", "S")
-
-    val cal = remember(viewYear, viewMonth) {
-        Calendar.getInstance().apply {
-            set(Calendar.YEAR, viewYear)
-            set(Calendar.MONTH, viewMonth - 1)
-            set(Calendar.DAY_OF_MONTH, 1)
-        }
-    }
-    val firstDayOfWeekOffset = (cal.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY).coerceIn(0, 6)
-    val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                if (s.isLight) Color.White.copy(alpha = 0.65f)
-                else Color.Black.copy(alpha = 0.28f)
-            )
-            .border(
-                0.5.dp,
-                if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f),
-                RoundedCornerShape(18.dp)
-            )
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Month/Year Header + Navigation + "Hoje"
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${monthNames[(viewMonth - 1).coerceIn(0, 11)]} $viewYear",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = s.textPrimary
-            )
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(s.accentColor.copy(alpha = 0.16f))
-                        .clickable {
-                            val today = Calendar.getInstance()
-                            val ty = today.get(Calendar.YEAR)
-                            val tm = today.get(Calendar.MONTH) + 1
-                            val td = today.get(Calendar.DAY_OF_MONTH)
-                            viewYear = ty
-                            viewMonth = tm
-                            onSelectDate(String.format(Locale.US, "%04d-%02d-%02d", ty, tm, td))
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "Hoje",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = s.accentColor
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (s.isLight) Color.Black.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.10f))
-                        .clickable {
-                            if (viewMonth == 1) {
-                                viewMonth = 12
-                                viewYear -= 1
-                            } else {
-                                viewMonth -= 1
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Mês anterior",
-                        tint = s.textPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (s.isLight) Color.Black.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.10f))
-                        .clickable {
-                            if (viewMonth == 12) {
-                                viewMonth = 1
-                                viewYear += 1
-                            } else {
-                                viewMonth += 1
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Próximo mês",
-                        tint = s.textPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
-
-        // Weekday header
-        Row(modifier = Modifier.fillMaxWidth()) {
-            weekDays.forEach { wd ->
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = wd,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = s.textTertiary
-                    )
-                }
-            }
-        }
-
-        // Days grid
-        val totalSlots = firstDayOfWeekOffset + daysInMonth
-        val rows = (totalSlots + 6) / 7
-        for (r in 0 until rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                for (c in 0 until 7) {
-                    val slotIdx = r * 7 + c
-                    val dayNum = slotIdx - firstDayOfWeekOffset + 1
-                    if (dayNum in 1..daysInMonth) {
-                        val isSelected = parsedParts.first == viewYear &&
-                            parsedParts.second == viewMonth &&
-                            parsedParts.third == dayNum
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSelected) s.accentColor else Color.Transparent)
-                                    .clickable {
-                                        val formatted = String.format(
-                                            Locale.US,
-                                            "%04d-%02d-%02d",
-                                            viewYear,
-                                            viewMonth,
-                                            dayNum
-                                        )
-                                        onSelectDate(formatted)
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = dayNum.toString(),
-                                    fontSize = 12.sp,
-                                    fontFamily = SpaceGroteskTabularFamily,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else s.textPrimary
-                                )
-                            }
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f).height(32.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Camada de fundo Liquid Glass na GPU para o Menu de Registro da HQ (idêntica à arquitetura óptica do menu inferior):
- * - Substrato translúcido adaptativo ao tema + refração suave da capa
- * - Pipeline de 4 camadas na GPU (`Modifier.liquidGlass(radiusX = 30f, radiusY = 30f)`) com isolamento `.graphicsLayer`,
- *   `RenderEffect.createBlurEffect`, luminância vertical (`0.08f -> 0.03f`), borda Fresnel 2.5D (`1.2.dp`, `0.30f -> Transparent`)
- *   e interatividade radial ao toque.
- */
-@Composable
-fun LiquidGlassSheetRefractiveLayer(
-    coverUrl: String,
-    scrollOffsetPx: Float = 0f,
-    dragOffsetY: Float = 0f,
-    cornerRadiusDp: Float = 24f,
-    sheetShape: Shape = RoundedRectangle(cornerRadiusDp.dp),
-    modifier: Modifier = Modifier
-) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-    val context = LocalContext.current
-    val rootBackdrop = rememberCurrentBackdrop()
-
-    Box(
-        modifier = modifier.fillMaxSize()
-    ) {
-        // 1. Vidro óptico refrativo usando exclusivamente o backdrop raiz do aplicativo
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .liquidGlassRegistrationSheet(
-                    backdrop = rootBackdrop,
-                    cornerRadiusDp = cornerRadiusDp
-                )
-        )
-
-        // 2. Capa difusa em baixa resolução (24x36) para blur instantâneo na GPU sem queda de FPS na rolagem
-        if (coverUrl.isNotBlank()) {
-            val cleanCover = remember(coverUrl) {
-                coverUrl.trim().replace("http://", "https://")
-            }
-            val blurredRequest = remember(cleanCover, context) {
-                ImageRequest.Builder(context)
-                    .data(cleanCover)
-                    .size(24, 36)
-                    .precision(coil.size.Precision.INEXACT)
-                    .crossfade(false)
-                    .allowHardware(true)
-                    .allowRgb565(true)
-                    .memoryCacheKey(cleanCover + "_sheet_amb")
-                    .diskCacheKey(cleanCover + "_sheet_amb")
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .build()
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.15f
-                        scaleY = 1.18f
-                    }
-                    .alpha(if (s.isLight) 0.14f else 0.20f)
-            ) {
-                AsyncImage(
-                    model = blurredRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CatalogStatusSegmentedBar(
-    value: ReadingStatus,
-    onChange: (ReadingStatus) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    AppleSegmentedPicker(
-        options = listOf(
-            SegmentOption(ReadingStatus.READ, "Lido"),
-            SegmentOption(ReadingStatus.READING, "Lendo"),
-            SegmentOption(ReadingStatus.WANT_TO_READ, "Quero Ler")
-        ),
-        value = value,
-        onChange = onChange,
-        modifier = modifier.fillMaxWidth()
-    )
-}
-
-/**
- * Card horizontal interativo para visualizar e navegar pelas edições da mesma sequência
- * (ex.: Batman #1, #2, #3, #4, #5 de Matt Fraction).
- */
-@Composable
-fun ComicSequenceCarouselCard(
-    currentComic: ComicEntry,
-    allUserComics: List<ComicEntry>,
-    onlineSequencePool: List<ComicEntry>,
-    spine3d: Boolean,
-    onSelectSequenceIssue: (ComicEntry) -> Unit,
-    onAddNextIssue: ((ComicEntry) -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-
-    val sequenceGroup = remember(currentComic, allUserComics, onlineSequencePool) {
-        SeriesSequenceEngine.findSequenceForComic(
-            target = currentComic,
-            userComics = allUserComics,
-            catalogComics = CuratedCatalog.curatedComicsCatalog,
-            extraOnlineComics = onlineSequencePool
-        )
-    }
-
-    val sequenceItems = sequenceGroup.issues
-    val baseSeriesTitle = sequenceGroup.baseSeriesTitle
-    val primaryAuthor = sequenceGroup.primaryAuthor
-    val currentIssueNum = remember(currentComic) {
-        SeriesSequenceEngine.inferIssueNumber(currentComic)
-    }
-    val inShelfCount = sequenceGroup.savedCount
-    val nextIssueNumber = sequenceGroup.nextIssueNumber
-
-    // Mostra o carrossel sempre que houver mais de 1 edição na sequência ou quando a HQ tiver número de edição (#1, Vol. 1...)
-    if (sequenceItems.size <= 1 && currentIssueNum <= 0 && currentComic.seriesName.isBlank()) return
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .inputWellSurface(RoundedCornerShape(18.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = LucideIcons.Layers,
-                        contentDescription = null,
-                        tint = s.accentColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "SEQUÊNCIA DA SÉRIE",
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        color = s.accentColor
-                    )
-                }
-                Text(
-                    text = buildString {
-                        append(baseSeriesTitle)
-                        if (primaryAuthor.isNotBlank()) {
-                            append(" • ")
-                            append(primaryAuthor)
-                        }
-                    },
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = s.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(s.accentColor.copy(alpha = 0.14f))
-                    .padding(horizontal = 9.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "$inShelfCount/${sequenceItems.size} na estante",
-                    fontSize = 10.5.sp,
-                    fontFamily = SpaceGroteskTabularFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = s.accentColor
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            sequenceItems.forEach { seqItem ->
-                val isCurrent = seqItem.comic.id == currentComic.id ||
-                    (currentComic.externalId.isNotBlank() && seqItem.comic.externalId == currentComic.externalId) ||
-                    (currentIssueNum > 0 && seqItem.issueNumber == currentIssueNum)
-
-                val userStatus = seqItem.savedEntry?.status
-                val statusBadgeText = when (userStatus) {
-                    ReadingStatus.READ -> "✓ Lido"
-                    ReadingStatus.READING -> "Lendo"
-                    ReadingStatus.WANT_TO_READ -> "Fila"
-                    null -> "+ Ver"
-                }
-                val statusBadgeBg = when (userStatus) {
-                    ReadingStatus.READ -> Color(0xFF10B981).copy(alpha = 0.20f)
-                    ReadingStatus.READING -> s.accentColor.copy(alpha = 0.20f)
-                    ReadingStatus.WANT_TO_READ -> Color(0xFFF59E0B).copy(alpha = 0.20f)
-                    null -> if (s.isLight) Color.Black.copy(alpha = 0.07f) else Color.White.copy(alpha = 0.10f)
-                }
-                val statusBadgeColor = when (userStatus) {
-                    ReadingStatus.READ -> if (s.isLight) Color(0xFF047857) else Color(0xFF34D399)
-                    ReadingStatus.READING -> s.accentColor
-                    ReadingStatus.WANT_TO_READ -> if (s.isLight) Color(0xFFB45309) else Color(0xFFFBBF24)
-                    null -> s.textSecondary
-                }
-
-                Column(
-                    modifier = Modifier
-                        .width(78.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isCurrent) s.accentColor.copy(alpha = if (s.isLight) 0.14f else 0.22f)
-                            else if (s.isLight) Color.White.copy(alpha = 0.65f)
-                            else Color.White.copy(alpha = 0.05f)
-                        )
-                        .border(
-                            width = if (isCurrent) 1.5.dp else 0.6.dp,
-                            color = if (isCurrent) s.accentColor
-                            else if (s.isLight) Color.Black.copy(alpha = 0.08f)
-                            else Color.White.copy(alpha = 0.10f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable { onSelectSequenceIssue(seqItem.comic) }
-                        .padding(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(2f / 3f)
-                            .clip(RoundedCornerShape(8.dp))
-                    ) {
-                        BookCover(
-                            src = seqItem.comic.coverUrl,
-                            title = seqItem.comic.title,
-                            authors = seqItem.comic.authors,
-                            publisher = seqItem.comic.publisher,
-                            year = seqItem.comic.releaseYear,
-                            spine3d = spine3d,
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        // Issue badge (#1, #2, #3... ou ano quando obra sem número)
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(4.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    if (isCurrent) s.accentColor
-                                    else Color.Black.copy(alpha = 0.75f)
-                                )
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = if (seqItem.issueNumber > 0) "#${seqItem.issueNumber}" else "${seqItem.comic.releaseYear}",
-                                fontSize = 9.5.sp,
-                                fontFamily = SpaceGroteskTabularFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (seqItem.issueNumber > 0) "Edição #${seqItem.issueNumber}" else seqItem.comic.title,
-                        fontSize = 10.5.sp,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.SemiBold,
-                        color = if (isCurrent) s.accentColor else s.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(statusBadgeBg)
-                            .padding(vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = statusBadgeText,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = statusBadgeColor,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-
-            // Card rápido para adicionar a próxima edição da sequência (#N+1)
-            if (onAddNextIssue != null) {
-                Column(
-                    modifier = Modifier
-                        .width(78.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (s.isLight) Color.White.copy(alpha = 0.50f)
-                            else Color.White.copy(alpha = 0.04f)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = s.accentColor.copy(alpha = 0.45f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable {
-                            val nextTemplate = SeriesSequenceEngine.createNextIssueTemplate(
-                                fromComic = currentComic,
-                                nextIssueNumber = nextIssueNumber
-                            )
-                            onAddNextIssue(nextTemplate)
-                        }
-                        .padding(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(2f / 3f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(s.accentColor.copy(alpha = 0.10f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = "+ #$nextIssueNumber",
-                                fontSize = 14.sp,
-                                fontFamily = SpaceGroteskTabularFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = s.accentColor
-                            )
-                            Text(
-                                text = "Próxima",
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = s.textSecondary
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = "Edição #$nextIssueNumber",
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = s.accentColor,
-                        maxLines = 1
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(s.accentBg)
-                            .padding(vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "+ Criar",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = s.accentText
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
  * 4.7 Modal de Catalogação e Diário (`selectedComic`) — SwiftUI `.sheet` + `.inspector`:
  * - Novo Liquid Glass na GPU (idêntico ao menu inferior) com refração óptica, luminância vertical e borda Fresnel 2.5D de 1.2.dp
  * - Estado local `draftComic` isolado para zero recomposição da árvore principal durante digitação, avaliação e sliders
@@ -762,9 +147,27 @@ fun CatalogSheetModal(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val localizedInitial = remember(selectedComic) {
-        com.example.data.PortugueseComicTranslator.localizeComic(selectedComic)
+        com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = false)
     }
     var draftComic by remember(selectedComic.id) { mutableStateOf(localizedInitial) }
+    LaunchedEffect(selectedComic.id, selectedComic.synopsisPtBr) {
+        if (selectedComic.synopsisPtBr.isNotBlank() && draftComic.synopsisPtBr != selectedComic.synopsisPtBr) {
+            draftComic = draftComic.copy(
+                synopsis = selectedComic.synopsisPtBr,
+                synopsisPtBr = selectedComic.synopsisPtBr
+            )
+        } else if (draftComic.synopsisPtBr.isBlank()) {
+            val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = true)
+            }
+            if (enriched.synopsisPtBr.isNotBlank()) {
+                draftComic = draftComic.copy(
+                    synopsis = enriched.synopsisPtBr,
+                    synopsisPtBr = enriched.synopsisPtBr
+                )
+            }
+        }
+    }
     var comicTagInput by remember(selectedComic.id) { mutableStateOf("") }
     var showMiniCalendar by remember(selectedComic.id) { mutableStateOf(false) }
     var momentNoteInput by remember(selectedComic.id) { mutableStateOf("") }
@@ -795,7 +198,7 @@ fun CatalogSheetModal(
         }
         return finalComic
     }
-    val sheetLazyListState = rememberLazyListState()
+    val sheetScrollState = rememberScrollState(0)
     val context = LocalContext.current
     val dragScope = androidx.compose.runtime.rememberCoroutineScope()
     val dragOffsetYAnim = remember { Animatable(0f) }
@@ -1008,13 +411,15 @@ fun CatalogSheetModal(
                     }
                 }
 
-                // Conteúdo rolável do modal otimizado com LazyColumn e trava vertical durante uso do slider
+                // Conteúdo rolável do modal com Column + verticalScroll contínuo (mantém todas as seções medidas sem saltos/teleporte ao rolar para cima)
                 val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
-                LazyColumn(
-                    state = sheetLazyListState,
-                    userScrollEnabled = !isSliderActive,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(
+                            state = sheetScrollState,
+                            enabled = !isSliderActive
+                        )
                         .padding(
                             start = if (isSheetExpanded) 22.dp else 18.dp,
                             end = if (isSheetExpanded) 22.dp else 18.dp,
@@ -1024,897 +429,208 @@ fun CatalogSheetModal(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // Item 1: Resumo da Obra (Capa + Título + Autor)
-                    item(key = "comic_work_summary", contentType = "work_summary") {
+                    CatalogWorkSummaryHeader(
+                        draftComic = draftComic,
+                        onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                    )
+
+                    // Item 1.5: Sequência da Série (#1, #2, #3...)
+                    ComicSequenceCarouselCard(
+                        currentComic = draftComic,
+                        allUserComics = allUserComics,
+                        onlineSequencePool = onlineSequencePool,
+                        spine3d = appSettings.spine3dEffect,
+                        onSelectSequenceIssue = { nextComic ->
+                            onSelectSequenceComic(nextComic)
+                        },
+                        onAddNextIssue = { nextTemplate ->
+                            onSelectSequenceComic(nextTemplate)
+                        }
+                    )
+
+                    // Item 2: Seletor de Status ultra rápido (Lido / Lendo / Na Fila)
+                    CatalogStatusSegmentedBar(
+                        value = draftComic.status,
+                        onChange = { nextStatus ->
+                            draftComic = draftComic.copy(
+                                status = nextStatus,
+                                currentPage = when (nextStatus) {
+                                    ReadingStatus.READ -> draftComic.pageCount
+                                    ReadingStatus.WANT_TO_READ -> 0
+                                    ReadingStatus.READING -> draftComic.currentPage
+                                },
+                                rating = if (nextStatus != ReadingStatus.READ) 0f else draftComic.rating,
+                                favorite = if (nextStatus != ReadingStatus.READ) false else draftComic.favorite,
+                                review = if (nextStatus != ReadingStatus.READ) "" else draftComic.review,
+                                rereadCount = if (nextStatus == ReadingStatus.WANT_TO_READ) 0 else draftComic.rereadCount
+                            )
+                        }
+                    )
+
+                    if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inputWellSurface(RoundedCornerShape(16.dp))
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            BookCover(
-                                src = draftComic.coverUrl,
-                                title = draftComic.title,
-                                publisher = draftComic.publisher,
-                                year = draftComic.releaseYear,
+                            Box(
                                 modifier = Modifier
-                                    .width(64.dp)
-                                    .aspectRatio(2f / 3f)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(s.accentColor.copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                BasicTextField(
-                                    value = draftComic.title,
-                                    onValueChange = { v -> draftComic = draftComic.copy(title = v) },
-                                    textStyle = TextStyle(
-                                        fontFamily = PlusJakartaSansFamily,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = s.textPrimary
-                                    ),
-                                    cursorBrush = SolidColor(s.accentColor),
-                                    modifier = Modifier.fillMaxWidth()
+                                Icon(
+                                    imageVector = Icons.Default.Bookmark,
+                                    contentDescription = null,
+                                    tint = s.accentColor,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                BasicTextField(
-                                    value = draftComic.authors,
-                                    onValueChange = { v -> draftComic = draftComic.copy(authors = v) },
-                                    textStyle = TextStyle(
-                                        fontFamily = PlusJakartaSansFamily,
-                                        fontSize = 12.sp,
-                                        color = s.textSecondary
-                                    ),
-                                    cursorBrush = SolidColor(s.accentColor),
-                                    modifier = Modifier.fillMaxWidth()
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Na sua Fila de Leitura (Quero Ler)",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = s.textPrimary
                                 )
                                 Text(
-                                    text = "${draftComic.publisher} • ${draftComic.releaseYear} • ${draftComic.pageCount} págs",
+                                    text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
                                     fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    lineHeight = 15.sp,
                                     color = s.textSecondary
                                 )
                             }
                         }
-                    }
-
-                    // Item 1.5: Sequência da Série (#1, #2, #3...)
-                    item(key = "comic_sequence_strip", contentType = "sequence_strip") {
-                        ComicSequenceCarouselCard(
-                            currentComic = draftComic,
-                            allUserComics = allUserComics,
-                            onlineSequencePool = onlineSequencePool,
-                            spine3d = appSettings.spine3dEffect,
-                            onSelectSequenceIssue = { nextComic ->
-                                onSelectSequenceComic(nextComic)
-                            },
-                            onAddNextIssue = { nextTemplate ->
-                                onSelectSequenceComic(nextTemplate)
-                            }
-                        )
-                    }
-
-                    // Item 2: Seletor de Status ultra rápido (Lido / Lendo / Na Fila)
-                    item(key = "reading_status_selector", contentType = "status_picker") {
-                        CatalogStatusSegmentedBar(
-                            value = draftComic.status,
-                            onChange = { nextStatus ->
-                                draftComic = draftComic.copy(
-                                    status = nextStatus,
-                                    currentPage = when (nextStatus) {
-                                        ReadingStatus.READ -> draftComic.pageCount
-                                        ReadingStatus.WANT_TO_READ -> 0
-                                        ReadingStatus.READING -> draftComic.currentPage
-                                    },
-                                    rating = if (nextStatus != ReadingStatus.READ) 0f else draftComic.rating,
-                                    favorite = if (nextStatus != ReadingStatus.READ) false else draftComic.favorite,
-                                    review = if (nextStatus != ReadingStatus.READ) "" else draftComic.review,
-                                    rereadCount = if (nextStatus == ReadingStatus.WANT_TO_READ) 0 else draftComic.rereadCount
-                                )
-                            }
-                        )
-                    }
-
-                    if (draftComic.status == ReadingStatus.WANT_TO_READ) {
-                        item(key = "want_to_read_notice_card", contentType = "notice_card") {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .inputWellSurface(RoundedCornerShape(16.dp))
-                                    .padding(14.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(s.accentColor.copy(alpha = 0.16f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Bookmark,
-                                        contentDescription = null,
-                                        tint = s.accentColor,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Na sua Fila de Leitura (Quero Ler)",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = s.textPrimary
-                                    )
-                                    Text(
-                                        text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
-                                        fontSize = 11.5.sp,
-                                        lineHeight = 15.sp,
-                                        color = s.textSecondary
-                                    )
-                                }
-                            }
-                        }
                     } else {
                         // Item 3: Data da Leitura (com Mini Calendário) & Releitura
-                        item(key = "reading_date_and_rereads", contentType = "date_section") {
+                        CatalogReadingDateAndRereadsSection(
+                            draftComic = draftComic,
+                            allowRereads = appSettings.allowRereads,
+                            showMiniCalendar = showMiniCalendar,
+                            onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
+                            onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                        )
+
+                        // Item 4: Progresso de Páginas quando está Lendo
+                        if (draftComic.status == ReadingStatus.READING) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .inputWellSurface(RoundedCornerShape(16.dp))
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showMiniCalendar = !showMiniCalendar }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CalendarMonth,
-                                            contentDescription = null,
-                                            tint = s.accentColor,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Data da leitura",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.textPrimary
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(
-                                                if (showMiniCalendar) s.accentColor.copy(alpha = 0.18f)
-                                                else s.accentColor.copy(alpha = 0.10f)
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = draftComic.readDate.ifBlank { "Selecionar data" },
-                                            fontFamily = SpaceGroteskTabularFamily,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = s.accentColor
-                                        )
-                                    }
-                                }
-
-                                AnimatedVisibility(
-                                    visible = showMiniCalendar,
-                                    enter = expandVertically() + fadeIn(),
-                                    exit = shrinkVertically() + fadeOut()
-                                ) {
-                                    AppleMiniCalendarPicker(
-                                        selectedDateStr = draftComic.readDate,
-                                        onSelectDate = { pickedDate ->
-                                            draftComic = draftComic.copy(readDate = pickedDate)
-                                            showMiniCalendar = false
-                                        }
+                                    Text(
+                                        text = "Página atual (${draftComic.currentPage} de ${draftComic.pageCount})",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.textPrimary
+                                    )
+                                    AppleStepper(
+                                        value = draftComic.currentPage,
+                                        min = 0,
+                                        max = draftComic.pageCount.coerceAtLeast(1),
+                                        step = 1,
+                                        onChange = { v -> draftComic = draftComic.copy(currentPage = v) }
                                     )
                                 }
-
-                                if (appSettings.allowRereads) {
-                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Já havia lido esta obra antes",
-                                                fontSize = 12.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = s.textPrimary
-                                            )
-                                            Text(
-                                                text = if (draftComic.rereadCount > 0) {
-                                                    "Registrado como releitura (${draftComic.rereadCount}x)"
-                                                } else {
-                                                    "Primeira leitura"
-                                                },
-                                                fontSize = 11.sp,
-                                                color = s.textSecondary
-                                            )
-                                        }
-                                        AppleStepper(
-                                            value = draftComic.rereadCount,
-                                            min = 0,
-                                            max = 50,
-                                            step = 1,
-                                            onChange = { v -> draftComic = draftComic.copy(rereadCount = v) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Item 4: Progresso de Páginas quando está Lendo
-                        if (draftComic.status == ReadingStatus.READING) {
-                            item(key = "reading_page_progress", contentType = "progress_section") {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .inputWellSurface(RoundedCornerShape(16.dp))
-                                        .padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Página atual (${draftComic.currentPage} de ${draftComic.pageCount})",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.textPrimary
-                                        )
-                                        AppleStepper(
-                                            value = draftComic.currentPage,
-                                            min = 0,
-                                            max = draftComic.pageCount.coerceAtLeast(1),
-                                            step = 1,
-                                            onChange = { v -> draftComic = draftComic.copy(currentPage = v) }
-                                        )
-                                    }
-                                    AppleSlider(
-                                        value = draftComic.currentPage.toFloat(),
-                                        min = 0f,
-                                        max = draftComic.pageCount.coerceAtLeast(1).toFloat(),
-                                        step = 1f,
-                                        accentColor = s.accentColor,
-                                        onChange = { v -> draftComic = draftComic.copy(currentPage = v.roundToInt()) }
-                                    )
-                                }
+                                AppleSlider(
+                                    value = draftComic.currentPage.toFloat(),
+                                    min = 0f,
+                                    max = draftComic.pageCount.coerceAtLeast(1).toFloat(),
+                                    step = 1f,
+                                    accentColor = s.accentColor,
+                                    onChange = { v -> draftComic = draftComic.copy(currentPage = v.roundToInt()) }
+                                )
                             }
                         }
 
                         // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
                         if (draftComic.status == ReadingStatus.READ) {
                             // Item 5: Avaliar + Gostei (Coração)
-                            item(key = "rating_and_favorite_block", contentType = "rating_section") {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .inputWellSurface(RoundedCornerShape(16.dp))
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = "AVALIAÇÃO",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                letterSpacing = 0.5.sp,
-                                                color = s.textPrimary.copy(alpha = 0.85f)
-                                            )
-                                            if (draftComic.rating > 0f) {
-                                                Text(
-                                                    text = "${String.format(Locale.US, "%.1f", draftComic.rating)} ★ (Limpar)",
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = s.accentColor,
-                                                    modifier = Modifier.clickable {
-                                                        draftComic = draftComic.copy(rating = 0f)
-                                                    }
-                                                )
-                                            } else {
-                                                Text(
-                                                    text = "Toque ou arraste para avaliar",
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = s.textSecondary
-                                                )
-                                            }
-                                        }
-                                        StarRating(
-                                            rating = draftComic.rating,
-                                            onChange = { r -> draftComic = draftComic.copy(rating = r) },
-                                            size = "lg",
-                                            starColor = s.starColor,
-                                            allowHalf = appSettings.halfStarRatings
-                                        )
-                                    }
-
-                                    // Gostei (Coração)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(1.dp)
-                                                .height(42.dp)
-                                                .background(mat.dividerColor)
-                                        )
-                                        Spacer(modifier = Modifier.width(14.dp))
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = "GOSTEI",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                letterSpacing = 0.5.sp,
-                                                color = s.textPrimary.copy(alpha = 0.85f)
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (draftComic.favorite) Color(0xFFF43F5E).copy(alpha = 0.18f)
-                                                        else Color.Transparent
-                                                    )
-                                                    .clickable {
-                                                        draftComic = draftComic.copy(favorite = !draftComic.favorite)
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (draftComic.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                                    contentDescription = "Gostei",
-                                                    tint = if (draftComic.favorite) Color(0xFFF43F5E) else s.textSecondary.copy(alpha = 0.65f),
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            CatalogRatingAndFavoriteSection(
+                                draftComic = draftComic,
+                                halfStarRatings = appSettings.halfStarRatings,
+                                onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                            )
 
                             // Item 6: Resenha / Comentários
-                            item(key = "review_comments_block", contentType = "review_section") {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(
-                                        text = "RESENHA OU COMENTÁRIOS",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                        color = s.textPrimary.copy(alpha = 0.85f),
-                                        modifier = Modifier.padding(horizontal = 4.dp)
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(if (isSheetExpanded) 110.dp else 84.dp)
-                                            .inputWellSurface(RoundedCornerShape(16.dp))
-                                            .padding(12.dp)
-                                    ) {
-                                        if (draftComic.review.isEmpty()) {
-                                            Text(
-                                                text = "Adicionar resenha...",
-                                                fontSize = 12.5.sp,
-                                                color = s.textSecondary.copy(alpha = 0.70f)
-                                            )
-                                        }
-                                        BasicTextField(
-                                            value = draftComic.review,
-                                            onValueChange = { r -> draftComic = draftComic.copy(review = r) },
-                                            textStyle = TextStyle(
-                                                fontFamily = PlusJakartaSansFamily,
-                                                fontSize = 12.5.sp,
-                                                lineHeight = 18.sp,
-                                                color = s.textPrimary
-                                            ),
-                                            cursorBrush = SolidColor(s.accentColor),
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                }
-                            }
+                            CatalogReviewCommentsSection(
+                                reviewText = draftComic.review,
+                                isExpanded = isSheetExpanded,
+                                onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
+                            )
                         }
                     }
 
                     // Item 7: Seção Própria e Exclusiva de Tags
-                    item(key = "tags_section_block", contentType = "tags_section") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inputWellSurface(RoundedCornerShape(16.dp))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocalOffer,
-                                        contentDescription = null,
-                                        tint = s.accentColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = "TAGS",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                        color = s.textPrimary.copy(alpha = 0.85f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "${draftComic.tags.size} ${if (draftComic.tags.size == 1) "selecionada" else "selecionadas"}",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = s.textSecondary,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
+                    CatalogTagsSection(
+                        tags = draftComic.tags,
+                        quickReviewTags = appSettings.quickReviewTags,
+                        comicTagInput = comicTagInput,
+                        onChangeComicTagInput = { comicTagInput = it },
+                        onUpdateTags = { nextTags -> draftComic = draftComic.copy(tags = nextTags) }
+                    )
 
-                            if (draftComic.tags.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    draftComic.tags.forEach { tag ->
-                                        Row(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(s.accentBg)
-                                                .clickable {
-                                                    draftComic = draftComic.copy(tags = draftComic.tags - tag)
-                                                }
-                                                .padding(horizontal = 11.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                        ) {
-                                            Text(
-                                                text = tag,
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = s.accentText
-                                            )
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = null,
-                                                tint = s.accentText.copy(alpha = 0.85f),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            if (s.isLight) Color.White.copy(alpha = 0.88f)
-                                            else Color.Black.copy(alpha = 0.35f)
-                                        )
-                                        .border(
-                                            width = 0.6.dp,
-                                            color = if (s.isLight) Color.Black.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.16f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 12.dp, vertical = 9.dp)
-                                ) {
-                                    if (comicTagInput.isEmpty()) {
-                                        Text(
-                                            text = "Adicionar tag (ex: edição de luxo, favorito)...",
-                                            fontSize = 12.sp,
-                                            color = s.textSecondary.copy(alpha = 0.70f),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    BasicTextField(
-                                        value = comicTagInput,
-                                        onValueChange = { comicTagInput = it },
-                                        singleLine = true,
-                                        textStyle = TextStyle(
-                                            fontFamily = PlusJakartaSansFamily,
-                                            fontSize = 12.sp,
-                                            color = s.textPrimary
-                                        ),
-                                        cursorBrush = SolidColor(s.accentColor),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                if (comicTagInput.trim().isNotEmpty()) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(s.accentBg)
-                                            .clickable {
-                                                val clean = comicTagInput.trim().replace(",", "")
-                                                if (clean.isNotEmpty() && !draftComic.tags.contains(clean)) {
-                                                    draftComic = draftComic.copy(tags = draftComic.tags + clean)
-                                                }
-                                                comicTagInput = ""
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = "+ Tag",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = s.accentText
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (appSettings.quickReviewTags.isNotEmpty()) {
-                                Text(
-                                    text = "Sugestões rápidas (toque para marcar/desmarcar):",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = s.textSecondary
-                                )
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    appSettings.quickReviewTags.forEach { tag ->
-                                        val isSelected = draftComic.tags.contains(tag)
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(
-                                                    if (isSelected) s.accentBg
-                                                    else if (s.isLight) Color.White.copy(alpha = 0.90f)
-                                                    else Color.White.copy(alpha = 0.14f)
-                                                )
-                                                .border(
-                                                    width = 0.5.dp,
-                                                    color = if (isSelected) Color.Transparent
-                                                            else if (s.isLight) Color.Black.copy(alpha = 0.16f)
-                                                            else Color.White.copy(alpha = 0.20f),
-                                                    shape = RoundedCornerShape(999.dp)
-                                                )
-                                                .clickable {
-                                                    val next = if (isSelected) draftComic.tags - tag else draftComic.tags + tag
-                                                    draftComic = draftComic.copy(tags = next)
-                                                }
-                                                .padding(horizontal = 11.dp, vertical = 6.dp)
-                                        ) {
-                                            Text(
-                                                text = if (isSelected) "✓ $tag" else "+ $tag",
-                                                fontSize = 11.5.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                                color = if (isSelected) s.accentText else s.textPrimary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                    // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
+                    val addCurrentMoment = {
+                        val cleanNote = momentNoteInput.trim()
+                        if (cleanNote.isNotEmpty()) {
+                            val pageNum = momentPageInput.toIntOrNull() ?: 0
+                            val today = java.time.LocalDate.now()
+                                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                            val newMoment = ComicMoment(
+                                id = "moment_${System.currentTimeMillis()}_${(100..999).random()}",
+                                page = pageNum,
+                                tag = "",
+                                note = cleanNote,
+                                date = draftComic.readDate.ifBlank { today },
+                                isSpoiler = false
+                            )
+                            draftComic = draftComic.copy(moments = draftComic.moments + newMoment)
+                            momentNoteInput = ""
                         }
                     }
-
-                    // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas (Mesmo padrão de adição das Tags, sem tipo de momento)
-                    item(key = "moments_section_block", contentType = "moments_section") {
-                        val addCurrentMoment = {
-                            val cleanNote = momentNoteInput.trim()
-                            if (cleanNote.isNotEmpty()) {
-                                val pageNum = momentPageInput.toIntOrNull() ?: 0
-                                val today = java.time.LocalDate.now()
-                                    .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
-                                val newMoment = ComicMoment(
-                                    id = "moment_${System.currentTimeMillis()}_${(100..999).random()}",
-                                    page = pageNum,
-                                    tag = "",
-                                    note = cleanNote,
-                                    date = draftComic.readDate.ifBlank { today },
-                                    isSpoiler = false
-                                )
-                                draftComic = draftComic.copy(moments = draftComic.moments + newMoment)
-                                momentNoteInput = ""
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inputWellSurface(RoundedCornerShape(16.dp))
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Bookmark,
-                                        contentDescription = null,
-                                        tint = s.accentColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Text(
-                                        text = "MOMENTOS MARCANTES",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                        color = s.textPrimary.copy(alpha = 0.85f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(s.accentColor.copy(alpha = 0.12f))
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "${draftComic.moments.size} ${if (draftComic.moments.size == 1) "adicionado" else "adicionados"}",
-                                        fontSize = 10.5.sp,
-                                        fontFamily = SpaceGroteskTabularFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        color = s.accentColor,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-
-                            // Momentos já adicionados (exibidos em pílulas/cards acima do campo, assim como nas Tags, com botão X para remover)
-                            if (draftComic.moments.isNotEmpty()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    draftComic.moments.forEach { moment ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(s.accentBg.copy(alpha = 0.14f))
-                                                .border(
-                                                    width = 0.5.dp,
-                                                    color = s.accentColor.copy(alpha = 0.30f),
-                                                    shape = RoundedCornerShape(12.dp)
-                                                )
-                                                .clickable {
-                                                    draftComic = draftComic.copy(
-                                                        moments = draftComic.moments.filter { it.id != moment.id }
-                                                    )
-                                                }
-                                                .padding(horizontal = 11.dp, vertical = 7.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.weight(1f),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                if (moment.page > 0) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(999.dp))
-                                                            .background(s.accentBg)
-                                                            .padding(horizontal = 7.dp, vertical = 2.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = "Pág. ${moment.page}",
-                                                            fontSize = 10.sp,
-                                                            fontFamily = SpaceGroteskTabularFamily,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = s.accentText,
-                                                            maxLines = 1,
-                                                            softWrap = false
-                                                        )
-                                                    }
-                                                }
-                                                Text(
-                                                    text = moment.note,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = s.textPrimary,
-                                                    lineHeight = 16.sp
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Remover momento",
-                                                tint = s.textSecondary.copy(alpha = 0.85f),
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Linha de adição rápida contínua (idêntica às Tags: digita e toca em + Adicionar quantas vezes quiser)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                // Campo opcional compacto de Página
-                                Box(
-                                    modifier = Modifier
-                                        .width(56.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            if (s.isLight) Color.White.copy(alpha = 0.88f)
-                                            else Color.Black.copy(alpha = 0.35f)
-                                        )
-                                        .border(
-                                            width = 0.6.dp,
-                                            color = if (s.isLight) Color.Black.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.16f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 9.dp),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    if (momentPageInput.isEmpty()) {
-                                        Text(
-                                            text = "Pág.",
-                                            fontSize = 11.sp,
-                                            color = s.textSecondary.copy(alpha = 0.70f),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                    BasicTextField(
-                                        value = momentPageInput,
-                                        onValueChange = { input ->
-                                            if (input.all { it.isDigit() } && input.length <= 5) {
-                                                momentPageInput = input
-                                            }
-                                        },
-                                        singleLine = true,
-                                        textStyle = TextStyle(
-                                            fontFamily = SpaceGroteskTabularFamily,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = s.textPrimary
-                                        ),
-                                        cursorBrush = SolidColor(s.accentColor),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                // Campo de texto para digitar a nota ou momento marcante
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            if (s.isLight) Color.White.copy(alpha = 0.88f)
-                                            else Color.Black.copy(alpha = 0.35f)
-                                        )
-                                        .border(
-                                            width = 0.6.dp,
-                                            color = if (s.isLight) Color.Black.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.16f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 9.dp)
-                                ) {
-                                    if (momentNoteInput.isEmpty()) {
-                                        Text(
-                                            text = "Adicionar momento ou citação...",
-                                            fontSize = 12.sp,
-                                            color = s.textSecondary.copy(alpha = 0.70f),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    BasicTextField(
-                                        value = momentNoteInput,
-                                        onValueChange = { momentNoteInput = it },
-                                        singleLine = true,
-                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                                        ),
-                                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                                            onDone = { addCurrentMoment() }
-                                        ),
-                                        textStyle = TextStyle(
-                                            fontFamily = PlusJakartaSansFamily,
-                                            fontSize = 12.sp,
-                                            color = s.textPrimary
-                                        ),
-                                        cursorBrush = SolidColor(s.accentColor),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                val canAddMoment = momentNoteInput.trim().isNotEmpty()
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(
-                                            if (canAddMoment) s.accentBg
-                                            else s.accentColor.copy(alpha = 0.14f)
-                                        )
-                                        .clickable(enabled = canAddMoment) {
-                                            addCurrentMoment()
-                                        }
-                                        .padding(horizontal = 11.dp, vertical = 9.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "+ Adicionar",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (canAddMoment) s.accentText else s.accentColor.copy(alpha = 0.65f),
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Item 8: Botão Salvar Registro
-                    item(key = "save_registration_button", contentType = "action_button") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .shadow(6.dp, RoundedCornerShape(999.dp))
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(s.accentBg)
-                                .clickable { onSave(buildFinalComicForSave()) }
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Salvar Registro",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = s.accentText
+                    CatalogMomentsSection(
+                        moments = draftComic.moments,
+                        momentPageInput = momentPageInput,
+                        momentNoteInput = momentNoteInput,
+                        onChangeMomentPage = { momentPageInput = it },
+                        onChangeMomentNote = { momentNoteInput = it },
+                        onAddMoment = { addCurrentMoment() },
+                        onRemoveMoment = { momentId ->
+                            draftComic = draftComic.copy(
+                                moments = draftComic.moments.filter { it.id != momentId }
                             )
                         }
+                    )
+
+                    // Item 8: Botão Salvar Registro
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(6.dp, RoundedCornerShape(999.dp))
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(s.accentBg)
+                            .clickable { onSave(buildFinalComicForSave()) }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Salvar Registro",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = s.accentText
+                        )
                     }
                 }
             }
@@ -1948,7 +664,7 @@ fun ComicInfoSynopsisSheetModal(
     var isExpanded by remember { mutableStateOf(false) }
     val dragScope = androidx.compose.runtime.rememberCoroutineScope()
     val dragOffsetYAnim = remember { Animatable(0f) }
-    val infoLazyListState = rememberLazyListState()
+    val infoScrollState = rememberScrollState(0)
 
     // Prefetching strategy: decodifica e armazena em cache de memória antecipadamente a capa
     LaunchedEffect(comic.coverUrl) {
@@ -1967,20 +683,38 @@ fun ComicInfoSynopsisSheetModal(
 
     val sheetShape = remember { RoundedRectangle(24f.dp) }
 
-    val displayComic = remember(comic) {
-        PortugueseComicTranslator.localizeComic(comic)
+    var displayComic by remember(comic) {
+        mutableStateOf(PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = false))
+    }
+
+    LaunchedEffect(comic.id, comic.synopsisPtBr) {
+        if (comic.synopsisPtBr.isNotBlank() && displayComic.synopsisPtBr != comic.synopsisPtBr) {
+            displayComic = displayComic.copy(
+                synopsis = comic.synopsisPtBr,
+                synopsisPtBr = comic.synopsisPtBr
+            )
+        } else if (displayComic.synopsisPtBr.isBlank()) {
+            val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = true)
+            }
+            displayComic = enriched
+        }
     }
 
     val synopsisText = remember(displayComic) {
-        displayComic.synopsis.trim().ifBlank {
+        val candidate = displayComic.synopsisPtBr.trim().ifBlank { displayComic.synopsis.trim() }
+        if (candidate.isNotBlank() && PortugueseComicTranslator.isPortugueseText(candidate)) {
+            candidate
+        } else {
             PortugueseComicTranslator.translateSynopsisToPtBr(
-                rawSynopsis = "",
+                rawSynopsis = candidate,
                 translatedTitle = displayComic.title,
                 authors = displayComic.authors,
                 publisher = displayComic.publisher,
                 releaseYear = displayComic.releaseYear,
                 pageCount = displayComic.pageCount,
-                issueNumber = displayComic.issueNumber
+                issueNumber = displayComic.issueNumber,
+                allowNetworkTranslation = false
             )
         }
     }
@@ -2109,134 +843,195 @@ fun ComicInfoSynopsisSheetModal(
                     Spacer(modifier = Modifier.width(48.dp))
                 }
 
-                LazyColumn(
-                    state = infoLazyListState,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(infoScrollState)
                         .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Item 1: Cover + Primary Info
-                    item(key = "info_cover_and_metadata", contentType = "cover_meta") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.Top
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        BookCover(
+                            src = displayComic.coverUrl,
+                            title = displayComic.title,
+                            authors = displayComic.authors,
+                            publisher = displayComic.publisher,
+                            year = displayComic.releaseYear,
+                            spine3d = appSettings.spine3dEffect,
+                            modifier = Modifier
+                                .width(92.dp)
+                                .aspectRatio(2f / 3f)
+                                .shadow(8.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            BookCover(
-                                src = displayComic.coverUrl,
-                                title = displayComic.title,
-                                authors = displayComic.authors,
-                                publisher = displayComic.publisher,
-                                year = displayComic.releaseYear,
-                                spine3d = appSettings.spine3dEffect,
-                                modifier = Modifier
-                                    .width(92.dp)
-                                    .aspectRatio(2f / 3f)
-                                    .shadow(8.dp, RoundedCornerShape(12.dp))
-                                    .clip(RoundedCornerShape(12.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .inputWellSurface(RoundedCornerShape(999.dp))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = displayComic.genre,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.accentColor
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = displayComic.title,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = s.textPrimary,
+                                lineHeight = 23.sp
                             )
 
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .inputWellSurface(RoundedCornerShape(999.dp))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            text = displayComic.genre,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.accentColor
-                                        )
-                                    }
-                                }
+                            Text(
+                                text = displayComic.authors,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = s.textSecondary
+                            )
 
-                                Text(
-                                    text = displayComic.title,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = s.textPrimary,
-                                    lineHeight = 23.sp
-                                )
-
-                                Text(
-                                    text = displayComic.authors,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = s.textSecondary
-                                )
-
-                                Text(
-                                    text = "${displayComic.publisher} • ${displayComic.releaseYear} • ${displayComic.pageCount} páginas",
-                                    fontSize = 11.5.sp,
-                                    color = s.textSecondary
-                                )
-                            }
+                            Text(
+                                text = "${displayComic.publisher} • ${displayComic.releaseYear} • ${displayComic.pageCount} páginas",
+                                fontSize = 11.5.sp,
+                                color = s.textSecondary
+                            )
                         }
                     }
 
                     // Item 1.5: Sequência da Série (#1, #2, #3...)
-                    item(key = "info_sequence_carousel", contentType = "sequence_carousel") {
-                        ComicSequenceCarouselCard(
-                            currentComic = savedEntry ?: displayComic,
-                            allUserComics = allUserComics,
-                            onlineSequencePool = onlineSequencePool,
-                            spine3d = appSettings.spine3dEffect,
-                            onSelectSequenceIssue = { nextComic ->
-                                onSelectSequenceComic(nextComic)
-                            },
-                            onAddNextIssue = { nextTemplate ->
-                                onOpenCatalogWithStatus(nextTemplate, ReadingStatus.WANT_TO_READ)
-                            }
+                    ComicSequenceCarouselCard(
+                        currentComic = savedEntry ?: displayComic,
+                        allUserComics = allUserComics,
+                        onlineSequencePool = onlineSequencePool,
+                        spine3d = appSettings.spine3dEffect,
+                        onSelectSequenceIssue = { nextComic ->
+                            onSelectSequenceComic(nextComic)
+                        },
+                        onAddNextIssue = { nextTemplate ->
+                            onOpenCatalogWithStatus(nextTemplate, ReadingStatus.WANT_TO_READ)
+                        }
+                    )
+
+                    // Item 2: Sinopse da Obra
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inputWellSurface(RoundedCornerShape(18.dp))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                contentDescription = null,
+                                tint = s.accentColor,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "SINOPSE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp,
+                                color = s.accentColor
+                            )
+                        }
+                        Text(
+                            text = synopsisText,
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = s.textPrimary
                         )
                     }
 
-                    // Item 2: Sinopse da Obra
-                    item(key = "info_synopsis_card", contentType = "synopsis_card") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inputWellSurface(RoundedCornerShape(18.dp))
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                    // Item 3: Ficha Técnica da Edição
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .inputWellSurface(RoundedCornerShape(18.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "FICHA TÉCNICA DA EDIÇÃO",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp,
+                            color = s.textPrimary.copy(alpha = 0.85f)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                    contentDescription = null,
-                                    tint = s.accentColor,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = "SINOPSE",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp,
-                                    color = s.accentColor
-                                )
-                            }
+                            Text("Editora", fontSize = 12.sp, color = s.textSecondary)
+                            Text(displayComic.publisher, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
+                        }
+                        HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Formato", fontSize = 12.sp, color = s.textSecondary)
                             Text(
-                                text = synopsisText,
-                                fontSize = 13.sp,
-                                lineHeight = 20.sp,
+                                displayComic.format.ifBlank { "Encadernado (TPB)" },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = s.textPrimary
                             )
                         }
+                        HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Ano e Extensão", fontSize = 12.sp, color = s.textSecondary)
+                            Text(
+                                "${displayComic.releaseYear} • ${displayComic.pageCount} págs",
+                                fontSize = 12.sp,
+                                fontFamily = SpaceGroteskTabularFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                color = s.textPrimary
+                            )
+                        }
+                        if (displayComic.isbn.isNotBlank()) {
+                            HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("ISBN", fontSize = 12.sp, color = s.textSecondary)
+                                Text(
+                                    displayComic.isbn,
+                                    fontSize = 12.sp,
+                                    fontFamily = SpaceGroteskTabularFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = s.textPrimary
+                                )
+                            }
+                        }
                     }
 
-                    // Item 3: Ficha Técnica da Edição
-                    item(key = "info_technical_specs", contentType = "specs_card") {
+                    // Item 3.5: Momentos e Notas Salvos
+                    if (savedEntry?.moments?.isNotEmpty() == true) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2244,208 +1039,135 @@ fun ComicInfoSynopsisSheetModal(
                                 .padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "FICHA TÉCNICA DA EDIÇÃO",
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp,
-                                color = s.textPrimary.copy(alpha = 0.85f)
-                            )
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Editora", fontSize = 12.sp, color = s.textSecondary)
-                                Text(displayComic.publisher, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
-                            }
-                            HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Formato", fontSize = 12.sp, color = s.textSecondary)
+                                Icon(
+                                    imageVector = Icons.Default.Bookmark,
+                                    contentDescription = null,
+                                    tint = s.accentColor,
+                                    modifier = Modifier.size(15.dp)
+                                )
                                 Text(
-                                    displayComic.format.ifBlank { "Encadernado (TPB)" },
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = s.textPrimary
+                                    text = "MOMENTOS MARCANTES & NOTAS (${savedEntry.moments.size})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp,
+                                    color = s.accentColor
                                 )
                             }
-                            HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Ano e Extensão", fontSize = 12.sp, color = s.textSecondary)
-                                Text(
-                                    "${displayComic.releaseYear} • ${displayComic.pageCount} págs",
-                                    fontSize = 12.sp,
-                                    fontFamily = SpaceGroteskTabularFamily,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = s.textPrimary
-                                )
-                            }
-                            if (displayComic.isbn.isNotBlank()) {
-                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                            savedEntry.moments.forEach { m ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("ISBN", fontSize = 12.sp, color = s.textSecondary)
-                                    Text(
-                                        displayComic.isbn,
-                                        fontSize = 12.sp,
-                                        fontFamily = SpaceGroteskTabularFamily,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = s.textPrimary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Item 3.5: Momentos e Notas Salvos
-                    if (savedEntry?.moments?.isNotEmpty() == true) {
-                        item(key = "info_saved_moments", contentType = "moments_list") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .inputWellSurface(RoundedCornerShape(18.dp))
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Bookmark,
-                                        contentDescription = null,
-                                        tint = s.accentColor,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "MOMENTOS MARCANTES & NOTAS (${savedEntry.moments.size})",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp,
-                                        color = s.accentColor
-                                    )
-                                }
-                                savedEntry.moments.forEach { m ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(
-                                                if (s.isLight) Color.White.copy(alpha = 0.80f)
-                                                else Color.White.copy(alpha = 0.08f)
-                                            )
-                                            .padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        if (m.page > 0) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(999.dp))
-                                                    .background(s.accentBg)
-                                                    .padding(horizontal = 7.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = "Pág. ${m.page}",
-                                                    fontSize = 9.5.sp,
-                                                    fontFamily = SpaceGroteskTabularFamily,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = s.accentText
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = m.note,
-                                            fontSize = 11.5.sp,
-                                            color = s.textPrimary,
-                                            lineHeight = 16.sp
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (s.isLight) Color.White.copy(alpha = 0.80f)
+                                            else Color.White.copy(alpha = 0.08f)
                                         )
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (m.page > 0) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(s.accentBg)
+                                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Pág. ${m.page}",
+                                                fontSize = 9.5.sp,
+                                                fontFamily = SpaceGroteskTabularFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                color = s.accentText
+                                            )
+                                        }
                                     }
+                                    Text(
+                                        text = m.note,
+                                        fontSize = 11.5.sp,
+                                        color = s.textPrimary,
+                                        lineHeight = 16.sp
+                                    )
                                 }
                             }
                         }
                     }
 
                     // Item 4: Ações de Registro na Biblioteca
-                    item(key = "info_library_actions", contentType = "actions_card") {
-                        if (savedEntry != null) {
+                    if (savedEntry != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(6.dp, RoundedCornerShape(999.dp))
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(s.accentBg)
+                                .clickable { onEditSavedComic(savedEntry) }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Editar Registro na Biblioteca (${savedEntry.status.shortLabel})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = s.accentText
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .shadow(6.dp, RoundedCornerShape(999.dp))
                                     .clip(RoundedCornerShape(999.dp))
                                     .background(s.accentBg)
-                                    .clickable { onEditSavedComic(savedEntry) }
-                                    .padding(vertical = 14.dp),
+                                    .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.READ) }
+                                    .padding(vertical = 13.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Editar Registro na Biblioteca (${savedEntry.status.shortLabel})",
+                                    text = "+ Registrar como Lido",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.accentText
                                 )
                             }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .shadow(6.dp, RoundedCornerShape(999.dp))
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(s.accentBg)
-                                        .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.READ) }
-                                        .padding(vertical = 13.dp),
+                                        .weight(1f)
+                                        .inputWellSurface(RoundedCornerShape(999.dp))
+                                        .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.READING) }
+                                        .padding(vertical = 12.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "+ Registrar como Lido",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = s.accentText
+                                        text = "Lendo Agora",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.textPrimary
                                     )
                                 }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .inputWellSurface(RoundedCornerShape(999.dp))
+                                        .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.WANT_TO_READ) }
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .inputWellSurface(RoundedCornerShape(999.dp))
-                                            .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.READING) }
-                                            .padding(vertical = 12.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "Lendo Agora",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.textPrimary
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .inputWellSurface(RoundedCornerShape(999.dp))
-                                            .clickable { onOpenCatalogWithStatus(displayComic, ReadingStatus.WANT_TO_READ) }
-                                            .padding(vertical = 12.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = "Adicionar à Fila",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.textPrimary
-                                        )
-                                    }
+                                    Text(
+                                        text = "Adicionar à Fila",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.textPrimary
+                                    )
                                 }
                             }
                         }

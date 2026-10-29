@@ -98,6 +98,32 @@ class MultiApiSearchEngine {
 
     fun getCached(cacheKey: String): List<ComicEntry>? = onlineSearchCache[cacheKey]
 
+    fun updateCachedComicTranslation(translated: ComicEntry) {
+        if (translated.synopsisPtBr.isBlank() && translated.titlePtBr.isBlank()) return
+        onlineSearchCache.keys.forEach { k ->
+            val current = onlineSearchCache[k] ?: return@forEach
+            var changed = false
+            val updated = current.map { item ->
+                if ((translated.id.isNotBlank() && item.id == translated.id) ||
+                    (translated.externalId.isNotBlank() && item.externalId == translated.externalId)
+                ) {
+                    changed = true
+                    item.copy(
+                        title = translated.titlePtBr.ifBlank { item.title },
+                        titlePtBr = translated.titlePtBr.ifBlank { item.titlePtBr },
+                        synopsis = translated.synopsisPtBr.ifBlank { item.synopsis },
+                        synopsisPtBr = translated.synopsisPtBr.ifBlank { item.synopsisPtBr }
+                    )
+                } else {
+                    item
+                }
+            }
+            if (changed) {
+                onlineSearchCache[k] = updated
+            }
+        }
+    }
+
     suspend fun resolveBestCoverUrl(title: String, authors: String = ""): String = withContext(Dispatchers.IO) {
         val cleanTitle = title.substringBefore("—").substringBefore("(").trim()
         val query = if (authors.isNotBlank()) "$cleanTitle ${authors.substringBefore(",")}" else cleanTitle
@@ -204,7 +230,7 @@ class MultiApiSearchEngine {
         @Synchronized
         fun pushProgressiveBatch(newBatch: List<ComicEntry>): List<ComicEntry> {
             for (rawItem in newBatch) {
-                val it = PortugueseComicTranslator.localizeComic(rawItem)
+                val it = PortugueseComicTranslator.localizeComicMetadataOnly(rawItem)
                 val dedupKey = SeriesSequenceEngine.canonicalDeduplicationKey(it)
                 val existing = mapByCanonicalKey[dedupKey]
                 if (existing == null) {
@@ -350,39 +376,29 @@ class MultiApiSearchEngine {
                     val publisher = PortugueseComicTranslator.normalizePublisher(rawSeller, ptTitle, authors, genre)
                     val (format, pageCount) = PortugueseComicTranslator.normalizeFormatAndPages("", 0, ptTitle, genre)
                     val issueNum = SeriesSequenceEngine.inferIssueNumber(ptTitle)
-                    val ptSynopsis = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = desc,
-                        translatedTitle = ptTitle,
-                        authors = authors,
-                        publisher = publisher,
-                        releaseYear = year,
-                        pageCount = pageCount,
-                        issueNumber = issueNum
-                    )
-
                     val trackId = item.optLong("trackId", item.optLong("collectionId", i.toLong()))
                     val uniqueExternalId = "ab-$countryCode-$trackId"
-                    out.add(
-                        ComicEntry(
-                            id = uniqueExternalId,
-                            externalId = uniqueExternalId,
-                            sourceLabel = "Catálogo Online",
-                            isOnlineResult = true,
-                            title = ptTitle,
-                            authors = authors,
-                            publisher = publisher,
-                            genre = genre,
-                            format = format,
-                            releaseYear = year,
-                            pageCount = pageCount,
-                            currentPage = pageCount,
-                            coverUrl = coverUrl,
-                            synopsis = ptSynopsis,
-                            status = ReadingStatus.READ,
-                            seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
-                            issueNumber = issueNum
-                        )
+                    val rawEntry = ComicEntry(
+                        id = uniqueExternalId,
+                        externalId = uniqueExternalId,
+                        sourceLabel = "Catálogo Online",
+                        isOnlineResult = true,
+                        title = ptTitle,
+                        titlePtBr = ptTitle,
+                        authors = authors,
+                        publisher = publisher,
+                        genre = genre,
+                        format = format,
+                        releaseYear = year,
+                        pageCount = pageCount,
+                        currentPage = pageCount,
+                        coverUrl = coverUrl,
+                        synopsis = desc,
+                        status = ReadingStatus.READ,
+                        seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
+                        issueNumber = issueNum
                     )
+                    out.add(PortugueseComicTranslator.localizeComicMetadataOnly(rawEntry))
                 }
                 out
             }
@@ -434,16 +450,6 @@ class MultiApiSearchEngine {
                     val publisher = PortugueseComicTranslator.normalizePublisher(rawPublisher, ptTitle, authors, genre)
                     val (format, pages) = PortugueseComicTranslator.normalizeFormatAndPages("", rawPages, ptTitle, genre)
                     val issueNum = SeriesSequenceEngine.inferIssueNumber(ptTitle)
-                    val ptSynopsis = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = desc,
-                        translatedTitle = ptTitle,
-                        authors = authors,
-                        publisher = publisher,
-                        releaseYear = year,
-                        pageCount = pages,
-                        issueNumber = issueNum
-                    )
-
                     val imgLinks = vol.optJSONObject("imageLinks")
                     val coverUrl = (imgLinks?.optString("thumbnail", "")?.takeIf { it.isNotBlank() }
                         ?: imgLinks?.optString("smallThumbnail", "") ?: "")
@@ -452,27 +458,27 @@ class MultiApiSearchEngine {
 
                     val gId = item.optString("id", "$i")
                     val uniqueExternalId = "gb-$gId"
-                    out.add(
-                        ComicEntry(
-                            id = uniqueExternalId,
-                            externalId = uniqueExternalId,
-                            sourceLabel = "Catálogo Online",
-                            isOnlineResult = true,
-                            title = ptTitle,
-                            authors = authors,
-                            publisher = publisher,
-                            genre = genre,
-                            format = format,
-                            releaseYear = year,
-                            pageCount = pages,
-                            currentPage = pages,
-                            coverUrl = coverUrl,
-                            synopsis = ptSynopsis,
-                            status = ReadingStatus.READ,
-                            seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
-                            issueNumber = issueNum
-                        )
+                    val rawEntry = ComicEntry(
+                        id = uniqueExternalId,
+                        externalId = uniqueExternalId,
+                        sourceLabel = "Catálogo Online",
+                        isOnlineResult = true,
+                        title = ptTitle,
+                        titlePtBr = ptTitle,
+                        authors = authors,
+                        publisher = publisher,
+                        genre = genre,
+                        format = format,
+                        releaseYear = year,
+                        pageCount = pages,
+                        currentPage = pages,
+                        coverUrl = coverUrl,
+                        synopsis = desc,
+                        status = ReadingStatus.READ,
+                        seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
+                        issueNumber = issueNum
                     )
+                    out.add(PortugueseComicTranslator.localizeComicMetadataOnly(rawEntry))
                 }
                 out
             }
@@ -516,37 +522,27 @@ class MultiApiSearchEngine {
                     val uniqueExternalId = "kitsu-$kitsuId"
                     val rawSynopsis = attr.optString("synopsis", "").trim()
                     val issueNum = SeriesSequenceEngine.inferIssueNumber(ptTitle)
-                    val ptSynopsis = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = rawSynopsis,
-                        translatedTitle = ptTitle,
+                    val rawEntry = ComicEntry(
+                        id = uniqueExternalId,
+                        externalId = uniqueExternalId,
+                        sourceLabel = "Catálogo de Mangás",
+                        isOnlineResult = true,
+                        title = ptTitle,
+                        titlePtBr = ptTitle,
                         authors = authorLabel,
                         publisher = publisher,
+                        genre = "Mangá",
+                        format = "Mangá (Tankobon)",
                         releaseYear = releaseYear,
                         pageCount = pageCount,
+                        currentPage = pageCount,
+                        coverUrl = coverUrl,
+                        synopsis = rawSynopsis,
+                        status = ReadingStatus.READ,
+                        seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
                         issueNumber = issueNum
                     )
-
-                    out.add(
-                        ComicEntry(
-                            id = uniqueExternalId,
-                            externalId = uniqueExternalId,
-                            sourceLabel = "Catálogo de Mangás",
-                            isOnlineResult = true,
-                            title = ptTitle,
-                            authors = authorLabel,
-                            publisher = publisher,
-                            genre = "Mangá",
-                            format = "Mangá (Tankobon)",
-                            releaseYear = releaseYear,
-                            pageCount = pageCount,
-                            currentPage = pageCount,
-                            coverUrl = coverUrl,
-                            synopsis = ptSynopsis,
-                            status = ReadingStatus.READ,
-                            seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
-                            issueNumber = issueNum
-                        )
-                    )
+                    out.add(PortugueseComicTranslator.localizeComicMetadataOnly(rawEntry))
                 }
                 out
             }
@@ -601,40 +597,30 @@ class MultiApiSearchEngine {
                     val publisher = PortugueseComicTranslator.normalizePublisher(rawPublisher, ptTitle, authors, genre)
                     val (format, pageCount) = PortugueseComicTranslator.normalizeFormatAndPages("", rawPages, ptTitle, genre)
                     val issueNum = SeriesSequenceEngine.inferIssueNumber(ptTitle)
-                    val ptSynopsis = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = firstSentence,
-                        translatedTitle = ptTitle,
-                        authors = authors,
-                        publisher = publisher,
-                        releaseYear = releaseYear,
-                        pageCount = pageCount,
-                        issueNumber = issueNum
-                    )
-
                     val cleanKey = doc.optString("key", "$idx").replace("/", "-")
                     val uniqueExternalId = "ol-$cleanKey"
-                    out.add(
-                        ComicEntry(
-                            id = uniqueExternalId,
-                            externalId = uniqueExternalId,
-                            sourceLabel = "Catálogo Online",
-                            isOnlineResult = true,
-                            title = ptTitle,
-                            authors = authors,
-                            publisher = publisher,
-                            genre = genre,
-                            format = format,
-                            releaseYear = releaseYear,
-                            pageCount = pageCount,
-                            currentPage = pageCount,
-                            isbn = isbn,
-                            coverUrl = coverUrl,
-                            synopsis = ptSynopsis,
-                            status = ReadingStatus.READ,
-                            seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
-                            issueNumber = issueNum
-                        )
+                    val rawEntry = ComicEntry(
+                        id = uniqueExternalId,
+                        externalId = uniqueExternalId,
+                        sourceLabel = "Catálogo Online",
+                        isOnlineResult = true,
+                        title = ptTitle,
+                        titlePtBr = ptTitle,
+                        authors = authors,
+                        publisher = publisher,
+                        genre = genre,
+                        format = format,
+                        releaseYear = releaseYear,
+                        pageCount = pageCount,
+                        currentPage = pageCount,
+                        isbn = isbn,
+                        coverUrl = coverUrl,
+                        synopsis = firstSentence,
+                        status = ReadingStatus.READ,
+                        seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
+                        issueNumber = issueNum
                     )
+                    out.add(PortugueseComicTranslator.localizeComicMetadataOnly(rawEntry))
                 }
                 out
             }
@@ -698,38 +684,28 @@ class MultiApiSearchEngine {
                     val ptTitle = PortugueseComicTranslator.translateTitleToPtBr(rawTitle)
                     val publisher = PortugueseComicTranslator.normalizePublisher("", ptTitle, authors, "Mangá")
                     val issueNum = SeriesSequenceEngine.inferIssueNumber(ptTitle)
-                    val ptSynopsis = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = rawSynopsis,
-                        translatedTitle = ptTitle,
+                    val uniqueExternalId = "md-$mangaId"
+                    val rawEntry = ComicEntry(
+                        id = uniqueExternalId,
+                        externalId = uniqueExternalId,
+                        sourceLabel = "Catálogo de Mangás",
+                        isOnlineResult = true,
+                        title = ptTitle,
+                        titlePtBr = ptTitle,
                         authors = authors,
                         publisher = publisher,
+                        genre = "Mangá",
+                        format = "Mangá (Tankobon)",
                         releaseYear = releaseYear,
                         pageCount = 192,
+                        currentPage = 192,
+                        coverUrl = coverUrl,
+                        synopsis = rawSynopsis,
+                        status = ReadingStatus.READ,
+                        seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
                         issueNumber = issueNum
                     )
-                    val uniqueExternalId = "md-$mangaId"
-
-                    out.add(
-                        ComicEntry(
-                            id = uniqueExternalId,
-                            externalId = uniqueExternalId,
-                            sourceLabel = "Catálogo de Mangás",
-                            isOnlineResult = true,
-                            title = ptTitle,
-                            authors = authors,
-                            publisher = publisher,
-                            genre = "Mangá",
-                            format = "Mangá (Tankobon)",
-                            releaseYear = releaseYear,
-                            pageCount = 192,
-                            currentPage = 192,
-                            coverUrl = coverUrl,
-                            synopsis = ptSynopsis,
-                            status = ReadingStatus.READ,
-                            seriesName = SeriesSequenceEngine.inferBaseSeriesTitle(ptTitle),
-                            issueNumber = issueNum
-                        )
-                    )
+                    out.add(PortugueseComicTranslator.localizeComicMetadataOnly(rawEntry))
                 }
                 out
             }

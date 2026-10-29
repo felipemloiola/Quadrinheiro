@@ -77,6 +77,10 @@
           "type": "string",
           "description": "Comic title (1..300 chars)."
         },
+        "titlePtBr": {
+          "type": "string",
+          "description": "Translated PT-BR comic title (0..300 chars)."
+        },
         "authors": {
           "type": "string",
           "description": "Comic authors/illustrators (0..300 chars)."
@@ -152,6 +156,10 @@
         "synopsis": {
           "type": "string",
           "description": "Synopsis text (up to 5000 chars)."
+        },
+        "synopsisPtBr": {
+          "type": "string",
+          "description": "Translated PT-BR synopsis text (up to 5000 chars)."
         },
         "sourceLabel": {
           "type": "string",

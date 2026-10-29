@@ -1,0 +1,652 @@
+package com.example.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.PortugueseComicTranslator
+import com.example.data.SeriesSequenceEngine
+import com.example.model.AppSettings
+import com.example.model.ComicEntry
+import com.example.model.ReadingStatus
+import com.example.ui.components.AppleCapsuleButton
+import com.example.ui.components.BookCover
+import com.example.ui.components.StarRating
+import com.example.ui.components.contentMaterialSurface
+import com.example.ui.components.inputWellSurface
+import com.example.ui.theme.LocalAppleMaterials
+import com.example.ui.theme.SpaceGroteskTabularFamily
+import java.util.Locale
+import kotlin.math.roundToInt
+
+/**
+ * Linha de quadrinho na visualização em lista da Biblioteca (ShelfLibraryTab).
+ */
+@Composable
+fun ShelfListComicRow(
+    comic: ComicEntry,
+    onSelectComic: (ComicEntry) -> Unit
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .contentMaterialSurface(RoundedCornerShape(22.dp))
+            .clickable { onSelectComic(comic) }
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BookCover(
+            src = comic.coverUrl,
+            title = comic.title,
+            publisher = comic.publisher,
+            year = comic.releaseYear,
+            modifier = Modifier
+                .width(56.dp)
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = comic.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = s.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = comic.authors,
+                fontSize = 12.sp,
+                color = s.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (comic.status == ReadingStatus.READ) {
+                    StarRating(
+                        rating = comic.rating,
+                        readOnly = true,
+                        size = "xs",
+                        starColor = s.starColor
+                    )
+                }
+                Text(
+                    text = "${comic.status.label} • ${comic.releaseYear}",
+                    fontSize = 11.sp,
+                    color = s.textTertiary
+                )
+            }
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = s.textTertiary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/**
+ * Card de resumo estatístico e histograma de notas do Diário Cronológico.
+ */
+@Composable
+fun DiaryAnalyticsSummaryCard(
+    comics: List<ComicEntry>
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+
+    val ratedComics = remember(comics) { comics.filter { it.status == ReadingStatus.READ && it.rating > 0f } }
+    val avgRating = remember(ratedComics) {
+        if (ratedComics.isEmpty()) 0f
+        else ratedComics.map { it.rating }.average().toFloat()
+    }
+    val totalLoggedPages = remember(comics) {
+        comics.sumOf {
+            when (it.status) {
+                ReadingStatus.READ -> it.pageCount
+                ReadingStatus.READING -> it.currentPage
+                ReadingStatus.WANT_TO_READ -> 0
+            }
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .contentMaterialSurface(RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.width(86.dp)
+        ) {
+            Text(
+                text = String.format(Locale.US, "%.1f", avgRating),
+                fontSize = 28.sp,
+                fontFamily = SpaceGroteskTabularFamily,
+                fontWeight = FontWeight.Bold,
+                color = s.textPrimary
+            )
+            StarRating(
+                rating = avgRating,
+                readOnly = true,
+                size = "xs",
+                starColor = s.starColor
+            )
+            Text(
+                text = "${ratedComics.size} avaliadas",
+                fontSize = 10.sp,
+                color = s.textTertiary
+            )
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            val totalRated = ratedComics.size.coerceAtLeast(1)
+            for (star in 5 downTo 1) {
+                val countForStar = ratedComics.count { it.rating.roundToInt() == star }
+                val ratio = (countForStar.toFloat() / totalRated.toFloat()).coerceIn(0f, 1f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "$star★",
+                        fontSize = 9.5.sp,
+                        fontFamily = SpaceGroteskTabularFamily,
+                        color = s.textSecondary,
+                        modifier = Modifier.width(18.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                if (s.isLight) Color.Black.copy(alpha = 0.08f)
+                                else Color.White.copy(alpha = 0.10f)
+                            )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(ratio.coerceAtLeast(if (countForStar > 0) 0.08f else 0f))
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(s.starColor)
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "PÁGINAS",
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = s.textTertiary
+            )
+            Text(
+                text = "$totalLoggedPages",
+                fontSize = 18.sp,
+                fontFamily = SpaceGroteskTabularFamily,
+                fontWeight = FontWeight.Bold,
+                color = s.accentColor
+            )
+            Text(
+                text = "${comics.count { it.status == ReadingStatus.READ }} concluídas",
+                fontSize = 10.sp,
+                color = s.textSecondary
+            )
+        }
+    }
+}
+
+/**
+ * Grupo mensal de entradas do Diário Cronológico.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DiaryMonthGroupCard(
+    monthLabel: String,
+    entries: List<Pair<ComicEntry, String>>,
+    appSettings: AppSettings,
+    revealedSpoilers: MutableMap<String, Boolean>,
+    onSelectComic: (ComicEntry) -> Unit
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = monthLabel,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = s.textSecondary,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .contentMaterialSurface(RoundedCornerShape(24.dp))
+        ) {
+            entries.forEachIndexed { idx, (entry, displayDay) ->
+                if (idx > 0) {
+                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                }
+                val isSpoilerHidden = appSettings.spoilerProtection &&
+                    entry.review.isNotBlank() &&
+                    !(revealedSpoilers[entry.id] ?: false)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectComic(entry) }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.width(36.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = displayDay,
+                            fontSize = 18.sp,
+                            fontFamily = SpaceGroteskTabularFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = s.textPrimary
+                        )
+                        Text(
+                            text = entry.status.shortLabel.uppercase(),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = s.textTertiary
+                        )
+                    }
+
+                    BookCover(
+                        src = entry.coverUrl,
+                        title = entry.title,
+                        modifier = Modifier
+                            .width(48.dp)
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(6.dp))
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = entry.title,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = s.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (appSettings.allowRereads && entry.rereadCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .inputWellSurface(RoundedCornerShape(999.dp))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "↻ ${entry.rereadCount}x",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.textPrimary
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = buildString {
+                                append(entry.authors)
+                                if (appSettings.showPagesInDiary) {
+                                    append(" • ${entry.publisher} • ${entry.pageCount} págs")
+                                }
+                            },
+                            fontSize = 12.sp,
+                            color = s.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        if (entry.status == ReadingStatus.READ && (entry.rating > 0f || entry.favorite)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (entry.rating > 0f) {
+                                    StarRating(
+                                        rating = entry.rating,
+                                        readOnly = true,
+                                        size = "xs",
+                                        starColor = s.starColor
+                                    )
+                                }
+                                if (entry.favorite) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF43F5E),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (entry.tags.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                entry.tags.forEach { t ->
+                                    Box(
+                                        modifier = Modifier
+                                            .inputWellSurface(RoundedCornerShape(999.dp))
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = t,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = s.textPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (entry.status == ReadingStatus.READ && entry.review.isNotBlank()) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .clickable(enabled = isSpoilerHidden) {
+                                        revealedSpoilers[entry.id] = true
+                                    }
+                            ) {
+                                Text(
+                                    text = "“${entry.review}”",
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp,
+                                    color = s.textSecondary,
+                                    modifier = if (isSpoilerHidden) Modifier.blur(6.dp) else Modifier
+                                )
+                                if (isSpoilerHidden) {
+                                    Text(
+                                        text = "Toque para revelar resenha",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = s.accentColor,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Card de resultado de busca online/curada na aba Buscar (SearchMultiApiTab).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SearchResultComicCard(
+    item: ComicEntry,
+    savedEntry: ComicEntry?,
+    appSettings: AppSettings,
+    onOpenComicInfoModal: (ComicEntry) -> Unit,
+    onSelectSavedComic: (ComicEntry) -> Unit,
+    onOpenCatalogSheetForComic: (ComicEntry, ReadingStatus) -> Unit
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .contentMaterialSurface(RoundedCornerShape(22.dp))
+            .clickable { onOpenComicInfoModal(item) }
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        BookCover(
+            src = item.coverUrl,
+            title = item.title,
+            authors = item.authors,
+            publisher = item.publisher,
+            year = item.releaseYear,
+            spine3d = appSettings.spine3dEffect,
+            modifier = Modifier
+                .width(64.dp)
+                .aspectRatio(2f / 3f)
+                .shadow(4.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenComicInfoModal(item) }
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            val issueNum = remember(item.id, item.title, item.issueNumber) {
+                SeriesSequenceEngine.inferIssueNumber(item)
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .inputWellSurface(RoundedCornerShape(999.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = item.format.ifBlank { item.publisher },
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = s.textPrimary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (issueNum > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(s.accentColor.copy(alpha = 0.14f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Sequência • Ed. #$issueNum",
+                            fontSize = 9.5.sp,
+                            fontFamily = SpaceGroteskTabularFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = s.accentColor,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier.padding(vertical = 2.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = item.genre,
+                        fontSize = 10.sp,
+                        color = s.textTertiary,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                text = item.title,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = s.textPrimary,
+                lineHeight = 19.sp
+            )
+
+            Text(
+                text = item.authors,
+                fontSize = 12.sp,
+                color = s.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = "${item.publisher} • ${item.releaseYear} • ${item.pageCount} págs",
+                fontSize = 11.sp,
+                color = s.textTertiary
+            )
+
+            val previewSynopsis = item.synopsisPtBr.ifBlank {
+                if (PortugueseComicTranslator.isPortugueseText(item.synopsis)) item.synopsis else ""
+            }
+            if (previewSynopsis.isNotBlank()) {
+                Text(
+                    text = previewSynopsis,
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp,
+                    color = s.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Text(
+                text = "Toque para ver sinopse e informações ›",
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = s.accentColor
+            )
+
+            if (savedEntry != null) {
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .inputWellSurface(RoundedCornerShape(999.dp))
+                        .clickable { onSelectSavedComic(savedEntry) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFF34D399),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Editar na Biblioteca (${savedEntry.status.shortLabel})",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = s.textPrimary
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppleCapsuleButton(
+                        label = "+ Lido",
+                        prominent = true,
+                        onClick = {
+                            onOpenCatalogSheetForComic(item, ReadingStatus.READ)
+                        }
+                    )
+
+                    AppleCapsuleButton(
+                        label = "Lendo",
+                        prominent = false,
+                        onClick = {
+                            onOpenCatalogSheetForComic(item, ReadingStatus.READING)
+                        }
+                    )
+
+                    AppleCapsuleButton(
+                        label = "Quero Ler",
+                        prominent = false,
+                        onClick = {
+                            onOpenCatalogSheetForComic(item, ReadingStatus.WANT_TO_READ)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}

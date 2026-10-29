@@ -16,9 +16,19 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object PortugueseComicTranslator {
 
+    data class CachedComicTranslation(
+        val titlePtBr: String = "",
+        val synopsisPtBr: String = "",
+        val isFinalSynopsis: Boolean = false
+    )
+
     private val synopsisTranslationCache = ConcurrentHashMap<String, String>()
     private val titleTranslationCache = ConcurrentHashMap<String, String>()
     private val canonicalWorkKeyCache = ConcurrentHashMap<String, String>()
+    private val comicIdTranslationCache = ConcurrentHashMap<String, CachedComicTranslation>()
+
+    @Volatile
+    var onTranslationPersisted: ((ComicEntry) -> Unit)? = null
 
     // Palavras exclusivas de edições alemãs, francesas ou italianas que poluem buscas de HQs
     private val foreignEditionNoiseRegex = Regex(
@@ -579,12 +589,101 @@ object PortugueseComicTranslator {
         return stripped
     }
 
+    fun resolveComicCacheKey(entry: ComicEntry): String {
+        val primaryId = entry.id.trim()
+        if (primaryId.isNotEmpty()) return primaryId
+        val extId = entry.externalId.trim()
+        if (extId.isNotEmpty()) return extId
+        return canonicalWorkKey(entry.title)
+    }
+
+    fun getCachedTranslationForComicId(comicId: String): CachedComicTranslation? {
+        if (comicId.isBlank()) return null
+        return comicIdTranslationCache[comicId]
+    }
+
     /**
-     * Localiza um `ComicEntry` completo para Português (PT-BR):
-     * traduz título, nome da série, sinopse, editora, gênero, formato e número da edição.
+     * Pré-carrega traduções já salvas no SafeStorage ou Firestore para garantir que
+     * o mesmo `comicId` nunca seja traduzido duas vezes.
      */
-    fun localizeComic(entry: ComicEntry, allowNetworkTranslation: Boolean = false): ComicEntry {
-        val ptTitle = translateTitleToPtBr(entry.title)
+    fun seedPersistedTranslations(
+        comics: List<ComicEntry>,
+        persistedMap: Map<String, Pair<String, String>> = emptyMap()
+    ) {
+        persistedMap.forEach { (key, pair) ->
+            val (tPt, sPt) = pair
+            if (key.isNotBlank() && (tPt.isNotBlank() || sPt.isNotBlank())) {
+                comicIdTranslationCache[key] = CachedComicTranslation(
+                    titlePtBr = tPt,
+                    synopsisPtBr = sPt,
+                    isFinalSynopsis = sPt.isNotBlank()
+                )
+            }
+        }
+        val allSeedComics = comics + CuratedCatalog.curatedComicsCatalog
+        allSeedComics.forEach { c ->
+            val key = resolveComicCacheKey(c)
+            val extKey = c.externalId.trim()
+            val tPt = c.titlePtBr.ifBlank {
+                if (c.id.startsWith("cat-") || c.id.startsWith("init-")) c.title else ""
+            }
+            val sPt = c.synopsisPtBr.ifBlank {
+                if ((c.id.startsWith("cat-") || c.id.startsWith("init-") || isPortugueseText(c.synopsis)) &&
+                    c.synopsis.isNotBlank() &&
+                    !c.synopsis.contains("Apple Books") &&
+                    !c.synopsis.contains("Google Books")
+                ) {
+                    c.synopsis
+                } else {
+                    ""
+                }
+            }
+            if (tPt.isNotBlank() || sPt.isNotBlank()) {
+                val cached = CachedComicTranslation(
+                    titlePtBr = tPt.ifBlank { translateTitleToPtBr(c.title) },
+                    synopsisPtBr = sPt,
+                    isFinalSynopsis = sPt.isNotBlank()
+                )
+                if (key.isNotBlank()) comicIdTranslationCache[key] = cached
+                if (extKey.isNotBlank()) comicIdTranslationCache[extKey] = cached
+            }
+        }
+    }
+
+    private fun recordComicTranslation(
+        entry: ComicEntry,
+        titlePtBr: String,
+        synopsisPtBr: String,
+        isFinalSynopsis: Boolean
+    ) {
+        val key = resolveComicCacheKey(entry)
+        val extKey = entry.externalId.trim()
+        val cached = CachedComicTranslation(
+            titlePtBr = titlePtBr,
+            synopsisPtBr = synopsisPtBr,
+            isFinalSynopsis = isFinalSynopsis
+        )
+        if (key.isNotBlank()) comicIdTranslationCache[key] = cached
+        if (extKey.isNotBlank()) comicIdTranslationCache[extKey] = cached
+    }
+
+    /**
+     * Tradução Leve / Batch (usada pelo `MultiApiSearchEngine.kt` e listagens de sequências):
+     * Traduz apenas título, formato, editora e gênero se necessário.
+     * NÃO dispara a tradução de sinopses para os 20–50 resultados da busca de uma só vez;
+     * reutiliza `synopsisPtBr` apenas se já estiver em cache para este `comicId`.
+     */
+    fun localizeComicMetadataOnly(entry: ComicEntry): ComicEntry {
+        val key = resolveComicCacheKey(entry)
+        val extKey = entry.externalId.trim()
+        val cached = comicIdTranslationCache[key] ?: if (extKey.isNotBlank()) comicIdTranslationCache[extKey] else null
+
+        val ptTitle = when {
+            entry.titlePtBr.isNotBlank() -> entry.titlePtBr
+            cached != null && cached.titlePtBr.isNotBlank() -> cached.titlePtBr
+            else -> translateTitleToPtBr(entry.title)
+        }
+
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
         val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
@@ -594,6 +693,101 @@ object PortugueseComicTranslator {
         } else {
             SeriesSequenceEngine.inferBaseSeriesTitle(entry.copy(title = ptTitle))
         }
+
+        val knownSynopsisPtBr = when {
+            entry.synopsisPtBr.isNotBlank() -> entry.synopsisPtBr
+            cached != null && cached.isFinalSynopsis && cached.synopsisPtBr.isNotBlank() -> cached.synopsisPtBr
+            entry.synopsis.isNotBlank() && isPortugueseText(entry.synopsis) &&
+                !entry.synopsis.contains("Apple Books") && !entry.synopsis.contains("Google Books") -> entry.synopsis
+            else -> ""
+        }
+
+        if (cached == null || cached.titlePtBr.isBlank() || (knownSynopsisPtBr.isNotBlank() && !cached.isFinalSynopsis)) {
+            recordComicTranslation(
+                entry = entry,
+                titlePtBr = ptTitle,
+                synopsisPtBr = knownSynopsisPtBr,
+                isFinalSynopsis = knownSynopsisPtBr.isNotBlank()
+            )
+        }
+
+        return entry.copy(
+            title = ptTitle,
+            titlePtBr = ptTitle,
+            publisher = publisher,
+            genre = genre,
+            format = format,
+            pageCount = pages,
+            currentPage = if (entry.status == com.example.model.ReadingStatus.READ) pages else entry.currentPage.coerceAtMost(pages),
+            synopsis = if (knownSynopsisPtBr.isNotBlank()) knownSynopsisPtBr else entry.synopsis,
+            synopsisPtBr = knownSynopsisPtBr,
+            seriesName = ptSeries,
+            issueNumber = issueNum
+        )
+    }
+
+    /**
+     * Localiza um `ComicEntry` completo para Português (PT-BR) sob demanda (Lazy):
+     * - Nunca traduz duas vezes o mesmo `comicId` (retorna imediatamente se `synopsisPtBr` já existir).
+     * - Assim que traduzir a sinopse ou título, salva no `SafeStorage` e no `QuadrinheiroCloudRepository` via `onTranslationPersisted`.
+     */
+    fun localizeComic(entry: ComicEntry, allowNetworkTranslation: Boolean = false): ComicEntry {
+        val key = resolveComicCacheKey(entry)
+        val extKey = entry.externalId.trim()
+        val cached = comicIdTranslationCache[key] ?: if (extKey.isNotBlank()) comicIdTranslationCache[extKey] else null
+
+        val ptTitle = when {
+            entry.titlePtBr.isNotBlank() -> entry.titlePtBr
+            cached != null && cached.titlePtBr.isNotBlank() -> cached.titlePtBr
+            else -> translateTitleToPtBr(entry.title)
+        }
+
+        val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
+        val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
+        val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
+        val issueNum = if (entry.issueNumber > 0) entry.issueNumber else SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle))
+        val ptSeries = if (entry.seriesName.isNotBlank()) {
+            translateTitleToPtBr(entry.seriesName)
+        } else {
+            SeriesSequenceEngine.inferBaseSeriesTitle(entry.copy(title = ptTitle))
+        }
+
+        // 1. Verifica se este comicId já possui sinopse traduzida definitiva (nunca traduz duas vezes o mesmo comicId!)
+        val existingFinalSynopsis = when {
+            entry.synopsisPtBr.isNotBlank() -> entry.synopsisPtBr
+            cached != null && cached.isFinalSynopsis && cached.synopsisPtBr.isNotBlank() -> cached.synopsisPtBr
+            else -> ""
+        }
+
+        if (existingFinalSynopsis.isNotBlank()) {
+            if (cached == null || !cached.isFinalSynopsis) {
+                recordComicTranslation(entry, ptTitle, existingFinalSynopsis, isFinalSynopsis = true)
+            }
+            return entry.copy(
+                title = ptTitle,
+                titlePtBr = ptTitle,
+                publisher = publisher,
+                genre = genre,
+                format = format,
+                pageCount = pages,
+                currentPage = if (entry.status == com.example.model.ReadingStatus.READ) pages else entry.currentPage.coerceAtMost(pages),
+                synopsis = existingFinalSynopsis,
+                synopsisPtBr = existingFinalSynopsis,
+                seriesName = ptSeries,
+                issueNumber = issueNum
+            )
+        }
+
+        // 2. Realiza a tradução da sinopse sob demanda
+        val rawClean = entry.synopsis
+            .replace(htmlTagRegex, " ")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace(whitespaceRegex, " ")
+            .trim()
+
         val ptSynopsis = translateSynopsisToPtBr(
             rawSynopsis = entry.synopsis,
             translatedTitle = ptTitle,
@@ -605,16 +799,52 @@ object PortugueseComicTranslator {
             allowNetworkTranslation = allowNetworkTranslation
         )
 
-        return entry.copy(
+        // Determina se a tradução já é definitiva (veio do catálogo curado, já estava em PT-BR,
+        // a sinopse original era vazia, ou já executou a chamada de tradução de rede)
+        val workKey = canonicalWorkKey(ptTitle)
+        val hasCatalogHit = catalogByWorkKey[workKey]?.any { it.synopsis == ptSynopsis } == true
+        val isAlreadyPt = rawClean.isNotBlank() && isPortugueseText(rawClean) &&
+            !rawClean.contains("Apple Books") && !rawClean.contains("Google Books")
+        val isCachedSentence = rawClean.length >= 20 && synopsisTranslationCache.containsKey(rawClean.take(180))
+        val isFinal = allowNetworkTranslation || hasCatalogHit || isAlreadyPt || isCachedSentence || rawClean.length < 20
+
+        val finalSynopsisPtBr = if (isFinal) ptSynopsis else ""
+
+        recordComicTranslation(
+            entry = entry,
+            titlePtBr = ptTitle,
+            synopsisPtBr = if (isFinal) ptSynopsis else (cached?.synopsisPtBr ?: ""),
+            isFinalSynopsis = isFinal
+        )
+
+        val localizedEntry = entry.copy(
             title = ptTitle,
+            titlePtBr = ptTitle,
             publisher = publisher,
             genre = genre,
             format = format,
             pageCount = pages,
             currentPage = if (entry.status == com.example.model.ReadingStatus.READ) pages else entry.currentPage.coerceAtMost(pages),
-            synopsis = ptSynopsis,
+            // Preserva a sinopse bruta em `synopsis` enquanto `isFinal == false` para que a passagem assíncrona com rede traduza o texto real
+            synopsis = if (isFinal) ptSynopsis else entry.synopsis,
+            synopsisPtBr = finalSynopsisPtBr.ifBlank { ptSynopsis },
             seriesName = ptSeries,
             issueNumber = issueNum
         )
+
+        if (isFinal) {
+            // Persiste imediatamente a tradução no SafeStorage e no QuadrinheiroCloudRepository
+            val toPersist = localizedEntry.copy(
+                synopsis = ptSynopsis,
+                synopsisPtBr = ptSynopsis
+            )
+            recordComicTranslation(toPersist, ptTitle, ptSynopsis, isFinalSynopsis = true)
+            onTranslationPersisted?.invoke(toPersist)
+            return toPersist
+        }
+
+        // Quando allowNetworkTranslation == false e o texto original ainda aguarda a tradução de rede em background,
+        // mantemos synopsisPtBr vazio no cache definitivo, mas exibimos o resumo em PT-BR sem perder o rawSynopsis em `entry.synopsis`
+        return localizedEntry.copy(synopsisPtBr = "")
     }
 }
