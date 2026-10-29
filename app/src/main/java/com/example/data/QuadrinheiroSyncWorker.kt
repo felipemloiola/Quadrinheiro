@@ -28,6 +28,9 @@ class QuadrinheiroSyncWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val storage = SafeStorage(applicationContext)
+            if (storage.isGuestMode()) {
+                return@withContext Result.success()
+            }
             val persisted = storage.loadState()
             val dirtyComics = persisted.comics.filter { it.isDirty }
             val profileDirty = persisted.profile.isDirty

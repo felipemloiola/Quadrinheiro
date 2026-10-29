@@ -6,10 +6,13 @@ import com.example.model.ComicEntry
 import com.example.model.ComicMoment
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import com.example.model.UserProfile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.UUID
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -25,6 +28,10 @@ class SafeStorage(context: Context) {
     companion object {
         const val STORAGE_KEY = "quadrinheiro_apple_hig_liquid_v10"
         const val TRANSLATION_CACHE_KEY = "quadrinheiro_ptbr_translation_cache_v1"
+        const val AUTH_SESSION_KEY = "quadrinheiro_auth_session_v1"
+        const val GUEST_MODE_KEY = "quadrinheiro_guest_mode_v1"
+        const val AUTH_ONBOARDING_KEY = "quadrinheiro_auth_onboarding_done_v1"
+        const val LOCAL_ACCOUNTS_KEY = "quadrinheiro_local_email_accounts_v1"
         private val memoryFallback = mutableMapOf<String, String>()
     }
 
@@ -41,6 +48,170 @@ class SafeStorage(context: Context) {
         try {
             prefs?.edit()?.putString(key, value)?.apply()
         } catch (_: Throwable) {
+        }
+    }
+
+    fun removeItem(key: String) {
+        memoryFallback.remove(key)
+        try {
+            prefs?.edit()?.remove(key)?.apply()
+        } catch (_: Throwable) {
+        }
+    }
+
+    @Synchronized
+    fun saveAuthSession(userProfile: UserProfile?) {
+        if (userProfile == null) {
+            removeItem(AUTH_SESSION_KEY)
+            return
+        }
+        try {
+            val obj = JSONObject().apply {
+                put("uid", userProfile.uid)
+                put("displayName", userProfile.displayName)
+                put("email", userProfile.email ?: JSONObject.NULL)
+                put("photoUrl", userProfile.photoUrl ?: JSONObject.NULL)
+                put("isGuest", userProfile.isGuest)
+                put("provider", userProfile.provider)
+            }
+            setItem(AUTH_SESSION_KEY, obj.toString())
+            setCompletedAuthOnboarding(true)
+            setGuestMode(userProfile.isGuest)
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun loadAuthSession(): UserProfile? {
+        val raw = getItem(AUTH_SESSION_KEY) ?: return null
+        return try {
+            val obj = JSONObject(raw)
+            val uid = obj.optString("uid", "").trim()
+            if (uid.isEmpty()) return null
+            val emailVal = if (obj.isNull("email")) null else obj.optString("email", "").takeIf { it.isNotBlank() }
+            val photoVal = if (obj.isNull("photoUrl")) null else obj.optString("photoUrl", "").takeIf { it.isNotBlank() }
+            UserProfile(
+                uid = uid,
+                displayName = obj.optString("displayName", "Leitor").ifBlank { "Leitor" },
+                email = emailVal,
+                photoUrl = photoVal,
+                isGuest = obj.optBoolean("isGuest", false),
+                provider = obj.optString("provider", "guest").ifBlank { "guest" }
+            )
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    @Synchronized
+    fun setGuestMode(enabled: Boolean) {
+        setItem(GUEST_MODE_KEY, if (enabled) "true" else "false")
+        if (enabled) {
+            setCompletedAuthOnboarding(true)
+        }
+    }
+
+    fun isGuestMode(): Boolean {
+        if (getItem(GUEST_MODE_KEY) == "true") return true
+        val session = loadAuthSession()
+        return session?.isGuest == true
+    }
+
+    @Synchronized
+    fun setCompletedAuthOnboarding(completed: Boolean) {
+        setItem(AUTH_ONBOARDING_KEY, if (completed) "true" else "false")
+    }
+
+    fun hasCompletedAuthOnboarding(): Boolean {
+        return getItem(AUTH_ONBOARDING_KEY) == "true"
+    }
+
+    fun hasActiveSession(): Boolean {
+        return loadAuthSession() != null || isGuestMode() || hasCompletedAuthOnboarding()
+    }
+
+    @Synchronized
+    fun clearAuthSession() {
+        removeItem(AUTH_SESSION_KEY)
+        setItem(GUEST_MODE_KEY, "false")
+        setItem(AUTH_ONBOARDING_KEY, "false")
+    }
+
+    private fun hashPassword(email: String, password: String): String {
+        val input = "${email.trim().lowercase()}:quadrinheiro_salt_v1:$password"
+        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(StandardCharsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    @Synchronized
+    fun registerLocalEmailAccount(name: String, email: String, password: String): Result<UserProfile> {
+        val cleanEmail = email.trim().lowercase()
+        val cleanName = name.trim().ifBlank { cleanEmail.substringBefore("@").replaceFirstChar { it.uppercase() } }
+        return try {
+            val raw = getItem(LOCAL_ACCOUNTS_KEY)
+            val root = if (!raw.isNullOrBlank()) JSONObject(raw) else JSONObject()
+            if (root.has(cleanEmail)) {
+                return Result.failure(IllegalArgumentException("ERROR_EMAIL_ALREADY_IN_USE"))
+            }
+            val uid = "email_" + UUID.nameUUIDFromBytes(cleanEmail.toByteArray(StandardCharsets.UTF_8)).toString()
+            val acctObj = JSONObject().apply {
+                put("uid", uid)
+                put("displayName", cleanName)
+                put("email", cleanEmail)
+                put("passwordHash", hashPassword(cleanEmail, password))
+                put("createdAt", System.currentTimeMillis())
+            }
+            root.put(cleanEmail, acctObj)
+            setItem(LOCAL_ACCOUNTS_KEY, root.toString())
+            val profile = UserProfile(
+                uid = uid,
+                displayName = cleanName,
+                email = cleanEmail,
+                photoUrl = null,
+                isGuest = false,
+                provider = "email"
+            )
+            saveAuthSession(profile)
+            Result.success(profile)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    @Synchronized
+    fun authenticateLocalEmailAccount(email: String, password: String): Result<UserProfile> {
+        val cleanEmail = email.trim().lowercase()
+        return try {
+            val raw = getItem(LOCAL_ACCOUNTS_KEY)
+            val root = if (!raw.isNullOrBlank()) JSONObject(raw) else JSONObject()
+            val acctObj = root.optJSONObject(cleanEmail)
+                ?: return Result.failure(IllegalArgumentException("ERROR_USER_NOT_FOUND"))
+            val expectedHash = acctObj.optString("passwordHash", "")
+            val actualHash = hashPassword(cleanEmail, password)
+            if (expectedHash.isNotEmpty() && expectedHash != actualHash) {
+                return Result.failure(IllegalArgumentException("ERROR_WRONG_PASSWORD"))
+            }
+            val profile = UserProfile(
+                uid = acctObj.optString("uid", "email_$cleanEmail"),
+                displayName = acctObj.optString("displayName", "Leitor").ifBlank { "Leitor" },
+                email = cleanEmail,
+                photoUrl = null,
+                isGuest = false,
+                provider = "email"
+            )
+            saveAuthSession(profile)
+            Result.success(profile)
+        } catch (t: Throwable) {
+            Result.failure(t)
+        }
+    }
+
+    fun hasLocalEmailAccount(email: String): Boolean {
+        val cleanEmail = email.trim().lowercase()
+        val raw = getItem(LOCAL_ACCOUNTS_KEY) ?: return false
+        return try {
+            JSONObject(raw).has(cleanEmail)
+        } catch (_: Throwable) {
+            false
         }
     }
 

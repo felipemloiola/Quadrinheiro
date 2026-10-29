@@ -102,6 +102,7 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.MultiApiSearchEngine
+import com.example.model.AuthUiState
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 import androidx.compose.animation.core.Animatable
@@ -127,6 +128,7 @@ import com.example.ui.components.realLiquidGlassBackdrop
 import com.example.ui.components.rememberDampedDragAnimation
 import com.example.ui.components.rememberInteractiveHighlight
 import com.example.ui.components.tintedLiquidBlueButton
+import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.DiaryChronologicalTab
 import com.example.ui.screens.HomeReadingNowTab
 import com.example.ui.screens.SearchMultiApiTab
@@ -220,6 +222,12 @@ class MainActivity : ComponentActivity() {
 fun QuadrinheiroApp(
     viewModel: QuadrinheiroViewModel = viewModel()
 ) {
+    val authUiState by viewModel.authUiState.collectAsState()
+    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
+    val authFeedback by viewModel.authFeedback.collectAsState()
+    val showAuthModalFromSettings by viewModel.showAuthModalFromSettings.collectAsState()
+    val authModalInitialMode by viewModel.authModalInitialMode.collectAsState()
+
     val activeTab by viewModel.activeTab.collectAsState()
     val lastCapsuleIndex by viewModel.lastCapsuleIndex.collectAsState()
     val isSidebarOpen by viewModel.isSidebarOpen.collectAsState()
@@ -352,6 +360,26 @@ fun QuadrinheiroApp(
     }
 
     QuadrinheiroTheme(settings = appSettings) {
+        // ROTEAMENTO CONDICIONAL SÍNCRONO NO BOOT (SEM FLASH DE TELA):
+        // Se o usuário ainda não tiver sessão ativa nem tiver escolhido o Modo Convidado,
+        // renderiza exclusivamente a AuthScreen edge-to-edge.
+        if (authUiState == AuthUiState.Unauthenticated) {
+            AuthScreen(
+                isLoading = isAuthLoading,
+                feedbackMessage = authFeedback?.first,
+                isFeedbackError = authFeedback?.second ?: true,
+                isLinkingFromGuest = false,
+                onClearFeedback = viewModel::clearAuthFeedback,
+                onLoginWithEmail = viewModel::loginWithEmail,
+                onRegisterWithEmail = viewModel::registerWithEmail,
+                onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
+                onContinueAsGuest = viewModel::enterAsGuest,
+                onResetPassword = viewModel::resetPassword,
+                onDismissModal = null
+            )
+            return@QuadrinheiroTheme
+        }
+
         val mat = LocalAppleMaterials.current
         val s = mat.scheme
         val themeColors = LocalIOS27Theme.current
@@ -990,6 +1018,34 @@ fun QuadrinheiroApp(
                     state = menuHostState,
                     backdrop = mainContentBackdrop
                 )
+
+                // Modal de Autenticação (quando aberto a partir da tela de Ajustes no Modo Convidado para vincular conta)
+                AnimatedVisibility(
+                    visible = showAuthModalFromSettings,
+                    enter = fadeIn(tween(260)),
+                    exit = fadeOut(tween(200)),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(50f)
+                ) {
+                    BackHandler(enabled = showAuthModalFromSettings) {
+                        viewModel.dismissAuthModalForLinking()
+                    }
+                    AuthScreen(
+                        isLoading = isAuthLoading,
+                        feedbackMessage = authFeedback?.first,
+                        isFeedbackError = authFeedback?.second ?: true,
+                        isLinkingFromGuest = authUiState == AuthUiState.Guest,
+                        initialMode = authModalInitialMode,
+                        onClearFeedback = viewModel::clearAuthFeedback,
+                        onLoginWithEmail = viewModel::loginWithEmail,
+                        onRegisterWithEmail = viewModel::registerWithEmail,
+                        onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
+                        onContinueAsGuest = viewModel::dismissAuthModalForLinking,
+                        onResetPassword = viewModel::resetPassword,
+                        onDismissModal = viewModel::dismissAuthModalForLinking
+                    )
+                }
                 }
             }
         }

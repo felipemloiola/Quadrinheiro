@@ -12,14 +12,18 @@ import com.example.data.CloudAuthUser
 import com.example.data.CuratedCatalog
 import com.example.data.MultiApiSearchEngine
 import com.example.data.PortugueseComicTranslator
+import com.example.data.QuadrinheiroAuthManager
 import com.example.data.QuadrinheiroCloudRepository
 import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
+import com.example.model.AuthMode
+import com.example.model.AuthUiState
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import com.example.model.UserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -68,13 +72,46 @@ class QuadrinheiroViewModel(
     private val appContext = application.applicationContext
     private val storage = SafeStorage(appContext)
     private val searchEngine = MultiApiSearchEngine()
+    private val authManager = QuadrinheiroAuthManager(appContext, storage)
     private val cloudRepo: QuadrinheiroCloudRepository? by lazy {
         runCatching { QuadrinheiroCloudRepository(appContext) }.getOrNull()
     }
     private val initial = storage.loadState()
 
+    // Estado de Autenticação inicializado de forma SÍNCRONA no boot (Zero Flash de Tela)
+    private val _authUiState = MutableStateFlow<AuthUiState>(authManager.getInitialAuthUiState())
+    val authUiState: StateFlow<AuthUiState> = _authUiState.asStateFlow()
+
+    private val _currentUserProfile = MutableStateFlow<UserProfile?>(
+        authManager.getInitialUserProfile(initial.profile.name)
+    )
+    val currentUserProfile: StateFlow<UserProfile?> = _currentUserProfile.asStateFlow()
+
+    private val _isAuthLoading = MutableStateFlow(false)
+    val isAuthLoading: StateFlow<Boolean> = _isAuthLoading.asStateFlow()
+
+    // Pair(mensagemPtBr, isError)
+    private val _authFeedback = MutableStateFlow<Pair<String, Boolean>?>(null)
+    val authFeedback: StateFlow<Pair<String, Boolean>?> = _authFeedback.asStateFlow()
+
+    // Permite que um usuário no Modo Convidado abra a AuthScreen pela tela de Ajustes para vincular/criar conta
+    private val _showAuthModalFromSettings = MutableStateFlow(false)
+    val showAuthModalFromSettings: StateFlow<Boolean> = _showAuthModalFromSettings.asStateFlow()
+
+    private val _authModalInitialMode = MutableStateFlow(AuthMode.LOGIN)
+    val authModalInitialMode: StateFlow<AuthMode> = _authModalInitialMode.asStateFlow()
+
     // Cloud Authentication & Firestore Sync state
-    private val _cloudUser = MutableStateFlow<CloudAuthUser?>(null)
+    private val _cloudUser = MutableStateFlow<CloudAuthUser?>(
+        _currentUserProfile.value?.takeIf { !it.isGuest && it.provider == "google" }?.let {
+            CloudAuthUser(
+                uid = it.uid,
+                displayName = it.displayName,
+                email = it.email,
+                photoUrl = it.photoUrl
+            )
+        }
+    )
     val cloudUser: StateFlow<CloudAuthUser?> = _cloudUser.asStateFlow()
 
     private val _isSyncingCloud = MutableStateFlow(false)
@@ -232,8 +269,8 @@ class QuadrinheiroViewModel(
                 }
         }
 
-        // Se houver itens sujos pendentes de sessão offline anterior, agenda o WorkManager
-        if (initial.comics.any { it.isDirty } || initial.profile.isDirty) {
+        // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
+        if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
@@ -241,9 +278,36 @@ class QuadrinheiroViewModel(
             // Defer non-critical background work until after initial Activity SurfaceSyncGroup transaction completes
             delay(600)
             cloudRepo?.let { repo ->
-                _cloudUser.value = repo.currentAuthUser()
+                val activeFbUser = repo.currentAuthUser()
+                if (activeFbUser != null) {
+                    _cloudUser.value = activeFbUser
+                    val syncedProfile = UserProfile(
+                        uid = activeFbUser.uid,
+                        displayName = activeFbUser.displayName ?: _profile.value.name.ifBlank { "Leitor" },
+                        email = activeFbUser.email,
+                        photoUrl = activeFbUser.photoUrl,
+                        isGuest = false,
+                        provider = "google"
+                    )
+                    storage.saveAuthSession(syncedProfile)
+                    _currentUserProfile.value = syncedProfile
+                    _authUiState.value = AuthUiState.Authenticated
+                }
                 repo.observeAuthState().collectLatest { user ->
                     _cloudUser.value = user
+                    if (user != null) {
+                        val syncedProfile = UserProfile(
+                            uid = user.uid,
+                            displayName = user.displayName ?: _profile.value.name.ifBlank { "Leitor" },
+                            email = user.email,
+                            photoUrl = user.photoUrl,
+                            isGuest = false,
+                            provider = "google"
+                        )
+                        storage.saveAuthSession(syncedProfile)
+                        _currentUserProfile.value = syncedProfile
+                        _authUiState.value = AuthUiState.Authenticated
+                    }
                     startOrStopCloudListeners(user)
                 }
             }
@@ -495,9 +559,194 @@ class QuadrinheiroViewModel(
         }
     }
 
+    fun clearAuthFeedback() {
+        _authFeedback.value = null
+    }
+
+    fun openAuthModalForLinking(mode: AuthMode = AuthMode.LOGIN) {
+        _authFeedback.value = null
+        _authModalInitialMode.value = mode
+        _showAuthModalFromSettings.value = true
+    }
+
+    fun dismissAuthModalForLinking() {
+        _authFeedback.value = null
+        _showAuthModalFromSettings.value = false
+    }
+
+    /**
+     * Marca todos os quadrinhos e perfil locais criados/editados no Modo Convidado como `isDirty = true`
+     * e faz o merge imediato com a conta autenticada (sem perder nenhum dado local).
+     */
+    private fun applyAuthenticatedSessionAndMergeLocalData(
+        userProfile: UserProfile,
+        wasGuestBefore: Boolean
+    ) {
+        val nowMs = System.currentTimeMillis()
+        storage.saveAuthSession(userProfile)
+        _currentUserProfile.value = userProfile
+        _authUiState.value = AuthUiState.Authenticated
+        _showAuthModalFromSettings.value = false
+        _authFeedback.value = null
+
+        // Atualiza o ReaderProfile com o nome/foto da conta se ainda estiver com o nome padrão
+        val currentProf = _profile.value
+        val shouldUpdateName = currentProf.name.isBlank() ||
+            currentProf.name == "Felipe" ||
+            currentProf.name.equals("Leitor Convidado", ignoreCase = true) ||
+            currentProf.name.equals("Leitor", ignoreCase = true)
+        val mergedReaderProfile = currentProf.copy(
+            name = if (shouldUpdateName && userProfile.displayName.isNotBlank()) userProfile.displayName else currentProf.name,
+            handle = if (currentProf.handle == "@felipe_hqs" || currentProf.handle.isBlank()) {
+                val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
+                    .lowercase()
+                    .replace(Regex("[^a-z0-9_]"), "")
+                    .take(18)
+                if (baseHandle.isNotBlank()) "@$baseHandle" else currentProf.handle
+            } else currentProf.handle,
+            avatarUrl = if (currentProf.avatarUrl.isBlank() && !userProfile.photoUrl.isNullOrBlank()) {
+                userProfile.photoUrl
+            } else currentProf.avatarUrl,
+            updatedAt = nowMs,
+            isDirty = true
+        )
+        _profile.value = mergedReaderProfile
+
+        // Se o usuário veio do Modo Convidado ou tinha obras locais, marca todas como isDirty = true
+        // para garantir que 100% do acervo local suba no merge com o Firestore
+        if (wasGuestBefore || _comics.value.isNotEmpty()) {
+            val dirtyMarkedComics = _comics.value.map { comic ->
+                comic.copy(
+                    updatedAt = maxOf(comic.updatedAt, nowMs),
+                    isDirty = true
+                )
+            }
+            _comics.value = dirtyMarkedComics
+        }
+        persistAll()
+
+        if (userProfile.provider == "google") {
+            val cloudAuthUser = CloudAuthUser(
+                uid = userProfile.uid,
+                displayName = userProfile.displayName,
+                email = userProfile.email,
+                photoUrl = userProfile.photoUrl
+            )
+            _cloudUser.value = cloudAuthUser
+            startOrStopCloudListeners(cloudAuthUser)
+            syncNowWithCloud()
+        }
+    }
+
+    fun loginWithEmail(email: String, pass: String) {
+        if (_isAuthLoading.value) return
+        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _authFeedback.value = null
+            val result = authManager.signInWithEmail(email, pass)
+            _isAuthLoading.value = false
+            result.onSuccess { userProfile ->
+                applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
+                showNotice(
+                    if (wasGuest) "Bem-vindo, ${userProfile.displayName}! Acervo local vinculado à sua conta."
+                    else "Bem-vindo de volta, ${userProfile.displayName}!"
+                )
+            }.onFailure { err ->
+                _authFeedback.value = (err.message ?: "Não foi possível entrar com E-mail e Senha.") to true
+            }
+        }
+    }
+
+    fun registerWithEmail(name: String, email: String, pass: String) {
+        if (_isAuthLoading.value) return
+        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _authFeedback.value = null
+            val result = authManager.signUpWithEmail(name, email, pass)
+            _isAuthLoading.value = false
+            result.onSuccess { userProfile ->
+                applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
+                showNotice(
+                    if (wasGuest) "Conta criada! Todos os seus quadrinhos locais foram preservados."
+                    else "Conta criada com sucesso! Bem-vindo, ${userProfile.displayName}!"
+                )
+            }.onFailure { err ->
+                _authFeedback.value = (err.message ?: "Não foi possível criar sua conta agora.") to true
+            }
+        }
+    }
+
+    fun loginWithGoogle(activityContext: Context) {
+        if (_isAuthLoading.value) return
+        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _isSyncingCloud.value = true
+            _authFeedback.value = null
+            val result = authManager.signInWithGoogle(activityContext)
+            _isAuthLoading.value = false
+            _isSyncingCloud.value = false
+            result.onSuccess { userProfile ->
+                applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
+                showNotice(
+                    if (wasGuest) "Conectado como ${userProfile.displayName}! Acervo do modo convidado sincronizado."
+                    else "Conectado como ${userProfile.displayName}"
+                )
+            }.onFailure { err ->
+                if (err !is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                    val msg = authManager.translateAuthErrorToPtBr(err)
+                    _authFeedback.value = msg to true
+                    if (_authUiState.value != AuthUiState.Unauthenticated && !_showAuthModalFromSettings.value) {
+                        showNotice(msg)
+                    }
+                }
+            }
+        }
+    }
+
+    fun enterAsGuest() {
+        val guestProfile = authManager.continueAsGuest(_profile.value.name.ifBlank { "Leitor Convidado" })
+        _currentUserProfile.value = guestProfile
+        _authUiState.value = AuthUiState.Guest
+        _showAuthModalFromSettings.value = false
+        _authFeedback.value = null
+        showNotice("Modo Convidado ativo — seus quadrinhos ficam salvos neste aparelho")
+    }
+
+    fun resetPassword(email: String) {
+        if (_isAuthLoading.value) return
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _authFeedback.value = null
+            val result = authManager.sendPasswordReset(email)
+            _isAuthLoading.value = false
+            result.onSuccess { successMsg ->
+                _authFeedback.value = successMsg to false
+            }.onFailure { err ->
+                _authFeedback.value = (err.message ?: "Informe um e-mail válido para redefinir a senha.") to true
+            }
+        }
+    }
+
+    fun logout(activityContext: Context? = null) {
+        viewModelScope.launch {
+            cloudProfileJob?.cancel()
+            cloudComicsJob?.cancel()
+            authManager.signOut(activityContext)
+            _cloudUser.value = null
+            _currentUserProfile.value = null
+            _showAuthModalFromSettings.value = false
+            _authFeedback.value = null
+            _authUiState.value = AuthUiState.Unauthenticated
+            showNotice("Sessão encerrada com segurança")
+        }
+    }
+
     fun trySilentGoogleSignIn(activityContext: Context) {
         val repo = cloudRepo ?: return
-        if (_cloudUser.value != null) return
+        if (_cloudUser.value != null || storage.isGuestMode()) return
         viewModelScope.launch {
             repo.trySilentGoogleSignIn(activityContext).onSuccess { user ->
                 if (user != null) {
@@ -508,41 +757,21 @@ class QuadrinheiroViewModel(
     }
 
     fun signInWithGoogle(activityContext: Context) {
-        val repo = cloudRepo ?: run {
-            showNotice("Serviço Firebase indisponível neste dispositivo")
-            return
-        }
-        viewModelScope.launch {
-            _isSyncingCloud.value = true
-            val result = repo.signInWithGoogleInteractive(activityContext)
-            _isSyncingCloud.value = false
-            result.onSuccess { user ->
-                _cloudUser.value = user
-                if (_profile.value.name == "Felipe" && !user.displayName.isNullOrBlank()) {
-                    updateProfile { it.copy(name = user.displayName) }
-                }
-                syncNowWithCloud()
-                showNotice("Conectado como ${user.displayName ?: user.email ?: "Leitor"}")
-            }.onFailure { err ->
-                if (err !is androidx.credentials.exceptions.GetCredentialCancellationException) {
-                    showNotice("Não foi possível entrar com o Google")
-                }
-            }
-        }
+        loginWithGoogle(activityContext)
     }
 
     fun signOutFromCloud(activityContext: Context) {
-        val repo = cloudRepo ?: return
-        viewModelScope.launch {
-            repo.signOut(activityContext)
-            _cloudUser.value = null
-            showNotice("Conta desconectada da nuvem")
-        }
+        logout(activityContext)
     }
 
     fun syncNowWithCloud() {
         val repo = cloudRepo ?: return
-        val user = _cloudUser.value ?: return
+        val user = _cloudUser.value ?: run {
+            if (_currentUserProfile.value?.provider == "email") {
+                showNotice("Acervo salvo no dispositivo. Conecte o Google para sincronizar entre aparelhos.")
+            }
+            return
+        }
         if (_isSyncingCloud.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSyncingCloud.value = true

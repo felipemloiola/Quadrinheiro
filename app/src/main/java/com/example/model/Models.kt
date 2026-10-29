@@ -669,3 +669,32 @@ data class ApiDiagnosticsReport(
     val totalMs: Long,
     val endpoints: List<ApiEndpointStatus>
 )
+
+@Immutable
+enum class AuthMode {
+    LOGIN,
+    REGISTER
+}
+
+@Immutable
+data class UserProfile(
+    val uid: String = "",
+    val displayName: String = "Leitor",
+    val email: String? = null,
+    val photoUrl: String? = null,
+    val isGuest: Boolean = false,
+    val provider: String = "guest" // "google", "email", "guest"
+)
+
+@Immutable
+sealed interface AuthUiState {
+    @Immutable
+    data object Authenticated : AuthUiState
+
+    @Immutable
+    data object Guest : AuthUiState
+
+    @Immutable
+    data object Unauthenticated : AuthUiState
+}
+

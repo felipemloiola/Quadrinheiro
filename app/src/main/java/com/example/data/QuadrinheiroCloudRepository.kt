@@ -591,11 +591,11 @@ class QuadrinheiroCloudRepository(
                     ?: (if (local.externalId.isNotBlank()) remoteByExtId[local.externalId] else null)
 
                 if (remoteMatch == null) {
-                    // Item existe apenas localmente: se foi editado/criado offline (isDirty), deve subir para a nuvem
-                    if (local.isDirty) {
-                        mergedById[local.id] = local
-                        dirtyWinners.add(local)
-                    }
+                    // Item existe apenas localmente (ex: criado no Modo Convidado ou offline):
+                    // preserva integralmente no merge e agenda upload para o Firestore
+                    val localToSync = if (local.isDirty) local else local.copy(isDirty = true)
+                    mergedById[local.id] = localToSync
+                    dirtyWinners.add(localToSync)
                 } else {
                     // Conflito entre versão local e versão remota: vence o maior updatedAt
                     val localWins = local.isDirty && local.updatedAt >= remoteMatch.updatedAt

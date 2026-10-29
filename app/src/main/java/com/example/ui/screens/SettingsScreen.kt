@@ -94,6 +94,8 @@ import androidx.compose.ui.unit.sp
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
 import com.example.model.AppleAvatarPreset
+import com.example.model.AuthMode
+import com.example.model.AuthUiState
 import com.example.model.ComicEntry
 import com.example.model.IOS27ThemeDef
 import com.example.model.ReaderProfile
@@ -329,6 +331,20 @@ fun SettingsTabScreen(
                         tint = themeColors.textTertiary,
                         modifier = Modifier.size(18.dp)
                     )
+                }
+            }
+
+            // Card de Conta e Sincronização na Nuvem no topo dos Ajustes
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Conta e Sincronização na Nuvem",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = themeColors.textSecondary,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    CloudSyncCard(viewModel = viewModel)
                 }
             }
 
@@ -2539,8 +2555,21 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
     val s = mat.scheme
     val themeColors = LocalIOS27Theme.current
     val context = LocalContext.current
+    val authUiState by viewModel.authUiState.collectAsStateWithLifecycle()
+    val currentUserProfile by viewModel.currentUserProfile.collectAsStateWithLifecycle()
     val cloudUser by viewModel.cloudUser.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncingCloud.collectAsStateWithLifecycle()
+    val isAuthLoading by viewModel.isAuthLoading.collectAsStateWithLifecycle()
+
+    val isAuthenticated = authUiState == AuthUiState.Authenticated && currentUserProfile?.isGuest == false
+    val displayName = currentUserProfile?.displayName?.takeIf { it.isNotBlank() }
+        ?: cloudUser?.displayName?.takeIf { it.isNotBlank() }
+        ?: if (isAuthenticated) "Leitor Conectado" else "Modo Convidado"
+    val emailText = currentUserProfile?.email?.takeIf { it.isNotBlank() }
+        ?: cloudUser?.email?.takeIf { it.isNotBlank() }
+    val photoUrl = currentUserProfile?.photoUrl?.takeIf { it.isNotBlank() }
+        ?: cloudUser?.photoUrl?.takeIf { it.isNotBlank() }
+    val provider = currentUserProfile?.provider ?: if (cloudUser != null) "google" else "guest"
 
     Column(
         modifier = Modifier
@@ -2561,46 +2590,71 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
                         .background(
-                            if (cloudUser != null)
-                                themeColors.accent.copy(alpha = 0.16f)
+                            if (isAuthenticated)
+                                themeColors.accent.copy(alpha = 0.18f)
                             else
-                                s.textTertiary.copy(alpha = 0.12f)
+                                s.textTertiary.copy(alpha = 0.14f)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isAuthenticated) themeColors.accent.copy(alpha = 0.38f) else s.textSecondary.copy(alpha = 0.20f),
+                            shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    val photo = cloudUser?.photoUrl
-                    if (cloudUser != null && !photo.isNullOrBlank()) {
+                    if (isAuthenticated && !photoUrl.isNullOrBlank()) {
                         AsyncImage(
-                            model = photo,
-                            contentDescription = "Foto de perfil Google",
+                            model = photoUrl,
+                            contentDescription = "Foto de perfil da conta",
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(CircleShape)
                         )
+                    } else if (isAuthenticated) {
+                        val initials = displayName
+                            .split(" ")
+                            .filter { it.isNotBlank() }
+                            .take(2)
+                            .joinToString("") { it.first().uppercase() }
+                            .ifBlank { "L" }
+                        Text(
+                            text = initials,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = themeColors.accent
+                        )
                     } else {
                         Icon(
-                            imageVector = if (cloudUser != null) Icons.Default.Person else Icons.Default.AutoAwesome,
+                            imageVector = LucideIcons.UserCheck,
                             contentDescription = null,
-                            tint = if (cloudUser != null) themeColors.accent else s.textSecondary,
-                            modifier = Modifier.size(22.dp)
+                            tint = themeColors.accent,
+                            modifier = Modifier.size(21.dp)
                         )
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
-                        text = if (cloudUser != null) (cloudUser?.displayName ?: "Conta Google Conectada") else "Sincronização em Nuvem",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = displayName,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
                         color = s.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = if (cloudUser != null) (cloudUser?.email ?: "Sincronizado via Firebase Firestore") else "Backup seguro via Firebase & Google Sign-In",
+                        text = when {
+                            isAuthenticated && !emailText.isNullOrBlank() -> emailText
+                            isAuthenticated && provider == "google" -> "Sincronizado via Google & Firestore"
+                            isAuthenticated -> "Conta Quadrinheiro ativa"
+                            else -> "Acervo salvo localmente neste aparelho"
+                        },
                         fontSize = 12.sp,
                         color = s.textSecondary,
                         maxLines = 1,
@@ -2609,79 +2663,211 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 }
             }
 
-            if (isSyncing) {
+            if (isSyncing || isAuthLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
                     color = themeColors.accent
                 )
-            } else if (cloudUser != null) {
+            } else if (isAuthenticated) {
+                val badgeColor = if (provider == "google") Color(0xFF10B981) else themeColors.accent
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFF10B981).copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .background(badgeColor.copy(alpha = 0.16f))
+                        .border(
+                            width = 0.8.dp,
+                            color = badgeColor.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(999.dp)
+                        )
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF10B981))
+                                .background(badgeColor)
                         )
                         Text(
-                            text = "Ativo",
-                            fontSize = 11.sp,
+                            text = if (provider == "google") "Google Sync" else "Conta E-mail",
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF10B981)
+                            color = badgeColor
                         )
                     }
+                }
+            } else {
+                // Badge Modo Convidado
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0xFFF59E0B).copy(alpha = 0.16f))
+                        .border(
+                            width = 0.8.dp,
+                            color = Color(0xFFF59E0B).copy(alpha = 0.38f),
+                            shape = RoundedCornerShape(999.dp)
+                        )
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Modo Convidado (Apenas Local)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFBBF24)
+                    )
                 }
             }
         }
 
         HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
 
-        if (cloudUser == null) {
+        if (!isAuthenticated) {
             Text(
-                text = "Conecte sua Conta Google para salvar seu acervo, histórico de leitura e resenhas diretamente no Firebase Firestore de forma automática e contínua.",
-                fontSize = 12.5.sp,
-                lineHeight = 17.sp,
+                text = "Seus quadrinhos, notas do diário cronológico e sequências estão salvos localmente. Ao vincular uma conta Google ou E-mail, todo o seu acervo atual será mesclado automaticamente sem perder nenhum item.",
+                fontSize = 12.sp,
+                lineHeight = 16.5.sp,
                 color = s.textSecondary
             )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(themeColors.accent)
-                    .clickable { viewModel.signInWithGoogle(context) }
-                    .padding(vertical = 12.dp, horizontal = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                // Botão 1: Vincular com Google
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(themeColors.accent)
+                        .clickable(enabled = !isAuthLoading && !isSyncing) {
+                            viewModel.loginWithGoogle(context)
+                        }
+                        .padding(vertical = 11.dp, horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.GoogleIcon,
+                                contentDescription = null,
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Text(
+                            text = "Vincular com Google",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                // Botão 2: Criar Conta / Entrar com E-mail
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Entrar com Google",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .inputWellSurface(RoundedCornerShape(14.dp))
+                            .clickable(enabled = !isAuthLoading) {
+                                viewModel.openAuthModalForLinking(AuthMode.REGISTER)
+                            }
+                            .padding(vertical = 10.dp, horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Mail,
+                                contentDescription = null,
+                                tint = themeColors.accent,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Criar Conta / Entrar com E-mail",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = s.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .inputWellSurface(RoundedCornerShape(14.dp))
+                            .clickable(enabled = !isAuthLoading) {
+                                viewModel.logout(context)
+                            }
+                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.LogOut,
+                            contentDescription = "Voltar à tela de login",
+                            tint = s.textSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         } else {
+            // Modo Autenticado: Sincronizar Agora / Vincular Google (se entrou por e-mail) / Sair da Conta (Logout)
+            if (provider == "email" && cloudUser == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(themeColors.accent.copy(alpha = 0.14f))
+                        .border(
+                            width = 0.8.dp,
+                            color = themeColors.accent.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = !isSyncing && !isAuthLoading) {
+                            viewModel.loginWithGoogle(context)
+                        }
+                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.GoogleIcon,
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = "Vincular Google para Backup na Nuvem",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = themeColors.accent
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -2706,7 +2892,7 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                         )
                         Text(
                             text = if (isSyncing) "Sincronizando..." else "Sincronizar Agora",
-                            fontSize = 13.sp,
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = s.textPrimary
                         )
@@ -2717,7 +2903,7 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                     modifier = Modifier
                         .weight(1f)
                         .inputWellSurface(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.signOutFromCloud(context) }
+                        .clickable { viewModel.logout(context) }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2726,14 +2912,14 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Close,
+                            imageVector = LucideIcons.LogOut,
                             contentDescription = null,
                             tint = Color(0xFFF43F5E),
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Desconectar",
-                            fontSize = 13.sp,
+                            text = "Sair da Conta",
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFF43F5E)
                         )
@@ -2743,3 +2929,4 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
         }
     }
 }
+
