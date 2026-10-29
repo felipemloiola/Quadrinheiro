@@ -265,6 +265,8 @@ fun CatalogSheetModal(
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
+                    scrollOffsetProvider = { sheetScrollState.value.toFloat() },
+                    dragOffsetYProvider = { dragOffsetYAnim.value },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
@@ -515,43 +517,14 @@ fun CatalogSheetModal(
                             onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
                         )
 
-                        // Item 4: Progresso de Páginas quando está Lendo
+                        // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
                         if (draftComic.status == ReadingStatus.READING) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .inputWellSurface(RoundedCornerShape(16.dp))
-                                    .padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Página atual (${draftComic.currentPage} de ${draftComic.pageCount})",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = s.textPrimary
-                                    )
-                                    AppleStepper(
-                                        value = draftComic.currentPage,
-                                        min = 0,
-                                        max = draftComic.pageCount.coerceAtLeast(1),
-                                        step = 1,
-                                        onChange = { v -> draftComic = draftComic.copy(currentPage = v) }
-                                    )
-                                }
-                                AppleSlider(
-                                    value = draftComic.currentPage.toFloat(),
-                                    min = 0f,
-                                    max = draftComic.pageCount.coerceAtLeast(1).toFloat(),
-                                    step = 1f,
-                                    accentColor = s.accentColor,
-                                    onChange = { v -> draftComic = draftComic.copy(currentPage = v.roundToInt()) }
-                                )
-                            }
+                            CatalogReadingProgressSection(
+                                currentPageProvider = { draftComic.currentPage },
+                                pageCount = draftComic.pageCount,
+                                accentColor = s.accentColor,
+                                onChangePage = { v -> draftComic = draftComic.copy(currentPage = v) }
+                            )
                         }
 
                         // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
@@ -752,6 +725,8 @@ fun ComicInfoSynopsisSheetModal(
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = comic.coverUrl,
+                    scrollOffsetProvider = { infoScrollState.value.toFloat() },
+                    dragOffsetYProvider = { dragOffsetYAnim.value },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
@@ -1212,8 +1187,8 @@ fun ManualEntrySheetModal(
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = form.coverUrl,
-                    scrollOffsetPx = 0f,
-                    dragOffsetY = 0f,
+                    scrollOffsetProvider = { 0f },
+                    dragOffsetYProvider = { 0f },
                     cornerRadiusDp = 24f,
                     sheetShape = shape
                 )
@@ -1356,8 +1331,13 @@ fun AdaptiveSidebarDrawer(
         Column(
             modifier = Modifier
                 .padding(12.dp)
-                .width((288f * scaleXAnim.value).coerceAtLeast(96f).dp)
-                .fillMaxHeight(scaleYAnim.value.coerceIn(0.35f, 1f))
+                .width(288.dp)
+                .fillMaxHeight()
+                .graphicsLayer {
+                    scaleX = scaleXAnim.value.coerceIn(0.35f, 1f)
+                    scaleY = scaleYAnim.value.coerceIn(0.35f, 1f)
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                }
                 .liquidGlassNavSurface(
                     shape = com.kyant.shapes.ContinuousRoundedRectangle(34.dp),
                     elevation = 22.dp

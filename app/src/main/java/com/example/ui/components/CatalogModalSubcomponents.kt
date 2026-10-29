@@ -50,10 +50,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.roundToInt
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -296,12 +300,15 @@ fun AppleMiniCalendarPicker(
 
 /**
  * Camada de fundo Liquid Glass na GPU para o Menu de Registro da HQ.
+ * Usa Leitura Diferida de Estado (`scrollOffsetProvider` / `dragOffsetYProvider` como lambdas `() -> Float`)
+ * lida exclusivamente na fase de draw (`Modifier.graphicsLayer { ... }`), evitando recomposições em cascata
+ * sobre os shaders do `com.kyant.backdrop`.
  */
 @Composable
 fun LiquidGlassSheetRefractiveLayer(
     coverUrl: String,
-    scrollOffsetPx: Float = 0f,
-    dragOffsetY: Float = 0f,
+    scrollOffsetProvider: () -> Float = { 0f },
+    dragOffsetYProvider: () -> Float = { 0f },
     cornerRadiusDp: Float = 24f,
     sheetShape: Shape = RoundedRectangle(cornerRadiusDp.dp),
     modifier: Modifier = Modifier
@@ -345,8 +352,11 @@ fun LiquidGlassSheetRefractiveLayer(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        val scrollY = scrollOffsetProvider()
+                        val dragY = dragOffsetYProvider()
                         scaleX = 1.15f
                         scaleY = 1.18f
+                        translationY = (-scrollY * 0.04f + dragY * 0.08f).coerceIn(-28f, 28f)
                     }
                     .alpha(if (s.isLight) 0.14f else 0.20f)
             ) {
@@ -1496,3 +1506,86 @@ internal fun CatalogMomentsSection(
         }
     }
 }
+
+/**
+ * Seção isolada de Progresso de Páginas no modal de catalogação com Leitura Diferida de Estado:
+ * Recebe `currentPageProvider: () -> Int` e `progressFractionProvider: () -> Float` como lambdas
+ * para que a atualização contínua do `LiquidSlider` isole a recomposição apenas neste bloco e
+ * desenhe a barra na fase de draw (`Modifier.drawWithCache`).
+ */
+@Composable
+internal fun CatalogReadingProgressSection(
+    currentPageProvider: () -> Int,
+    pageCount: Int,
+    accentColor: Color,
+    onChangePage: (Int) -> Unit
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+    val safeTotal = pageCount.coerceAtLeast(1)
+    val currentPage = currentPageProvider().coerceIn(0, safeTotal)
+    val trackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .inputWellSurface(RoundedCornerShape(16.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Página atual ($currentPage de $safeTotal)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = s.textPrimary
+            )
+            AppleStepper(
+                value = currentPage,
+                min = 0,
+                max = safeTotal,
+                step = 1,
+                onChange = onChangePage
+            )
+        }
+
+        // Indicador visual desenhado inteiramente na fase de draw com leitura diferida de estado
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .drawWithCache {
+                    val cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                    onDrawBehind {
+                        drawRoundRect(
+                            color = trackColor,
+                            size = size,
+                            cornerRadius = cornerRadius
+                        )
+                        val fraction = (currentPageProvider().toFloat() / safeTotal.toFloat()).coerceIn(0f, 1f)
+                        if (fraction > 0f) {
+                            drawRoundRect(
+                                color = accentColor,
+                                size = Size(width = size.width * fraction, height = size.height),
+                                cornerRadius = cornerRadius
+                            )
+                        }
+                    }
+                }
+        )
+
+        AppleSlider(
+            value = currentPage.toFloat(),
+            min = 0f,
+            max = safeTotal.toFloat(),
+            step = 1f,
+            accentColor = accentColor,
+            onChange = { v -> onChangePage(v.roundToInt()) }
+        )
+    }
+}
+

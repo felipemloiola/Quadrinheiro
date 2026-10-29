@@ -24,12 +24,19 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,10 +48,13 @@ import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 import com.example.ui.components.AppleCapsuleButton
+import com.example.ui.components.AppleStepper
 import com.example.ui.components.BookCover
 import com.example.ui.components.StarRating
 import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.inputWellSurface
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.ui.theme.LocalAppleMaterials
 import com.example.ui.theme.SpaceGroteskTabularFamily
 import java.util.Locale
@@ -128,6 +138,152 @@ fun ShelfListComicRow(
 }
 
 /**
+ * Barra de progresso com Leitura Diferida de Estado (`progressProvider: () -> Float`)
+ * desenhada inteiramente na fase de draw (`Modifier.drawWithCache`), evitando recomposições
+ * ou relayouts em cascata sobre os shaders `com.kyant.backdrop`.
+ */
+@Composable
+fun DeferredLinearProgressBar(
+    progressProvider: () -> Float,
+    trackColor: Color,
+    fillColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.drawWithCache {
+            val cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+            onDrawBehind {
+                drawRoundRect(
+                    color = trackColor,
+                    size = size,
+                    cornerRadius = cornerRadius
+                )
+                val fraction = progressProvider().coerceIn(0f, 1f)
+                if (fraction > 0f) {
+                    drawRoundRect(
+                        color = fillColor,
+                        size = Size(width = size.width * fraction, height = size.height),
+                        cornerRadius = cornerRadius
+                    )
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Card de leitura em andamento ("Em leitura") na aba Lendo Agora, isolado com `progressProvider: () -> Float`.
+ */
+@Composable
+fun HomeReadingNowComicCard(
+    item: ComicEntry,
+    appSettings: AppSettings,
+    progressProvider: () -> Float,
+    onSelectComic: (ComicEntry) -> Unit,
+    onQuickUpdateReadingPage: (ComicEntry, Int) -> Unit
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+    val pct = remember(item.currentPage, item.pageCount) {
+        ((item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1).toFloat()) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .contentMaterialSurface(RoundedCornerShape(26.dp))
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BookCover(
+            src = item.coverUrl,
+            title = item.title,
+            authors = item.authors,
+            publisher = item.publisher,
+            year = item.releaseYear,
+            spine3d = appSettings.spine3dEffect,
+            modifier = Modifier
+                .width(80.dp)
+                .aspectRatio(2f / 3f)
+                .shadow(6.dp, RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onSelectComic(item) }
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelectComic(item) }
+            ) {
+                Text(
+                    text = "${item.publisher.uppercase()} • $pct% CONCLUÍDO",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = s.textSecondary
+                )
+                Text(
+                    text = item.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = s.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = item.authors,
+                    fontSize = 12.sp,
+                    color = s.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                DeferredLinearProgressBar(
+                    progressProvider = progressProvider,
+                    trackColor = if (s.isLight) Color.Black.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.12f),
+                    fillColor = s.accentColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pág. ${item.currentPage} de ${item.pageCount}",
+                        fontSize = 11.sp,
+                        fontFamily = SpaceGroteskTabularFamily,
+                        fontWeight = FontWeight.Medium,
+                        color = s.textSecondary
+                    )
+
+                    AppleStepper(
+                        value = item.currentPage,
+                        min = 0,
+                        max = item.pageCount.coerceAtLeast(1),
+                        step = 5,
+                        onChange = { nextPage ->
+                            onQuickUpdateReadingPage(item, nextPage)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Card de resumo estatístico e histograma de notas do Diário Cronológico.
  */
 @Composable
@@ -190,9 +346,11 @@ fun DiaryAnalyticsSummaryCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             val totalRated = ratedComics.size.coerceAtLeast(1)
+            val barTrackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
             for (star in 5 downTo 1) {
-                val countForStar = ratedComics.count { it.rating.roundToInt() == star }
-                val ratio = (countForStar.toFloat() / totalRated.toFloat()).coerceIn(0f, 1f)
+                val countForStar = remember(ratedComics, star) {
+                    ratedComics.count { it.rating.roundToInt() == star }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -204,24 +362,17 @@ fun DiaryAnalyticsSummaryCard(
                         color = s.textSecondary,
                         modifier = Modifier.width(18.dp)
                     )
-                    Box(
+                    DeferredLinearProgressBar(
+                        progressProvider = {
+                            val raw = (countForStar.toFloat() / totalRated.toFloat()).coerceIn(0f, 1f)
+                            raw.coerceAtLeast(if (countForStar > 0) 0.08f else 0f)
+                        },
+                        trackColor = barTrackColor,
+                        fillColor = s.starColor,
                         modifier = Modifier
                             .weight(1f)
                             .height(5.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(
-                                if (s.isLight) Color.Black.copy(alpha = 0.08f)
-                                else Color.White.copy(alpha = 0.10f)
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(ratio.coerceAtLeast(if (countForStar > 0) 0.08f else 0f))
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(s.starColor)
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -453,6 +604,9 @@ fun DiaryMonthGroupCard(
 
 /**
  * Card de resultado de busca online/curada na aba Buscar (SearchMultiApiTab).
+ * Implementa Tradução Progressiva Baseada em Visibilidade: renderiza imediatamente o resultado do
+ * `MultiApiSearchEngine` e dispara a tradução local/em cache da sinopse e título em background
+ * (`LaunchedEffect` na `Dispatchers.IO`) apenas para os cards visíveis na tela.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -467,36 +621,67 @@ fun SearchResultComicCard(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
 
+    var progressiveComic by remember(item.id, item.externalId, item.synopsisPtBr, item.titlePtBr) {
+        val cached = PortugueseComicTranslator.getCachedTranslationForComicId(item.id)
+            ?: PortugueseComicTranslator.getCachedTranslationForComicId(item.externalId)
+        mutableStateOf(
+            if (cached != null) {
+                item.copy(
+                    title = cached.titlePtBr.ifBlank { item.title },
+                    titlePtBr = cached.titlePtBr.ifBlank { item.titlePtBr },
+                    synopsis = cached.synopsisPtBr.ifBlank { item.synopsis },
+                    synopsisPtBr = cached.synopsisPtBr.ifBlank { item.synopsisPtBr }
+                )
+            } else {
+                item
+            }
+        )
+    }
+
+    // Tradução Progressiva Baseada em Visibilidade: traduz apenas os itens visíveis no viewport da LazyColumn
+    LaunchedEffect(item.id, item.externalId, item.synopsis) {
+        if (progressiveComic.synopsisPtBr.isBlank() && item.synopsis.isNotBlank()) {
+            val localized = withContext(Dispatchers.IO) {
+                PortugueseComicTranslator.localizeComic(item, allowNetworkTranslation = false)
+            }
+            if (localized.synopsisPtBr.isNotBlank() || localized.titlePtBr.isNotBlank()) {
+                progressiveComic = localized
+            }
+        }
+    }
+
+    val displayItem = progressiveComic
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .contentMaterialSurface(RoundedCornerShape(22.dp))
-            .clickable { onOpenComicInfoModal(item) }
+            .clickable { onOpenComicInfoModal(displayItem) }
             .padding(14.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top
     ) {
         BookCover(
-            src = item.coverUrl,
-            title = item.title,
-            authors = item.authors,
-            publisher = item.publisher,
-            year = item.releaseYear,
+            src = displayItem.coverUrl,
+            title = displayItem.title,
+            authors = displayItem.authors,
+            publisher = displayItem.publisher,
+            year = displayItem.releaseYear,
             spine3d = appSettings.spine3dEffect,
             modifier = Modifier
                 .width(64.dp)
                 .aspectRatio(2f / 3f)
                 .shadow(4.dp, RoundedCornerShape(8.dp))
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { onOpenComicInfoModal(item) }
+                .clickable { onOpenComicInfoModal(displayItem) }
         )
 
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            val issueNum = remember(item.id, item.title, item.issueNumber) {
-                SeriesSequenceEngine.inferIssueNumber(item)
+            val issueNum = remember(displayItem.id, displayItem.title, displayItem.issueNumber) {
+                SeriesSequenceEngine.inferIssueNumber(displayItem)
             }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -508,7 +693,7 @@ fun SearchResultComicCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = item.format.ifBlank { item.publisher },
+                        text = displayItem.format.ifBlank { displayItem.publisher },
                         fontSize = 9.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textPrimary,
@@ -540,7 +725,7 @@ fun SearchResultComicCard(
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Text(
-                        text = item.genre,
+                        text = displayItem.genre,
                         fontSize = 10.sp,
                         color = s.textTertiary,
                         maxLines = 1,
@@ -551,7 +736,7 @@ fun SearchResultComicCard(
             }
 
             Text(
-                text = item.title,
+                text = displayItem.title,
                 fontSize = 14.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = s.textPrimary,
@@ -559,7 +744,7 @@ fun SearchResultComicCard(
             )
 
             Text(
-                text = item.authors,
+                text = displayItem.authors,
                 fontSize = 12.sp,
                 color = s.textSecondary,
                 maxLines = 1,
@@ -567,13 +752,13 @@ fun SearchResultComicCard(
             )
 
             Text(
-                text = "${item.publisher} • ${item.releaseYear} • ${item.pageCount} págs",
+                text = "${displayItem.publisher} • ${displayItem.releaseYear} • ${displayItem.pageCount} págs",
                 fontSize = 11.sp,
                 color = s.textTertiary
             )
 
-            val previewSynopsis = item.synopsisPtBr.ifBlank {
-                if (PortugueseComicTranslator.isPortugueseText(item.synopsis)) item.synopsis else ""
+            val previewSynopsis = displayItem.synopsisPtBr.ifBlank {
+                if (PortugueseComicTranslator.isPortugueseText(displayItem.synopsis)) displayItem.synopsis else ""
             }
             if (previewSynopsis.isNotBlank()) {
                 Text(

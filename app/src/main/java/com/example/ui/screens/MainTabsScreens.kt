@@ -226,7 +226,7 @@ fun HomeReadingNowTab(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item {
+            item(key = "home-header", contentType = "tab_header") {
                 // Header (Apenas um botão de registrar no topo, sem duplicidade)
                 Row(
                     modifier = Modifier
@@ -266,7 +266,7 @@ fun HomeReadingNowTab(
 
         // Resumo da Meta de Leitura (Apple HIG Activity Rings + Gauge)
         if (profile.showGoalOnHome) {
-            item {
+            item(key = "home-goal-summary", contentType = "goal_summary_card") {
                 val isDark = LocalIsDarkTheme.current
                 val outerRingColor = themeColors.accent
                 val innerRingColor = when (themeColors.appTheme) {
@@ -383,7 +383,7 @@ fun HomeReadingNowTab(
         }
 
         if (comics.isEmpty()) {
-            item {
+            item(key = "home-empty-state", contentType = "empty_state_card") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -450,9 +450,9 @@ fun HomeReadingNowTab(
                 }
             }
         } else {
-            // Seção: Continuar Lendo com Stepper Nativo
+            // Seção: Continuar Lendo com Stepper Nativo e Leitura Diferida de Estado
             if (readingNowList.isNotEmpty()) {
-                item {
+                item(key = "home-reading-now-header", contentType = "section_header") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -469,117 +469,25 @@ fun HomeReadingNowTab(
                     }
                 }
 
-                items(readingNowList, key = { "reading-${it.id}" }) { item ->
-                    val pct = ((item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1).toFloat()) * 100f)
-                        .roundToInt()
-                        .coerceIn(0, 100)
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .contentMaterialSurface(RoundedCornerShape(26.dp))
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BookCover(
-                            src = item.coverUrl,
-                            title = item.title,
-                            authors = item.authors,
-                            publisher = item.publisher,
-                            year = item.releaseYear,
-                            spine3d = appSettings.spine3dEffect,
-                            modifier = Modifier
-                                .width(80.dp)
-                                .aspectRatio(2f / 3f)
-                                .shadow(6.dp, RoundedCornerShape(10.dp))
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onSelectComic(item) }
-                        )
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSelectComic(item) }
-                            ) {
-                                Text(
-                                    text = "${item.publisher.uppercase()} • $pct% CONCLUÍDO",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = s.textSecondary
-                                )
-                                Text(
-                                    text = item.title,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = s.textPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = item.authors,
-                                    fontSize = 12.sp,
-                                    color = s.textSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(99.dp))
-                                        .background(
-                                            if (s.isLight) Color.Black.copy(alpha = 0.10f)
-                                            else Color.White.copy(alpha = 0.12f)
-                                        )
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxHeight()
-                                            .fillMaxWidth(pct / 100f)
-                                            .clip(RoundedCornerShape(99.dp))
-                                            .background(s.accentColor)
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Pág. ${item.currentPage} de ${item.pageCount}",
-                                        fontSize = 11.sp,
-                                        fontFamily = SpaceGroteskTabularFamily,
-                                        fontWeight = FontWeight.Medium,
-                                        color = s.textSecondary
-                                    )
-
-                                    AppleStepper(
-                                        value = item.currentPage,
-                                        min = 0,
-                                        max = item.pageCount.coerceAtLeast(1),
-                                        step = 5,
-                                        onChange = { nextPage ->
-                                            onQuickUpdateReadingPage(item, nextPage)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
+                items(
+                    items = readingNowList,
+                    key = { "reading-${it.id}" },
+                    contentType = { "reading_now_item" }
+                ) { item ->
+                    HomeReadingNowComicCard(
+                        item = item,
+                        appSettings = appSettings,
+                        progressProvider = {
+                            (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+                        },
+                        onSelectComic = onSelectComic,
+                        onQuickUpdateReadingPage = onQuickUpdateReadingPage
+                    )
                 }
             }
 
             // Seção: Recentes na Biblioteca
-            item {
+            item(key = "home-recent-header", contentType = "section_header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -603,7 +511,11 @@ fun HomeReadingNowTab(
                 }
             }
 
-            items(recentRows, key = { row -> row.firstOrNull()?.id ?: row.hashCode() }) { rowItems ->
+            items(
+                items = recentRows,
+                key = { row -> "recent-row-${row.firstOrNull()?.id ?: row.hashCode()}" },
+                contentType = { "recent_grid_row" }
+            ) { rowItems ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(if (recentCols >= 4) 8.dp else 12.dp)
@@ -704,23 +616,18 @@ private fun ComicGridCard(
             }
 
             if (appSettings.showProgressOnCovers && comic.status == ReadingStatus.READING) {
-                Box(
+                DeferredLinearProgressBar(
+                    progressProvider = {
+                        (comic.currentPage.toFloat() / comic.pageCount.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+                    },
+                    trackColor = Color.Black.copy(alpha = 0.60f),
+                    fillColor = s.accentColor,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = if (isCompact4Col) 6.dp else 8.dp, vertical = if (isCompact4Col) 6.dp else 8.dp)
                         .fillMaxWidth()
                         .height(if (isCompact4Col) 5.dp else 6.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(Color.Black.copy(alpha = 0.60f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(pct / 100f)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(s.accentColor)
-                    )
-                }
+                )
             }
         }
 
@@ -868,7 +775,7 @@ fun ShelfLibraryTab(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(key = "shelf-header", contentType = "tab_header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -933,7 +840,7 @@ fun ShelfLibraryTab(
             }
 
             // Primary Section Switcher: Estante vs Diário
-            item {
+            item(key = "shelf-section-switcher", contentType = "segmented_switcher") {
                 AppleSegmentedPicker(
                     value = shelfSection,
                     onChange = onChangeShelfSection,
@@ -946,7 +853,7 @@ fun ShelfLibraryTab(
 
             if (shelfSection == "shelf") {
                 // Segmented Picker + Filter TextField + Genre Pills
-                item {
+                item(key = "shelf-filter-controls", contentType = "shelf_filters") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AppleSegmentedPicker(
                     value = shelfStatus,
@@ -1047,7 +954,7 @@ fun ShelfLibraryTab(
         }
 
         if (filteredShelf.isEmpty()) {
-            item {
+            item(key = "shelf-empty-state", contentType = "empty_state_card") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1393,7 +1300,7 @@ fun ShelfLibraryTab(
         } else {
             // Diário items
             if (diaryGroups.isEmpty()) {
-                item {
+                item(key = "shelf-diary-empty-state", contentType = "empty_state_card") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1416,12 +1323,12 @@ fun ShelfLibraryTab(
                     }
                 }
             } else {
-                item(key = "shelf-diary-analytics-card") {
+                item(key = "shelf-diary-analytics-card", contentType = "diary_analytics_card") {
                     DiaryAnalyticsSummaryCard(comics = comics)
                 }
 
                 diaryGroups.forEach { (monthLabel, entries) ->
-                    item(key = "shelf-diary-month-$monthLabel") {
+                    item(key = "shelf-diary-month-$monthLabel", contentType = "diary_month_group") {
                         DiaryMonthGroupCard(
                             monthLabel = monthLabel,
                             entries = entries,
@@ -1493,7 +1400,7 @@ fun DiaryChronologicalTab(
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            item {
+            item(key = "diary-header", contentType = "tab_header") {
                 Column(modifier = Modifier.padding(bottom = 14.dp)) {
                 Text(
                     text = "Registro cronológico",
@@ -1513,7 +1420,7 @@ fun DiaryChronologicalTab(
         }
 
         if (diaryGroups.isEmpty()) {
-            item {
+            item(key = "diary-empty-state", contentType = "empty_state_card") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1537,12 +1444,12 @@ fun DiaryChronologicalTab(
             }
         } else {
             // Apple HIG Charting Data & Rating Indicators Summary Card
-            item(key = "diary-analytics-card") {
+            item(key = "diary-analytics-card", contentType = "diary_analytics_card") {
                 DiaryAnalyticsSummaryCard(comics = comics)
             }
 
             diaryGroups.forEach { (monthLabel, entries) ->
-                item(key = "diary-month-$monthLabel") {
+                item(key = "diary-month-$monthLabel", contentType = "diary_month_group") {
                     DiaryMonthGroupCard(
                         monthLabel = monthLabel,
                         entries = entries,
@@ -1666,7 +1573,7 @@ fun SearchMultiApiTab(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(key = "search-header", contentType = "tab_header") {
                 Row(
                     modifier = Modifier
                     .fillMaxWidth()
@@ -1716,7 +1623,7 @@ fun SearchMultiApiTab(
         }
 
         // Barra de Busca em Liquid Glass + Sugestões Rápidas
-        item {
+        item(key = "search-bar-controls", contentType = "search_bar") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                     modifier = Modifier
@@ -1848,7 +1755,7 @@ fun SearchMultiApiTab(
         }
 
         if (combinedSearchResults.isEmpty() && !isSearchingApi) {
-            item {
+            item(key = "search-empty-state", contentType = "empty_state_card") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1886,8 +1793,8 @@ fun SearchMultiApiTab(
             }
         } else {
             items(
-                combinedSearchResults,
-                key = { item -> (item.externalId.ifBlank { item.id } + "_" + item.title).hashCode() },
+                items = combinedSearchResults,
+                key = { item -> item.id.ifBlank { item.externalId.ifBlank { item.title } } },
                 contentType = { "search_result_item" }
             ) { item ->
                 val savedEntry = comics.firstOrNull {

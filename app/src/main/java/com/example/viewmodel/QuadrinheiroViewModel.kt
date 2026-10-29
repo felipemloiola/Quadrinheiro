@@ -13,6 +13,7 @@ import com.example.data.CuratedCatalog
 import com.example.data.MultiApiSearchEngine
 import com.example.data.PortugueseComicTranslator
 import com.example.data.QuadrinheiroCloudRepository
+import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
@@ -222,9 +223,18 @@ class QuadrinheiroViewModel(
                     if (uid != null && repo != null) {
                         runCatching { repo.saveComic(uid, target) }.onSuccess {
                             markComicsCleanInMemoryAndStorage(setOf(target.id, target.externalId), target.updatedAt)
+                        }.onFailure {
+                            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                         }
+                    } else {
+                        QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                     }
                 }
+        }
+
+        // Se houver itens sujos pendentes de sessão offline anterior, agenda o WorkManager
+        if (initial.comics.any { it.isDirty } || initial.profile.isDirty) {
+            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -700,8 +710,12 @@ class QuadrinheiroViewModel(
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching { repo.saveUserProfile(uid, next) }.onSuccess {
                     markProfileCleanInMemoryAndStorage(nowMs)
+                }.onFailure {
+                    QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
             }
+        } else {
+            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
     }
 
@@ -1070,8 +1084,12 @@ class QuadrinheiroViewModel(
             viewModelScope.launch(Dispatchers.IO) {
                 runCatching { repo.saveComic(uid, entry) }.onSuccess {
                     markComicsCleanInMemoryAndStorage(setOf(entry.id, entry.externalId), nowMs)
+                }.onFailure {
+                    QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
             }
+        } else {
+            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
         _selectedComic.value = null

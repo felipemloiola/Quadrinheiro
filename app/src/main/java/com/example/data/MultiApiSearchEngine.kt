@@ -6,11 +6,14 @@ import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Dispatcher
 import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
@@ -31,6 +34,8 @@ import java.util.concurrent.TimeUnit
 class MultiApiSearchEngine {
 
     companion object {
+        private const val API_TIMEOUT_MS = 3500L
+
         val ipv4FirstDns = object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 return try {
@@ -128,14 +133,36 @@ class MultiApiSearchEngine {
         val cleanTitle = title.substringBefore("—").substringBefore("(").trim()
         val query = if (authors.isNotBlank()) "$cleanTitle ${authors.substringBefore(",")}" else cleanTitle
         val enc = URLEncoder.encode(query, "UTF-8")
-        val appleBr = fetchAppleBooks(enc, "BR", true).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
-        if (!appleBr.isNullOrBlank()) return@withContext appleBr
-        val appleUs = fetchAppleBooks(enc, "US", true).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
-        if (!appleUs.isNullOrBlank()) return@withContext appleUs
-        val kitsu = fetchKitsuManga(URLEncoder.encode(cleanTitle, "UTF-8")).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
-        if (!kitsu.isNullOrBlank()) return@withContext kitsu
-        val google = fetchGoogleBooks(enc, "pt").firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
-        google ?: ""
+        val cleanEnc = URLEncoder.encode(cleanTitle, "UTF-8")
+
+        supervisorScope {
+            val appleBrJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchAppleBooks(enc, "BR", true).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
+                }
+            }
+            val appleUsJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchAppleBooks(enc, "US", true).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
+                }
+            }
+            val kitsuJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchKitsuManga(cleanEnc).firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
+                }
+            }
+            val googleJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchGoogleBooks(enc, "pt").firstOrNull { it.coverUrl.isNotBlank() }?.coverUrl
+                }
+            }
+
+            appleBrJob.await()?.takeIf { it.isNotBlank() }
+                ?: appleUsJob.await()?.takeIf { it.isNotBlank() }
+                ?: kitsuJob.await()?.takeIf { it.isNotBlank() }
+                ?: googleJob.await()?.takeIf { it.isNotBlank() }
+                ?: ""
+        }
     }
 
     private val sequenceCache = ConcurrentHashMap<String, List<ComicEntry>>()
@@ -153,10 +180,16 @@ class MultiApiSearchEngine {
             baseSeries
         }
         val enc = URLEncoder.encode(query, "UTF-8")
-        val combined = coroutineScope {
-            val brJob = async { fetchAppleBooks(enc, "BR", hdCovers) }
-            val usJob = async { fetchAppleBooks(enc, "US", hdCovers) }
-            val gbJob = async { fetchGoogleBooks(enc, "pt") }
+        val combined = supervisorScope {
+            val brJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) { fetchAppleBooks(enc, "BR", hdCovers) } ?: emptyList()
+            }
+            val usJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) { fetchAppleBooks(enc, "US", hdCovers) } ?: emptyList()
+            }
+            val gbJob = async {
+                withTimeoutOrNull(API_TIMEOUT_MS) { fetchGoogleBooks(enc, "pt") } ?: emptyList()
+            }
             (brJob.await() + usJob.await() + gbJob.await())
         }
         val uniqueMap = LinkedHashMap<String, ComicEntry>()
@@ -174,17 +207,25 @@ class MultiApiSearchEngine {
 
     suspend fun prewarmPopularSearches() = withContext(Dispatchers.IO) {
         val popular = CuratedCatalog.quickSearchSuggestions.take(6)
-        coroutineScope {
+        supervisorScope {
             popular.forEach { term ->
                 launch {
                     val tLower = term.lowercase()
                     val keyUsHd = "MULTI:US:hdtrue:$tLower"
                     if (!onlineSearchCache.containsKey(keyUsHd)) {
                         val enc = URLEncoder.encode(term, "UTF-8")
-                        val appleBrJob = async { fetchAppleBooks(enc, "BR", true) }
-                        val appleUsJob = async { fetchAppleBooks(enc, "US", true) }
-                        val kitsuJob = async { fetchKitsuManga(enc) }
-                        val rawList = appleBrJob.await() + appleUsJob.await() + kitsuJob.await()
+                        val rawList = supervisorScope {
+                            val appleBrJob = async {
+                                withTimeoutOrNull(API_TIMEOUT_MS) { fetchAppleBooks(enc, "BR", true) } ?: emptyList()
+                            }
+                            val appleUsJob = async {
+                                withTimeoutOrNull(API_TIMEOUT_MS) { fetchAppleBooks(enc, "US", true) } ?: emptyList()
+                            }
+                            val kitsuJob = async {
+                                withTimeoutOrNull(API_TIMEOUT_MS) { fetchKitsuManga(enc) } ?: emptyList()
+                            }
+                            appleBrJob.await() + appleUsJob.await() + kitsuJob.await()
+                        }
                         val dedupMap = LinkedHashMap<String, ComicEntry>()
                         for (item in rawList) {
                             val key = SeriesSequenceEngine.canonicalDeduplicationKey(item)
@@ -263,54 +304,81 @@ class MultiApiSearchEngine {
             URLEncoder.encode(q, "UTF-8")
         }
 
-        coroutineScope {
+        supervisorScope {
             // 1. Apple Books BR (Catálogo brasileiro com títulos e capas em português)
-            launch(Dispatchers.IO) {
-                val batch = fetchAppleBooks(encoded, "BR", hdCovers)
+            val appleBrDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchAppleBooks(encoded, "BR", hdCovers)
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
 
-            // 2. Apple Books US (Catálogo mundial amplo: Marvel, DC, Image, Mangás - traduzido para PT-BR)
-            launch(Dispatchers.IO) {
-                val batch = fetchAppleBooks(encoded, "US", hdCovers)
+            // 2. Apple Books US (Catálogo mundial amplo: Marvel, DC, Image, Mangás)
+            val appleUsDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchAppleBooks(encoded, "US", hdCovers)
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
 
             // 3. Kitsu Manga & Comics API (Ultra-rápido, sem autenticação, capas em CDN)
-            launch(Dispatchers.IO) {
-                val batch = fetchKitsuManga(encoded)
+            val kitsuDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchKitsuManga(encoded)
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
 
             // 4. MangaDex API (Banco de dados rico de mangás com títulos em múltiplos idiomas)
-            launch(Dispatchers.IO) {
-                val batch = fetchMangaDex(encoded)
+            val mangaDexDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchMangaDex(encoded)
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
 
             // 5. Open Library API (Edições ocidentais, graphic novels e encadernados)
-            launch(Dispatchers.IO) {
-                val batch = fetchOpenLibrary(encoded, hdCovers)
+            val openLibraryDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchOpenLibrary(encoded, hdCovers)
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
 
             // 6. Google Books API (Priorizando idioma português)
-            launch(Dispatchers.IO) {
-                val batch = fetchGoogleBooks(encoded, "pt")
+            val googleBooksDeferred = async(Dispatchers.IO) {
+                val batch = withTimeoutOrNull(API_TIMEOUT_MS) {
+                    fetchGoogleBooks(encoded, "pt")
+                } ?: emptyList()
                 if (batch.isNotEmpty()) {
                     send(pushProgressiveBatch(batch))
                 }
+                batch
             }
+
+            awaitAll(
+                appleBrDeferred,
+                appleUsDeferred,
+                kitsuDeferred,
+                mangaDexDeferred,
+                openLibraryDeferred,
+                googleBooksDeferred
+            )
         }
 
         // Se nenhuma API remota tiver retornado resultados (ou offline),
