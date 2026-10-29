@@ -102,6 +102,7 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.MultiApiSearchEngine
+import com.example.model.AuthActions
 import com.example.model.AuthUiState
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
@@ -222,11 +223,9 @@ class MainActivity : ComponentActivity() {
 fun QuadrinheiroApp(
     viewModel: QuadrinheiroViewModel = viewModel()
 ) {
-    val authUiState by viewModel.authUiState.collectAsState()
-    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
-    val authFeedback by viewModel.authFeedback.collectAsState()
-    val showAuthModalFromSettings by viewModel.showAuthModalFromSettings.collectAsState()
-    val authModalInitialMode by viewModel.authModalInitialMode.collectAsState()
+    val authScreenUiState by viewModel.authScreenUiState.collectAsState()
+    val authUiState = authScreenUiState.sessionState
+    val showAuthModalFromSettings = authScreenUiState.showLinkModalFromSettings
 
     val activeTab by viewModel.activeTab.collectAsState()
     val lastCapsuleIndex by viewModel.lastCapsuleIndex.collectAsState()
@@ -365,17 +364,17 @@ fun QuadrinheiroApp(
         // renderiza exclusivamente a AuthScreen edge-to-edge.
         if (authUiState == AuthUiState.Unauthenticated) {
             AuthScreen(
-                isLoading = isAuthLoading,
-                feedbackMessage = authFeedback?.first,
-                isFeedbackError = authFeedback?.second ?: true,
+                uiState = authScreenUiState,
                 isLinkingFromGuest = false,
-                onClearFeedback = viewModel::clearAuthFeedback,
-                onLoginWithEmail = viewModel::loginWithEmail,
-                onRegisterWithEmail = viewModel::registerWithEmail,
-                onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
-                onContinueAsGuest = viewModel::enterAsGuest,
-                onResetPassword = viewModel::resetPassword,
-                onDismissModal = null
+                actions = AuthActions(
+                    onClearFeedback = viewModel::clearAuthFeedback,
+                    onLoginWithEmail = viewModel::loginWithEmail,
+                    onRegisterWithEmail = viewModel::registerWithEmail,
+                    onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
+                    onContinueAsGuest = viewModel::enterAsGuest,
+                    onResetPassword = viewModel::resetPassword,
+                    onDismissModal = null
+                )
             )
             return@QuadrinheiroTheme
         }
@@ -1032,18 +1031,17 @@ fun QuadrinheiroApp(
                         viewModel.dismissAuthModalForLinking()
                     }
                     AuthScreen(
-                        isLoading = isAuthLoading,
-                        feedbackMessage = authFeedback?.first,
-                        isFeedbackError = authFeedback?.second ?: true,
+                        uiState = authScreenUiState,
                         isLinkingFromGuest = authUiState == AuthUiState.Guest,
-                        initialMode = authModalInitialMode,
-                        onClearFeedback = viewModel::clearAuthFeedback,
-                        onLoginWithEmail = viewModel::loginWithEmail,
-                        onRegisterWithEmail = viewModel::registerWithEmail,
-                        onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
-                        onContinueAsGuest = viewModel::dismissAuthModalForLinking,
-                        onResetPassword = viewModel::resetPassword,
-                        onDismissModal = viewModel::dismissAuthModalForLinking
+                        actions = AuthActions(
+                            onClearFeedback = viewModel::clearAuthFeedback,
+                            onLoginWithEmail = viewModel::loginWithEmail,
+                            onRegisterWithEmail = viewModel::registerWithEmail,
+                            onLoginWithGoogle = { viewModel.loginWithGoogle(context) },
+                            onContinueAsGuest = viewModel::dismissAuthModalForLinking,
+                            onResetPassword = viewModel::resetPassword,
+                            onDismissModal = viewModel::dismissAuthModalForLinking
+                        )
                     )
                 }
                 }

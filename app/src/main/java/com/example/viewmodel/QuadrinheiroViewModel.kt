@@ -18,7 +18,10 @@ import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
+import com.example.model.AuthFeedbackBanner
+import com.example.model.AuthFeedbackType
 import com.example.model.AuthMode
+import com.example.model.AuthScreenUiState
 import com.example.model.AuthUiState
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
@@ -30,11 +33,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -100,6 +106,40 @@ class QuadrinheiroViewModel(
 
     private val _authModalInitialMode = MutableStateFlow(AuthMode.LOGIN)
     val authModalInitialMode: StateFlow<AuthMode> = _authModalInitialMode.asStateFlow()
+
+    // Estado consolidado da tela de Autenticação para consumo declarativo em peça única
+    val authScreenUiState: StateFlow<AuthScreenUiState> = combine(
+        _authUiState,
+        _currentUserProfile,
+        _isAuthLoading,
+        _authFeedback,
+        combine(_showAuthModalFromSettings, _authModalInitialMode) { show, mode -> show to mode }
+    ) { session, profile, loading, feedback, (showModal, modalMode) ->
+        AuthScreenUiState(
+            sessionState = session,
+            userProfile = profile,
+            isLoading = loading,
+            banner = feedback?.let { (msg, isErr) ->
+                AuthFeedbackBanner(
+                    message = msg,
+                    type = if (isErr) AuthFeedbackType.ERROR else AuthFeedbackType.SUCCESS
+                )
+            },
+            showLinkModalFromSettings = showModal,
+            modalInitialMode = modalMode
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = AuthScreenUiState(
+            sessionState = _authUiState.value,
+            userProfile = _currentUserProfile.value,
+            isLoading = false,
+            banner = null,
+            showLinkModalFromSettings = false,
+            modalInitialMode = AuthMode.LOGIN
+        )
+    )
 
     // Cloud Authentication & Firestore Sync state
     private val _cloudUser = MutableStateFlow<CloudAuthUser?>(

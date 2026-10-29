@@ -111,6 +111,7 @@ import com.example.ui.components.AppleToggle
 import com.example.ui.components.IOS27LiquidGlassController
 import com.example.ui.components.LiquidGlassModeSwitcher
 import com.example.ui.components.LucideIcons
+import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.SegmentOption
 import com.example.ui.components.SettingsSquircleIcon
 import com.example.ui.components.UserAvatar
@@ -475,6 +476,35 @@ fun SettingsTabScreen(
                             }
                         )
                     }
+                }
+            }
+
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuadrinheiroLogo(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(com.kyant.shapes.ContinuousRoundedRectangle(12.dp))
+                    )
+                    Text(
+                        text = "Quadrinheiro",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = themeColors.textPrimary,
+                        letterSpacing = (-0.3).sp
+                    )
+                    Text(
+                        text = "Catálogo, Diário Cronológico & Guia de Leitura",
+                        fontSize = 11.5.sp,
+                        color = themeColors.textTertiary,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         } else {

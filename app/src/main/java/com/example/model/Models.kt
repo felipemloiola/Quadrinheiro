@@ -715,6 +715,56 @@ data class AuthFeedbackBanner(
 }
 
 /**
+ * Estado imutável do formulário da AuthScreen, evitando múltiplos estados booleanos/strings espalhados.
+ */
+@Immutable
+data class AuthFormState(
+    val mode: AuthMode = AuthMode.LOGIN,
+    val name: String = "",
+    val email: String = "",
+    val password: String = "",
+    val confirmPassword: String = "",
+    val isPasswordVisible: Boolean = false,
+    val isConfirmPasswordVisible: Boolean = false
+) {
+    val trimmedName: String get() = name.trim()
+    val trimmedEmail: String get() = email.trim()
+
+    val passwordsMatch: Boolean
+        get() = mode == AuthMode.LOGIN || (confirmPassword.isNotEmpty() && password == confirmPassword)
+
+    val showPasswordMismatchWarning: Boolean
+        get() = mode == AuthMode.REGISTER && confirmPassword.isNotEmpty() && password != confirmPassword
+}
+
+/**
+ * Estado consolidado da tela de autenticação para consumo reativo via StateFlow.
+ */
+@Immutable
+data class AuthScreenUiState(
+    val sessionState: AuthUiState = AuthUiState.Unauthenticated,
+    val userProfile: UserProfile? = null,
+    val isLoading: Boolean = false,
+    val banner: AuthFeedbackBanner? = null,
+    val showLinkModalFromSettings: Boolean = false,
+    val modalInitialMode: AuthMode = AuthMode.LOGIN
+)
+
+/**
+ * Contrato de ações da AuthScreen agrupado para simplificar assinaturas de Composables.
+ */
+@Immutable
+data class AuthActions(
+    val onClearFeedback: () -> Unit = {},
+    val onLoginWithEmail: (email: String, password: String) -> Unit = { _, _ -> },
+    val onRegisterWithEmail: (name: String, email: String, password: String) -> Unit = { _, _, _ -> },
+    val onLoginWithGoogle: () -> Unit = {},
+    val onContinueAsGuest: () -> Unit = {},
+    val onResetPassword: (email: String) -> Unit = {},
+    val onDismissModal: (() -> Unit)? = null
+)
+
+/**
  * Validador centralizado e reutilizável para formulários de autenticação (UI + Camada de Dados).
  */
 object AuthFormValidator {
@@ -753,6 +803,14 @@ object AuthFormValidator {
         }
     }
 
+    fun validateForm(form: AuthFormState): String? = validateForm(
+        mode = form.mode,
+        name = form.trimmedName,
+        email = form.trimmedEmail,
+        password = form.password,
+        confirmPassword = form.confirmPassword
+    )
+
     fun validateForm(
         mode: AuthMode,
         name: String,
@@ -771,5 +829,6 @@ object AuthFormValidator {
         return null
     }
 }
+
 
 

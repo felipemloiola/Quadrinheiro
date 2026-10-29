@@ -1356,11 +1356,11 @@ fun AdaptiveSidebarDrawer(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
+                // Brand Header with QuadrinheiroLogo
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1368,20 +1368,18 @@ fun AdaptiveSidebarDrawer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        UserAvatar(profile = profile, sizeDp = 34)
-                        Column {
-                            Text(
-                                text = profile.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = s.textPrimary
-                            )
-                            Text(
-                                text = profile.handle.ifBlank { "@leitor" },
-                                fontSize = 10.sp,
-                                color = s.textSecondary
-                            )
-                        }
+                        QuadrinheiroLogo(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(com.kyant.shapes.ContinuousRoundedRectangle(8.dp))
+                        )
+                        Text(
+                            text = "Quadrinheiro",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = s.textPrimary,
+                            letterSpacing = (-0.4).sp
+                        )
                     }
 
                     Box(
@@ -1396,6 +1394,31 @@ fun AdaptiveSidebarDrawer(
                             contentDescription = "Fechar menu",
                             tint = s.textPrimary,
                             modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Profile Card
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .inputWellSurface(com.kyant.shapes.ContinuousRoundedRectangle(16.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    UserAvatar(profile = profile, sizeDp = 34)
+                    Column {
+                        Text(
+                            text = profile.name,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = s.textPrimary
+                        )
+                        Text(
+                            text = profile.handle.ifBlank { "@leitor" },
+                            fontSize = 10.sp,
+                            color = s.textSecondary
                         )
                     }
                 }
