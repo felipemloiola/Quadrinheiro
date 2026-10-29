@@ -1,158 +1,95 @@
-<div align="center">
+# Quadrinheiro
 
-# 📚 Quadrinheiro
+Quadrinheiro is an Android app for keeping track of the comics, graphic novels and manga you own and read. You build a personal library, log your progress page by page, and keep a dated diary of everything you finish, with a rating, tags and a written review.
 
-**A catalog, reading tracker and chronological diary for comics, graphic novels and manga.**
+The interface uses a translucent "Liquid Glass" look, and everything is saved to your account in the cloud, so your library follows you across devices.
 
-Liquid Glass design · Multi-API search · Cloud sync
-
-![Android](https://img.shields.io/badge/Android-API%2024%2B-3DDC84?logo=android&logoColor=white)
+![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
-![Material 3](https://img.shields.io/badge/Material-3-6750A4?logo=materialdesign&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20%2B%20Firestore-FFCA28?logo=firebase&logoColor=black)
-![Gemini](https://img.shields.io/badge/Gemini-API-4285F4?logo=googlegemini&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.0-blue)
 
-</div>
+## What it does
 
----
+- **Library:** save titles to your shelf as *Want to read*, *Reading* or *Read*.
+- **Search:** look up books through more than one catalog API and import the title, authors, publisher, ISBN, cover and synopsis.
+- **Progress:** record the current page against the total page count.
+- **Diary:** keep the date you finished each book, how many times you reread it, a 0 to 5 star rating, up to 30 tags and a review of up to 5,000 characters.
+- **Favorites:** flag the titles you love.
+- **Goals:** set a yearly reading goal and a daily pages goal, and choose whether progress shows on the home screen.
+- **Profile:** display name, @handle, bio, favorite publisher or universe, and an avatar color.
+- **Accounts:** sign in with Google. Each user's data is stored separately.
 
-## ✨ About
+## Built with
 
-**Quadrinheiro** is a native Android app for comic lovers. It brings together your **personal shelf**, **reading progress** (current page, goals and stats) and a **chronological diary** with notes, ratings and tags for every title you read.
-
-The interface follows a **Liquid Glass** visual style: translucent surfaces, soft layers and a modern, pleasant experience. Your data is synced to the cloud with secure Google sign-in.
-
-## 🚀 Features
-
-- **Personal catalog**: organize comics, graphic novels and manga in a cloud library.
-- **Multi-API search**: find titles across several catalogs and import title, authors, publisher, ISBN, cover and synopsis.
-- **Reading status**: `Want to read`, `Reading` and `Read`, with current page and total page tracking.
-- **Chronological diary**: log the read date, rereads, a 0–5 star rating and a review of up to 5,000 characters.
-- **Favorites and tags**: mark beloved titles and classify them with up to 30 review tags.
-- **Reading goals**: set a yearly comics goal and a daily pages goal, and optionally show progress on the home screen.
-- **Collector profile**: name, @handle, bio, favorite universe (Marvel, DC, manga, etc.) and customizable avatar.
-- **Google sign-in**: authentication through Firebase Auth and Credential Manager.
-- **Cloud sync**: private, per-user data in Cloud Firestore.
-
-## 🧰 Tech Stack
-
-| Layer | Technology |
+| Area | Tools |
 |---|---|
 | Language | Kotlin |
-| UI | Jetpack Compose + Material 3 (extended icons) |
+| UI | Jetpack Compose, Material 3 |
 | Images | Coil |
 | Networking | OkHttp |
-| Concurrency | Kotlin Coroutines |
-| Authentication | Firebase Auth + Credential Manager + Google ID |
+| Async | Kotlin Coroutines |
+| Auth | Firebase Auth, Credential Manager, Google ID |
 | Database | Cloud Firestore |
-| AI | Gemini API (server-side) |
-| Build | Gradle Kotlin DSL, KSP, Secrets Gradle Plugin |
-| Testing | JUnit, Robolectric, Espresso, Compose UI Test |
+| AI | Gemini API, called server-side |
+| Build | Gradle (Kotlin DSL), KSP, Secrets Gradle Plugin |
+| Tests | JUnit, Robolectric, Espresso, Compose UI Test |
 
-**Android requirements:** `minSdk 24` · `targetSdk 36` · `compileSdk 36` · Java 11.
+The app targets Android 7.0 (API 24) and up, compiles against API 36, and uses Java 11.
 
-## 🗂️ Data Model
+## Data model
 
-Data lives in Firestore, isolated per user:
+Firestore holds two kinds of documents, both under the signed-in user:
 
 ```
-/users/{userId}                    → UserProfile
-/users/{userId}/comics/{comicId}   → CloudComic
+/users/{userId}                    UserProfile
+/users/{userId}/comics/{comicId}   CloudComic
 ```
 
-**UserProfile**: `name`, `handle`, `bio`, `favoriteUniverse`, `avatarPreset`, `yearlyGoal`, `dailyPagesGoal`, `showGoalOnHome`, `updatedAt`.
+`UserProfile` stores the name, handle, bio, favorite universe, avatar preset, the two goals and the home-screen toggle.
 
-**CloudComic**: `title`, `authors`, `publisher`, `genre`, `format`, `releaseYear`, `pageCount`, `currentPage`, `status` (`READ` | `READING` | `WANT_TO_READ`), `rating`, `favorite`, `rereadCount`, `tags`, `review`, `readDate`, `isbn`, `coverUrl`, `synopsis`, `sourceLabel`, `addedAt`, `updatedAt`.
+`CloudComic` stores the bibliographic data (title, authors, publisher, genre, format, year, ISBN, cover, synopsis), the reading state (status, current page, page count, rating, favorite, rereads, read date) and the user's own tags and review.
 
-The full schema is in [`firebase-blueprint.json`](firebase-blueprint.json).
+The full schema is in [`firebase-blueprint.json`](firebase-blueprint.json), and the access rules are in [`firestore.rules`](firestore.rules).
 
-## 🔒 Security
+## Running it locally
 
-Firestore access rules are defined in [`firestore.rules`](firestore.rules). Each authenticated user can access only their own data, and fields are validated (size limits, types and allowed values).
-
-## ⚙️ Getting Started
-
-### Prerequisites
-
-- Up-to-date Android Studio (with SDK 36 support)
-- JDK 11 or later
-- A [Firebase](https://console.firebase.google.com/) project with **Authentication (Google)** and **Firestore** enabled
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/felipemloiola/Quadrinheiro.git
-   cd Quadrinheiro
-   ```
-2. **Configure Firebase**: download `google-services.json` from your project and place it in `app/`.
-3. **Set environment variables**: copy the template and fill in your key.
-   ```bash
-   cp .env.example .env
-   ```
-   ```env
-   GEMINI_API_KEY=your_key_here
-   ```
-4. **Deploy the Firestore rules**
-   ```bash
-   firebase deploy --only firestore:rules
-   ```
-5. **Build and install**
-   ```bash
-   ./gradlew assembleDebug
-   ```
-   Or open the project in Android Studio and click **Run ▶**.
-
-### Tests
+You need Android Studio with SDK 36, JDK 11 or newer, and a Firebase project with Google sign-in and Firestore turned on.
 
 ```bash
-./gradlew test
+git clone https://github.com/felipemloiola/Quadrinheiro.git
+cd Quadrinheiro
+cp .env.example .env
 ```
 
-> ⚠️ **Never** commit your `.env` file, keystores or passwords. The `.gitignore` already covers the most common sensitive files.
+1. Download `google-services.json` from your Firebase project and put it in `app/`.
+2. Open `.env` and set `GEMINI_API_KEY`.
+3. Deploy the security rules with `firebase deploy --only firestore:rules`.
+4. Build with `./gradlew assembleDebug`, or press Run in Android Studio.
 
-## 📁 Project Structure
+Run the unit tests with `./gradlew test`.
+
+Keep `.env`, keystores and passwords out of version control.
+
+## Repository layout
 
 ```
-Quadrinheiro/
-├── app/                      # Android module (Kotlin code, resources, manifest)
-├── gradle/                   # Version catalog and wrapper
-├── .env.example              # Environment variable template
-├── build.gradle.kts          # Root Gradle configuration
-├── settings.gradle.kts
-├── firebase.json             # Firebase configuration
-├── firebase-blueprint.json   # Firestore entity schema
-├── firestore.rules           # Security rules
-└── metadata.json             # App metadata
+app/                      Android module: Kotlin code, resources, manifest
+gradle/                   Version catalog and wrapper
+.env.example              Template for local secrets
+firebase.json             Firebase configuration
+firebase-blueprint.json   Firestore entity schema
+firestore.rules           Firestore security rules
+metadata.json             App metadata
 ```
 
-## 🗺️ Roadmap
+## Contributions
 
-- [ ] Yearly reading statistics and charts
-- [ ] Library export and import
-- [ ] Custom lists and collections
-- [ ] AI-powered recommendations (Gemini)
-- [ ] Improved offline mode
+This is a personal project and it is not open to outside contributions. Pull requests and unsolicited code changes will not be merged. If you find a problem, you are welcome to open an issue.
 
-## 🤝 Contributing
+## License
 
-Suggestions and improvements are welcome!
+All rights reserved. The source is public for reference only, and no permission is granted to copy, modify or redistribute it without written consent from the author.
 
-1. Fork the project
-2. Create a branch: `git checkout -b feature/my-idea`
-3. Commit your changes: `git commit -m "feat: my idea"`
-4. Push: `git push origin feature/my-idea`
-5. Open a Pull Request
+## Author
 
-## 👤 Author
-
-**Felipe Loiola** · [@felipemloiola](https://github.com/felipemloiola)
-
----
-
-<div align="center">
-
-Made with ❤️ for comic book lovers.
-
-</div>
+Felipe Loiola ([@felipemloiola](https://github.com/felipemloiola))
