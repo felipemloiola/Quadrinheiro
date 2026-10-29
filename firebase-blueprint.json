@@ -1,0 +1,207 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Collector profile and reading goals synced in the cloud for an authenticated user.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the profile owner."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the reader (1..80 chars)."
+        },
+        "handle": {
+          "type": "string",
+          "description": "Reader handle (@username, up to 60 chars)."
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short biography of the reader (up to 400 chars)."
+        },
+        "favoriteUniverse": {
+          "type": "string",
+          "description": "Favorite comic publisher or universe (up to 80 chars)."
+        },
+        "avatarPreset": {
+          "type": "string",
+          "description": "Selected avatar color preset ID."
+        },
+        "yearlyGoal": {
+          "type": "integer",
+          "description": "Yearly comics reading goal (1..1000)."
+        },
+        "dailyPagesGoal": {
+          "type": "integer",
+          "description": "Daily pages reading goal (1..2000)."
+        },
+        "showGoalOnHome": {
+          "type": "boolean",
+          "description": "Whether to show the reading goal progress on the Home screen."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last profile update."
+        }
+      },
+      "required": [
+        "ownerId",
+        "name",
+        "handle",
+        "bio",
+        "favoriteUniverse",
+        "avatarPreset",
+        "yearlyGoal",
+        "dailyPagesGoal",
+        "showGoalOnHome",
+        "updatedAt"
+      ]
+    },
+    "CloudComic": {
+      "title": "CloudComic",
+      "description": "A comic book or graphic novel entry in the user's personal cloud library and reading diary.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the comic owner."
+        },
+        "externalId": {
+          "type": "string",
+          "description": "External catalog or API identifier."
+        },
+        "title": {
+          "type": "string",
+          "description": "Comic title (1..300 chars)."
+        },
+        "authors": {
+          "type": "string",
+          "description": "Comic authors/illustrators (0..300 chars)."
+        },
+        "publisher": {
+          "type": "string",
+          "description": "Publisher name (0..160 chars)."
+        },
+        "genre": {
+          "type": "string",
+          "description": "Comic genre or universe (0..120 chars)."
+        },
+        "format": {
+          "type": "string",
+          "description": "Edition format (e.g., Encadernado (TPB), Capa Dura)."
+        },
+        "releaseYear": {
+          "type": "integer",
+          "description": "Publication year."
+        },
+        "pageCount": {
+          "type": "integer",
+          "description": "Total number of pages (>= 1)."
+        },
+        "currentPage": {
+          "type": "integer",
+          "description": "Current reading page (>= 0)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["READ", "READING", "WANT_TO_READ"],
+          "description": "Reading status in the user's shelf."
+        },
+        "rating": {
+          "type": "number",
+          "description": "Star rating from 0.0 to 5.0."
+        },
+        "favorite": {
+          "type": "boolean",
+          "description": "Whether marked as liked/favorite."
+        },
+        "rereadCount": {
+          "type": "integer",
+          "description": "Number of times reread (>= 0)."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "User review tags (up to 30 tags)."
+        },
+        "review": {
+          "type": "string",
+          "description": "User review notes (up to 5000 chars)."
+        },
+        "readDate": {
+          "type": "string",
+          "description": "Date read in YYYY-MM-DD format."
+        },
+        "addedAt": {
+          "type": "string",
+          "description": "ISO timestamp when added."
+        },
+        "isbn": {
+          "type": "string",
+          "description": "ISBN identifier."
+        },
+        "coverUrl": {
+          "type": "string",
+          "description": "HTTPS URL of the comic cover."
+        },
+        "synopsis": {
+          "type": "string",
+          "description": "Synopsis text (up to 5000 chars)."
+        },
+        "sourceLabel": {
+          "type": "string",
+          "description": "Catalog source label."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last update."
+        }
+      },
+      "required": [
+        "ownerId",
+        "externalId",
+        "title",
+        "authors",
+        "publisher",
+        "genre",
+        "format",
+        "releaseYear",
+        "pageCount",
+        "currentPage",
+        "status",
+        "rating",
+        "favorite",
+        "rereadCount",
+        "tags",
+        "review",
+        "readDate",
+        "addedAt",
+        "isbn",
+        "coverUrl",
+        "synopsis",
+        "sourceLabel",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores authenticated user's profile and reading goals."
+    },
+    "/users/{userId}/comics/{comicId}": {
+      "schema": {
+        "$ref": "#/entities/CloudComic"
+      },
+      "description": "Stores authenticated user's personal comic library and reading diary entries."
+    }
+  }
+}

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Liquid Glass Rounded Frame -->
+    <path
+        android:fillColor="#26FFFFFF"
+        android:strokeColor="#80E0F2FE"
+        android:strokeWidth="1.5"
+        android:pathData="M31,27 C31,24.2 33.2,22 36,22 L72,22 C74.8,22 77,24.2 77,27 L77,81 C77,83.8 74.8,86 72,86 L36,86 C33.2,86 31,83.8 31,81 Z" />
+    <!-- Open Comic Book Left Page -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M34,31 C41,31 48,33 52.5,36.5 L52.5,77.5 C48,74 41,72 34,72 Z" />
+    <!-- Open Comic Book Right Page -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M74,31 C67,31 60,33 55.5,36.5 L55.5,77.5 C60,74 67,72 74,72 Z" />
+    <!-- Comic Panel Dividers on Left Page -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M37,36 L49,38.5 L49,49 L37,47 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M37,51 L49,53 L49,66 L37,64 Z" />
+    <!-- Bookmark Ribbon & Gold Star Accent on Right Page -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M61,22 L69,22 L69,56 L65,52 L61,56 Z" />
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M64.5,60 L66.3,63.6 L70.3,64.2 L67.4,67 L68.1,71 L64.5,69.1 L60.9,71 L61.6,67 L58.7,64.2 L62.7,63.6 Z" />
+</vector>

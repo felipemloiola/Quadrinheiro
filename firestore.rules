@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Document ID: {userId} (matches request.auth.uid)
+    // Fields:
+    //   - ownerId: string (required, immutable, matches userId)
+    //   - name: string (required, 1..80 chars)
+    //   - handle: string (required, 1..60 chars)
+    //   - bio: string (required, 0..400 chars)
+    //   - favoriteUniverse: string (required, 0..80 chars)
+    //   - avatarPreset: string (required, 1..40 chars)
+    //   - yearlyGoal: int (required, 1..1000)
+    //   - dailyPagesGoal: int (required, 1..2000)
+    //   - showGoalOnHome: bool (required)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: /users/{userId}/comics/{comicId}
+    // Document ID: {comicId}
+    // Fields:
+    //   - ownerId: string (required, immutable, matches userId)
+    //   - externalId: string (required, 0..200 chars)
+    //   - title: string (required, 1..300 chars)
+    //   - authors: string (required, 0..300 chars)
+    //   - publisher: string (required, 0..160 chars)
+    //   - genre: string (required, 0..120 chars)
+    //   - format: string (required, 0..120 chars)
+    //   - releaseYear: int (required, 1800..2100)
+    //   - pageCount: int (required, 1..20000)
+    //   - currentPage: int (required, 0..20000)
+    //   - status: string (required, in ['READ', 'READING', 'WANT_TO_READ'])
+    //   - rating: number (required, 0.0..5.0)
+    //   - favorite: bool (required)
+    //   - rereadCount: int (required, 0..500)
+    //   - tags: list (required, size <= 30)
+    //   - review: string (required, 0..5000 chars)
+    //   - readDate: string (required, 0..30 chars)
+    //   - addedAt: string (required, 0..60 chars)
+    //   - isbn: string (required, 0..60 chars)
+    //   - coverUrl: string (required, 0..2000 chars)
+    //   - synopsis: string (required, 0..5000 chars)
+    //   - sourceLabel: string (required, 0..120 chars)
+    //   - updatedAt: timestamp (required)
+    // ===============================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data, userId) {
+      let allowedKeys = [
+        'ownerId', 'name', 'handle', 'bio', 'favoriteUniverse',
+        'avatarPreset', 'yearlyGoal', 'dailyPagesGoal', 'showGoalOnHome', 'updatedAt'
+      ];
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.ownerId is string && data.ownerId == userId &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 60 &&
+        data.bio is string && data.bio.size() <= 400 &&
+        data.favoriteUniverse is string && data.favoriteUniverse.size() <= 80 &&
+        data.avatarPreset is string && data.avatarPreset.size() >= 1 && data.avatarPreset.size() <= 40 &&
+        data.yearlyGoal is int && data.yearlyGoal >= 1 && data.yearlyGoal <= 1000 &&
+        data.dailyPagesGoal is int && data.dailyPagesGoal >= 1 && data.dailyPagesGoal <= 2000 &&
+        data.showGoalOnHome is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCloudComic(data, userId) {
+      let allowedKeys = [
+        'ownerId', 'externalId', 'title', 'authors', 'publisher',
+        'genre', 'format', 'releaseYear', 'pageCount', 'currentPage',
+        'status', 'rating', 'favorite', 'rereadCount', 'tags',
+        'review', 'readDate', 'addedAt', 'isbn', 'coverUrl',
+        'synopsis', 'sourceLabel', 'moments', 'updatedAt'
+      ];
+      return data.keys().hasAll(allowedKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.ownerId is string && data.ownerId == userId &&
+        data.externalId is string && data.externalId.size() <= 200 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.authors is string && data.authors.size() <= 300 &&
+        data.publisher is string && data.publisher.size() <= 160 &&
+        data.genre is string && data.genre.size() <= 120 &&
+        data.format is string && data.format.size() <= 120 &&
+        data.releaseYear is int && data.releaseYear >= 1800 && data.releaseYear <= 2100 &&
+        data.pageCount is int && data.pageCount >= 1 && data.pageCount <= 20000 &&
+        data.currentPage is int && data.currentPage >= 0 && data.currentPage <= 20000 &&
+        data.status is string && (data.status in ['READ', 'READING', 'WANT_TO_READ']) &&
+        data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        data.favorite is bool &&
+        data.rereadCount is int && data.rereadCount >= 0 && data.rereadCount <= 500 &&
+        data.tags is list && data.tags.size() <= 30 &&
+        data.review is string && data.review.size() <= 5000 &&
+        data.readDate is string && data.readDate.size() <= 30 &&
+        data.addedAt is string && data.addedAt.size() <= 60 &&
+        data.isbn is string && data.isbn.size() <= 60 &&
+        data.coverUrl is string && data.coverUrl.size() <= 2000 &&
+        data.synopsis is string && data.synopsis.size() <= 5000 &&
+        data.sourceLabel is string && data.sourceLabel.size() <= 120 &&
+        data.moments is list && data.moments.size() <= 100 &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data, userId);
+      allow update: if isOwner(userId) &&
+        resource.data.ownerId == request.resource.data.ownerId &&
+        isValidUserProfile(request.resource.data, userId);
+      allow delete: if isOwner(userId);
+
+      match /comics/{comicId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidCloudComic(request.resource.data, userId);
+        allow update: if isOwner(userId) &&
+          resource.data.ownerId == request.resource.data.ownerId &&
+          isValidCloudComic(request.resource.data, userId);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Quadrinheiro",
+  "description": "Catálogo, acompanhamento de leitura e diário cronológico de quadrinhos, graphic novels e mangás com design Liquid Glass e busca Multi-API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
