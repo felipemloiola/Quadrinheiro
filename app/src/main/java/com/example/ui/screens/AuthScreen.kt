@@ -193,7 +193,7 @@ fun AuthScreen(
                 isLight = s.isLight
             )
 
-            // 2. Shell de Layout Responsivo em Liquid Glass
+            // 2. Shell de Layout Responsivo em Liquid Glass com card mais compacto e consistente com o app
             AuthGlassScreenShell(
                 isLinkingFromGuest = isLinkingFromGuest,
                 onDismissModal = onDismissModal
@@ -208,7 +208,7 @@ fun AuthScreen(
                     }
                 )
 
-                // 2.2 Banner de Feedback Estruturado
+                // 2.2 Banner de Feedback Estruturado (apenas quando existe mensagem)
                 AuthFeedbackBannerCard(banner = activeBanner)
 
                 // 2.3 Grupo de Campos de Credenciais
@@ -257,11 +257,8 @@ fun AuthScreen(
                         focusManager.clearFocus()
                         localBanner = null
                         onClearFeedback()
-                        if (onDismissModal != null) {
-                            onDismissModal()
-                        } else {
-                            onContinueAsGuest()
-                        }
+                        // Sempre entra como convidado com app "zerado"; não apenas fecha o modal
+                        onContinueAsGuest()
                     }
                 )
             }
@@ -272,6 +269,7 @@ fun AuthScreen(
 /**
  * Pure UI Shell responsável pelo scroll, WindowInsets, botão de fechar modal,
  * cabeçalho da marca e card translúcido central em Liquid Glass.
+ * Mantém layout mais compacto, alinhado aos demais cards do app.
  */
 @Composable
 private fun AuthGlassScreenShell(
