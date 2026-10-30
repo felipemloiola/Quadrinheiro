@@ -1,0 +1,84 @@
+name: Validate collection performance improvements
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/optimize_collection.py'
+      - '.github/workflows/optimize-collection.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collection-performance-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Stage the previously approved data fixes and bounded performance patches
+        run: |
+          python3 .github/scripts/harden_account_data.py
+          python3 .github/scripts/optimize_collection.py
+      - name: Validate tests and compilation with isolated Firebase
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+        run: |
+          cat > "$RUNNER_TEMP/perf-test-logging.gradle" <<'EOF'
+          allprojects {
+            tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+              testLogging {
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
+              }
+            }
+          }
+          EOF
+          npx --yes firebase-tools@14 emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:testDebugUnitTest :app:compileDebugKotlin --init-script $RUNNER_TEMP/perf-test-logging.gradle --no-daemon --console=plain"
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collection-performance-diagnostics-${{ github.run_number }}
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+            firebase-debug.log
+            firestore-debug.log
+            .audit/account_hardening_v13.txt
+            .audit/collection_performance_v15.txt
+          if-no-files-found: ignore
+      - name: Commit tested changes without overwriting newer app changes
+        run: |
+          git fetch origin main
+          latest=$(git rev-parse origin/main)
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            git diff --quiet "$GITHUB_SHA" "$latest" -- app gradle build.gradle.kts settings.gradle.kts gradle.properties firebase.ci.json firebase.json firestore.rules firestore.indexes.json .github/scripts .github/workflows || { echo '::error::O código mudou durante os testes. Execute novamente na main atual; nenhuma alteração será aplicada sobre código não validado.'; exit 1; }
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/example/data/SafeStorage.kt app/src/main/java/com/example/data/QuadrinheiroSyncWorker.kt app/src/main/java/com/example/data/QuadrinheiroCloudRepository.kt app/src/main/java/com/example/data/CatalogMatchIndex.kt app/src/main/java/com/example/data/FirestoreSnapshotDispatch.kt app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt app/src/test/java/com/example/AccountPersistenceRegressionTest.kt app/src/test/java/com/example/CollectionPerformancePolicyTest.kt firebase.ci.json .audit/account_hardening_v13.txt .audit/collection_performance_v15.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'perf: validated snapshot background processing and indexed catalog matching'
+          if [ "$latest" != "$GITHUB_SHA" ]; then git rebase "$latest"; fi
+          git push origin HEAD:main
