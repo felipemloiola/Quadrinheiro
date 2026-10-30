@@ -1,5 +1,5 @@
 > Get more help at https://help.gradle.org.
 
-BUILD FAILED in 1m 51s
-8 actionable tasks: 8 executed
+BUILD FAILED in 38s
+8 actionable tasks: 1 executed, 7 from cache
 Configuration cache entry stored.

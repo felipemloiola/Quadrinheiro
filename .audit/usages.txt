@@ -52,24 +52,24 @@
                         .width(with(density) { startW.toDp() })
                         .height(with(density) { startH.toDp() })
                         .graphicsLayer {
-=== app/src/main/java/com/example/ui/components/QuadrinheiroLogo.kt:35
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.ui.theme.LocalIOS27Theme
-import com.example.ui.theme.PlusJakartaSansFamily
-
-enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
+=== app/src/main/java/com/example/ui/components/QuadrinheiroLogo.kt:79
+                drawPath(paths[3], Brush.linearGradient(listOf(Color.White.copy(alpha = 0.24f), Color.Transparent), Offset(28.9f, 32.9f), Offset(40.1f, 52.7f)))
+                drawPath(paths[4], Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Transparent), Offset(63.9f, 55.3f), Offset(85.7f, 83.7f)))
+            }
+        }
+    }
+}
 
 @Composable
 fun QuadrinheiroLogo(
-    variant: QuadrinheiroLogoVariant = QuadrinheiroLogoVariant.Primary,
+    variant: QuadrinheiroLogoVariant = QuadrinheiroLogoVariant.Badge,
     modifier: Modifier = Modifier,
-    titleVisible: Boolean = true,
+    titleVisible: Boolean = false,
     subtitle: String? = null,
     leadingIcon: ImageVector? = null
 ) {
-    val theme = LocalIOS27Theme.current
-    val original = variant == QuadrinheiroLogoVariant.Primary
+    if (!titleVisible && subtitle.isNullOrBlank() && leadingIcon == null) {
+        LogoMark(variant, modifier)
 === app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt:49
 fun Modifier.authGlassCardSurface(): Modifier = composed {
     background(LocalIOS27Theme.current.bgPrimary, RoundedCornerShape(22.dp))
