@@ -1,6 +1,6 @@
 # Quadrinheiro
 
-![Quadrinheiro Logo](https://user-gen-media-assets.s3.amazonaws.com/seedream_images/45f812d5-9b45-4178-8b43-11b2285f9768.jpg)
+<img src="app/src/main/res/drawable/ic_launcher_foreground.xml" alt="Quadrinheiro Logo" width="180" />
 
 > A neo-comic Liquid Glass library and reading diary for comics, graphic novels and manga.
 
@@ -44,7 +44,7 @@ Whether your shelf is full of superhero runs, indie graphic novels or long-runni
 - **Diary:**
   - Keep the date you finished each book.
   - Track how many times you reread it.
-  - Add a 0d05 star rating, up to 30 tags and a review of up to 5,000 characters.
+  - Add a 0–5 star rating, up to 30 tags and a review of up to 5,000 characters.
 
 - **Favorites & Ratings:**
   - Flag the titles you love.
@@ -72,13 +72,13 @@ Quadrinheiro is designed as a **neo-comic Liquid Glass** experience:
   - Dark, translucent surfaces with soft highlights and edge refraction.
   - Cards and toolbars float over content, mimicking modern iOS aesthetics.
 
-- **Origami Q Logo:**
-  - A folded comics page in origami form, built from irregular panels.
-  - Panels use rich gradients:
-    - Left: **carmine red 192 neon pink**.
-    - Top: **golden yellow 192 vibrant orange**.
-    - Tail: **royal blue 192 electric cyan**.
-  - Sarjetas (gutters) and folds create a negative-space **"Q"** that feels dynamic and three-dimensional.
+- **Origami Q Logo (in-app icon):**
+  - Implemented as a VectorDrawable in [`ic_launcher_foreground.xml`](app/src/main/res/drawable/ic_launcher_foreground.xml).
+  - A folded comics page in origami form, built from irregular panels with gradient fills:
+    - Left panel: **carmine red → neon pink**.
+    - Top panel: **golden yellow → vibrant orange**.
+    - Lower tail panel: **royal blue → electric cyan**, extending beyond the square to form the stylized "Q" tail.
+  - Sarjetas (gutters) and faceted highlights suggest depth and motion, creating a dynamic negative-space **"Q"**.
 
 - **Reading Experience:**
   - Responsive layouts for recent reads, sequences and diary.
