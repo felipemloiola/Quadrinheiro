@@ -9,15 +9,13 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.MemoryCacheSettings
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.After
 import org.junit.Before
 import org.junit.runner.RunWith
@@ -33,48 +31,42 @@ abstract class FirestoreEmulatorTestBase {
     lateinit var auth: FirebaseAuth
     lateinit var context: Context
     lateinit var databaseId: String
+    private var isolatedApp: FirebaseApp? = null
 
     @Before
     open fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        databaseId = try {
-            context.getString(R.string.firestore_database_id)
-        } catch (_: Exception) {
-            "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71"
-        }
+        // Match firebase.ci.json explicitly; never create an implicit open-rules database.
+        databaseId = "(default)"
+        resetEmulator("http://$EMULATOR_HOST:$FIRESTORE_PORT/emulator/v1/projects/$PROJECT_ID/databases/$databaseId/documents")
+        resetEmulator("http://$EMULATOR_HOST:$AUTH_PORT/emulator/v1/projects/$PROJECT_ID/accounts")
 
-        val app = if (FirebaseApp.getApps(context).isEmpty()) {
-            val newApp = FirebaseApp.initializeApp(
-                context,
-                FirebaseOptions.Builder()
-                    .setProjectId(PROJECT_ID)
-                    .setApiKey("fake-api-key-for-emulator")
-                    .setApplicationId("1:1234567890:android:abcdef")
-                    .build()
-            )
-            val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
-            newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-            newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
-                .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-                .build()
-
-            val newAuth = FirebaseAuth.getInstance(newApp)
-            newAuth.useEmulator(EMULATOR_HOST, AUTH_PORT)
-            newApp
-        } else {
-            FirebaseApp.getInstance()
-        }
-
+        // Never reuse the production/default FirebaseApp, even when google-services.json exists.
+        val app = FirebaseApp.initializeApp(
+            context,
+            FirebaseOptions.Builder()
+                .setProjectId(PROJECT_ID)
+                .setApiKey("fake-api-key-for-emulator")
+                .setApplicationId("1:1234567890:android:abcdef")
+                .build(),
+            "rules-test-${UUID.randomUUID()}"
+        )
+        isolatedApp = app
         db = FirebaseFirestore.getInstance(app, databaseId)
+        db.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+        db.firestoreSettings = FirebaseFirestoreSettings.Builder()
+            .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+            .build()
         auth = FirebaseAuth.getInstance(app)
-
-        clearFirestoreEmulator()
-        clearAuthEmulator()
+        auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
     }
 
     @After
     open fun tearDown() {
-        auth.signOut()
+        if (::auth.isInitialized) auth.signOut()
+        if (::db.isInitialized) db.terminate()
+        isolatedApp?.delete()
+        isolatedApp = null
     }
 
     protected suspend fun signInTestUser(
@@ -89,37 +81,20 @@ abstract class FirestoreEmulatorTestBase {
             } catch (_: Exception) {
                 auth.createUserWithEmailAndPassword(email, password).await()
             }
-            checkNotNull(result.user?.uid) { "User auth failed" }
+            checkNotNull(result.user?.uid) { "Emulator user authentication failed" }
         }
     }
 
-    private fun clearFirestoreEmulator() {
-        for (dbName in listOf("(default)", "demo-database", databaseId)) {
-            try {
-                val url = URL("http://$EMULATOR_HOST:$FIRESTORE_PORT/emulator/v1/projects/$PROJECT_ID/databases/$dbName/documents")
-                (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "DELETE"
-                    connectTimeout = 2000
-                    readTimeout = 2000
-                    responseCode
-                    disconnect()
-                }
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    private fun clearAuthEmulator() {
+    private fun resetEmulator(endpoint: String) {
+        val connection = URL(endpoint).openConnection() as HttpURLConnection
         try {
-            val url = URL("http://$EMULATOR_HOST:$AUTH_PORT/emulator/v1/projects/$PROJECT_ID/accounts")
-            (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "DELETE"
-                connectTimeout = 2000
-                readTimeout = 2000
-                responseCode
-                disconnect()
-            }
-        } catch (_: Exception) {
+            connection.requestMethod = "DELETE"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            val status = connection.responseCode
+            check(status in 200..299) { "Firebase emulator reset failed ($status). Run tests through firebase emulators:exec with firebase.ci.json." }
+        } finally {
+            connection.disconnect()
         }
     }
 
@@ -129,6 +104,6 @@ abstract class FirestoreEmulatorTestBase {
         const val AUTH_PORT = 9099
         const val PROJECT_ID = "demo-no-project"
         const val DEFAULT_PASSWORD = "password123"
-        const val AUTH_TIMEOUT_MS = 5000L
+        const val AUTH_TIMEOUT_MS = 10000L
     }
 }

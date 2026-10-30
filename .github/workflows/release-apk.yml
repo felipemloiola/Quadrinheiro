@@ -9,6 +9,9 @@ on:
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+      - 'firebase.ci.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
       - '.github/scripts/configure_android_release.py'
       - '.github/workflows/release-apk.yml'
 
@@ -32,6 +35,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
@@ -65,6 +71,8 @@ jobs:
           KEYSTORE_TYPE: PKCS12
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
         run: |
           mkdir -p ci-reports
           args=(-PreleaseVersionCode="$VERSION_CODE" -PreleaseVersionName="$VERSION_NAME" --no-daemon --console=plain)
@@ -72,10 +80,10 @@ jobs:
           task=$(awk '$1 ~ /^testRelease(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt)
           if [ -z "$task" ]; then task=$(awk '$1 ~ /^testDebug(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt); fi
           if [ -z "$task" ]; then task=$(awk '$1 == "test" {print $1; exit}' ci-reports/app-tasks.txt); fi
-          if [ -z "$task" ]; then echo '::error::Nenhuma tarefa de testes compatível foi encontrada. Consulte app-tasks.txt; a publicação foi bloqueada, sem ignorar testes.'; exit 1; fi
+          if [ -z "$task" ]; then echo '::error::Nenhuma tarefa de testes compatível foi encontrada.'; exit 1; fi
           echo "Tarefa de testes selecionada: :app:$task" | tee ci-reports/selected-tests.txt
-          echo "Test task selected: :app:$task" >> "$GITHUB_STEP_SUMMARY"
-          gradle ":app:$task" :app:assembleRelease "${args[@]}"
+          echo "Test task selected: :app:$task; local Auth/Firestore emulators; production rules unchanged." >> "$GITHUB_STEP_SUMMARY"
+          npx --yes firebase-tools@14 emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$task :app:assembleRelease -PreleaseVersionCode=$VERSION_CODE -PreleaseVersionName=$VERSION_NAME --no-daemon --console=plain"
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,6 +93,8 @@ jobs:
             ci-reports/
             app/build/reports/tests/
             app/build/test-results/
+            firebase-debug.log
+            firestore-debug.log
           if-no-files-found: ignore
       - name: Verify APK and create update manifest
         run: |
