@@ -315,16 +315,18 @@ class QuadrinheiroAuthManager(
      * Realiza Logout seguro da conta (Google / E-mail / Convidado), mantendo os quadrinhos salvos no aparelho.
      */
     suspend fun signOut(activityContext: Context? = null) {
+        storage.clearAuthSession()
         withContext(Dispatchers.IO) {
             runCatching { auth?.signOut() }
-        }
-        if (activityContext != null) {
-            runCatching {
-                CredentialManager.create(activityContext)
-                    .clearCredentialState(ClearCredentialStateRequest())
+            if (activityContext != null) {
+                kotlinx.coroutines.withTimeoutOrNull(600L) {
+                    runCatching {
+                        CredentialManager.create(activityContext)
+                            .clearCredentialState(ClearCredentialStateRequest())
+                    }
+                }
             }
         }
-        storage.clearAuthSession()
     }
 
     /**

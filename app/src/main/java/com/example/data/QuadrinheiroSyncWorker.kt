@@ -28,10 +28,21 @@ class QuadrinheiroSyncWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val storage = SafeStorage(applicationContext)
-            if (storage.isGuestMode()) {
+            val session = storage.loadAuthSession()
+            if (storage.isGuestMode() || session == null || session.isGuest || session.uid.isBlank()) {
                 return@withContext Result.success()
             }
-            val persisted = storage.loadState()
+            val cloudRepo = runCatching {
+                QuadrinheiroCloudRepository(applicationContext)
+            }.getOrNull() ?: return@withContext Result.success()
+
+            val currentUser = cloudRepo.currentAuthUser() ?: return@withContext Result.success()
+            val uid = currentUser.uid
+            if (uid != session.uid) {
+                return@withContext Result.success()
+            }
+
+            val persisted = storage.loadAccountState(uid) ?: return@withContext Result.success()
             val dirtyComics = persisted.comics.filter { it.isDirty }
             val profileDirty = persisted.profile.isDirty
 
@@ -39,22 +50,18 @@ class QuadrinheiroSyncWorker(
                 return@withContext Result.success()
             }
 
-            val cloudRepo = runCatching {
-                QuadrinheiroCloudRepository(applicationContext)
-            }.getOrNull() ?: return@withContext Result.success()
-
-            val currentUser = cloudRepo.currentAuthUser() ?: return@withContext Result.success()
-            val uid = currentUser.uid
-
             if (profileDirty) {
-                cloudRepo.saveUserProfile(uid, persisted.profile)
-                storage.markProfileSynced(persisted.profile.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis())
+                cloudRepo.saveUserProfile(uid, persisted.profile, persisted.settings)
+                storage.markProfileSynced(
+                    syncedAtMillis = persisted.profile.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                    ownerUid = uid
+                )
             }
 
             if (dirtyComics.isNotEmpty()) {
                 val syncedIds = cloudRepo.syncDirtyComicsBatch(uid, dirtyComics)
                 if (syncedIds.isNotEmpty()) {
-                    storage.markComicsSynced(syncedIds, System.currentTimeMillis())
+                    storage.markComicsSynced(syncedIds, System.currentTimeMillis(), ownerUid = uid)
                 }
             }
 

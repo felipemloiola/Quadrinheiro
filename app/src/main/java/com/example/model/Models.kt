@@ -588,6 +588,7 @@ data class ReaderProfile(
     val yearlyGoal: Int = 24,
     val dailyPagesGoal: Int = 30,
     val showGoalOnHome: Boolean = true,
+    val activeReadingComicId: String = "",
     val updatedAt: Long = 0L,
     val isDirty: Boolean = false
 )
@@ -621,6 +622,7 @@ data class AppSettings(
     val showRatingsOnGrid: Boolean = true,
     val spine3dEffect: Boolean = true,
     val defaultShelfSort: String = "RECENT", // "RECENT" | "RATING" | "TITLE" | "YEAR"
+    val shelfLayout: String = "grid", // "grid" | "list" | "sequences"
     val defaultFormat: String = "Encadernado (TPB)",
     val searchLanguage: String = "ALL", // "ALL" | "PT"
     val searchProvider: String = "MULTI", // "MULTI" | "BOOKS" | "MANGA"
@@ -831,5 +833,66 @@ object AuthFormValidator {
     }
 }
 
+@Immutable
+enum class UsernameAvailabilityStatus {
+    IDLE,
+    CHECKING,
+    AVAILABLE_OWNED,
+    AVAILABLE_NEW,
+    TAKEN,
+    INVALID
+}
 
+@Immutable
+data class UsernameVerificationState(
+    val inputHandle: String = "@leitor",
+    val normalizedHandle: String = "leitor",
+    val status: UsernameAvailabilityStatus = UsernameAvailabilityStatus.AVAILABLE_OWNED,
+    val message: String = "Disponível na sua conta"
+) {
+    val isPositive: Boolean
+        get() = status == UsernameAvailabilityStatus.AVAILABLE_OWNED ||
+            status == UsernameAvailabilityStatus.AVAILABLE_NEW
 
+    val isNegative: Boolean
+        get() = status == UsernameAvailabilityStatus.TAKEN ||
+            status == UsernameAvailabilityStatus.INVALID
+
+    val isChecking: Boolean
+        get() = status == UsernameAvailabilityStatus.CHECKING
+}
+
+object UsernameValidator {
+    private val HANDLE_KEY_REGEX = Regex("^[a-z0-9_.-]{3,30}$")
+    private val RESERVED_HANDLES = setOf("convidado", "admin", "root", "system")
+
+    fun normalizeHandleKey(raw: String): String {
+        return raw.trim()
+            .removePrefix("@")
+            .lowercase()
+            .replace(Regex("[^a-z0-9_.-]"), "")
+            .take(30)
+    }
+
+    fun formatDisplayHandle(raw: String): String {
+        val cleaned = normalizeHandleKey(raw)
+        return if (cleaned.isEmpty()) "@" else "@$cleaned"
+    }
+
+    fun validateHandle(raw: String, isGuest: Boolean = false): String? {
+        val key = normalizeHandleKey(raw)
+        if (isGuest && key == "convidado") return null
+        return when {
+            key.length < 3 -> "O identificador precisa ter pelo menos 3 caracteres (ex: @leitor_hq)."
+            key.length > 30 -> "O identificador pode ter no máximo 30 caracteres."
+            !HANDLE_KEY_REGEX.matches(key) -> "Use apenas letras minúsculas, números, '_', '.' ou '-'."
+            key in RESERVED_HANDLES -> "Este identificador é reservado pelo sistema."
+            else -> null
+        }
+    }
+
+    fun isValidHandleKey(key: String): Boolean {
+        val clean = key.trim()
+        return clean.length in 3..30 && HANDLE_KEY_REGEX.matches(clean) && clean !in RESERVED_HANDLES
+    }
+}

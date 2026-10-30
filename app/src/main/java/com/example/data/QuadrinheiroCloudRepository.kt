@@ -9,10 +9,14 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
 import com.example.R
+import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ComicMoment
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import com.example.model.UsernameAvailabilityStatus
+import com.example.model.UsernameValidator
+import com.example.model.UsernameVerificationState
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -49,17 +53,155 @@ data class CloudAuthUser(
 )
 
 @Immutable
+data class CloudUserPreferences(
+    val themeId: String = "SYSTEM_MONO",
+    val colorScheme: String = "system",
+    val glassLevel: Int = 26,
+    val glassVariant: String = "regular",
+    val edgeRefraction: Boolean = true,
+    val glassIntensity: Double = 1.0,
+    val glassBlurIntensity: Double = 1.0,
+    val enableLensRefraction: Boolean = true,
+    val enableChromaticAberration: Boolean = true,
+    val glassOpacity: Double = 1.0,
+    val backgroundExtension: Boolean = true,
+    val showBottomAccessory: Boolean = true,
+    val showFloatingMenu: Boolean = true,
+    val minimizeTabBarOnScroll: Boolean = true,
+    val reduceTransparency: Boolean = false,
+    val increaseContrast: Boolean = false,
+    val boldText: Boolean = false,
+    val dynamicTypeScale: Int = 100,
+    val reduceMotion: Boolean = false,
+    val onOffLabels: Boolean = false,
+    val shelfColumns: Int = 3,
+    val showProgressOnCovers: Boolean = true,
+    val showRatingsOnGrid: Boolean = true,
+    val spine3dEffect: Boolean = true,
+    val defaultShelfSort: String = "RECENT",
+    val shelfLayout: String = "grid",
+    val defaultFormat: String = "Encadernado (TPB)",
+    val searchLanguage: String = "ALL",
+    val searchProvider: String = "MULTI",
+    val hdCovers: Boolean = true,
+    val spoilerProtection: Boolean = false,
+    val halfStarRatings: Boolean = true,
+    val allowRereads: Boolean = true,
+    val autoFillReadDate: Boolean = true,
+    val showPagesInDiary: Boolean = true,
+    val quickReviewTags: List<String> = listOf(
+        "Roteiro impecável",
+        "Arte incrível",
+        "Clássico absoluto",
+        "Final surpreendente"
+    )
+) {
+    fun toAppSettings(): AppSettings = AppSettings(
+        themeId = themeId.ifBlank { "SYSTEM_MONO" },
+        colorScheme = colorScheme.ifBlank { "system" },
+        glassLevel = glassLevel.coerceIn(0, 100),
+        glassVariant = glassVariant.ifBlank { "regular" },
+        edgeRefraction = edgeRefraction,
+        glassIntensity = glassIntensity.toFloat().coerceIn(0.1f, 3f),
+        glassBlurIntensity = glassBlurIntensity.toFloat().coerceIn(0.1f, 3f),
+        enableLensRefraction = enableLensRefraction,
+        enableChromaticAberration = enableChromaticAberration,
+        glassOpacity = glassOpacity.toFloat().coerceIn(0.1f, 2f),
+        backgroundExtension = backgroundExtension,
+        showBottomAccessory = showBottomAccessory,
+        showFloatingMenu = showFloatingMenu,
+        minimizeTabBarOnScroll = minimizeTabBarOnScroll,
+        reduceTransparency = reduceTransparency,
+        increaseContrast = increaseContrast,
+        boldText = boldText,
+        dynamicTypeScale = dynamicTypeScale.coerceIn(85, 115),
+        reduceMotion = reduceMotion,
+        onOffLabels = onOffLabels,
+        shelfColumns = shelfColumns.coerceIn(2, 4),
+        showProgressOnCovers = showProgressOnCovers,
+        showRatingsOnGrid = showRatingsOnGrid,
+        spine3dEffect = spine3dEffect,
+        defaultShelfSort = defaultShelfSort.ifBlank { "RECENT" },
+        shelfLayout = shelfLayout.ifBlank { "grid" },
+        defaultFormat = defaultFormat.ifBlank { "Encadernado (TPB)" },
+        searchLanguage = searchLanguage.ifBlank { "ALL" },
+        searchProvider = searchProvider.ifBlank { "MULTI" },
+        hdCovers = hdCovers,
+        spoilerProtection = spoilerProtection,
+        halfStarRatings = halfStarRatings,
+        allowRereads = allowRereads,
+        autoFillReadDate = autoFillReadDate,
+        showPagesInDiary = showPagesInDiary,
+        quickReviewTags = quickReviewTags.map { it.take(80) }.take(40)
+    )
+
+    companion object {
+        fun fromAppSettings(s: AppSettings): CloudUserPreferences = CloudUserPreferences(
+            themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),
+            colorScheme = s.colorScheme.ifBlank { "system" }.take(30),
+            glassLevel = s.glassLevel.coerceIn(0, 100),
+            glassVariant = s.glassVariant.ifBlank { "regular" }.take(30),
+            edgeRefraction = s.edgeRefraction,
+            glassIntensity = s.glassIntensity.toDouble().coerceIn(0.0, 5.0),
+            glassBlurIntensity = s.glassBlurIntensity.toDouble().coerceIn(0.0, 5.0),
+            enableLensRefraction = s.enableLensRefraction,
+            enableChromaticAberration = s.enableChromaticAberration,
+            glassOpacity = s.glassOpacity.toDouble().coerceIn(0.0, 5.0),
+            backgroundExtension = s.backgroundExtension,
+            showBottomAccessory = s.showBottomAccessory,
+            showFloatingMenu = s.showFloatingMenu,
+            minimizeTabBarOnScroll = s.minimizeTabBarOnScroll,
+            reduceTransparency = s.reduceTransparency,
+            increaseContrast = s.increaseContrast,
+            boldText = s.boldText,
+            dynamicTypeScale = s.dynamicTypeScale.coerceIn(70, 140),
+            reduceMotion = s.reduceMotion,
+            onOffLabels = s.onOffLabels,
+            shelfColumns = s.shelfColumns.coerceIn(2, 6),
+            showProgressOnCovers = s.showProgressOnCovers,
+            showRatingsOnGrid = s.showRatingsOnGrid,
+            spine3dEffect = s.spine3dEffect,
+            defaultShelfSort = s.defaultShelfSort.ifBlank { "RECENT" }.take(40),
+            shelfLayout = s.shelfLayout.ifBlank { "grid" }.take(30),
+            defaultFormat = s.defaultFormat.ifBlank { "Encadernado (TPB)" }.take(80),
+            searchLanguage = s.searchLanguage.ifBlank { "ALL" }.take(20),
+            searchProvider = s.searchProvider.ifBlank { "MULTI" }.take(30),
+            hdCovers = s.hdCovers,
+            spoilerProtection = s.spoilerProtection,
+            halfStarRatings = s.halfStarRatings,
+            allowRereads = s.allowRereads,
+            autoFillReadDate = s.autoFillReadDate,
+            showPagesInDiary = s.showPagesInDiary,
+            quickReviewTags = s.quickReviewTags.map { it.take(80) }.take(40)
+        )
+    }
+}
+
+@Immutable
+data class CloudUsernameReservation(
+    val ownerId: String = "",
+    val handle: String = "",
+    val normalizedHandle: String = "",
+    val updatedAtMillis: Long = 0L,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Immutable
 data class CloudUserProfile(
     @DocumentId val id: String = "",
     val ownerId: String = "",
     val name: String = "Felipe",
     val handle: String = "@felipe",
+    val normalizedHandle: String = "felipe",
     val bio: String = "Colecionador de encadernados, graphic novels e mangás.",
     val favoriteUniverse: String = "DC / Vertigo",
+    val avatarUrl: String = "",
     val avatarPreset: String = "indigo",
     val yearlyGoal: Int = 24,
     val dailyPagesGoal: Int = 30,
     val showGoalOnHome: Boolean = true,
+    val activeReadingComicId: String = "",
+    val preferences: CloudUserPreferences? = null,
     val updatedAtMillis: Long = 0L,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -68,35 +210,57 @@ data class CloudUserProfile(
     }
 
     fun toReaderProfile(existingAvatarUrl: String = ""): ReaderProfile {
+        val resolvedHandle = when {
+            handle.isNotBlank() -> UsernameValidator.formatDisplayHandle(handle)
+            normalizedHandle.isNotBlank() -> "@$normalizedHandle"
+            else -> "@leitor"
+        }
         return ReaderProfile(
             name = name.ifBlank { "Leitor" },
-            handle = handle.ifBlank { "@leitor" },
+            handle = resolvedHandle,
             bio = bio,
             favoriteUniverse = favoriteUniverse.ifBlank { "DC / Vertigo" },
-            avatarUrl = existingAvatarUrl,
+            avatarUrl = avatarUrl.ifBlank { existingAvatarUrl },
             avatarPreset = avatarPreset.ifBlank { "indigo" },
             yearlyGoal = yearlyGoal.coerceIn(1, 1000),
             dailyPagesGoal = dailyPagesGoal.coerceIn(1, 2000),
             showGoalOnHome = showGoalOnHome,
+            activeReadingComicId = activeReadingComicId,
             updatedAt = resolvedUpdatedAtMillis(),
             isDirty = false
         )
     }
 
+    fun toAppSettings(fallback: AppSettings = AppSettings()): AppSettings {
+        return preferences?.toAppSettings() ?: fallback
+    }
+
     companion object {
-        fun fromReaderProfile(uid: String, profile: ReaderProfile): CloudUserProfile {
+        fun fromReaderProfile(
+            uid: String,
+            profile: ReaderProfile,
+            settings: AppSettings? = null
+        ): CloudUserProfile {
             val tsMillis = if (profile.updatedAt > 0L) profile.updatedAt else System.currentTimeMillis()
+            val normalizedKey = UsernameValidator.normalizeHandleKey(profile.handle).let { key ->
+                if (UsernameValidator.isValidHandleKey(key)) key else "leitor_${uid.take(6).lowercase()}"
+            }
+            val displayHandle = "@$normalizedKey"
             return CloudUserProfile(
                 id = uid,
                 ownerId = uid,
                 name = profile.name.trim().ifBlank { "Leitor" }.take(80),
-                handle = profile.handle.trim().ifBlank { "@leitor" }.take(60),
+                handle = displayHandle.take(60),
+                normalizedHandle = normalizedKey.take(30),
                 bio = profile.bio.take(400),
                 favoriteUniverse = profile.favoriteUniverse.take(80),
+                avatarUrl = profile.avatarUrl.take(250_000),
                 avatarPreset = profile.avatarPreset.ifBlank { "indigo" }.take(40),
                 yearlyGoal = profile.yearlyGoal.coerceIn(1, 1000),
                 dailyPagesGoal = profile.dailyPagesGoal.coerceIn(1, 2000),
                 showGoalOnHome = profile.showGoalOnHome,
+                activeReadingComicId = profile.activeReadingComicId.take(200),
+                preferences = settings?.let { CloudUserPreferences.fromAppSettings(it) },
                 updatedAtMillis = tsMillis,
                 updatedAt = null
             )
@@ -163,6 +327,8 @@ data class CloudComicDocument(
     val synopsisPtBr: String = "",
     val sourceLabel: String = "Catálogo Base",
     val moments: List<CloudComicMoment> = emptyList(),
+    val seriesName: String = "",
+    val issueNumber: Int = 0,
     val updatedAtMillis: Long = 0L,
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -203,6 +369,8 @@ data class CloudComicDocument(
             sourceLabel = sourceLabel.ifBlank { "Catálogo Base" },
             isOnlineResult = false,
             moments = moments.map { it.toComicMoment() },
+            seriesName = seriesName,
+            issueNumber = issueNumber.coerceIn(0, 100000),
             updatedAt = resolvedUpdatedAtMillis(),
             isDirty = false
         )
@@ -249,6 +417,8 @@ data class CloudComicDocument(
                 synopsisPtBr = resolvedSynopsisPtBr,
                 sourceLabel = comic.sourceLabel.take(120),
                 moments = comic.moments.map { CloudComicMoment.fromComicMoment(it) },
+                seriesName = comic.seriesName.take(200),
+                issueNumber = comic.issueNumber.coerceIn(0, 100000),
                 updatedAtMillis = tsMillis,
                 updatedAt = null
             )
@@ -457,11 +627,178 @@ class QuadrinheiroCloudRepository(
         }
     }
 
-    suspend fun saveUserProfile(userId: String, profile: ReaderProfile) {
+    suspend fun checkUsernameAvailability(
+        rawHandle: String,
+        currentUserId: String? = auth.currentUser?.uid
+    ): UsernameVerificationState {
+        val validationError = UsernameValidator.validateHandle(rawHandle)
+        val key = UsernameValidator.normalizeHandleKey(rawHandle)
+        val formatted = UsernameValidator.formatDisplayHandle(rawHandle)
+        if (validationError != null) {
+            return UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.INVALID,
+                message = validationError
+            )
+        }
+        if (currentUserId.isNullOrBlank()) {
+            return UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.AVAILABLE_NEW,
+                message = "Identificador $formatted disponível"
+            )
+        }
+        val path = "usernames/$key"
+        return try {
+            val snap = kotlinx.coroutines.withTimeout(1500L) {
+                db.collection("usernames").document(key).get().await()
+            }
+            if (!snap.exists()) {
+                UsernameVerificationState(
+                    inputHandle = formatted,
+                    normalizedHandle = key,
+                    status = UsernameAvailabilityStatus.AVAILABLE_NEW,
+                    message = "Identificador $formatted disponível"
+                )
+            } else {
+                val ownerId = snap.getString("ownerId").orEmpty()
+                if (ownerId.isBlank() || ownerId == currentUserId) {
+                    UsernameVerificationState(
+                        inputHandle = formatted,
+                        normalizedHandle = key,
+                        status = UsernameAvailabilityStatus.AVAILABLE_OWNED,
+                        message = "Identificador $formatted vinculado à sua conta"
+                    )
+                } else {
+                    UsernameVerificationState(
+                        inputHandle = formatted,
+                        normalizedHandle = key,
+                        status = UsernameAvailabilityStatus.TAKEN,
+                        message = "Indisponível: $formatted já está em uso por outro leitor"
+                    )
+                }
+            }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.AVAILABLE_NEW,
+                message = "Disponível! Identificador $formatted salvo na sua conta"
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            runCatching { handleFirestoreError(e, OperationType.GET, path, auth) }
+            UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.AVAILABLE_NEW,
+                message = "Disponível! Identificador $formatted salvo na sua conta"
+            )
+        }
+    }
+
+    suspend fun getUsernameReservation(handleKey: String): CloudUsernameReservation? {
+        val cleanKey = UsernameValidator.normalizeHandleKey(handleKey)
+        if (!UsernameValidator.isValidHandleKey(cleanKey)) return null
+        val path = "usernames/$cleanKey"
+        return try {
+            val snap = kotlinx.coroutines.withTimeout(2000L) {
+                db.collection("usernames").document(cleanKey).get().await()
+            }
+            snap.toObject(CloudUsernameReservation::class.java)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, path, auth)
+            null
+        }
+    }
+
+    suspend fun saveUserProfile(
+        userId: String,
+        profile: ReaderProfile,
+        settings: AppSettings? = null,
+        strictHandleReservation: Boolean = true
+    ) {
         val path = "users/$userId"
-        val docData = CloudUserProfile.fromReaderProfile(userId, profile)
+        var docData = CloudUserProfile.fromReaderProfile(userId, profile, settings)
+        var handleKey = docData.normalizedHandle
         try {
-            db.collection("users").document(userId).set(docData).await()
+            if (UsernameValidator.isValidHandleKey(handleKey)) {
+                val userDocRef = db.collection("users").document(userId)
+                val existingUserSnap = runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(1200L) { userDocRef.get().await() }
+                }.getOrNull()
+                val oldHandleKey = existingUserSnap?.let { snap ->
+                    snap.getString("normalizedHandle")?.takeIf { it.isNotBlank() }
+                        ?: snap.getString("handle")?.let { UsernameValidator.normalizeHandleKey(it) }
+                }.orEmpty()
+
+                val targetHandleSnap = runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(1200L) {
+                        db.collection("usernames").document(handleKey).get().await()
+                    }
+                }.getOrNull()
+                val targetOwnerId = targetHandleSnap?.getString("ownerId").orEmpty()
+                val isTakenByAnotherUser = targetHandleSnap?.exists() == true &&
+                    targetOwnerId.isNotBlank() &&
+                    targetOwnerId != userId
+                val isTemplateDefaultHandle = handleKey == "felipe_hqs" || handleKey == "convidado"
+
+                if (isTakenByAnotherUser && (!strictHandleReservation || isTemplateDefaultHandle)) {
+                    // Se o handle padrão (ex: @felipe_hqs) já pertence a outra conta no Firestore,
+                    // preserva o handle anterior do próprio usuário ou gera um identificador exclusivo
+                    // para garantir que o perfil, metas, foto e activeReadingComicId sejam salvos!
+                    val fallbackKey = if (oldHandleKey.isNotBlank() && oldHandleKey != handleKey) {
+                        oldHandleKey
+                    } else {
+                        "${handleKey}_${userId.take(5).lowercase()}".take(30)
+                    }
+                    handleKey = fallbackKey
+                    docData = docData.copy(
+                        handle = "@$fallbackKey",
+                        normalizedHandle = fallbackKey
+                    )
+                }
+
+                val oldShouldDelete = if (
+                    oldHandleKey.isNotBlank() &&
+                    oldHandleKey != handleKey &&
+                    UsernameValidator.isValidHandleKey(oldHandleKey)
+                ) {
+                    val oldSnap = runCatching {
+                        kotlinx.coroutines.withTimeoutOrNull(1200L) {
+                            db.collection("usernames").document(oldHandleKey).get().await()
+                        }
+                    }.getOrNull()
+                    oldSnap?.exists() == true && oldSnap.getString("ownerId") == userId
+                } else {
+                    false
+                }
+
+                val reservation = CloudUsernameReservation(
+                    ownerId = userId,
+                    handle = docData.handle,
+                    normalizedHandle = handleKey,
+                    updatedAtMillis = docData.updatedAtMillis,
+                    updatedAt = null
+                )
+
+                kotlinx.coroutines.withTimeout(3500L) {
+                    db.runBatch { batch ->
+                        batch.set(db.collection("usernames").document(handleKey), reservation)
+                        if (oldShouldDelete) {
+                            batch.delete(db.collection("usernames").document(oldHandleKey))
+                        }
+                        batch.set(userDocRef, docData)
+                    }.await()
+                }
+            } else {
+                kotlinx.coroutines.withTimeout(3500L) {
+                    db.collection("users").document(userId).set(docData).await()
+                }
+            }
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
         }
@@ -517,6 +854,25 @@ class QuadrinheiroCloudRepository(
                 .document(safeId)
                 .delete()
                 .await()
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, path, auth)
+        }
+    }
+
+    suspend fun deleteAllUserComics(userId: String) {
+        val path = "users/$userId/comics"
+        try {
+            val colRef = db.collection("users").document(userId).collection("comics")
+            val snap = colRef.get().await()
+            val docs = snap.documents
+            if (docs.isEmpty()) return
+            for (chunk in docs.chunked(450)) {
+                db.runBatch { batch ->
+                    for (doc in chunk) {
+                        batch.delete(doc.reference)
+                    }
+                }.await()
+            }
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, path, auth)
         }
@@ -641,10 +997,14 @@ class QuadrinheiroCloudRepository(
             val localWins = (localProfile.isDirty && localProfile.updatedAt >= remoteMapped.updatedAt) ||
                 (localProfile.updatedAt > remoteMapped.updatedAt && localProfile.updatedAt > 0L)
             return if (localWins) {
-                localProfile to localProfile.isDirty
+                val mergedWinner = localProfile.copy(
+                    avatarUrl = localProfile.avatarUrl.ifBlank { remoteMapped.avatarUrl }
+                )
+                mergedWinner to localProfile.isDirty
             } else {
                 remoteMapped.copy(isDirty = false) to false
             }
         }
     }
 }
+

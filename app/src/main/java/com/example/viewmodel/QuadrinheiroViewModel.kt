@@ -27,9 +27,13 @@ import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
 import com.example.model.UserProfile
+import com.example.model.UsernameAvailabilityStatus
+import com.example.model.UsernameValidator
+import com.example.model.UsernameVerificationState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -198,6 +202,21 @@ class QuadrinheiroViewModel(
     private val _appSettings = MutableStateFlow(initial.settings)
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
 
+    private var baselineHandleKey: String = UsernameValidator.normalizeHandleKey(initial.profile.handle)
+
+    private val _usernameVerification = MutableStateFlow(
+        UsernameVerificationState(
+            inputHandle = UsernameValidator.formatDisplayHandle(initial.profile.handle),
+            normalizedHandle = UsernameValidator.normalizeHandleKey(initial.profile.handle),
+            status = UsernameAvailabilityStatus.IDLE,
+            message = ""
+        )
+    )
+    val usernameVerification: StateFlow<UsernameVerificationState> = _usernameVerification.asStateFlow()
+    private var handleCheckJob: Job? = null
+    private var persistJob: Job? = null
+    private var cloudProfileSaveJob: Job? = null
+
     // Shelf (Biblioteca) states: "shelf" (Estante inicial) vs "diary" (Diário)
     private val _shelfSection = MutableStateFlow(savedStateHandle.get<String>("shelfSection") ?: "shelf")
     val shelfSection: StateFlow<String> = _shelfSection.asStateFlow()
@@ -212,7 +231,9 @@ class QuadrinheiroViewModel(
     private val _shelfGenre = MutableStateFlow(savedStateHandle.get<String>("shelfGenre") ?: "Todos")
     val shelfGenre: StateFlow<String> = _shelfGenre.asStateFlow()
 
-    private val _shelfLayout = MutableStateFlow(savedStateHandle.get<String>("shelfLayout") ?: "grid")
+    private val _shelfLayout = MutableStateFlow(
+        savedStateHandle.get<String>("shelfLayout") ?: initial.settings.shelfLayout.ifBlank { "grid" }
+    )
     val shelfLayout: StateFlow<String> = _shelfLayout.asStateFlow()
 
     private val _shelfSort = MutableStateFlow(initial.settings.defaultShelfSort)
@@ -259,7 +280,10 @@ class QuadrinheiroViewModel(
     val manualForm: StateFlow<ManualComicForm> = _manualForm.asStateFlow()
 
     // Active reading comic ID for the bottom accessory bar (when >1 comic is READING)
-    private val _activeReadingComicId = MutableStateFlow<String?>(savedStateHandle.get<String>("activeReadingComicId"))
+    private val _activeReadingComicId = MutableStateFlow<String?>(
+        initial.profile.activeReadingComicId.takeIf { it.isNotBlank() }
+            ?: savedStateHandle.get<String>("activeReadingComicId")
+    )
     val activeReadingComicId: StateFlow<String?> = _activeReadingComicId.asStateFlow()
 
     private val _toast = MutableStateFlow<ToastNotice?>(null)
@@ -276,18 +300,28 @@ class QuadrinheiroViewModel(
     private var toastJob: Job? = null
 
     fun selectActiveReadingComic(id: String) {
+        if (id.isBlank()) return
         _activeReadingComicId.value = id
         savedStateHandle["activeReadingComicId"] = id
+        if (_profile.value.activeReadingComicId != id) {
+            updateProfile { it.copy(activeReadingComicId = id) }
+        } else {
+            persistAll()
+        }
     }
 
     fun cycleActiveReadingComic(delta: Int = 1) {
         val readingList = _comics.value.filter { it.status == ReadingStatus.READING }
         if (readingList.size <= 1) return
-        val currentIdx = readingList.indexOfFirst { it.id == _activeReadingComicId.value }.let { if (it < 0) 0 else it }
+        val currentIdx = readingList.indexOfFirst {
+            it.id == _activeReadingComicId.value ||
+                (it.externalId.isNotBlank() && it.externalId == _activeReadingComicId.value)
+        }.let { if (it < 0) 0 else it }
         val nextIdx = (currentIdx + delta + readingList.size) % readingList.size
         val nextId = readingList[nextIdx].id
         _activeReadingComicId.value = nextId
         savedStateHandle["activeReadingComicId"] = nextId
+        updateProfile { it.copy(activeReadingComicId = nextId) }
     }
 
     init {
@@ -300,8 +334,9 @@ class QuadrinheiroViewModel(
             _debouncedReadingPageUpdates
                 .debounce(800L)
                 .collectLatest { target ->
-                    storage.saveState(_comics.value, _profile.value, _appSettings.value)
-                    val uid = _cloudUser.value?.uid
+                    val ownerId = activeOwnerUid()
+                    storage.saveState(_comics.value, _profile.value, _appSettings.value, ownerId)
+                    val uid = activeCloudUid()
                     val repo = cloudRepo
                     if (uid != null && repo != null) {
                         runCatching { repo.saveComic(uid, target) }.onSuccess {
@@ -309,7 +344,7 @@ class QuadrinheiroViewModel(
                         }.onFailure {
                             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                         }
-                    } else {
+                    } else if (!isCurrentSessionGuest()) {
                         QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                     }
                 }
@@ -325,13 +360,20 @@ class QuadrinheiroViewModel(
             delay(600)
             cloudRepo?.let { repo ->
                 val activeFbUser = repo.currentAuthUser()
-                if (activeFbUser != null) {
+                val initialSession = storage.loadAuthSession()
+                if (activeFbUser != null &&
+                    !_isLoggingOut.value &&
+                    !storage.isGuestMode() &&
+                    initialSession != null &&
+                    !initialSession.isGuest &&
+                    initialSession.uid == activeFbUser.uid
+                ) {
                     _cloudUser.value = activeFbUser
                     val syncedProfile = UserProfile(
                         uid = activeFbUser.uid,
-                        displayName = activeFbUser.displayName ?: _profile.value.name.ifBlank { "Leitor" },
+                        displayName = _profile.value.name.ifBlank { activeFbUser.displayName ?: "Leitor" },
                         email = activeFbUser.email,
-                        photoUrl = activeFbUser.photoUrl,
+                        photoUrl = _profile.value.avatarUrl.ifBlank { activeFbUser.photoUrl.orEmpty() }.ifBlank { null },
                         isGuest = false,
                         provider = "google"
                     )
@@ -340,21 +382,33 @@ class QuadrinheiroViewModel(
                     _authUiState.value = AuthUiState.Authenticated
                 }
                 repo.observeAuthState().collectLatest { user ->
-                    _cloudUser.value = user
-                    if (user != null) {
+                    if (_isLoggingOut.value) return@collectLatest
+                    val existingSession = storage.loadAuthSession()
+                    val isValidAuthenticatedUser = user != null &&
+                        !storage.isGuestMode() &&
+                        _authUiState.value != AuthUiState.Guest &&
+                        existingSession != null &&
+                        !existingSession.isGuest &&
+                        existingSession.uid == user.uid
+
+                    if (isValidAuthenticatedUser && user != null) {
+                        _cloudUser.value = user
                         val syncedProfile = UserProfile(
                             uid = user.uid,
-                            displayName = user.displayName ?: _profile.value.name.ifBlank { "Leitor" },
+                            displayName = _profile.value.name.ifBlank { user.displayName ?: "Leitor" },
                             email = user.email,
-                            photoUrl = user.photoUrl,
+                            photoUrl = _profile.value.avatarUrl.ifBlank { user.photoUrl.orEmpty() }.ifBlank { null },
                             isGuest = false,
                             provider = "google"
                         )
                         storage.saveAuthSession(syncedProfile)
                         _currentUserProfile.value = syncedProfile
                         _authUiState.value = AuthUiState.Authenticated
+                        startOrStopCloudListeners(user)
+                    } else {
+                        _cloudUser.value = null
+                        startOrStopCloudListeners(null)
                     }
-                    startOrStopCloudListeners(user)
                 }
             }
         }
@@ -468,29 +522,76 @@ class QuadrinheiroViewModel(
         cloudProfileJob?.cancel()
         cloudComicsJob?.cancel()
         val repo = cloudRepo ?: return
-        if (user == null) return
+        if (user == null || isCurrentSessionGuest()) return
 
         cloudProfileJob = viewModelScope.launch(Dispatchers.IO) {
             repo.observeUserProfile(user.uid)
                 .catch { }
                 .collectLatest { remoteProfile ->
+                    if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
                     if (remoteProfile != null && remoteProfile.ownerId == user.uid) {
                         val (resolvedProfile, shouldPushLocal) = QuadrinheiroCloudRepository.mergeLocalAndRemoteProfile(
                             localProfile = _profile.value,
                             remoteProfile = remoteProfile
                         )
+                        val remoteSettings = remoteProfile.preferences?.toAppSettings()
+                        var changedAny = false
                         if (resolvedProfile != _profile.value) {
                             _profile.value = resolvedProfile
-                            persistAll()
+                            changedAny = true
+                        }
+                        if (resolvedProfile.activeReadingComicId.isNotBlank() &&
+                            _activeReadingComicId.value != resolvedProfile.activeReadingComicId
+                        ) {
+                            _activeReadingComicId.value = resolvedProfile.activeReadingComicId
+                            savedStateHandle["activeReadingComicId"] = resolvedProfile.activeReadingComicId
+                            changedAny = true
+                        }
+                        if (!shouldPushLocal && remoteSettings != null && remoteSettings != _appSettings.value) {
+                            _appSettings.value = remoteSettings
+                            val nextLayout = remoteSettings.shelfLayout.ifBlank { "grid" }
+                            if (_shelfLayout.value != nextLayout) {
+                                _shelfLayout.value = nextLayout
+                                savedStateHandle["shelfLayout"] = nextLayout
+                            }
+                            if (_shelfSort.value != remoteSettings.defaultShelfSort) {
+                                _shelfSort.value = remoteSettings.defaultShelfSort
+                            }
+                            changedAny = true
+                        }
+                        val normKey = UsernameValidator.normalizeHandleKey(resolvedProfile.handle)
+                        if (UsernameValidator.isValidHandleKey(normKey)) {
+                            storage.reserveLocalHandle(normKey, user.uid)
+                            if (_usernameVerification.value.status == UsernameAvailabilityStatus.IDLE) {
+                                baselineHandleKey = normKey
+                                _usernameVerification.value = _usernameVerification.value.copy(
+                                    inputHandle = UsernameValidator.formatDisplayHandle(resolvedProfile.handle),
+                                    normalizedHandle = normKey
+                                )
+                            }
+                        }
+                        val curSession = _currentUserProfile.value
+                        if (curSession != null && !curSession.isGuest && curSession.uid == user.uid) {
+                            val updatedSession = curSession.copy(
+                                displayName = resolvedProfile.name.ifBlank { curSession.displayName },
+                                photoUrl = resolvedProfile.avatarUrl.ifBlank { curSession.photoUrl.orEmpty() }.ifBlank { null }
+                            )
+                            if (updatedSession != curSession) {
+                                _currentUserProfile.value = updatedSession
+                                storage.saveAuthSession(updatedSession)
+                            }
+                        }
+                        if (changedAny) {
+                            persistAll(user.uid)
                         }
                         if (shouldPushLocal) {
-                            runCatching { repo.saveUserProfile(user.uid, resolvedProfile) }.onSuccess {
+                            runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
                                 markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt)
                             }
                         }
                     } else {
                         val localProf = _profile.value
-                        runCatching { repo.saveUserProfile(user.uid, localProf) }.onSuccess {
+                        runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
                             markProfileCleanInMemoryAndStorage(localProf.updatedAt)
                         }
                     }
@@ -501,6 +602,7 @@ class QuadrinheiroViewModel(
             repo.observeUserComics(user.uid)
                 .catch { }
                 .collectLatest { remoteComics ->
+                    if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
                     if (remoteComics.isNotEmpty()) {
                         PortugueseComicTranslator.seedPersistedTranslations(
                             remoteComics,
@@ -512,7 +614,7 @@ class QuadrinheiroViewModel(
                         )
                         if (mergedList != _comics.value) {
                             _comics.value = mergedList
-                            persistAll()
+                            persistAll(user.uid)
                         }
                         if (dirtyWinners.isNotEmpty()) {
                             runCatching {
@@ -522,7 +624,6 @@ class QuadrinheiroViewModel(
                             }
                         }
                     } else if (_comics.value.isNotEmpty()) {
-                        // Caso a nuvem esteja vazia no primeiro login, envia itens sujos ou o acervo inicial em lote
                         val dirtyOnly = _comics.value.filter { it.isDirty }
                         val batchToPush = dirtyOnly.ifEmpty { _comics.value }
                         runCatching {
@@ -596,8 +697,8 @@ class QuadrinheiroViewModel(
             val updatedShelfItem = matchedShelfComic
             if (updatedShelfItem != null) {
                 _comics.value = nextShelf
-                storage.saveState(nextShelf, _profile.value, _appSettings.value)
-                val uid = _cloudUser.value?.uid
+                storage.saveState(nextShelf, _profile.value, _appSettings.value, activeOwnerUid())
+                val uid = activeCloudUid()
                 val repo = cloudRepo
                 if (uid != null && repo != null) {
                     runCatching { repo.saveComic(uid, updatedShelfItem) }.onSuccess {
@@ -609,6 +710,32 @@ class QuadrinheiroViewModel(
                 }
             }
         }
+    }
+
+    private fun isCurrentSessionGuest(): Boolean {
+        return _authUiState.value == AuthUiState.Guest ||
+            _currentUserProfile.value?.isGuest == true ||
+            storage.isGuestMode()
+    }
+
+    private fun activeCloudUid(): String? {
+        if (isCurrentSessionGuest() || _authUiState.value != AuthUiState.Authenticated) {
+            return null
+        }
+        val sessionUid = _currentUserProfile.value?.takeIf { !it.isGuest }?.uid
+        val cloudUid = _cloudUser.value?.uid
+        return if (cloudUid != null && (sessionUid == null || sessionUid == cloudUid)) {
+            cloudUid
+        } else {
+            null
+        }
+    }
+
+    private fun activeOwnerUid(): String {
+        if (isCurrentSessionGuest()) return "guest_local"
+        return _cloudUser.value?.uid
+            ?: _currentUserProfile.value?.takeIf { !it.isGuest }?.uid
+            ?: "local_default"
     }
 
     fun resetToReadingHome() {
@@ -649,17 +776,84 @@ class QuadrinheiroViewModel(
     }
 
     /**
-     * Marca todos os quadrinhos e perfil locais criados/editados no Modo Convidado como `isDirty = true`
-     * e faz o merge imediato com a conta autenticada (sem perder nenhum dado local).
+     * Restaura exclusivamente o estado salvo da conta autenticada (`loadAccountState(uid)`),
+     * mantendo a conta de Convidado e cada conta de usuário 100% independentes e separadas.
      */
     private fun applyAuthenticatedSessionAndMergeLocalData(
         userProfile: UserProfile,
-        wasGuestBefore: Boolean
+        wasGuestBefore: Boolean = false
     ) {
         val startedFromSettingsModal = _showAuthModalFromSettings.value
-        val nowMs = System.currentTimeMillis()
-        storage.saveAuthSession(userProfile)
-        _currentUserProfile.value = userProfile
+        handleCheckJob?.cancel()
+        cloudProfileJob?.cancel()
+        cloudComicsJob?.cancel()
+        cloudProfileSaveJob?.cancel()
+        persistJob?.cancel()
+
+        // Se estava em modo convidado antes de entrar na conta, salva o estado do convidado na chave isolada dele
+        if (wasGuestBefore || isCurrentSessionGuest()) {
+            val guestComicsSnap = _comics.value
+            val guestProfileSnap = _profile.value
+            val guestSettingsSnap = _appSettings.value
+            storage.saveState(guestComicsSnap, guestProfileSnap, guestSettingsSnap, "guest_local")
+        }
+
+        val savedAccount = storage.loadAccountState(userProfile.uid)
+
+        if (savedAccount != null) {
+            val restoredProfile = savedAccount.profile.copy(
+                name = savedAccount.profile.name.ifBlank { userProfile.displayName.ifBlank { "Leitor" } },
+                avatarUrl = savedAccount.profile.avatarUrl.ifBlank { userProfile.photoUrl.orEmpty() }
+            )
+            _profile.value = restoredProfile
+            _appSettings.value = savedAccount.settings
+            val restoredLayout = savedAccount.settings.shelfLayout.ifBlank { "grid" }
+            _shelfLayout.value = restoredLayout
+            savedStateHandle["shelfLayout"] = restoredLayout
+            _shelfSort.value = savedAccount.settings.defaultShelfSort
+            _comics.value = savedAccount.comics
+
+            val restoredActiveComicId = restoredProfile.activeReadingComicId.takeIf { it.isNotBlank() }
+                ?: _comics.value.firstOrNull { it.status == ReadingStatus.READING }?.id
+            _activeReadingComicId.value = restoredActiveComicId
+            savedStateHandle["activeReadingComicId"] = restoredActiveComicId
+        } else {
+            val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
+                .lowercase()
+                .replace(Regex("[^a-z0-9_]"), "")
+                .take(18)
+            val defaultHandle = if (baseHandle.length >= 3) {
+                "@$baseHandle"
+            } else {
+                "@leitor_${userProfile.uid.takeLast(4).lowercase()}"
+            }
+            val cleanAccountProfile = ReaderProfile(
+                name = userProfile.displayName.ifBlank { "Leitor" },
+                handle = defaultHandle,
+                avatarUrl = userProfile.photoUrl.orEmpty(),
+                activeReadingComicId = "",
+                // Usa updatedAt = 0L para que os dados salvos no Firestore desta conta tenham prioridade total
+                updatedAt = 0L,
+                isDirty = false
+            )
+            val cleanSettings = AppSettings()
+            _profile.value = cleanAccountProfile
+            _appSettings.value = cleanSettings
+            _shelfLayout.value = cleanSettings.shelfLayout.ifBlank { "grid" }
+            savedStateHandle["shelfLayout"] = _shelfLayout.value
+            _shelfSort.value = cleanSettings.defaultShelfSort
+            _comics.value = emptyList()
+            _activeReadingComicId.value = null
+            savedStateHandle["activeReadingComicId"] = null
+        }
+
+        val resolvedSessionProfile = userProfile.copy(
+            displayName = _profile.value.name.ifBlank { userProfile.displayName },
+            photoUrl = _profile.value.avatarUrl.ifBlank { userProfile.photoUrl.orEmpty() }.ifBlank { null },
+            isGuest = false
+        )
+        storage.saveAuthSession(resolvedSessionProfile)
+        _currentUserProfile.value = resolvedSessionProfile
         _authUiState.value = AuthUiState.Authenticated
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
@@ -669,58 +863,27 @@ class QuadrinheiroViewModel(
             startSessionEntryTransition()
         }
 
-        // Atualiza o ReaderProfile com o nome/foto da conta se ainda estiver com o nome padrão
-        val currentProf = _profile.value
-        val shouldUpdateName = currentProf.name.isBlank() ||
-            currentProf.name == "Felipe" ||
-            currentProf.name.equals("Leitor Convidado", ignoreCase = true) ||
-            currentProf.name.equals("Leitor", ignoreCase = true)
-        val mergedReaderProfile = currentProf.copy(
-            name = if (shouldUpdateName && userProfile.displayName.isNotBlank()) userProfile.displayName else currentProf.name,
-            handle = if (currentProf.handle == "@felipe_hqs" || currentProf.handle.isBlank()) {
-                val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
-                    .lowercase()
-                    .replace(Regex("[^a-z0-9_]"), "")
-                    .take(18)
-                if (baseHandle.isNotBlank()) "@$baseHandle" else currentProf.handle
-            } else currentProf.handle,
-            avatarUrl = if (currentProf.avatarUrl.isBlank() && !userProfile.photoUrl.isNullOrBlank()) {
-                userProfile.photoUrl
-            } else currentProf.avatarUrl,
-            updatedAt = nowMs,
-            isDirty = true
-        )
-        _profile.value = mergedReaderProfile
-
-        // Se o usuário veio do Modo Convidado ou tinha obras locais, marca todas como isDirty = true
-        // para garantir que 100% do acervo local suba no merge com o Firestore
-        if (wasGuestBefore || _comics.value.isNotEmpty()) {
-            val dirtyMarkedComics = _comics.value.map { comic ->
-                comic.copy(
-                    updatedAt = maxOf(comic.updatedAt, nowMs),
-                    isDirty = true
-                )
-            }
-            _comics.value = dirtyMarkedComics
-        }
-        persistAll()
+        resetUsernameVerification(cancelPendingJob = true)
+        persistAll(userProfile.uid)
 
         if (userProfile.provider == "google") {
             val cloudAuthUser = CloudAuthUser(
                 uid = userProfile.uid,
-                displayName = userProfile.displayName,
-                email = userProfile.email,
-                photoUrl = userProfile.photoUrl
+                displayName = resolvedSessionProfile.displayName,
+                email = resolvedSessionProfile.email,
+                photoUrl = resolvedSessionProfile.photoUrl
             )
             _cloudUser.value = cloudAuthUser
             startOrStopCloudListeners(cloudAuthUser)
-            syncNowWithCloud()
+        } else {
+            _cloudUser.value = null
+            startOrStopCloudListeners(null)
         }
     }
 
     fun loginWithEmail(email: String, pass: String) {
         if (_isAuthLoading.value) return
-        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        val wasGuest = isCurrentSessionGuest()
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authFeedback.value = null
@@ -728,10 +891,7 @@ class QuadrinheiroViewModel(
             _isAuthLoading.value = false
             result.onSuccess { userProfile ->
                 applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
-                showNotice(
-                    if (wasGuest) "Bem-vindo, ${userProfile.displayName}! Acervo local vinculado à sua conta."
-                    else "Bem-vindo de volta, ${userProfile.displayName}!"
-                )
+                showNotice("Bem-vindo de volta, ${userProfile.displayName}!")
             }.onFailure { err ->
                 _authFeedback.value = (err.message ?: "Não foi possível entrar com E-mail e Senha.") to true
             }
@@ -740,7 +900,7 @@ class QuadrinheiroViewModel(
 
     fun registerWithEmail(name: String, email: String, pass: String) {
         if (_isAuthLoading.value) return
-        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        val wasGuest = isCurrentSessionGuest()
         viewModelScope.launch {
             _isAuthLoading.value = true
             _authFeedback.value = null
@@ -748,10 +908,7 @@ class QuadrinheiroViewModel(
             _isAuthLoading.value = false
             result.onSuccess { userProfile ->
                 applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
-                showNotice(
-                    if (wasGuest) "Conta criada! Todos os seus quadrinhos locais foram preservados."
-                    else "Conta criada com sucesso! Bem-vindo, ${userProfile.displayName}!"
-                )
+                showNotice("Conta criada com sucesso! Bem-vindo, ${userProfile.displayName}!")
             }.onFailure { err ->
                 _authFeedback.value = (err.message ?: "Não foi possível criar sua conta agora.") to true
             }
@@ -760,7 +917,7 @@ class QuadrinheiroViewModel(
 
     fun loginWithGoogle(activityContext: Context) {
         if (_isAuthLoading.value) return
-        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        val wasGuest = isCurrentSessionGuest()
         viewModelScope.launch {
             _isAuthLoading.value = true
             _isSyncingCloud.value = true
@@ -770,10 +927,7 @@ class QuadrinheiroViewModel(
             _isSyncingCloud.value = false
             result.onSuccess { userProfile ->
                 applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
-                showNotice(
-                    if (wasGuest) "Conectado como ${userProfile.displayName}! Acervo do modo convidado sincronizado."
-                    else "Conectado como ${userProfile.displayName}"
-                )
+                showNotice("Conectado como ${userProfile.displayName}")
             }.onFailure { err ->
                 if (err !is androidx.credentials.exceptions.GetCredentialCancellationException) {
                     val msg = authManager.translateAuthErrorToPtBr(err)
@@ -787,19 +941,43 @@ class QuadrinheiroViewModel(
     }
 
     fun enterAsGuest() {
+        handleCheckJob?.cancel()
+        cloudProfileJob?.cancel()
+        cloudComicsJob?.cancel()
+        cloudProfileSaveJob?.cancel()
+        persistJob?.cancel()
+
+        // Garante que nenhuma sessão Google anterior continue ativa em memória durante o Modo Convidado
+        _cloudUser.value = null
+        startOrStopCloudListeners(null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { cloudRepo?.signOut(appContext) }
+        }
+
         val guestProfile = authManager.continueAsGuest("Leitor Convidado")
         _currentUserProfile.value = guestProfile
         _authUiState.value = AuthUiState.Guest
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
-        // Modo Convidado inicializa zerado (sem quadrinhos pré-carregados e com perfil neutro)
-        _comics.value = emptyList()
-        _profile.value = ReaderProfile(name = "Leitor Convidado", handle = "@convidado")
-        _activeReadingComicId.value = null
-        persistAll()
+
+        // Carrega exclusivamente o ambiente isolado do Convidado (sem tocar na conta Google)
+        val guestState = storage.loadGuestState()
+        _comics.value = guestState.comics
+        _profile.value = guestState.profile.copy(name = "Leitor Convidado", handle = "@convidado", isDirty = false)
+        _appSettings.value = guestState.settings
+        val guestLayout = guestState.settings.shelfLayout.ifBlank { "grid" }
+        _shelfLayout.value = guestLayout
+        savedStateHandle["shelfLayout"] = guestLayout
+        _shelfSort.value = guestState.settings.defaultShelfSort
+        _activeReadingComicId.value = guestState.profile.activeReadingComicId.takeIf { it.isNotBlank() }
+            ?: guestState.comics.firstOrNull { it.status == ReadingStatus.READING }?.id
+        savedStateHandle["activeReadingComicId"] = _activeReadingComicId.value
+
+        resetUsernameVerification(cancelPendingJob = true)
+        persistAll("guest_local")
         resetToReadingHome()
         startSessionEntryTransition()
-        showNotice("Modo Convidado ativo — sua biblioteca começa zerada")
+        showNotice("Modo Convidado ativo")
     }
 
     fun resetPassword(email: String) {
@@ -819,23 +997,67 @@ class QuadrinheiroViewModel(
 
     fun logout(activityContext: Context? = null) {
         _isLoggingOut.value = true
-        viewModelScope.launch {
-            delay(6000)
-            _isLoggingOut.value = false
+        handleCheckJob?.cancel()
+        cloudProfileJob?.cancel()
+        cloudComicsJob?.cancel()
+        cloudProfileSaveJob?.cancel()
+        persistJob?.cancel()
+
+        val wasGuestLogout = isCurrentSessionGuest()
+        val outgoingUid = if (wasGuestLogout) {
+            "guest_local"
+        } else {
+            _cloudUser.value?.uid ?: _currentUserProfile.value?.takeIf { !it.isGuest }?.uid
         }
-        viewModelScope.launch {
-            cloudProfileJob?.cancel()
-            cloudComicsJob?.cancel()
-            authManager.signOut(activityContext)
-            _cloudUser.value = null
-            _currentUserProfile.value = null
-            _showAuthModalFromSettings.value = false
-            _authFeedback.value = null
-            delay(450)
-            resetToReadingHome()
-            _authUiState.value = AuthUiState.Unauthenticated
-            _isLoggingOut.value = false
-            showNotice("Sessão encerrada com segurança")
+        val outgoingCloudUid = if (wasGuestLogout) null else _cloudUser.value?.uid
+        val comicsSnapshot = _comics.value
+        val profileSnapshot = _profile.value.copy(
+            activeReadingComicId = _activeReadingComicId.value?.takeIf { it.isNotBlank() }
+                ?: _profile.value.activeReadingComicId
+        )
+        val settingsSnapshot = _appSettings.value.copy(
+            shelfLayout = _shelfLayout.value.ifBlank { _appSettings.value.shelfLayout }
+        )
+        _profile.value = profileSnapshot
+        _appSettings.value = settingsSnapshot
+
+        // Encerra a sessão imediatamente na interface para que o usuário nunca fique preso
+        storage.clearAuthSession()
+        _cloudUser.value = null
+        _currentUserProfile.value = null
+        startOrStopCloudListeners(null)
+        _showAuthModalFromSettings.value = false
+        _authFeedback.value = null
+        _isSyncingCloud.value = false
+        _isAuthLoading.value = false
+        resetUsernameVerification(cancelPendingJob = true)
+        resetToReadingHome()
+        _authUiState.value = AuthUiState.Unauthenticated
+        _isLoggingOut.value = false
+        showNotice("Sessão encerrada com segurança")
+
+        // Persiste o estado final da conta que estava ativa (Convidado ou Conta) sem misturar
+        viewModelScope.launch(Dispatchers.IO) {
+            if (outgoingUid != null) {
+                storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, outgoingUid)
+            }
+            val repo = cloudRepo
+            if (outgoingCloudUid != null && repo != null) {
+                kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                    runCatching {
+                        repo.saveUserProfile(outgoingCloudUid, profileSnapshot, settingsSnapshot)
+                    }
+                    val dirtyComics = comicsSnapshot.filter { it.isDirty }
+                    if (dirtyComics.isNotEmpty()) {
+                        runCatching {
+                            repo.syncDirtyComicsBatch(outgoingCloudUid, dirtyComics)
+                        }
+                    }
+                }
+            }
+            runCatching {
+                authManager.signOut(activityContext)
+            }
         }
     }
 
@@ -872,10 +1094,8 @@ class QuadrinheiroViewModel(
             _isSyncingCloud.value = true
             val dirtyComics = _comics.value.filter { it.isDirty }
             runCatching {
-                if (_profile.value.isDirty || _profile.value.updatedAt == 0L) {
-                    repo.saveUserProfile(user.uid, _profile.value)
-                    markProfileCleanInMemoryAndStorage()
-                }
+                repo.saveUserProfile(user.uid, _profile.value, _appSettings.value)
+                markProfileCleanInMemoryAndStorage()
                 val syncedIds = if (dirtyComics.isNotEmpty()) {
                     repo.syncDirtyComicsBatch(user.uid, _comics.value)
                 } else {
@@ -888,7 +1108,7 @@ class QuadrinheiroViewModel(
                 } else {
                     "${_comics.value.size} obras sincronizadas"
                 }
-                showNotice("Acervo sincronizado na nuvem ($countMsg)")
+                showNotice("Conta sincronizada na nuvem ($countMsg)")
             }.onFailure {
                 showNotice("Falha ao sincronizar com a nuvem")
             }
@@ -920,12 +1140,22 @@ class QuadrinheiroViewModel(
         }
     }
 
-    private fun persistAll() {
+    private fun persistAll(ownerUid: String? = null) {
+        val resolvedUid = ownerUid ?: activeOwnerUid()
+        persistJob?.cancel()
+        persistJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(80)
+            storage.saveState(_comics.value, _profile.value, _appSettings.value, resolvedUid)
+        }
+    }
+
+    private fun persistAllImmediateAsync(ownerUid: String? = null) {
+        val resolvedUid = ownerUid ?: activeOwnerUid()
         val comicsSnapshot = _comics.value
         val profileSnapshot = _profile.value
         val settingsSnapshot = _appSettings.value
         viewModelScope.launch(Dispatchers.IO) {
-            storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot)
+            storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
         }
     }
 
@@ -1000,6 +1230,9 @@ class QuadrinheiroViewModel(
     }
 
     fun openSettingsCategory(page: String, parent: String? = null) {
+        if (page == "profile") {
+            resetUsernameVerification(cancelPendingJob = false)
+        }
         scrollMemory["settings:$page"] = 0 to 0
         _settingsParentPage.value = parent
         _settingsSubPage.value = page
@@ -1008,6 +1241,7 @@ class QuadrinheiroViewModel(
     }
 
     fun goBackSettings() {
+        resetUsernameVerification(cancelPendingJob = false)
         val parent = _settingsParentPage.value
         if (parent != null) {
             _settingsSubPage.value = parent
@@ -1024,32 +1258,276 @@ class QuadrinheiroViewModel(
         _isSidebarOpen.value = open
     }
 
+    fun resetUsernameVerification(cancelPendingJob: Boolean = false) {
+        if (cancelPendingJob) {
+            handleCheckJob?.cancel()
+        }
+        val currentHandle = _profile.value.handle
+        val norm = UsernameValidator.normalizeHandleKey(currentHandle)
+        baselineHandleKey = norm
+        _usernameVerification.value = UsernameVerificationState(
+            inputHandle = UsernameValidator.formatDisplayHandle(currentHandle),
+            normalizedHandle = norm,
+            status = UsernameAvailabilityStatus.IDLE,
+            message = ""
+        )
+    }
+
+    fun onHandleInputChanged(rawInput: String) {
+        handleCheckJob?.cancel()
+        val key = UsernameValidator.normalizeHandleKey(rawInput)
+        val formatted = UsernameValidator.formatDisplayHandle(rawInput)
+        val activeUid = activeOwnerUid()
+        val currentSavedKey = UsernameValidator.normalizeHandleKey(_profile.value.handle)
+
+        // Se o usuário não alterou ou digitou novamente o mesmo @usuario que já estava salvo,
+        // mantém o campo normal (IDLE) sem disparar ou exibir aviso de verificação.
+        if (key == baselineHandleKey) {
+            if (currentSavedKey != baselineHandleKey && UsernameValidator.isValidHandleKey(key)) {
+                val nowMs = System.currentTimeMillis()
+                val restoredProfile = _profile.value.copy(
+                    handle = formatted,
+                    updatedAt = nowMs,
+                    isDirty = true
+                )
+                _profile.value = restoredProfile
+                viewModelScope.launch(Dispatchers.IO) {
+                    storage.reserveLocalHandle(key, activeUid, previousKey = currentSavedKey)
+                    storage.saveState(_comics.value, restoredProfile, _appSettings.value, activeUid)
+                    val repo = cloudRepo
+                    val cloudUid = activeCloudUid()
+                    if (repo != null && cloudUid != null && repo.currentAuthUser()?.uid == cloudUid) {
+                        kotlinx.coroutines.withTimeoutOrNull(3500L) {
+                            runCatching { repo.saveUserProfile(cloudUid, restoredProfile, _appSettings.value, strictHandleReservation = true) }.onSuccess {
+                                markProfileCleanInMemoryAndStorage(nowMs)
+                            }
+                        }
+                    }
+                }
+            }
+            _usernameVerification.value = UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.IDLE,
+                message = ""
+            )
+            return
+        }
+
+        val validationError = UsernameValidator.validateHandle(rawInput, isGuest = isCurrentSessionGuest())
+        if (validationError != null) {
+            _usernameVerification.value = UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.INVALID,
+                message = validationError
+            )
+            return
+        }
+
+        val previousHandle = _profile.value.handle
+        val previousKey = currentSavedKey
+        _usernameVerification.value = UsernameVerificationState(
+            inputHandle = formatted,
+            normalizedHandle = key,
+            status = UsernameAvailabilityStatus.CHECKING,
+            message = "Verificando disponibilidade de $formatted..."
+        )
+
+        handleCheckJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(180)
+            // 1. Verifica registro local de handles em background (sem travar a digitação)
+            val localOwner = storage.getLocalHandleOwner(key)
+            if (localOwner != null && localOwner != activeUid) {
+                _usernameVerification.value = UsernameVerificationState(
+                    inputHandle = formatted,
+                    normalizedHandle = key,
+                    status = UsernameAvailabilityStatus.TAKEN,
+                    message = "Indisponível: $formatted já está em uso por outro leitor"
+                )
+                return@launch
+            }
+
+            // 2. Reserva e salva localmente em background imediatamente após o debounce
+            val nowMs = System.currentTimeMillis()
+            storage.reserveLocalHandle(key, activeUid, previousKey = previousKey)
+            val updatedProfile = _profile.value.copy(
+                handle = formatted,
+                updatedAt = nowMs,
+                isDirty = true
+            )
+            _profile.value = updatedProfile
+            storage.saveState(_comics.value, updatedProfile, _appSettings.value, activeUid)
+
+            // 3. Verifica disponibilidade na nuvem com timeout curto (nunca trava em "Verificando")
+            val repo = cloudRepo
+            val cloudUid = activeCloudUid()
+            val hasCloudAuth = repo != null && cloudUid != null && repo.currentAuthUser()?.uid == cloudUid
+            val verification = if (hasCloudAuth) {
+                kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                    repo!!.checkUsernameAvailability(formatted, cloudUid!!)
+                } ?: UsernameVerificationState(
+                    inputHandle = formatted,
+                    normalizedHandle = key,
+                    status = UsernameAvailabilityStatus.AVAILABLE_OWNED,
+                    message = "Disponível e salvo na sua conta ($formatted)"
+                )
+            } else {
+                UsernameVerificationState(
+                    inputHandle = formatted,
+                    normalizedHandle = key,
+                    status = UsernameAvailabilityStatus.AVAILABLE_OWNED,
+                    message = "Disponível e salvo na sua conta ($formatted)"
+                )
+            }
+
+            if (verification.isNegative) {
+                storage.reserveLocalHandle(previousKey, activeUid, previousKey = key)
+                val reverted = _profile.value.copy(handle = previousHandle, updatedAt = System.currentTimeMillis())
+                _profile.value = reverted
+                storage.saveState(_comics.value, reverted, _appSettings.value, activeUid)
+                _usernameVerification.value = verification
+                return@launch
+            }
+
+            // 4. Conclui a verificação visual imediatamente como Disponível!
+            _usernameVerification.value = UsernameVerificationState(
+                inputHandle = formatted,
+                normalizedHandle = key,
+                status = UsernameAvailabilityStatus.AVAILABLE_OWNED,
+                message = "Disponível e salvo na sua conta ($formatted)"
+            )
+
+            // 5. Sincroniza com o Firestore em background sem prender o estado "Verificando"
+            if (hasCloudAuth) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val result = kotlinx.coroutines.withTimeoutOrNull(3500L) {
+                        runCatching {
+                            repo!!.saveUserProfile(cloudUid!!, updatedProfile, _appSettings.value, strictHandleReservation = true)
+                        }
+                    }
+                    if (result != null) {
+                        result.onSuccess {
+                            markProfileCleanInMemoryAndStorage(nowMs)
+                        }.onFailure { err ->
+                            val msg = err.message.orEmpty()
+                            if (msg.contains("PERMISSION_DENIED", ignoreCase = true)) {
+                                storage.reserveLocalHandle(previousKey, activeUid, previousKey = key)
+                                val reverted = _profile.value.copy(handle = previousHandle, updatedAt = System.currentTimeMillis())
+                                _profile.value = reverted
+                                storage.saveState(_comics.value, reverted, _appSettings.value, activeUid)
+                                _usernameVerification.value = UsernameVerificationState(
+                                    inputHandle = formatted,
+                                    normalizedHandle = key,
+                                    status = UsernameAvailabilityStatus.TAKEN,
+                                    message = "Indisponível: $formatted já está em uso por outro leitor"
+                                )
+                            } else {
+                                QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
+                            }
+                        }
+                    } else {
+                        QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
+                    }
+                }
+            }
+        }
+    }
+
     fun updateProfile(transform: (ReaderProfile) -> ReaderProfile) {
         val nowMs = System.currentTimeMillis()
-        val next = transform(_profile.value).copy(
+        val candidate = transform(_profile.value)
+        val candidateKey = UsernameValidator.normalizeHandleKey(candidate.handle)
+        val activeUid = activeOwnerUid()
+        val currentKey = UsernameValidator.normalizeHandleKey(_profile.value.handle)
+
+        // Se o handle mudou via updateProfile, verifica unicidade antes de aplicar
+        if (candidateKey != currentKey) {
+            onHandleInputChanged(candidate.handle)
+            val withoutHandleChange = candidate.copy(
+                handle = _profile.value.handle,
+                updatedAt = nowMs,
+                isDirty = true
+            )
+            if (withoutHandleChange != _profile.value.copy(updatedAt = nowMs, isDirty = true)) {
+                _profile.value = withoutHandleChange
+                persistAll(activeUid)
+            }
+            return
+        }
+
+        val next = candidate.copy(
+            handle = UsernameValidator.formatDisplayHandle(candidate.handle),
             updatedAt = nowMs,
             isDirty = true
         )
         _profile.value = next
+        if (next.activeReadingComicId.isNotBlank() && _activeReadingComicId.value != next.activeReadingComicId) {
+            _activeReadingComicId.value = next.activeReadingComicId
+            savedStateHandle["activeReadingComicId"] = next.activeReadingComicId
+        }
+        val curSession = _currentUserProfile.value
+        if (curSession != null && !curSession.isGuest) {
+            val updatedSession = curSession.copy(
+                displayName = next.name.ifBlank { curSession.displayName },
+                photoUrl = next.avatarUrl.ifBlank { curSession.photoUrl.orEmpty() }.ifBlank { null }
+            )
+            if (updatedSession != curSession) {
+                _currentUserProfile.value = updatedSession
+                storage.saveAuthSession(updatedSession)
+            }
+        }
+        persistAll(activeUid)
+        scheduleCloudProfileSave(nowMs)
+    }
+
+    fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        val nowMs = System.currentTimeMillis()
+        val nextSettings = transform(_appSettings.value)
+        _appSettings.value = nextSettings
+        if (nextSettings.shelfLayout.isNotBlank() && _shelfLayout.value != nextSettings.shelfLayout) {
+            _shelfLayout.value = nextSettings.shelfLayout
+            savedStateHandle["shelfLayout"] = nextSettings.shelfLayout
+        }
+        if (_shelfSort.value != nextSettings.defaultShelfSort) {
+            _shelfSort.value = nextSettings.defaultShelfSort
+        }
+        val nextProfile = _profile.value.copy(
+            updatedAt = nowMs,
+            isDirty = true
+        )
+        _profile.value = nextProfile
         persistAll()
-        val uid = _cloudUser.value?.uid
+        scheduleCloudProfileSave(nowMs)
+    }
+
+    private fun scheduleCloudProfileSave(updatedAtMs: Long) {
+        cloudProfileSaveJob?.cancel()
+        if (isCurrentSessionGuest()) return
+        val uid = activeCloudUid()
         val repo = cloudRepo
         if (uid != null && repo != null) {
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { repo.saveUserProfile(uid, next) }.onSuccess {
-                    markProfileCleanInMemoryAndStorage(nowMs)
-                }.onFailure {
+            cloudProfileSaveJob = viewModelScope.launch(Dispatchers.IO) {
+                delay(350)
+                if (isCurrentSessionGuest() || repo.currentAuthUser()?.uid != uid) return@launch
+                val profileSnap = _profile.value
+                val settingsSnap = _appSettings.value
+                val activeKey = UsernameValidator.normalizeHandleKey(profileSnap.handle)
+                if (UsernameValidator.isValidHandleKey(activeKey)) {
+                    storage.reserveLocalHandle(activeKey, uid)
+                }
+                val res = kotlinx.coroutines.withTimeoutOrNull(3500L) {
+                    runCatching { repo.saveUserProfile(uid, profileSnap, settingsSnap) }
+                }
+                if (res != null && res.isSuccess) {
+                    markProfileCleanInMemoryAndStorage(updatedAtMs)
+                } else {
                     QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
             }
         } else {
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
-    }
-
-    fun updateSettings(transform: (AppSettings) -> AppSettings) {
-        _appSettings.value = transform(_appSettings.value)
-        persistAll()
     }
 
     fun setShelfSection(section: String) {
@@ -1076,17 +1554,22 @@ class QuadrinheiroViewModel(
             "list" -> "sequences"
             else -> "grid"
         }
-        _shelfLayout.value = next
-        savedStateHandle["shelfLayout"] = next
+        setShelfLayout(next)
     }
 
     fun setShelfLayout(layout: String) {
         _shelfLayout.value = layout
         savedStateHandle["shelfLayout"] = layout
+        if (_appSettings.value.shelfLayout != layout) {
+            updateSettings { it.copy(shelfLayout = layout) }
+        }
     }
 
     fun setShelfSort(sort: String) {
         _shelfSort.value = sort
+        if (_appSettings.value.defaultShelfSort != sort) {
+            updateSettings { it.copy(defaultShelfSort = sort) }
+        }
     }
 
     fun setShelfFilterQuery(q: String) {
@@ -1406,7 +1889,7 @@ class QuadrinheiroViewModel(
         _comics.value = currentList
         persistAll()
 
-        val uid = _cloudUser.value?.uid
+        val uid = activeCloudUid()
         val repo = cloudRepo
         if (uid != null && repo != null) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -1416,7 +1899,7 @@ class QuadrinheiroViewModel(
                     QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
             }
-        } else {
+        } else if (!isCurrentSessionGuest()) {
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
@@ -1443,7 +1926,7 @@ class QuadrinheiroViewModel(
     fun deleteComic(id: String) {
         _comics.value = _comics.value.filterNot { it.id == id }
         persistAll()
-        val uid = _cloudUser.value?.uid
+        val uid = activeCloudUid()
         val repo = cloudRepo
         if (uid != null && repo != null) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -1473,6 +1956,7 @@ class QuadrinheiroViewModel(
                 c
             }
         }
+        persistAll()
         updatedComic?.let { target ->
             _debouncedReadingPageUpdates.tryEmit(target)
         }
@@ -1481,6 +1965,13 @@ class QuadrinheiroViewModel(
     fun clearAllComics() {
         _comics.value = emptyList()
         persistAll()
+        val uid = activeCloudUid()
+        val repo = cloudRepo
+        if (uid != null && repo != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { repo.deleteAllUserComics(uid) }
+            }
+        }
         showNotice("Acervo limpo")
     }
 
@@ -1517,7 +2008,7 @@ class QuadrinheiroViewModel(
             if (uid != null && repo != null) {
                 viewModelScope.launch(Dispatchers.IO) {
                     runCatching {
-                        repo.saveUserProfile(uid, restored.profile)
+                        repo.saveUserProfile(uid, restored.profile, restored.settings)
                         repo.syncAllComicsBatch(uid, restored.comics)
                     }
                 }

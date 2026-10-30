@@ -1,15 +1,18 @@
 package com.example
 
 import com.example.data.QuadrinheiroCloudRepository
+import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import com.example.model.UsernameAvailabilityStatus
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -39,27 +42,39 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         isbn = "9781779501127",
         coverUrl = "https://books.google.com/books/content?id=watchmen",
         synopsis = "Sinopse de Watchmen.",
-        sourceLabel = "Catálogo Base"
+        sourceLabel = "Catálogo Base",
+        seriesName = "Watchmen",
+        issueNumber = 1
     )
 
     @Test
-    fun saveAndGetUserProfileAndComic_authenticatedOwner_succeeds() = runBlocking {
+    fun saveAndGetUserProfileSettingsAvatarAndComic_authenticatedOwner_succeeds() = runBlocking {
         val repo = QuadrinheiroCloudRepository(context, db, auth)
         val aliceUid = signInTestUser("alice@example.com")
 
+        val customSettings = AppSettings(
+            themeId = "carmineRed",
+            colorScheme = "dark",
+            shelfColumns = 4,
+            defaultShelfSort = "RATING",
+            shelfLayout = "list",
+            spoilerProtection = true
+        )
         val profile = ReaderProfile(
             name = "Alice Quadrinheira",
             handle = "@alicehq",
             bio = "Colecionadora de encadernados e mangás.",
             favoriteUniverse = "DC / Vertigo",
-            avatarPreset = "indigo",
+            avatarUrl = "data:image/jpeg;base64,fakeavatar123",
+            avatarPreset = "crimson",
             yearlyGoal = 30,
             dailyPagesGoal = 40,
-            showGoalOnHome = true
+            showGoalOnHome = true,
+            activeReadingComicId = "init-batman-fraction-2"
         )
 
         withTimeout(5000L) {
-            repo.saveUserProfile(aliceUid, profile)
+            repo.saveUserProfile(aliceUid, profile, customSettings)
         }
 
         val fetchedProfile = withTimeout(5000L) {
@@ -67,7 +82,19 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
         assertNotNull(fetchedProfile)
         assertEquals("Alice Quadrinheira", fetchedProfile?.name)
+        assertEquals("@alicehq", fetchedProfile?.handle)
+        assertEquals("alicehq", fetchedProfile?.normalizedHandle)
+        assertEquals("data:image/jpeg;base64,fakeavatar123", fetchedProfile?.avatarUrl)
         assertEquals(30, fetchedProfile?.yearlyGoal)
+        assertEquals(40, fetchedProfile?.dailyPagesGoal)
+        assertEquals("init-batman-fraction-2", fetchedProfile?.activeReadingComicId)
+
+        val restoredSettings = fetchedProfile?.toAppSettings()
+        assertEquals("carmineRed", restoredSettings?.themeId)
+        assertEquals(4, restoredSettings?.shelfColumns)
+        assertEquals("RATING", restoredSettings?.defaultShelfSort)
+        assertEquals("list", restoredSettings?.shelfLayout)
+        assertEquals(true, restoredSettings?.spoilerProtection)
 
         val comic = sampleComic("hq-watchmen")
         withTimeout(5000L) {
@@ -79,8 +106,61 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         }
         assertNotNull(fetchedComic)
         assertEquals("Watchmen: Edição Definitiva", fetchedComic?.title)
+        assertEquals("Watchmen", fetchedComic?.seriesName)
+        assertEquals(1, fetchedComic?.issueNumber)
         assertEquals(5.0f, fetchedComic?.rating ?: 0f, 0.01f)
         assertTrue(fetchedComic?.favorite == true)
+    }
+
+    @Test
+    fun duplicateUsernameReservation_rejectsSecondUserAndReturnsNegativeVerification() = runBlocking {
+        val repo = QuadrinheiroCloudRepository(context, db, auth)
+        val aliceUid = signInTestUser("alice@example.com")
+        val uniqueHandle = "@leitor_${System.currentTimeMillis() % 1000000}"
+
+        // Alice checks uniqueHandle -> positive (AVAILABLE_NEW)
+        val initialCheck = withTimeout(5000L) {
+            repo.checkUsernameAvailability(uniqueHandle, aliceUid)
+        }
+        assertTrue(initialCheck.isPositive)
+        assertEquals(UsernameAvailabilityStatus.AVAILABLE_NEW, initialCheck.status)
+
+        // Alice claims uniqueHandle
+        withTimeout(5000L) {
+            repo.saveUserProfile(
+                aliceUid,
+                ReaderProfile(name = "Alice", handle = uniqueHandle)
+            )
+        }
+
+        // Alice checking her own handle -> positive (AVAILABLE_OWNED)
+        val ownedCheck = withTimeout(5000L) {
+            repo.checkUsernameAvailability(uniqueHandle, aliceUid)
+        }
+        assertTrue(ownedCheck.isPositive)
+        assertEquals(UsernameAvailabilityStatus.AVAILABLE_OWNED, ownedCheck.status)
+
+        // Bob signs in and checks uniqueHandle -> negative (TAKEN)
+        val bobUid = signInTestUser("bob@example.com")
+        val bobCheck = withTimeout(5000L) {
+            repo.checkUsernameAvailability(uniqueHandle, bobUid)
+        }
+        assertTrue(bobCheck.isNegative)
+        assertFalse(bobCheck.isPositive)
+        assertEquals(UsernameAvailabilityStatus.TAKEN, bobCheck.status)
+
+        // Bob attempts to force-save uniqueHandle -> rejected by Firestore rules with PERMISSION_DENIED
+        try {
+            withTimeout(5000L) {
+                repo.saveUserProfile(
+                    bobUid,
+                    ReaderProfile(name = "Bob", handle = uniqueHandle)
+                )
+            }
+            fail("Expected PERMISSION_DENIED when Bob tries to claim Alice's username $uniqueHandle")
+        } catch (e: FirebaseFirestoreException) {
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, e.code)
+        }
     }
 
     @Test

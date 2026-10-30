@@ -34,7 +34,11 @@ abstract class FirestoreEmulatorTestBase {
     @Before
     open fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        databaseId = "(default)"
+        databaseId = if (System.getenv("GITHUB_ACTIONS") == "true") {
+            "(default)"
+        } else {
+            context.getString(R.string.firestore_database_id)
+        }
 
         synchronized(FirestoreEmulatorTestBase::class.java) {
             val existing = FirebaseApp.getApps(context).firstOrNull { it.name == TEST_APP_NAME }

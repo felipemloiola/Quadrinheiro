@@ -32,12 +32,25 @@ class SafeStorage(context: Context) {
         const val GUEST_MODE_KEY = "quadrinheiro_guest_mode_v1"
         const val AUTH_ONBOARDING_KEY = "quadrinheiro_auth_onboarding_done_v1"
         const val LOCAL_ACCOUNTS_KEY = "quadrinheiro_local_email_accounts_v1"
-        private val memoryFallback = mutableMapOf<String, String>()
+        const val LOCAL_HANDLES_KEY = "quadrinheiro_local_handles_registry_v1"
+        const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
+        const val GUEST_STATE_KEY = "quadrinheiro_guest_isolated_state_v1"
+        private val memoryFallback = java.util.concurrent.ConcurrentHashMap<String, String>()
+    }
+
+    private fun accountStateKey(uid: String): String {
+        val clean = uid.trim().replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+        return "$ACCOUNT_STATE_PREFIX$clean"
     }
 
     fun getItem(key: String = STORAGE_KEY): String? {
+        memoryFallback[key]?.let { return it }
         return try {
-            prefs?.getString(key, null) ?: memoryFallback[key]
+            val fromDisk = prefs?.getString(key, null)
+            if (fromDisk != null) {
+                memoryFallback[key] = fromDisk
+            }
+            fromDisk
         } catch (_: Throwable) {
             memoryFallback[key]
         }
@@ -171,6 +184,14 @@ class SafeStorage(context: Context) {
                 provider = "email"
             )
             saveAuthSession(profile)
+            val baseHandleKey = cleanEmail.substringBefore("@")
+                .lowercase()
+                .replace(Regex("[^a-z0-9_.-]"), "")
+                .take(24)
+                .let { if (it.length >= 3) it else "leitor_${uid.takeLast(6)}" }
+            if (getLocalHandleOwner(baseHandleKey) == null) {
+                reserveLocalHandle(baseHandleKey, uid)
+            }
             Result.success(profile)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -210,6 +231,75 @@ class SafeStorage(context: Context) {
         val raw = getItem(LOCAL_ACCOUNTS_KEY) ?: return false
         return try {
             JSONObject(raw).has(cleanEmail)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    @Synchronized
+    fun syncAccountMetadata(uid: String, displayName: String, handle: String, photoUrl: String? = null) {
+        if (uid.isBlank() || uid == "guest_local") return
+        try {
+            val raw = getItem(LOCAL_ACCOUNTS_KEY) ?: return
+            val root = JSONObject(raw)
+            var changed = false
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val emailKey = keys.next()
+                val acctObj = root.optJSONObject(emailKey) ?: continue
+                if (acctObj.optString("uid", "") == uid) {
+                    if (displayName.isNotBlank()) {
+                        acctObj.put("displayName", displayName)
+                        changed = true
+                    }
+                    if (handle.isNotBlank()) {
+                        acctObj.put("handle", handle)
+                        changed = true
+                    }
+                    if (!photoUrl.isNullOrBlank()) {
+                        acctObj.put("photoUrl", photoUrl)
+                        changed = true
+                    }
+                }
+            }
+            if (changed) {
+                setItem(LOCAL_ACCOUNTS_KEY, root.toString())
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    @Synchronized
+    fun getLocalHandleOwner(normalizedKey: String): String? {
+        val clean = normalizedKey.trim().lowercase().removePrefix("@")
+        if (clean.isEmpty()) return null
+        val raw = getItem(LOCAL_HANDLES_KEY) ?: return null
+        return try {
+            val root = JSONObject(raw)
+            root.optString(clean, "").takeIf { it.isNotBlank() }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    @Synchronized
+    fun reserveLocalHandle(normalizedKey: String, ownerUid: String, previousKey: String? = null): Boolean {
+        val clean = normalizedKey.trim().lowercase().removePrefix("@")
+        if (clean.length < 3 || ownerUid.isBlank()) return false
+        return try {
+            val raw = getItem(LOCAL_HANDLES_KEY)
+            val root = if (!raw.isNullOrBlank()) JSONObject(raw) else JSONObject()
+            val existingOwner = root.optString(clean, "")
+            if (existingOwner.isNotBlank() && existingOwner != ownerUid) {
+                return false
+            }
+            val prevClean = previousKey?.trim()?.lowercase()?.removePrefix("@").orEmpty()
+            if (prevClean.isNotBlank() && prevClean != clean && root.optString(prevClean, "") == ownerUid) {
+                root.remove(prevClean)
+            }
+            root.put(clean, ownerUid)
+            setItem(LOCAL_HANDLES_KEY, root.toString())
+            true
         } catch (_: Throwable) {
             false
         }
@@ -303,72 +393,111 @@ class SafeStorage(context: Context) {
     }
 
     @Synchronized
-    fun markComicsSynced(syncedIds: Set<String>, syncedAtMillis: Long = System.currentTimeMillis()) {
+    fun markComicsSynced(
+        syncedIds: Set<String>,
+        syncedAtMillis: Long = System.currentTimeMillis(),
+        ownerUid: String? = null
+    ) {
         if (syncedIds.isEmpty()) return
-        try {
-            val rawState = getItem(STORAGE_KEY) ?: return
-            val root = JSONObject(rawState)
-            val comicsArr = root.optJSONArray("comics") ?: return
-            var updatedAny = false
-            for (i in 0 until comicsArr.length()) {
-                val obj = comicsArr.optJSONObject(i) ?: continue
-                val idVal = obj.optString("id", "")
-                val extIdVal = obj.optString("externalId", "")
-                if (syncedIds.contains(idVal) || syncedIds.contains(extIdVal)) {
-                    if (obj.optBoolean("isDirty", false)) {
-                        obj.put("isDirty", false)
-                        if (obj.optLong("updatedAt", 0L) <= 0L) {
-                            obj.put("updatedAt", syncedAtMillis)
+        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() && it != "guest_local" }
+            ?: loadAuthSession()?.takeIf { !it.isGuest }?.uid
+        val targetKeys = buildList {
+            if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
+            add(STORAGE_KEY)
+        }
+        for (targetKey in targetKeys) {
+            try {
+                val rawState = getItem(targetKey) ?: continue
+                val root = JSONObject(rawState)
+                val comicsArr = root.optJSONArray("comics") ?: continue
+                var updatedAny = false
+                for (i in 0 until comicsArr.length()) {
+                    val obj = comicsArr.optJSONObject(i) ?: continue
+                    val idVal = obj.optString("id", "")
+                    val extIdVal = obj.optString("externalId", "")
+                    if (syncedIds.contains(idVal) || syncedIds.contains(extIdVal)) {
+                        if (obj.optBoolean("isDirty", false)) {
+                            obj.put("isDirty", false)
+                            if (obj.optLong("updatedAt", 0L) <= 0L) {
+                                obj.put("updatedAt", syncedAtMillis)
+                            }
+                            updatedAny = true
                         }
-                        updatedAny = true
                     }
                 }
+                if (updatedAny) {
+                    setItem(targetKey, root.toString())
+                }
+            } catch (_: Throwable) {
             }
-            if (updatedAny) {
-                setItem(STORAGE_KEY, root.toString())
-            }
-        } catch (_: Throwable) {
         }
     }
 
     @Synchronized
-    fun markProfileSynced(syncedAtMillis: Long = System.currentTimeMillis()) {
-        try {
-            val rawState = getItem(STORAGE_KEY) ?: return
-            val root = JSONObject(rawState)
-            val profObj = root.optJSONObject("profile") ?: return
-            if (profObj.optBoolean("isDirty", false)) {
-                profObj.put("isDirty", false)
-                if (profObj.optLong("updatedAt", 0L) <= 0L) {
-                    profObj.put("updatedAt", syncedAtMillis)
+    fun markProfileSynced(
+        syncedAtMillis: Long = System.currentTimeMillis(),
+        ownerUid: String? = null
+    ) {
+        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() && it != "guest_local" }
+            ?: loadAuthSession()?.takeIf { !it.isGuest }?.uid
+        val targetKeys = buildList {
+            if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
+            add(STORAGE_KEY)
+        }
+        for (targetKey in targetKeys) {
+            try {
+                val rawState = getItem(targetKey) ?: continue
+                val root = JSONObject(rawState)
+                val profObj = root.optJSONObject("profile") ?: continue
+                if (profObj.optBoolean("isDirty", false)) {
+                    profObj.put("isDirty", false)
+                    if (profObj.optLong("updatedAt", 0L) <= 0L) {
+                        profObj.put("updatedAt", syncedAtMillis)
+                    }
+                    setItem(targetKey, root.toString())
                 }
-                setItem(STORAGE_KEY, root.toString())
+            } catch (_: Throwable) {
             }
-        } catch (_: Throwable) {
         }
     }
 
-    fun loadState(): StoredState {
-        val persistedTranslations = loadTranslationCache()
-        val raw = getItem(STORAGE_KEY)
-        if (raw == null) {
-            val isGuest = isGuestMode()
-            val starter = if (isGuest || !hasCompletedAuthOnboarding()) emptyList() else CuratedCatalog.initialUserCollection
-            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
-            return StoredState(
-                comics = starter,
-                profile = if (isGuest) ReaderProfile(name = "Leitor Convidado", handle = "@convidado") else ReaderProfile(),
-                settings = AppSettings()
-            )
+    fun loadGuestState(): StoredState {
+        val raw = getItem(GUEST_STATE_KEY)
+        if (!raw.isNullOrBlank()) {
+            parseStoredStateJson(raw, loadTranslationCache())?.let { parsed ->
+                return parsed.copy(
+                    profile = parsed.profile.copy(
+                        name = "Leitor Convidado",
+                        handle = "@convidado",
+                        isDirty = false
+                    )
+                )
+            }
         }
+        return StoredState(
+            comics = emptyList(),
+            profile = ReaderProfile(name = "Leitor Convidado", handle = "@convidado", isDirty = false),
+            settings = AppSettings()
+        )
+    }
+
+    fun loadAccountState(uid: String): StoredState? {
+        if (uid.isBlank()) return null
+        if (uid == "guest_local") return loadGuestState()
+        val raw = getItem(accountStateKey(uid)) ?: return null
+        return parseStoredStateJson(raw, loadTranslationCache())
+    }
+
+    private fun parseStoredStateJson(
+        raw: String,
+        persistedTranslations: Map<String, Pair<String, String>>
+    ): StoredState? {
         return try {
             val root = JSONObject(raw)
             val comicsArr = root.optJSONArray("comics")
-            // Se comicsArr foi salvo (mesmo que vazio []), respeita a coleção vazia sem forçar CuratedCatalog!
             val comics = if (comicsArr != null) parseComics(comicsArr) else emptyList()
             PortugueseComicTranslator.seedPersistedTranslations(comics, persistedTranslations)
             val profile = root.optJSONObject("profile")?.let { parseProfile(it) } ?: ReaderProfile()
-            // STORAGE_SYSTEM_DEFAULTS_V7: preserve saved choices and default only missing preferences.
             val settings = root.optJSONObject("settings")?.let { saved ->
                 val parsed = parseSettings(saved)
                 val defaults = AppSettings()
@@ -384,13 +513,77 @@ class SafeStorage(context: Context) {
             } ?: AppSettings()
             StoredState(comics, profile, settings)
         } catch (_: Throwable) {
-            StoredState(emptyList(), ReaderProfile(), AppSettings())
+            null
         }
     }
 
-    fun saveState(comics: List<ComicEntry>, profile: ReaderProfile, settings: AppSettings) {
+    fun loadState(): StoredState {
+        val persistedTranslations = loadTranslationCache()
+        val activeSession = loadAuthSession()
+        if (isGuestMode() || activeSession?.isGuest == true) {
+            return loadGuestState()
+        }
+        if (activeSession != null && !activeSession.isGuest && activeSession.uid.isNotBlank()) {
+            loadAccountState(activeSession.uid)?.let { accountState ->
+                return accountState
+            }
+            // Conta autenticada sem estado local salvo ainda: inicia limpa para receber dados da conta sem misturar com convidado
+            return StoredState(
+                comics = emptyList(),
+                profile = ReaderProfile(
+                    name = activeSession.displayName.ifBlank { "Leitor" },
+                    avatarUrl = activeSession.photoUrl.orEmpty(),
+                    updatedAt = 0L,
+                    isDirty = false
+                ),
+                settings = AppSettings()
+            )
+        }
+        val raw = getItem(STORAGE_KEY)
+        if (raw == null) {
+            val starter = if (!hasCompletedAuthOnboarding()) emptyList() else CuratedCatalog.initialUserCollection
+            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
+            return StoredState(
+                comics = starter,
+                profile = ReaderProfile(),
+                settings = AppSettings()
+            )
+        }
+        return parseStoredStateJson(raw, persistedTranslations)
+            ?: StoredState(emptyList(), ReaderProfile(), AppSettings())
+    }
+
+    @Synchronized
+    fun saveState(
+        comics: List<ComicEntry>,
+        profile: ReaderProfile,
+        settings: AppSettings,
+        ownerUid: String? = null
+    ) {
         val json = buildBackupJsonString(comics, profile, settings, pretty = false)
-        setItem(STORAGE_KEY, json)
+        val activeSession = loadAuthSession()
+        val isGuestTarget = ownerUid == "guest_local" ||
+            (ownerUid == null && (isGuestMode() || activeSession?.isGuest == true))
+
+        if (isGuestTarget) {
+            // Modo Convidado: salva exclusivamente na chave isolada de convidado, sem tocar na conta principal!
+            setItem(GUEST_STATE_KEY, json)
+            return
+        }
+
+        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() && it != "guest_local" }
+            ?: activeSession?.takeIf { !it.isGuest }?.uid
+
+        if (!resolvedUid.isNullOrBlank()) {
+            setItem(accountStateKey(resolvedUid), json)
+            setItem(STORAGE_KEY, json)
+            syncAccountMetadata(
+                uid = resolvedUid,
+                displayName = profile.name,
+                handle = profile.handle,
+                photoUrl = profile.avatarUrl.takeIf { it.isNotBlank() }
+            )
+        }
     }
 
     fun buildBackupJsonString(
@@ -763,6 +956,7 @@ class SafeStorage(context: Context) {
         put("yearlyGoal", p.yearlyGoal)
         put("dailyPagesGoal", p.dailyPagesGoal)
         put("showGoalOnHome", p.showGoalOnHome)
+        put("activeReadingComicId", p.activeReadingComicId)
         put("updatedAt", p.updatedAt)
         put("isDirty", p.isDirty)
     }
@@ -779,6 +973,7 @@ class SafeStorage(context: Context) {
             yearlyGoal = obj.optInt("yearlyGoal", def.yearlyGoal).coerceAtLeast(1),
             dailyPagesGoal = obj.optInt("dailyPagesGoal", def.dailyPagesGoal).coerceAtLeast(5),
             showGoalOnHome = obj.optBoolean("showGoalOnHome", def.showGoalOnHome),
+            activeReadingComicId = obj.optString("activeReadingComicId", def.activeReadingComicId),
             updatedAt = obj.optLong("updatedAt", 0L),
             isDirty = obj.optBoolean("isDirty", false)
         )
@@ -810,6 +1005,7 @@ class SafeStorage(context: Context) {
         put("showRatingsOnGrid", s.showRatingsOnGrid)
         put("spine3dEffect", s.spine3dEffect)
         put("defaultShelfSort", s.defaultShelfSort)
+        put("shelfLayout", s.shelfLayout)
         put("defaultFormat", s.defaultFormat)
         put("searchLanguage", s.searchLanguage)
         put("searchProvider", s.searchProvider)
@@ -860,6 +1056,7 @@ class SafeStorage(context: Context) {
             showRatingsOnGrid = obj.optBoolean("showRatingsOnGrid", def.showRatingsOnGrid),
             spine3dEffect = obj.optBoolean("spine3dEffect", def.spine3dEffect),
             defaultShelfSort = obj.optString("defaultShelfSort", def.defaultShelfSort),
+            shelfLayout = obj.optString("shelfLayout", def.shelfLayout).ifBlank { "grid" },
             defaultFormat = obj.optString("defaultFormat", def.defaultFormat),
             searchLanguage = obj.optString("searchLanguage", def.searchLanguage),
             searchProvider = obj.optString("searchProvider", def.searchProvider),

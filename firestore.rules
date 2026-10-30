@@ -11,12 +11,25 @@ service cloud.firestore {
     //   - ownerId: string (required, immutable, matches userId)
     //   - name: string (required, 1..80 chars)
     //   - handle: string (required, 1..60 chars)
+    //   - normalizedHandle: string (optional, 2..60 chars)
     //   - bio: string (required, 0..400 chars)
     //   - favoriteUniverse: string (required, 0..80 chars)
+    //   - avatarUrl: string (optional, 0..250000 chars)
     //   - avatarPreset: string (required, 1..40 chars)
     //   - yearlyGoal: int (required, 1..1000)
     //   - dailyPagesGoal: int (required, 1..2000)
     //   - showGoalOnHome: bool (required)
+    //   - preferences: map (optional, validated AppSettings fields)
+    //   - updatedAtMillis: int (optional, >= 0)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: /usernames/{handleKey}
+    // Document ID: {handleKey} (normalized lowercase handle, 2..60 chars)
+    // Fields:
+    //   - ownerId: string (required, immutable on update, matches request.auth.uid)
+    //   - handle: string (required, 2..60 chars)
+    //   - normalizedHandle: string (required, matches handleKey)
+    //   - updatedAtMillis: int (optional, >= 0)
     //   - updatedAt: timestamp (required)
     //
     // Collection: /users/{userId}/comics/{comicId}
@@ -44,6 +57,9 @@ service cloud.firestore {
     //   - coverUrl: string (required, 0..2000 chars)
     //   - synopsis: string (required, 0..5000 chars)
     //   - sourceLabel: string (required, 0..120 chars)
+    //   - moments: list (required, size <= 100)
+    //   - seriesName: string (optional, 0..200 chars)
+    //   - issueNumber: int (optional, 0..100000)
     //   - updatedAt: timestamp (required)
     // ===============================================================
 
@@ -55,29 +71,78 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isValidHandleKey(handleKey) {
+      return handleKey is string &&
+        handleKey.size() >= 2 &&
+        handleKey.size() <= 60 &&
+        handleKey.matches('^[a-z0-9_.\\-]+$');
+    }
+
+    function isValidQuickReviewTags(tags) {
+      return tags is list &&
+        tags.size() <= 50 &&
+        (tags.size() == 0 || (
+          tags[0] is string && tags[0].size() >= 1 && tags[0].size() <= 80 &&
+          tags[tags.size() - 1] is string && tags[tags.size() - 1].size() >= 1 && tags[tags.size() - 1].size() <= 80
+        ));
+    }
+
+    function isValidUserPreferences(prefs) {
+      return prefs is map &&
+        prefs.size() <= 45 &&
+        (!('themeId' in prefs) || (prefs.themeId is string && prefs.themeId.size() >= 1 && prefs.themeId.size() <= 60)) &&
+        (!('colorScheme' in prefs) || (prefs.colorScheme is string && prefs.colorScheme.size() >= 1 && prefs.colorScheme.size() <= 20)) &&
+        (!('glassLevel' in prefs) || (prefs.glassLevel is int && prefs.glassLevel >= 0 && prefs.glassLevel <= 100)) &&
+        (!('glassVariant' in prefs) || (prefs.glassVariant is string && prefs.glassVariant.size() >= 1 && prefs.glassVariant.size() <= 30)) &&
+        (!('dynamicTypeScale' in prefs) || (prefs.dynamicTypeScale is int && prefs.dynamicTypeScale >= 50 && prefs.dynamicTypeScale <= 200)) &&
+        (!('shelfColumns' in prefs) || (prefs.shelfColumns is int && prefs.shelfColumns >= 1 && prefs.shelfColumns <= 6)) &&
+        (!('defaultShelfSort' in prefs) || (prefs.defaultShelfSort is string && prefs.defaultShelfSort.size() <= 40)) &&
+        (!('shelfLayout' in prefs) || (prefs.shelfLayout is string && prefs.shelfLayout.size() <= 30)) &&
+        (!('defaultFormat' in prefs) || (prefs.defaultFormat is string && prefs.defaultFormat.size() <= 120)) &&
+        (!('searchLanguage' in prefs) || (prefs.searchLanguage is string && prefs.searchLanguage.size() <= 20)) &&
+        (!('searchProvider' in prefs) || (prefs.searchProvider is string && prefs.searchProvider.size() <= 30)) &&
+        (!('quickReviewTags' in prefs) || isValidQuickReviewTags(prefs.quickReviewTags));
+    }
+
     function isValidUserProfile(data, userId) {
       let requiredKeys = [
         'ownerId', 'name', 'handle', 'bio', 'favoriteUniverse',
         'avatarPreset', 'yearlyGoal', 'dailyPagesGoal', 'showGoalOnHome', 'updatedAt'
       ];
       let allowedKeys = [
-        'ownerId', 'name', 'handle', 'bio', 'favoriteUniverse',
-        'avatarPreset', 'yearlyGoal', 'dailyPagesGoal', 'showGoalOnHome',
-        'updatedAtMillis', 'updatedAt'
+        'ownerId', 'name', 'handle', 'normalizedHandle', 'bio', 'favoriteUniverse',
+        'avatarUrl', 'avatarPreset', 'yearlyGoal', 'dailyPagesGoal', 'showGoalOnHome',
+        'activeReadingComicId', 'preferences', 'updatedAtMillis', 'updatedAt'
       ];
       return data.keys().hasAll(requiredKeys) &&
         data.keys().hasOnly(allowedKeys) &&
         data.ownerId is string && data.ownerId == userId &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
         data.handle is string && data.handle.size() >= 1 && data.handle.size() <= 60 &&
+        (!('normalizedHandle' in data) || data.normalizedHandle == null || (data.normalizedHandle is string && data.normalizedHandle.size() >= 1 && data.normalizedHandle.size() <= 60)) &&
         data.bio is string && data.bio.size() <= 400 &&
         data.favoriteUniverse is string && data.favoriteUniverse.size() <= 80 &&
+        (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 250000)) &&
         data.avatarPreset is string && data.avatarPreset.size() >= 1 && data.avatarPreset.size() <= 40 &&
         data.yearlyGoal is int && data.yearlyGoal >= 1 && data.yearlyGoal <= 1000 &&
         data.dailyPagesGoal is int && data.dailyPagesGoal >= 1 && data.dailyPagesGoal <= 2000 &&
         data.showGoalOnHome is bool &&
+        (!('activeReadingComicId' in data) || data.activeReadingComicId == null || (data.activeReadingComicId is string && data.activeReadingComicId.size() <= 200)) &&
+        (!('preferences' in data) || data.preferences == null || isValidUserPreferences(data.preferences)) &&
         (!('updatedAtMillis' in data) || (data.updatedAtMillis is int && data.updatedAtMillis >= 0)) &&
-        data.updatedAt is timestamp;
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUsernameReservation(data, userId, handleKey) {
+      let requiredKeys = ['ownerId', 'handle', 'normalizedHandle', 'updatedAt'];
+      let allowedKeys = ['ownerId', 'handle', 'normalizedHandle', 'updatedAtMillis', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+        data.keys().hasOnly(allowedKeys) &&
+        data.ownerId is string && data.ownerId == userId &&
+        data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 60 &&
+        data.normalizedHandle is string && data.normalizedHandle == handleKey &&
+        (!('updatedAtMillis' in data) || (data.updatedAtMillis is int && data.updatedAtMillis >= 0)) &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
     function isValidTagsList(tags) {
@@ -125,7 +190,7 @@ service cloud.firestore {
         'status', 'rating', 'favorite', 'rereadCount', 'tags',
         'review', 'readDate', 'addedAt', 'isbn', 'coverUrl',
         'synopsis', 'synopsisPtBr', 'sourceLabel', 'moments',
-        'updatedAtMillis', 'updatedAt'
+        'seriesName', 'issueNumber', 'updatedAtMillis', 'updatedAt'
       ];
       return data.keys().hasAll(requiredKeys) &&
         data.keys().hasOnly(allowedKeys) &&
@@ -154,8 +219,26 @@ service cloud.firestore {
         (!('synopsisPtBr' in data) || (data.synopsisPtBr is string && data.synopsisPtBr.size() <= 5000)) &&
         data.sourceLabel is string && data.sourceLabel.size() <= 120 &&
         isValidComicMomentsList(data.moments) &&
+        (!('seriesName' in data) || (data.seriesName is string && data.seriesName.size() <= 200)) &&
+        (!('issueNumber' in data) || (data.issueNumber is int && data.issueNumber >= 0 && data.issueNumber <= 100000)) &&
         (!('updatedAtMillis' in data) || (data.updatedAtMillis is int && data.updatedAtMillis >= 0)) &&
-        data.updatedAt is timestamp;
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /usernames/{handleKey} {
+      allow get: if isSignedIn() && isValidHandleKey(handleKey);
+      allow list: if false;
+      allow create: if isSignedIn() &&
+        isValidHandleKey(handleKey) &&
+        isValidUsernameReservation(request.resource.data, request.auth.uid, handleKey);
+      allow update: if isSignedIn() &&
+        isValidHandleKey(handleKey) &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        isValidUsernameReservation(request.resource.data, request.auth.uid, handleKey);
+      allow delete: if isSignedIn() &&
+        isValidHandleKey(handleKey) &&
+        resource.data.ownerId == request.auth.uid;
     }
 
     match /users/{userId} {

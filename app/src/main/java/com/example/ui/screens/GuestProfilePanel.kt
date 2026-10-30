@@ -27,7 +27,12 @@ import com.example.ui.components.contentMaterialSurface
 import com.example.ui.theme.LocalIOS27Theme
 
 @Composable
-internal fun GuestProfilePanel(onBack: () -> Unit, onLogin: () -> Unit, onRegister: () -> Unit) {
+internal fun GuestProfilePanel(
+    onBack: () -> Unit,
+    onLogin: () -> Unit,
+    onRegister: () -> Unit,
+    onLogout: (() -> Unit)? = null
+) {
     val theme = LocalIOS27Theme.current
     BackHandler(onBack = onBack)
     Column(
@@ -52,6 +57,11 @@ internal fun GuestProfilePanel(onBack: () -> Unit, onLogin: () -> Unit, onRegist
                 )
             ) { Text("Entrar") }
             TextButton(onClick = onRegister) { Text("Criar conta", color = theme.accent) }
+            if (onLogout != null) {
+                TextButton(onClick = onLogout) {
+                    Text("Sair do Modo Convidado", color = Color(0xFFFF453A))
+                }
+            }
         }
     }
 }

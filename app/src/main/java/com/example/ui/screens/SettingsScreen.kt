@@ -89,6 +89,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -103,6 +104,8 @@ import com.example.model.ComicEntry
 import com.example.model.IOS27ThemeDef
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import com.example.model.UsernameAvailabilityStatus
+import com.example.model.UsernameValidator
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.components.AppleMenuPicker
@@ -152,19 +155,29 @@ fun SettingsTabScreen(
     // GUEST_SETTINGS_V7: no personal profile or goal editors for guests.
     val sessionState by viewModel.authUiState.collectAsStateWithLifecycle()
     val isGuest = sessionState == AuthUiState.Guest
+    val context = LocalContext.current
     if (isGuest && settingsSubPage == "profile") {
         GuestProfilePanel(
             onBack = viewModel::goBackSettings,
             onLogin = { viewModel.openAuthModalForLinking(AuthMode.LOGIN) },
-            onRegister = { viewModel.openAuthModalForLinking(AuthMode.REGISTER) }
+            onRegister = { viewModel.openAuthModalForLinking(AuthMode.REGISTER) },
+            onLogout = { viewModel.logout(context) }
         )
         return
     }
-    val context = LocalContext.current
     val config = LocalConfiguration.current
 
     var newTagInput by remember { mutableStateOf("") }
     var confirmClearAll by remember { mutableStateOf(false) }
+    val usernameVerification by viewModel.usernameVerification.collectAsStateWithLifecycle()
+    var nameInputDraft by remember(settingsSubPage) { mutableStateOf(profile.name) }
+    var bioInputDraft by remember(settingsSubPage) { mutableStateOf(profile.bio) }
+    var handleInputDraft by remember(settingsSubPage) { mutableStateOf(profile.handle) }
+    LaunchedEffect(profile.handle, usernameVerification.status) {
+        if (usernameVerification.status == UsernameAvailabilityStatus.IDLE) {
+            handleInputDraft = profile.handle
+        }
+    }
 
     val readComicsCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
     val totalPagesRead = remember(comics) {
@@ -198,12 +211,12 @@ fun SettingsTabScreen(
                         val sx = (bmp.width - minSide) / 2
                         val sy = (bmp.height - minSide) / 2
                         val cropped = Bitmap.createBitmap(bmp, sx, sy, minSide, minSide)
-                        val scaled = Bitmap.createScaledBitmap(cropped, 240, 240, true)
+                        val scaled = Bitmap.createScaledBitmap(cropped, 200, 200, true)
                         val baos = ByteArrayOutputStream()
-                        scaled.compress(Bitmap.CompressFormat.JPEG, 86, baos)
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 82, baos)
                         val b64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
                         viewModel.updateProfile { it.copy(avatarUrl = b64) }
-                        viewModel.showNotice("Foto de perfil atualizada")
+                        viewModel.showNotice("Foto de perfil salva na sua conta")
                     }
                 }
             } catch (_: Throwable) {
@@ -1818,28 +1831,158 @@ fun SettingsTabScreen(
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text("Nome de exibição", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
                                         AppleTextField(
-                                            value = profile.name,
-                                            onChange = { v -> viewModel.updateProfile { it.copy(name = v) } },
+                                            value = nameInputDraft,
+                                            onChange = { v ->
+                                                nameInputDraft = v
+                                                viewModel.updateProfile { it.copy(name = v) }
+                                            },
                                             placeholder = "Seu nome",
                                             leadingIcon = Icons.Default.Person
                                         )
                                     }
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Identificador (@usuario)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        val showVerificationFeedback =
+                                            usernameVerification.status != UsernameAvailabilityStatus.IDLE
+                                        val positiveColor = Color(0xFF34C759)
+                                        val negativeColor = Color(0xFFFF3B30)
+                                        val statusColor = when {
+                                            usernameVerification.isPositive -> positiveColor
+                                            usernameVerification.isNegative -> negativeColor
+                                            else -> themeColors.accent
+                                        }
+                                        val statusBadgeLabel = when (usernameVerification.status) {
+                                            UsernameAvailabilityStatus.AVAILABLE_OWNED,
+                                            UsernameAvailabilityStatus.AVAILABLE_NEW -> "Disponível"
+                                            UsernameAvailabilityStatus.TAKEN -> "Em uso"
+                                            UsernameAvailabilityStatus.INVALID -> "Inválido"
+                                            UsernameAvailabilityStatus.CHECKING -> "Verificando"
+                                            UsernameAvailabilityStatus.IDLE -> ""
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Identificador (@usuario)",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = s.textSecondary
+                                            )
+                                            if (showVerificationFeedback) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .testTag("username_verification_badge")
+                                                        .clip(RoundedCornerShape(999.dp))
+                                                        .background(statusColor.copy(alpha = 0.16f))
+                                                        .border(
+                                                            width = 0.8.dp,
+                                                            color = statusColor.copy(alpha = 0.42f),
+                                                            shape = RoundedCornerShape(999.dp)
+                                                        )
+                                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        when {
+                                                            usernameVerification.isChecking -> {
+                                                                CircularProgressIndicator(
+                                                                    modifier = Modifier.size(10.dp),
+                                                                    strokeWidth = 1.5.dp,
+                                                                    color = statusColor
+                                                                )
+                                                            }
+                                                            usernameVerification.isPositive -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Check,
+                                                                    contentDescription = "Positivo: nome de usuário disponível",
+                                                                    tint = statusColor,
+                                                                    modifier = Modifier.size(11.dp)
+                                                                )
+                                                            }
+                                                            usernameVerification.isNegative -> {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Close,
+                                                                    contentDescription = "Negativo: nome de usuário indisponível",
+                                                                    tint = statusColor,
+                                                                    modifier = Modifier.size(11.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        Text(
+                                                            text = statusBadgeLabel,
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = statusColor
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         AppleTextField(
-                                            value = profile.handle,
+                                            value = handleInputDraft,
                                             onChange = { v ->
-                                                val formatted = if (v.startsWith("@")) v else "@${v.trimStart('@')}"
-                                                viewModel.updateProfile { it.copy(handle = formatted) }
+                                                val cleaned = v.lowercase().replace(Regex("[^a-z0-9_.-@]"), "")
+                                                val formatted = if (cleaned.startsWith("@")) {
+                                                    "@" + cleaned.removePrefix("@").replace("@", "").take(30)
+                                                } else {
+                                                    "@" + cleaned.replace("@", "").take(30)
+                                                }
+                                                handleInputDraft = formatted
+                                                viewModel.onHandleInputChanged(formatted)
                                             },
                                             placeholder = "@seu_usuario"
                                         )
+
+                                        if (showVerificationFeedback && usernameVerification.message.isNotBlank()) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("username_verification_message")
+                                                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                when {
+                                                    usernameVerification.isPositive -> {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = positiveColor,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                    }
+                                                    usernameVerification.isNegative -> {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = null,
+                                                            tint = negativeColor,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Text(
+                                                    text = usernameVerification.message,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = statusColor
+                                                )
+                                            }
+                                        }
                                     }
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text("Biografia / Frase do leitor", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
                                         AppleTextField(
-                                            value = profile.bio,
-                                            onChange = { v -> viewModel.updateProfile { it.copy(bio = v) } },
+                                            value = bioInputDraft,
+                                            onChange = { v ->
+                                                bioInputDraft = v
+                                                viewModel.updateProfile { it.copy(bio = v) }
+                                            },
                                             placeholder = "Ex: Fã de Vertigo, mangás seinen e edições definitivas"
                                         )
                                     }
@@ -2545,13 +2688,16 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
     val isSyncing by viewModel.isSyncingCloud.collectAsStateWithLifecycle()
     val isAuthLoading by viewModel.isAuthLoading.collectAsStateWithLifecycle()
 
+    val readerProfile by viewModel.profile.collectAsStateWithLifecycle()
     val isAuthenticated = authUiState == AuthUiState.Authenticated && currentUserProfile?.isGuest == false
-    val displayName = currentUserProfile?.displayName?.takeIf { it.isNotBlank() }
+    val displayName = readerProfile.name.takeIf { it.isNotBlank() && !it.equals("Leitor Convidado", ignoreCase = true) }
+        ?: currentUserProfile?.displayName?.takeIf { it.isNotBlank() }
         ?: cloudUser?.displayName?.takeIf { it.isNotBlank() }
         ?: if (isAuthenticated) "Leitor Conectado" else "Modo Convidado"
     val emailText = currentUserProfile?.email?.takeIf { it.isNotBlank() }
         ?: cloudUser?.email?.takeIf { it.isNotBlank() }
-    val photoUrl = currentUserProfile?.photoUrl?.takeIf { it.isNotBlank() }
+    val photoUrl = readerProfile.avatarUrl.takeIf { it.isNotBlank() }
+        ?: currentUserProfile?.photoUrl?.takeIf { it.isNotBlank() }
         ?: cloudUser?.photoUrl?.takeIf { it.isNotBlank() }
     val provider = currentUserProfile?.provider ?: if (cloudUser != null) "google" else "guest"
 
@@ -2572,45 +2718,27 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isAuthenticated)
-                                themeColors.accent.copy(alpha = 0.18f)
-                            else
-                                s.textTertiary.copy(alpha = 0.14f)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (isAuthenticated) themeColors.accent.copy(alpha = 0.38f) else s.textSecondary.copy(alpha = 0.20f),
-                            shape = CircleShape
+                if (isAuthenticated) {
+                    UserAvatar(
+                        profile = readerProfile.copy(
+                            name = displayName,
+                            avatarUrl = photoUrl.orEmpty()
                         ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isAuthenticated && !photoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = photoUrl,
-                            contentDescription = "Foto de perfil da conta",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                        )
-                    } else if (isAuthenticated) {
-                        val initials = displayName
-                            .split(" ")
-                            .filter { it.isNotBlank() }
-                            .take(2)
-                            .joinToString("") { it.first().uppercase() }
-                            .ifBlank { "L" }
-                        Text(
-                            text = initials,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = themeColors.accent
-                        )
-                    } else {
+                        sizeDp = 46
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(s.textTertiary.copy(alpha = 0.14f))
+                            .border(
+                                width = 1.dp,
+                                color = s.textSecondary.copy(alpha = 0.20f),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = LucideIcons.UserCheck,
                             contentDescription = null,

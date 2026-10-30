@@ -1,7 +1,7 @@
 {
   "firestore": [
     {
-      "database": "(default)",
+      "database": "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }

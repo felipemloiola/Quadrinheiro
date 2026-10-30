@@ -357,7 +357,9 @@ fun QuadrinheiroApp(
     val readComicsList = remember(comics) { comics.filter { it.status == ReadingStatus.READ } }
     val activeReadingIndex = remember(readingNowList, activeReadingComicId) {
         if (readingNowList.isEmpty()) 0
-        else readingNowList.indexOfFirst { it.id == activeReadingComicId }.let { if (it >= 0) it else 0 }
+        else readingNowList.indexOfFirst {
+            it.id == activeReadingComicId || (it.externalId.isNotBlank() && it.externalId == activeReadingComicId)
+        }.let { if (it >= 0) it else 0 }
     }
     val featuredReadingItem = readingNowList.getOrNull(activeReadingIndex)
     val totalPagesRead = remember(comics) {
@@ -418,7 +420,9 @@ fun QuadrinheiroApp(
         val currentlyReadingComic = remember(readingNowList, activeReadingComicId) {
             if (readingNowList.isEmpty()) null
             else {
-                val idx = readingNowList.indexOfFirst { it.id == activeReadingComicId }
+                val idx = readingNowList.indexOfFirst {
+                    it.id == activeReadingComicId || (it.externalId.isNotBlank() && it.externalId == activeReadingComicId)
+                }
                 if (idx >= 0) readingNowList[idx] else readingNowList.first()
             }
         }

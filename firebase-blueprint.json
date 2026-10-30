@@ -1,8 +1,165 @@
 {
   "entities": {
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "Visual, reading, catalog, and accessibility preferences synced in the user's cloud account.",
+      "type": "object",
+      "properties": {
+        "themeId": {
+          "type": "string",
+          "description": "Selected visual theme identifier."
+        },
+        "colorScheme": {
+          "type": "string",
+          "enum": ["system", "dark", "light"],
+          "description": "Color mode preference."
+        },
+        "glassLevel": {
+          "type": "integer",
+          "description": "Liquid Glass intensity percentage (0..100)."
+        },
+        "glassVariant": {
+          "type": "string",
+          "enum": ["regular", "clear"],
+          "description": "Liquid Glass transparency variant."
+        },
+        "edgeRefraction": {
+          "type": "boolean",
+          "description": "Whether optical edge refraction is enabled."
+        },
+        "glassIntensity": {
+          "type": "number",
+          "description": "Optical refraction intensity multiplier."
+        },
+        "glassBlurIntensity": {
+          "type": "number",
+          "description": "Backdrop blur multiplier."
+        },
+        "enableLensRefraction": {
+          "type": "boolean",
+          "description": "Whether convex lens refraction is enabled."
+        },
+        "enableChromaticAberration": {
+          "type": "boolean",
+          "description": "Whether chromatic aberration is enabled."
+        },
+        "glassOpacity": {
+          "type": "number",
+          "description": "Glass surface opacity multiplier."
+        },
+        "backgroundExtension": {
+          "type": "boolean",
+          "description": "Whether cover ambient lighting extension is enabled."
+        },
+        "showBottomAccessory": {
+          "type": "boolean",
+          "description": "Whether to show the active reading bar above the dock."
+        },
+        "showFloatingMenu": {
+          "type": "boolean",
+          "description": "Whether to show the top floating quick actions bar."
+        },
+        "minimizeTabBarOnScroll": {
+          "type": "boolean",
+          "description": "Whether to minimize the bottom dock when scrolling."
+        },
+        "reduceTransparency": {
+          "type": "boolean",
+          "description": "Accessibility toggle to reduce glass transparency."
+        },
+        "increaseContrast": {
+          "type": "boolean",
+          "description": "Accessibility toggle to increase border and text contrast."
+        },
+        "boldText": {
+          "type": "boolean",
+          "description": "Accessibility toggle for bold typography."
+        },
+        "dynamicTypeScale": {
+          "type": "integer",
+          "description": "Typography scale percentage (85..115)."
+        },
+        "reduceMotion": {
+          "type": "boolean",
+          "description": "Accessibility toggle to reduce animations."
+        },
+        "onOffLabels": {
+          "type": "boolean",
+          "description": "Accessibility toggle to show I/O labels on switches."
+        },
+        "shelfColumns": {
+          "type": "integer",
+          "description": "Number of grid columns in the library shelf (2..4)."
+        },
+        "showProgressOnCovers": {
+          "type": "boolean",
+          "description": "Whether to show reading progress overlays on covers."
+        },
+        "showRatingsOnGrid": {
+          "type": "boolean",
+          "description": "Whether to show star ratings on grid cards."
+        },
+        "spine3dEffect": {
+          "type": "boolean",
+          "description": "Whether to render 3D book spine effects on covers."
+        },
+        "defaultShelfSort": {
+          "type": "string",
+          "description": "Default sorting mode in the library."
+        },
+        "shelfLayout": {
+          "type": "string",
+          "enum": ["grid", "list", "sequences"],
+          "description": "Selected layout mode in the library shelf."
+        },
+        "defaultFormat": {
+          "type": "string",
+          "description": "Default edition format when cataloging new comics."
+        },
+        "searchLanguage": {
+          "type": "string",
+          "description": "Preferred online catalog search language."
+        },
+        "searchProvider": {
+          "type": "string",
+          "description": "Preferred online search API provider."
+        },
+        "hdCovers": {
+          "type": "boolean",
+          "description": "Whether to prioritize high-definition cover images."
+        },
+        "spoilerProtection": {
+          "type": "boolean",
+          "description": "Whether to blur spoiler reviews in the diary."
+        },
+        "halfStarRatings": {
+          "type": "boolean",
+          "description": "Whether half-star ratings (0.5 increments) are enabled."
+        },
+        "allowRereads": {
+          "type": "boolean",
+          "description": "Whether reread counters are enabled."
+        },
+        "autoFillReadDate": {
+          "type": "boolean",
+          "description": "Whether to auto-fill today's date when marking a comic as read."
+        },
+        "showPagesInDiary": {
+          "type": "boolean",
+          "description": "Whether to show page counts and publisher in diary entries."
+        },
+        "quickReviewTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Custom quick review tags."
+        }
+      }
+    },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Collector profile and reading goals synced in the cloud for an authenticated user.",
+      "description": "Collector profile, avatar photo, reading goals, and app preferences synced in the cloud for an authenticated user.",
       "type": "object",
       "properties": {
         "ownerId": {
@@ -15,7 +172,11 @@
         },
         "handle": {
           "type": "string",
-          "description": "Reader handle (@username, up to 60 chars)."
+          "description": "Unique reader handle (@username, up to 60 chars)."
+        },
+        "normalizedHandle": {
+          "type": "string",
+          "description": "Normalized lowercase username key without @ (2..60 chars)."
         },
         "bio": {
           "type": "string",
@@ -24,6 +185,10 @@
         "favoriteUniverse": {
           "type": "string",
           "description": "Favorite comic publisher or universe (up to 80 chars)."
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Profile photo URL or cropped base64 data URI synced to the user's account."
         },
         "avatarPreset": {
           "type": "string",
@@ -41,10 +206,18 @@
           "type": "boolean",
           "description": "Whether to show the reading goal progress on the Home screen."
         },
+        "activeReadingComicId": {
+          "type": "string",
+          "description": "ID of the currently active reading comic in the bottom mini-bar."
+        },
+        "preferences": {
+          "$ref": "#/entities/UserPreferences",
+          "description": "Synced application preferences for the user."
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",
-          "description": "Server timestamp of the last profile update."
+          "description": "Server timestamp of the last profile update (clients must submit FieldValue.serverTimestamp())."
         }
       },
       "required": [
@@ -57,6 +230,36 @@
         "yearlyGoal",
         "dailyPagesGoal",
         "showGoalOnHome",
+        "updatedAt"
+      ]
+    },
+    "UsernameReservation": {
+      "title": "UsernameReservation",
+      "description": "Registry entry enforcing globally unique @username handles across all users.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who owns this username."
+        },
+        "handle": {
+          "type": "string",
+          "description": "Formatted @username display handle."
+        },
+        "normalizedHandle": {
+          "type": "string",
+          "description": "Lowercase normalized handle key matching the document ID."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the username was claimed or refreshed (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "ownerId",
+        "handle",
+        "normalizedHandle",
         "updatedAt"
       ]
     },
@@ -165,10 +368,18 @@
           "type": "string",
           "description": "Catalog source label."
         },
+        "seriesName": {
+          "type": "string",
+          "description": "Series name for chronological sequence grouping."
+        },
+        "issueNumber": {
+          "type": "integer",
+          "description": "Issue or volume number within the series."
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",
-          "description": "Server timestamp of the last update."
+          "description": "Server timestamp of the last update (clients must submit FieldValue.serverTimestamp())."
         }
       },
       "required": [
@@ -203,13 +414,19 @@
       "schema": {
         "$ref": "#/entities/UserProfile"
       },
-      "description": "Stores authenticated user's profile and reading goals."
+      "description": "Stores authenticated user's profile, avatar photo, reading goals, and application preferences."
     },
     "/users/{userId}/comics/{comicId}": {
       "schema": {
         "$ref": "#/entities/CloudComic"
       },
       "description": "Stores authenticated user's personal comic library and reading diary entries."
+    },
+    "/usernames/{handleKey}": {
+      "schema": {
+        "$ref": "#/entities/UsernameReservation"
+      },
+      "description": "Enforces globally unique @username handles across accounts."
     }
   }
 }
