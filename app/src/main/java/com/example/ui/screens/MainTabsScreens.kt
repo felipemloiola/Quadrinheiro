@@ -593,7 +593,8 @@ private fun ComicGridCard(
                 }
             }
 
-            val issueNum = remember(comic.id, comic.title, comic.issueNumber) {
+            // COMIC_DERIVED_STATE_V17: remember expensive sequence inference per stable item key.
+            val issueNum = remember(comic.id, comic.issueNumber, comic.title) {
                 SeriesSequenceEngine.inferIssueNumber(comic)
             }
             if (issueNum > 0) {

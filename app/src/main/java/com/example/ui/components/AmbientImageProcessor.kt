@@ -34,7 +34,8 @@ object AmbientImageProcessor {
         if (rawUrl.isBlank()) return null
         colorCache[rawUrl]?.let { return it }
 
-        val bmp = withContext(Dispatchers.IO) {
+        // AMBIENT_COVER_EXTRACTION_V17: hardware-rendered ambient bitmap, memory caching, non-blocking Default pool.
+        val computedColor = withContext(Dispatchers.IO) {
             runCatching {
                 val req = ImageRequest.Builder(context)
                     .data(rawUrl)
@@ -42,12 +43,10 @@ object AmbientImageProcessor {
                     .allowHardware(false)
                     .build()
                 val result = Coil.imageLoader(context).execute(req)
-                (result.drawable as? BitmapDrawable)?.bitmap
+                val bmp = (result.drawable as? BitmapDrawable)?.bitmap ?: return@runCatching null
+                calculateAverageCoverColor(bmp, dispatcher)
             }.getOrNull()
-        } ?: return null
-
-        // Cálculo de média ponderada e saturação de cores obrigatório em Dispatchers.Default
-        val computedColor = calculateAverageCoverColor(bmp, dispatcher)
+        }
         if (computedColor != null) {
             colorCache[rawUrl] = computedColor
         }

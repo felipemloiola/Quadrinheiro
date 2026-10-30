@@ -1,0 +1,3 @@
+OK app/src/main/java/com/example/ui/components/AmbientImageProcessor.kt
+OK app/src/main/java/com/example/ui/screens/MainTabsScreens.kt
+Optimizations keep full visual Liquid Glass, backdrop layers, and current layout trees. On-device frame timing still requires real S23 testing with the signed release build.
