@@ -1,0 +1,568 @@
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:149-218
+  149      val localizedInitial = remember(selectedComic) {
+  150          com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = false)
+  151      }
+  152      var draftComic by remember(selectedComic.id) { mutableStateOf(localizedInitial) }
+  153      LaunchedEffect(selectedComic.id, selectedComic.synopsisPtBr) {
+  154          if (selectedComic.synopsisPtBr.isNotBlank() && draftComic.synopsisPtBr != selectedComic.synopsisPtBr) {
+  155              draftComic = draftComic.copy(
+  156                  synopsis = selectedComic.synopsisPtBr,
+  157                  synopsisPtBr = selectedComic.synopsisPtBr
+  158              )
+  159          } else if (draftComic.synopsisPtBr.isBlank()) {
+  160              val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+  161                  com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = true)
+  162              }
+  163              if (enriched.synopsisPtBr.isNotBlank()) {
+  164                  draftComic = draftComic.copy(
+  165                      synopsis = enriched.synopsisPtBr,
+  166                      synopsisPtBr = enriched.synopsisPtBr
+  167                  )
+  168              }
+  169          }
+  170      }
+  171      var comicTagInput by remember(selectedComic.id) { mutableStateOf("") }
+  172      var showMiniCalendar by remember(selectedComic.id) { mutableStateOf(false) }
+  173      var momentNoteInput by remember(selectedComic.id) { mutableStateOf("") }
+  174      var momentPageInput by remember(selectedComic.id) {
+  175          mutableStateOf(if (selectedComic.currentPage > 0) selectedComic.currentPage.toString() else "")
+  176      }
+  177  
+  178      fun buildFinalComicForSave(): ComicEntry {
+  179          var finalComic = draftComic
+  180          val pendingTag = comicTagInput.trim().replace(",", "")
+  181          if (pendingTag.isNotEmpty() && !finalComic.tags.contains(pendingTag)) {
+  182              finalComic = finalComic.copy(tags = finalComic.tags + pendingTag)
+  183          }
+  184          val pendingNote = momentNoteInput.trim()
+  185          if (pendingNote.isNotEmpty()) {
+  186              val pageNum = momentPageInput.toIntOrNull() ?: 0
+  187              val today = java.time.LocalDate.now()
+  188                  .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+  189              val newMoment = ComicMoment(
+  190                  id = "moment_${System.currentTimeMillis()}_${(100..999).random()}",
+  191                  page = pageNum,
+  192                  tag = "",
+  193                  note = pendingNote,
+  194                  date = finalComic.readDate.ifBlank { today },
+  195                  isSpoiler = false
+  196              )
+  197              finalComic = finalComic.copy(moments = finalComic.moments + newMoment)
+  198          }
+  199          return finalComic
+  200      }
+  201      val sheetScrollState = rememberScrollState(0)
+  202      val context = LocalContext.current
+  203      val dragScope = androidx.compose.runtime.rememberCoroutineScope()
+  204      val dragOffsetYAnim = remember { Animatable(0f) }
+  205  
+  206      // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
+  207      LaunchedEffect(draftComic.coverUrl) {
+  208          val cleanUrl = draftComic.coverUrl.trim().replace("http://", "https://")
+  209          if (cleanUrl.isNotBlank()) {
+  210              val prefetch = ImageRequest.Builder(context)
+  211                  .data(cleanUrl)
+  212                  .size(240, 360)
+  213                  .precision(coil.size.Precision.INEXACT)
+  214                  .memoryCacheKey(cleanUrl)
+  215                  .diskCacheKey(cleanUrl)
+  216                  .memoryCachePolicy(CachePolicy.ENABLED)
+  217                  .diskCachePolicy(CachePolicy.ENABLED)
+  218                  .networkCachePolicy(CachePolicy.ENABLED)
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:497-566
+  497                                      text = "Na sua Fila de Leitura (Quero Ler)",
+  498                                      fontSize = 12.5.sp,
+  499                                      fontWeight = FontWeight.SemiBold,
+  500                                      color = s.textPrimary
+  501                                  )
+  502                                  Text(
+  503                                      text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
+  504                                      fontSize = 11.5.sp,
+  505                                      lineHeight = 15.sp,
+  506                                      color = s.textSecondary
+  507                                  )
+  508                              }
+  509                          }
+  510                      } else {
+  511                          // Item 3: Data da Leitura (com Mini Calendário) & Releitura
+  512                          CatalogReadingDateAndRereadsSection(
+  513                              draftComic = draftComic,
+  514                              allowRereads = appSettings.allowRereads,
+  515                              showMiniCalendar = showMiniCalendar,
+  516                              onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
+  517                              onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+  518                          )
+  519  
+  520                          // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
+  521                          if (draftComic.status == ReadingStatus.READING) {
+  522                              CatalogReadingProgressSection(
+  523                                  currentPageProvider = { draftComic.currentPage },
+  524                                  pageCount = draftComic.pageCount,
+  525                                  accentColor = s.accentColor,
+  526                                  onChangePage = { v -> draftComic = draftComic.copy(currentPage = v) }
+  527                              )
+  528                          }
+  529  
+  530                          // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
+  531                          if (draftComic.status == ReadingStatus.READ) {
+  532                              // Item 5: Avaliar + Gostei (Coração)
+  533                              CatalogRatingAndFavoriteSection(
+  534                                  draftComic = draftComic,
+  535                                  halfStarRatings = appSettings.halfStarRatings,
+  536                                  onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+  537                              )
+  538  
+  539                              // Item 6: Resenha / Comentários
+  540                              CatalogReviewCommentsSection(
+  541                                  reviewText = draftComic.review,
+  542                                  isExpanded = isSheetExpanded,
+  543                                  onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
+  544                              )
+  545                          }
+  546                      }
+  547  
+  548                      // Item 7: Seção Própria e Exclusiva de Tags
+  549                      CatalogTagsSection(
+  550                          tags = draftComic.tags,
+  551                          quickReviewTags = appSettings.quickReviewTags,
+  552                          comicTagInput = comicTagInput,
+  553                          onChangeComicTagInput = { comicTagInput = it },
+  554                          onUpdateTags = { nextTags -> draftComic = draftComic.copy(tags = nextTags) }
+  555                      )
+  556  
+  557                      // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
+  558                      val addCurrentMoment = {
+  559                          val cleanNote = momentNoteInput.trim()
+  560                          if (cleanNote.isNotEmpty()) {
+  561                              val pageNum = momentPageInput.toIntOrNull() ?: 0
+  562                              val today = java.time.LocalDate.now()
+  563                                  .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+  564                              val newMoment = ComicMoment(
+  565                                  id = "moment_${System.currentTimeMillis()}_${(100..999).random()}",
+  566                                  page = pageNum,
+=== app/src/main/java/com/example/ui/components/CatalogModalSubcomponents.kt:1237-1306
+ 1237                                  color = if (isSelected) Color.Transparent
+ 1238                                  else if (s.isLight) Color.Black.copy(alpha = 0.16f)
+ 1239                                  else Color.White.copy(alpha = 0.20f),
+ 1240                                  shape = RoundedCornerShape(999.dp)
+ 1241                              )
+ 1242                              .clickable {
+ 1243                                  val next = if (isSelected) tags - tag else tags + tag
+ 1244                                  onUpdateTags(next)
+ 1245                              }
+ 1246                              .padding(horizontal = 11.dp, vertical = 6.dp)
+ 1247                      ) {
+ 1248                          Text(
+ 1249                              text = if (isSelected) "✓ $tag" else "+ $tag",
+ 1250                              fontSize = 11.5.sp,
+ 1251                              fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+ 1252                              color = if (isSelected) s.accentText else s.textPrimary
+ 1253                          )
+ 1254                      }
+ 1255                  }
+ 1256              }
+ 1257          }
+ 1258      }
+ 1259  }
+ 1260  
+ 1261  /**
+ 1262   * Seção de Momentos Marcantes e Notas Rápidas do Diário.
+ 1263   */
+ 1264  @Composable
+ 1265  internal fun CatalogMomentsSection(
+ 1266      moments: List<ComicMoment>,
+ 1267      momentPageInput: String,
+ 1268      momentNoteInput: String,
+ 1269      onChangeMomentPage: (String) -> Unit,
+ 1270      onChangeMomentNote: (String) -> Unit,
+ 1271      onAddMoment: () -> Unit,
+ 1272      onRemoveMoment: (String) -> Unit
+ 1273  ) {
+ 1274      val mat = LocalAppleMaterials.current
+ 1275      val s = mat.scheme
+ 1276  
+ 1277      Column(
+ 1278          modifier = Modifier
+ 1279              .fillMaxWidth()
+ 1280              .inputWellSurface(RoundedCornerShape(16.dp))
+ 1281              .padding(14.dp),
+ 1282          verticalArrangement = Arrangement.spacedBy(10.dp)
+ 1283      ) {
+ 1284          Row(
+ 1285              modifier = Modifier.fillMaxWidth(),
+ 1286              horizontalArrangement = Arrangement.SpaceBetween,
+ 1287              verticalAlignment = Alignment.CenterVertically
+ 1288          ) {
+ 1289              Row(
+ 1290                  modifier = Modifier.weight(1f),
+ 1291                  verticalAlignment = Alignment.CenterVertically,
+ 1292                  horizontalArrangement = Arrangement.spacedBy(6.dp)
+ 1293              ) {
+ 1294                  Icon(
+ 1295                      imageVector = Icons.Default.Bookmark,
+ 1296                      contentDescription = null,
+ 1297                      tint = s.accentColor,
+ 1298                      modifier = Modifier.size(14.dp)
+ 1299                  )
+ 1300                  Text(
+ 1301                      text = "MOMENTOS MARCANTES",
+ 1302                      fontSize = 11.sp,
+ 1303                      fontWeight = FontWeight.Bold,
+ 1304                      letterSpacing = 0.5.sp,
+ 1305                      color = s.textPrimary.copy(alpha = 0.85f),
+ 1306                      maxLines = 1,
+=== app/src/main/java/com/example/ui/components/CatalogModalSubcomponents.kt:1386-1455
+ 1386                  }
+ 1387              }
+ 1388          }
+ 1389  
+ 1390          Row(
+ 1391              modifier = Modifier.fillMaxWidth(),
+ 1392              verticalAlignment = Alignment.CenterVertically,
+ 1393              horizontalArrangement = Arrangement.spacedBy(6.dp)
+ 1394          ) {
+ 1395              Box(
+ 1396                  modifier = Modifier
+ 1397                      .width(56.dp)
+ 1398                      .clip(RoundedCornerShape(12.dp))
+ 1399                      .background(
+ 1400                          if (s.isLight) Color.White.copy(alpha = 0.88f)
+ 1401                          else Color.Black.copy(alpha = 0.35f)
+ 1402                      )
+ 1403                      .border(
+ 1404                          width = 0.6.dp,
+ 1405                          color = if (s.isLight) Color.Black.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.16f),
+ 1406                          shape = RoundedCornerShape(12.dp)
+ 1407                      )
+ 1408                      .padding(horizontal = 8.dp, vertical = 9.dp),
+ 1409                  contentAlignment = Alignment.CenterStart
+ 1410              ) {
+ 1411                  if (momentPageInput.isEmpty()) {
+ 1412                      Text(
+ 1413                          text = "Pág.",
+ 1414                          fontSize = 11.sp,
+ 1415                          color = s.textSecondary.copy(alpha = 0.70f),
+ 1416                          maxLines = 1,
+ 1417                          softWrap = false
+ 1418                      )
+ 1419                  }
+ 1420                  BasicTextField(
+ 1421                      value = momentPageInput,
+ 1422                      onValueChange = { input ->
+ 1423                          if (input.all { it.isDigit() } && input.length <= 5) {
+ 1424                              onChangeMomentPage(input)
+ 1425                          }
+ 1426                      },
+ 1427                      singleLine = true,
+ 1428                      textStyle = TextStyle(
+ 1429                          fontFamily = SpaceGroteskTabularFamily,
+ 1430                          fontSize = 12.sp,
+ 1431                          fontWeight = FontWeight.Bold,
+ 1432                          color = s.textPrimary
+ 1433                      ),
+ 1434                      cursorBrush = SolidColor(s.accentColor),
+ 1435                      modifier = Modifier.fillMaxWidth()
+ 1436                  )
+ 1437              }
+ 1438  
+ 1439              Box(
+ 1440                  modifier = Modifier
+ 1441                      .weight(1f)
+ 1442                      .clip(RoundedCornerShape(12.dp))
+ 1443                      .background(
+ 1444                          if (s.isLight) Color.White.copy(alpha = 0.88f)
+ 1445                          else Color.Black.copy(alpha = 0.35f)
+ 1446                      )
+ 1447                      .border(
+ 1448                          width = 0.6.dp,
+ 1449                          color = if (s.isLight) Color.Black.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.16f),
+ 1450                          shape = RoundedCornerShape(12.dp)
+ 1451                      )
+ 1452                      .padding(horizontal = 10.dp, vertical = 9.dp)
+ 1453              ) {
+ 1454                  if (momentNoteInput.isEmpty()) {
+ 1455                      Text(
+=== app/src/main/java/com/example/ui/components/CatalogModalSubcomponents.kt:1487-1556
+ 1487                      .background(
+ 1488                          if (canAddMoment) s.accentBg
+ 1489                          else s.accentColor.copy(alpha = 0.14f)
+ 1490                      )
+ 1491                      .clickable(enabled = canAddMoment) {
+ 1492                          onAddMoment()
+ 1493                      }
+ 1494                      .padding(horizontal = 11.dp, vertical = 9.dp),
+ 1495                  contentAlignment = Alignment.Center
+ 1496              ) {
+ 1497                  Text(
+ 1498                      text = "+ Adicionar",
+ 1499                      fontSize = 11.5.sp,
+ 1500                      fontWeight = FontWeight.Bold,
+ 1501                      color = if (canAddMoment) s.accentText else s.accentColor.copy(alpha = 0.65f),
+ 1502                      maxLines = 1,
+ 1503                      softWrap = false
+ 1504                  )
+ 1505              }
+ 1506          }
+ 1507      }
+ 1508  }
+ 1509  
+ 1510  /**
+ 1511   * Seção isolada de Progresso de Páginas no modal de catalogação com Leitura Diferida de Estado:
+ 1512   * Recebe `currentPageProvider: () -> Int` e `progressFractionProvider: () -> Float` como lambdas
+ 1513   * para que a atualização contínua do `LiquidSlider` isole a recomposição apenas neste bloco e
+ 1514   * desenhe a barra na fase de draw (`Modifier.drawWithCache`).
+ 1515   */
+ 1516  @Composable
+ 1517  internal fun CatalogReadingProgressSection(
+ 1518      currentPageProvider: () -> Int,
+ 1519      pageCount: Int,
+ 1520      accentColor: Color,
+ 1521      onChangePage: (Int) -> Unit
+ 1522  ) {
+ 1523      val mat = LocalAppleMaterials.current
+ 1524      val s = mat.scheme
+ 1525      val safeTotal = pageCount.coerceAtLeast(1)
+ 1526      val currentPage = currentPageProvider().coerceIn(0, safeTotal)
+ 1527      val trackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
+ 1528  
+ 1529      Column(
+ 1530          modifier = Modifier
+ 1531              .fillMaxWidth()
+ 1532              .inputWellSurface(RoundedCornerShape(16.dp))
+ 1533              .padding(14.dp),
+ 1534          verticalArrangement = Arrangement.spacedBy(8.dp)
+ 1535      ) {
+ 1536          Row(
+ 1537              modifier = Modifier.fillMaxWidth(),
+ 1538              horizontalArrangement = Arrangement.SpaceBetween,
+ 1539              verticalAlignment = Alignment.CenterVertically
+ 1540          ) {
+ 1541              Text(
+ 1542                  text = "Página atual ($currentPage de $safeTotal)",
+ 1543                  fontSize = 12.5.sp,
+ 1544                  fontWeight = FontWeight.SemiBold,
+ 1545                  color = s.textPrimary
+ 1546              )
+ 1547              AppleStepper(
+ 1548                  value = currentPage,
+ 1549                  min = 0,
+ 1550                  max = safeTotal,
+ 1551                  step = 1,
+ 1552                  onChange = onChangePage
+ 1553              )
+ 1554          }
+ 1555  
+ 1556          // Indicador visual desenhado inteiramente na fase de draw com leitura diferida de estado
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:164-233
+  164      val config = LocalConfiguration.current
+  165  
+  166      var newTagInput by remember { mutableStateOf("") }
+  167      var confirmClearAll by remember { mutableStateOf(false) }
+  168  
+  169      val readComicsCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
+  170      val totalPagesRead = remember(comics) {
+  171          comics.sumOf {
+  172              when (it.status) {
+  173                  ReadingStatus.READ -> it.pageCount
+  174                  ReadingStatus.READING -> it.currentPage
+  175                  ReadingStatus.WANT_TO_READ -> 0
+  176              }
+  177          }
+  178      }
+  179  
+  180      // Back handler inside Settings sub-pages
+  181      BackHandler(enabled = settingsSubPage != null) {
+  182          viewModel.goBackSettings()
+  183      }
+  184  
+  185      // Route key for current settings view (root or sub-page)
+  186      val routeKey = viewModel.getCurrentRouteKey("settings", settingsSubPage)
+  187  
+  188      // Gallery photo picker for Avatar
+  189      val avatarPickerLauncher = rememberLauncherForActivityResult(
+  190          contract = ActivityResultContracts.PickVisualMedia()
+  191      ) { uri ->
+  192          if (uri != null) {
+  193              try {
+  194                  context.contentResolver.openInputStream(uri)?.use { stream ->
+  195                      val bmp = BitmapFactory.decodeStream(stream)
+  196                      if (bmp != null) {
+  197                          val minSide = min(bmp.width, bmp.height)
+  198                          val sx = (bmp.width - minSide) / 2
+  199                          val sy = (bmp.height - minSide) / 2
+  200                          val cropped = Bitmap.createBitmap(bmp, sx, sy, minSide, minSide)
+  201                          val scaled = Bitmap.createScaledBitmap(cropped, 240, 240, true)
+  202                          val baos = ByteArrayOutputStream()
+  203                          scaled.compress(Bitmap.CompressFormat.JPEG, 86, baos)
+  204                          val b64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+  205                          viewModel.updateProfile { it.copy(avatarUrl = b64) }
+  206                          viewModel.showNotice("Foto de perfil atualizada")
+  207                      }
+  208                  }
+  209              } catch (_: Throwable) {
+  210              }
+  211          }
+  212      }
+  213  
+  214      // Export / Import JSON Launchers & Android ZIP Launcher
+  215      val exportJsonLauncher = rememberLauncherForActivityResult(
+  216          contract = ActivityResultContracts.CreateDocument("application/json")
+  217      ) { uri ->
+  218          if (uri != null) {
+  219              try {
+  220                  context.contentResolver.openOutputStream(uri)?.use { out ->
+  221                      out.write(viewModel.exportBackupJson().toByteArray(Charsets.UTF_8))
+  222                  }
+  223                  viewModel.showNotice("Backup JSON exportado")
+  224              } catch (_: Throwable) {
+  225              }
+  226          }
+  227      }
+  228  
+  229      val importJsonLauncher = rememberLauncherForActivityResult(
+  230          contract = ActivityResultContracts.OpenDocument()
+  231      ) { uri ->
+  232          if (uri != null) {
+  233              try {
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1644-1713
+ 1644                                  Text(
+ 1645                                      text = "Meu Perfil",
+ 1646                                      fontSize = 28.sp,
+ 1647                                      fontWeight = FontWeight.Bold,
+ 1648                                      color = s.textPrimary
+ 1649                                  )
+ 1650                              }
+ 1651  
+ 1652                              // Cartão de Foto de Perfil + Seletor de Avatares Apple
+ 1653                              Column(
+ 1654                                  modifier = Modifier
+ 1655                                      .fillMaxWidth()
+ 1656                                      .contentMaterialSurface(RoundedCornerShape(24.dp))
+ 1657                                      .padding(20.dp),
+ 1658                                  horizontalAlignment = Alignment.CenterHorizontally,
+ 1659                                  verticalArrangement = Arrangement.spacedBy(14.dp)
+ 1660                              ) {
+ 1661                                  Box {
+ 1662                                      UserAvatar(profile = profile, sizeDp = 88)
+ 1663                                      Box(
+ 1664                                          modifier = Modifier
+ 1665                                              .align(Alignment.BottomEnd)
+ 1666                                              .size(32.dp)
+ 1667                                              .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
+ 1668                                              .clickable {
+ 1669                                                  avatarPickerLauncher.launch(
+ 1670                                                      PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+ 1671                                                  )
+ 1672                                              },
+ 1673                                          contentAlignment = Alignment.Center
+ 1674                                      ) {
+ 1675                                          Icon(
+ 1676                                              imageVector = Icons.Default.CameraAlt,
+ 1677                                              contentDescription = "Enviar foto do aparelho",
+ 1678                                              tint = s.textPrimary,
+ 1679                                              modifier = Modifier.size(15.dp)
+ 1680                                          )
+ 1681                                      }
+ 1682                                  }
+ 1683  
+ 1684                                  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+ 1685                                      Text(
+ 1686                                          text = if (isGuest) "Convidado" else profile.name.ifBlank { "Leitor" },
+ 1687                                          fontSize = 16.sp,
+ 1688                                          fontWeight = FontWeight.Bold,
+ 1689                                          color = s.textPrimary
+ 1690                                      )
+ 1691                                      Text(
+ 1692                                          text = "${profile.handle.ifBlank { "@leitor" }} • ${profile.favoriteUniverse.ifBlank { "Colecionador" }}",
+ 1693                                          fontSize = 12.sp,
+ 1694                                          color = s.textSecondary
+ 1695                                      )
+ 1696                                  }
+ 1697  
+ 1698                                  if (profile.avatarUrl.isNotBlank()) {
+ 1699                                      Row(
+ 1700                                          modifier = Modifier.fillMaxWidth(),
+ 1701                                          horizontalArrangement = Arrangement.spacedBy(10.dp),
+ 1702                                          verticalAlignment = Alignment.CenterVertically
+ 1703                                      ) {
+ 1704                                          Row(
+ 1705                                              modifier = Modifier
+ 1706                                                  .weight(1f)
+ 1707                                                  .height(40.dp)
+ 1708                                                  .clip(RoundedCornerShape(999.dp))
+ 1709                                                  .background(s.accentBg)
+ 1710                                                  .clickable {
+ 1711                                                      avatarPickerLauncher.launch(
+ 1712                                                          PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+ 1713                                                      )
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1760-1829
+ 1760                                              Icon(
+ 1761                                                  imageVector = Icons.Default.DeleteOutline,
+ 1762                                                  contentDescription = null,
+ 1763                                                  tint = Color(0xFFF87171),
+ 1764                                                  modifier = Modifier.size(15.dp)
+ 1765                                              )
+ 1766                                              Spacer(modifier = Modifier.width(6.dp))
+ 1767                                              Text(
+ 1768                                                  text = "Remover foto",
+ 1769                                                  fontSize = 12.sp,
+ 1770                                                  fontWeight = FontWeight.SemiBold,
+ 1771                                                  color = Color(0xFFF87171),
+ 1772                                                  maxLines = 1,
+ 1773                                                  softWrap = false,
+ 1774                                                  overflow = TextOverflow.Ellipsis
+ 1775                                              )
+ 1776                                          }
+ 1777                                      }
+ 1778                                  } else {
+ 1779                                      Row(
+ 1780                                          modifier = Modifier
+ 1781                                              .height(40.dp)
+ 1782                                              .clip(RoundedCornerShape(999.dp))
+ 1783                                              .background(s.accentBg)
+ 1784                                              .clickable {
+ 1785                                                  avatarPickerLauncher.launch(
+ 1786                                                      PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+ 1787                                                  )
+ 1788                                              }
+ 1789                                              .padding(horizontal = 20.dp),
+ 1790                                          verticalAlignment = Alignment.CenterVertically,
+ 1791                                          horizontalArrangement = Arrangement.spacedBy(8.dp)
+ 1792                                      ) {
+ 1793                                          Icon(
+ 1794                                              imageVector = Icons.Default.CameraAlt,
+ 1795                                              contentDescription = null,
+ 1796                                              tint = s.accentText,
+ 1797                                              modifier = Modifier.size(15.dp)
+ 1798                                          )
+ 1799                                          Text(
+ 1800                                              text = "Escolher foto do aparelho",
+ 1801                                              fontSize = 12.5.sp,
+ 1802                                              fontWeight = FontWeight.SemiBold,
+ 1803                                              color = s.accentText,
+ 1804                                              maxLines = 1,
+ 1805                                              softWrap = false
+ 1806                                          )
+ 1807                                      }
+ 1808                                  }
+ 1809  
+ 1810                                  if (profile.avatarUrl.isBlank()) {
+ 1811                                      HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+ 1812  
+ 1813                                      Text(
+ 1814                                          text = "Acabamento do emblema quando sem foto",
+ 1815                                          fontSize = 11.sp,
+ 1816                                          fontWeight = FontWeight.SemiBold,
+ 1817                                          color = s.textSecondary
+ 1818                                      )
+ 1819  
+ 1820                                      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+ 1821                                          AppleAvatarPreset.entries.forEach { preset ->
+ 1822                                              val active = profile.avatarPreset == preset.id
+ 1823                                              val startC = if (preset == AppleAvatarPreset.THEME) themeColors.accent else preset.startColor
+ 1824                                              val endC = if (preset == AppleAvatarPreset.THEME) themeColors.accentSecondary else preset.endColor
+ 1825                                              val avgLum = (
+ 1826                                                  (0.2126f * startC.red + 0.7152f * startC.green + 0.0722f * startC.blue) +
+ 1827                                                      (0.2126f * endC.red + 0.7152f * endC.green + 0.0722f * endC.blue)
+ 1828                                                  ) * 0.5f
+ 1829                                              val checkTint = if (avgLum > 0.55f) Color(0xFF0A0A0E) else Color.White
