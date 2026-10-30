@@ -1554,29 +1554,7 @@ internal fun CatalogReadingProgressSection(
         }
 
         // Indicador visual desenhado inteiramente na fase de draw com leitura diferida de estado
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .drawWithCache {
-                    val cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
-                    onDrawBehind {
-                        drawRoundRect(
-                            color = trackColor,
-                            size = size,
-                            cornerRadius = cornerRadius
-                        )
-                        val fraction = (currentPageProvider().toFloat() / safeTotal.toFloat()).coerceIn(0f, 1f)
-                        if (fraction > 0f) {
-                            drawRoundRect(
-                                color = accentColor,
-                                size = Size(width = size.width * fraction, height = size.height),
-                                cornerRadius = cornerRadius
-                            )
-                        }
-                    }
-                }
-        )
+        // SINGLE_PAGE_PROGRESS_CONTROL_V9: keep only the interactive page slider.
 
         AppleSlider(
             value = currentPage.toFloat(),

@@ -1,4 +1,3 @@
-RESTORED: exact shared gesture detector from before the global drag patch
+SKIP: original shared gesture detector already restored
 Settings logo preserved. Global exclusive-drag override disabled.
-Device verification pending: hold and drag the bottom tab indicator; release to select; tap tabs.
-Button-only scroll locking is deferred until isolated from tab bar gesture handlers.
+Device verification pending for tab-bar hold/drag behavior.

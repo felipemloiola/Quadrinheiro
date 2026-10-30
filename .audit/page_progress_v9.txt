@@ -1,0 +1,26 @@
+REMOVED: standalone duplicate progress bar; interactive slider preserved
+Device verification pending: only one page slider; minus/plus and saving still work.
+Removed source:
+Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .drawWithCache {
+                    val cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                    onDrawBehind {
+                        drawRoundRect(
+                            color = trackColor,
+                            size = size,
+                            cornerRadius = cornerRadius
+                        )
+                        val fraction = (currentPageProvider().toFloat() / safeTotal.toFloat()).coerceIn(0f, 1f)
+                        if (fraction > 0f) {
+                            drawRoundRect(
+                                color = accentColor,
+                                size = Size(width = size.width * fraction, height = size.height),
+                                cornerRadius = cornerRadius
+                            )
+                        }
+                    }
+                }
+        )
