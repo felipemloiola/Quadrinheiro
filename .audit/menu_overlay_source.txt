@@ -1,0 +1,635 @@
+fun LiquidGlassMenuOverlayHost(
+    state: LiquidGlassMenuHostState,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier
+) {
+    val activeRequest = state.currentRequest
+    var displayedRequest by remember { mutableStateOf<LiquidGlassMenuRequest?>(null) }
+
+    // Molas separadas para largura e altura criam a oscilação anisotrópica ("efeito gelatinoso")
+    val widthAnim = remember { Animatable(0f) }
+    val heightAnim = remember { Animatable(0f) }
+
+    // Deformação elástica ao arrastar o dedo pelo menu
+    val dragXAnim = remember { Animatable(0f) }
+    val dragYAnim = remember { Animatable(0f) }
+    var hoveredIndex by remember { mutableStateOf<Int?>(null) }
+    val hoverPillIndexAnim = remember { Animatable(0f) }
+    val hoverPillAlphaAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(activeRequest) {
+        if (activeRequest != null) {
+            val isNewMenu = displayedRequest?.id != activeRequest.id
+            displayedRequest = activeRequest
+            state.morphingMenuId = activeRequest.id
+            hoveredIndex = null
+            hoverPillAlphaAnim.snapTo(0f)
+            dragXAnim.snapTo(0f)
+            dragYAnim.snapTo(0f)
+            if (isNewMenu && widthAnim.value < 0.08f && heightAnim.value < 0.08f) {
+                // Inicia já em 0.08f para eliminar frames mortos no início do clique
+                widthAnim.snapTo(0.08f)
+                heightAnim.snapTo(0.06f)
+                state.activeMenuProgress = 0.07f
+            }
+            launch {
+                widthAnim.animateTo(
+                    targetValue = 1f,
+                    initialVelocity = 2.2f,
+                    animationSpec = spring(
+                        dampingRatio = 0.58f,
+                        stiffness = 860f,
+                        visibilityThreshold = 0.002f
+                    )
+                )
+            }
+            launch {
+                heightAnim.animateTo(
+                    targetValue = 1f,
+                    initialVelocity = 1.6f,
+                    animationSpec = spring(
+                        dampingRatio = 0.62f,
+                        stiffness = 700f,
+                        visibilityThreshold = 0.002f
+                    )
+                )
+            }
+        } else if (displayedRequest != null) {
+            hoveredIndex = null
+            launch { hoverPillAlphaAnim.animateTo(0f, tween(90)) }
+            launch { dragXAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 600f)) }
+            launch { dragYAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 600f)) }
+            // Fechamento suave, rápido e sem rebote negativo para nunca piscar o botão de origem
+            val wJob = launch {
+                widthAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = 0.94f,
+                        stiffness = 820f,
+                        visibilityThreshold = 0.008f
+                    )
+                )
+            }
+            val hJob = launch {
+                heightAnim.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = 0.92f,
+                        stiffness = 760f,
+                        visibilityThreshold = 0.008f
+                    )
+                )
+            }
+            wJob.join()
+            hJob.join()
+            if (state.currentRequest == null) {
+                state.activeMenuProgress = 0f
+                state.morphingMenuId = null
+                displayedRequest = null
+            }
+        }
+    }
+
+    val req = activeRequest ?: displayedRequest
+    if (req == null) {
+        state.activeMenuProgress = 0f
+        return
+    }
+
+    val wp = widthAnim.value.coerceAtLeast(0f)
+    val hp = heightAnim.value.coerceAtLeast(0f)
+    val morphProgress = ((wp + hp) * 0.5f).coerceIn(0f, 1f)
+    state.activeMenuProgress = morphProgress
+
+    if (morphProgress <= 0.006f && activeRequest == null) {
+        state.activeMenuProgress = 0f
+        state.morphingMenuId = null
+        return
+    }
+
+    androidx.activity.compose.BackHandler(enabled = activeRequest != null) {
+        state.dismissMenu()
+    }
+
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+    val isLight = s.isLight
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val density = LocalDensity.current
+    val animationScope = rememberCoroutineScope()
+
+    var hostRootOffset by remember { mutableStateOf(Offset.Zero) }
+    val targetMenuWidthDp = 244.dp
+    val rowHeightDp = 46.dp
+    val verticalPadDp = 7.dp
+    val estimatedHeightDp = rowHeightDp * req.items.size.coerceAtLeast(1) + verticalPadDp * 2
+
+    val interactiveHighlight = remember(animationScope) {
+        InteractiveHighlight(animationScope = animationScope)
+    }
+
+    // Receita óptica autêntica do vídeo (baixo desfoque para ver o fundo deformando na lente + alta refração)
+    val effectiveBlurDp = if (settings.reduceTransparency) {
+        22.dp
+    } else {
+        (5.5f * settings.glassBlurIntensity).coerceIn(3f, 14f).dp
+    }
+    val refractionMult = if (!settings.reduceTransparency && settings.enableLensRefraction) {
+        settings.glassIntensity.coerceIn(0.75f, 2.4f)
+    } else {
+        0f
+    }
+    val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
+    val glassAlpha = if (settings.reduceTransparency) {
+        if (isLight) 0.84f else 0.86f
+    } else {
+        ((if (isLight) 0.24f else 0.28f) * settings.glassOpacity).coerceIn(0.12f, 0.58f)
+    }
+    val glassSurfaceColor = if (isLight) {
+        Color.White.copy(alpha = glassAlpha)
+    } else {
+        Color(0xFF16161D).copy(alpha = glassAlpha)
+    }
+    val activeAccent = if (isLight && s.accentColor == Color.White) s.textPrimary else s.accentColor
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .zIndex(50f)
+            .onGloballyPositioned { coords ->
+                if (coords.isAttached) {
+                    hostRootOffset = coords.positionInRoot()
+                }
+            }
+    ) {
+        val windowW = constraints.maxWidth
+        val windowH = constraints.maxHeight
+        val minEdgeMargin = with(density) { 14.dp.roundToPx() }
+        val bottomNavReserve = with(density) { 92.dp.roundToPx() }
+
+        val anchorLeft = req.anchorBounds.left - hostRootOffset.x.roundToInt()
+        val anchorRight = req.anchorBounds.right - hostRootOffset.x.roundToInt()
+        val anchorTop = req.anchorBounds.top - hostRootOffset.y.roundToInt()
+        val anchorBottom = req.anchorBounds.bottom - hostRootOffset.y.roundToInt()
+        val anchorCenterX = (anchorLeft + anchorRight) / 2
+
+        val startW = (anchorRight - anchorLeft).coerceAtLeast(with(density) { 48.dp.roundToPx() })
+        val startH = (anchorBottom - anchorTop).coerceAtLeast(with(density) { 32.dp.roundToPx() })
+        val endW = with(density) { targetMenuWidthDp.roundToPx() }
+        val endH = with(density) { estimatedHeightDp.roundToPx() }
+
+        val alignRight = anchorCenterX > windowW / 2
+        val rawEndX = if (alignRight) {
+            anchorRight - endW
+        } else {
+            anchorLeft
+        }
+        val maxX = (windowW - endW - minEdgeMargin).coerceAtLeast(minEdgeMargin)
+        val endX = rawEndX.coerceIn(minEdgeMargin, maxX)
+
+        val spaceBelow = windowH - anchorTop - bottomNavReserve
+        val spaceAbove = anchorBottom - minEdgeMargin
+        val openDownwards = spaceBelow >= endH || spaceBelow >= spaceAbove
+
+        // Tamanho real da gota de vidro líquido a cada frame (incluindo o overshoot gelatinoso > 1f na abertura!)
+        val currentW = lerp(startW.toFloat(), endW.toFloat(), wp)
+            .roundToInt()
+            .coerceAtLeast(startW.coerceAtMost(with(density) { 36.dp.roundToPx() }))
+        val currentH = lerp(startH.toFloat(), endH.toFloat(), hp)
+            .roundToInt()
+            .coerceAtLeast(startH.coerceAtMost(with(density) { 28.dp.roundToPx() }))
+
+        val currentX = if (alignRight) {
+            val rightEdge = lerp(anchorRight.toFloat(), (endX + endW).toFloat(), wp.coerceIn(0f, 1f)).roundToInt()
+            rightEdge - currentW
+        } else {
+            lerp(anchorLeft.toFloat(), endX.toFloat(), wp.coerceIn(0f, 1f)).roundToInt()
+        }
+
+        val currentY = if (openDownwards) {
+            anchorTop
+        } else {
+            anchorBottom - currentH
+        }
+
+        val startRadiusDp = with(density) { (startH / 2f).toDp() }
+        val endRadiusDp = 26.dp
+        val currentRadiusDp = androidx.compose.ui.unit.lerp(
+            startRadiusDp,
+            endRadiusDp,
+            min(wp, hp).coerceIn(0f, 1f)
+        )
+
+        val pivotX = if (alignRight) 1f else 0f
+        val pivotY = if (openDownwards) 0f else 1f
+
+        // Scrim 100% transparente para fechar ao tocar fora mantendo o fundo nítido para refração
+        if (activeRequest != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(req.id) {
+                        detectTapGestures(
+                            onPress = {
+                                state.dismissMenu()
+                            }
+                        )
+                    }
+            )
+        }
+
+        val currentWidthDp = with(density) { currentW.toDp() }
+        val currentHeightDp = with(density) { currentH.toDp() }
+        val verticalPadPx = with(density) { verticalPadDp.toPx() }
+        val rowHeightPx = with(density) { rowHeightDp.toPx() }
+
+        // Cross-fade suave nos últimos 28% do fechamento para fundir perfeitamente com o botão real sem piscar
+        val dropletOverallAlpha = if (activeRequest != null) {
+            (morphProgress * 4.5f).coerceIn(0f, 1f)
+        } else {
+            (morphProgress / 0.28f).coerceIn(0f, 1f)
+        }
+
+        // Gota / Menu de Liquid Glass Real (drawBackdrop sobre mainContentBackdrop)
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(currentX, currentY) }
+                .size(width = currentWidthDp, height = currentHeightDp)
+                .graphicsLayer {
+                    alpha = dropletOverallAlpha
+                }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { ContinuousRoundedRectangle(currentRadiusDp) },
+                    highlight = {
+                        Highlight.Default.copy(
+                            alpha = (if (isLight) 0.90f else 0.76f) * dropletOverallAlpha
+                        )
+                    },
+                    shadow = {
+                        Shadow(
+                            radius = androidx.compose.ui.unit.lerp(8.dp, 28.dp, morphProgress),
+                            offset = DpOffset(0.dp, androidx.compose.ui.unit.lerp(3.dp, 12.dp, morphProgress)),
+                            color = Color.Black.copy(
+                                alpha = lerp(
+                                    if (isLight) 0.10f else 0.24f,
+                                    if (isLight) 0.18f else 0.44f,
+                                    morphProgress
+                                ) * dropletOverallAlpha
+                            )
+                        )
+                    },
+                    innerShadow = {
+                        InnerShadow(
+                            radius = androidx.compose.ui.unit.lerp(4.dp, 8.dp, morphProgress),
+                            alpha = lerp(
+                                if (isLight) 0.16f else 0.28f,
+                                if (isLight) 0.24f else 0.40f,
+                                morphProgress
+                            ) * dropletOverallAlpha
+                        )
+                    },
+                    effects = {
+                        if (!settings.reduceTransparency) {
+                            vibrancy()
+                        }
+                        val blurPx = effectiveBlurDp.toPx()
+                        if (blurPx >= 1f && !blurPx.isNaN()) {
+                            blur(blurPx)
+                        }
+                        if (refractionMult > 0f && size.isSpecified && size.width > 4f && size.height > 4f) {
+                            val jellyEnergy = (
+                                abs(wp - 1f) +
+                                    abs(hp - 1f) +
+                                    interactiveHighlight.pressProgress * 0.45f +
+                                    (abs(dragXAnim.value) + abs(dragYAnim.value)) / 220f
+                                ).coerceIn(0f, 1.2f)
+                            val dynamicBoost = 1f + 0.35f * jellyEnergy
+                            val maxAllowedHeight = min(size.width, size.height) * 0.46f
+                            val rHeight = ((26f * refractionMult).dp.toPx()).coerceAtMost(maxAllowedHeight)
+                            val rAmount = (54f * refractionMult * dynamicBoost).dp.toPx()
+                            if (rHeight >= 1f && rAmount >= 1f) {
+                                lens(
+                                    refractionHeight = rHeight,
+                                    refractionAmount = rAmount,
+                                    depthEffect = true,
+                                    chromaticAberration = chromaticAberration
+                                )
+                            }
+                        }
+                    },
+                    layerBlock = {
+                        if (size.isSpecified && size.width > 0f && size.height > 0f) {
+                            val width = size.width
+                            val height = size.height
+                            val pPress = interactiveHighlight.pressProgress
+                            val baseScale = lerp(1f, 1f + 6f.dp.toPx() / height.coerceAtLeast(1f), pPress)
+
+                            val maxOffset = size.minDimension.coerceAtLeast(1f)
+                            val initialDerivative = 0.075f
+                            val ox = dragXAnim.value
+                            val oy = dragYAnim.value
+                            translationX = maxOffset * tanh(initialDerivative * ox / maxOffset)
+                            translationY = maxOffset * tanh(initialDerivative * oy / maxOffset)
+
+                            val maxDragScale = 18f.dp.toPx() / height.coerceAtLeast(1f)
+                            val offsetAngle = atan2(oy, ox)
+                            val stretchX = maxDragScale * abs(cos(offsetAngle) * ox / size.maxDimension.coerceAtLeast(1f)) *
+                                (width / height).fastCoerceAtMost(1f)
+                            val stretchY = maxDragScale * abs(sin(offsetAngle) * oy / size.maxDimension.coerceAtLeast(1f)) *
+                                (height / width).fastCoerceAtMost(1f)
+
+                            // Deformação gelatinosa com conservação de volume (esticar em Y achata levemente X e vice-versa)
+                            scaleX = (baseScale + stretchX - stretchY * 0.32f).coerceIn(0.78f, 1.32f)
+                            scaleY = (baseScale + stretchY - stretchX * 0.32f).coerceIn(0.78f, 1.32f)
+                        }
+                    },
+                    onDrawSurface = {
+                        drawRect(glassSurfaceColor)
+                    }
+                )
+                .then(interactiveHighlight.modifier)
+                .then(interactiveHighlight.gestureModifier)
+                .pointerInput(req.id, req.items.size) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startPos = down.position
+                        val itemsCount = req.items.size.coerceAtLeast(1)
+                        val currentMenuH = size.height.toFloat().coerceAtLeast(1f)
+                        val effectiveRowH = ((currentMenuH - verticalPadPx * 2f).coerceAtLeast(1f)) / itemsCount
+
+                        val initialIdx = ((startPos.y - verticalPadPx) / effectiveRowH)
+                            .toInt()
+                            .coerceIn(0, itemsCount - 1)
+                        hoveredIndex = initialIdx
+                        animationScope.launch {
+                            if (hoverPillAlphaAnim.value < 0.1f) {
+                                hoverPillIndexAnim.snapTo(initialIdx.toFloat())
+                            } else {
+                                hoverPillIndexAnim.animateTo(
+                                    initialIdx.toFloat(),
+                                    spring(dampingRatio = 0.65f, stiffness = 560f)
+                                )
+                            }
+                            hoverPillAlphaAnim.animateTo(1f, tween(70))
+                        }
+
+                        var pointerUp = false
+                        while (!pointerUp) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                            if (change == null || !change.pressed) {
+                                pointerUp = true
+                            } else {
+                                val pos = change.position
+                                val delta = pos - startPos
+                                animationScope.launch {
+                                    dragXAnim.snapTo(delta.x)
+                                    dragYAnim.snapTo(delta.y)
+                                }
+                                val marginX = 56.dp.toPx()
+                                val marginY = 42.dp.toPx()
+                                val insideMenu = pos.x in -marginX..(size.width + marginX) &&
+                                    pos.y in -marginY..(size.height + marginY)
+                                if (insideMenu) {
+                                    val newIdx = ((pos.y - verticalPadPx) / effectiveRowH)
+                                        .toInt()
+                                        .coerceIn(0, itemsCount - 1)
+                                    if (hoveredIndex != newIdx) {
+                                        hoveredIndex = newIdx
+                                        animationScope.launch {
+                                            hoverPillIndexAnim.animateTo(
+                                                newIdx.toFloat(),
+                                                spring(dampingRatio = 0.62f, stiffness = 520f)
+                                            )
+                                            hoverPillAlphaAnim.animateTo(1f, tween(65))
+                                        }
+                                    }
+                                } else if (hoveredIndex != null) {
+                                    hoveredIndex = null
+                                    animationScope.launch {
+                                        hoverPillAlphaAnim.animateTo(0f, tween(100))
+                                    }
+                                }
+                                change.consume()
+                            }
+                        }
+
+                        val selectedIdx = hoveredIndex
+                        hoveredIndex = null
+                        animationScope.launch {
+                            hoverPillAlphaAnim.animateTo(0f, tween(120))
+                        }
+                        animationScope.launch {
+                            dragXAnim.animateTo(
+                                0f,
+                                spring(dampingRatio = 0.45f, stiffness = 420f)
+                            )
+                        }
+                        animationScope.launch {
+                            dragYAnim.animateTo(
+                                0f,
+                                spring(dampingRatio = 0.48f, stiffness = 380f)
+                            )
+                        }
+
+                        if (selectedIdx != null && selectedIdx in req.items.indices) {
+                            val chosen = req.items[selectedIdx]
+                            displayedRequest = LiquidGlassMenuRequest(
+                                id = req.id,
+                                anchorBounds = req.anchorBounds,
+                                triggerLabel = chosen.label,
+                                triggerIcon = req.triggerIcon,
+                                items = req.items,
+                                onDismiss = req.onDismiss
+                            )
+                            chosen.onClick()
+                            state.dismissMenu(req.id)
+                        }
+                    }
+                }
+                .clip(ContinuousRoundedRectangle(currentRadiusDp))
+        ) {
+            // 1. Conteúdo da pílula de origem ("Mais Recentes ⌄") dentro da gota durante o início da abertura e o fim do fechamento
+            val triggerContentAlpha = ((0.36f - morphProgress) / 0.36f).coerceIn(0f, 1f)
+            if (triggerContentAlpha > 0.01f && req.triggerLabel.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(if (alignRight) Alignment.TopEnd else Alignment.TopStart)
+                        .width(with(density) { startW.toDp() })
+                        .height(with(density) { startH.toDp() })
+                        .graphicsLayer {
+                            alpha = triggerContentAlpha
+                            val blurRadiusPx = (1f - triggerContentAlpha) * 6.dp.toPx()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadiusPx >= 0.8f) {
+                                renderEffect = AndroidRenderEffect.createBlurEffect(
+                                    blurRadiusPx,
+                                    blurRadiusPx,
+                                    Shader.TileMode.DECAL
+                                ).asComposeRenderEffect()
+                            }
+                        }
+                        .padding(horizontal = 13.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally)
+                ) {
+                    Text(
+                        text = req.triggerLabel,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = s.textPrimary,
+                        maxLines = 1
+                    )
+                    if (req.triggerIcon != null) {
+                        Icon(
+                            imageVector = req.triggerIcon,
+                            contentDescription = null,
+                            tint = s.textPrimary.copy(alpha = 0.85f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+
+            // 2. Itens do menu que escalam e focalizam rapidamente junto com a gota gelatinosa (igual a ios_027 e ios_057)
+            val menuContentAlpha = ((morphProgress - 0.04f) / 0.34f).coerceIn(0f, 1f)
+            if (menuContentAlpha > 0.01f) {
+                Box(
+                    modifier = Modifier
+                        .requiredSize(width = targetMenuWidthDp, height = estimatedHeightDp)
+                        .align(
+                            when {
+                                alignRight && openDownwards -> Alignment.TopEnd
+                                alignRight && !openDownwards -> Alignment.BottomEnd
+                                !alignRight && openDownwards -> Alignment.TopStart
+                                else -> Alignment.BottomStart
+                            }
+                        )
+                        .graphicsLayer {
+                            transformOrigin = TransformOrigin(pivotX, pivotY)
+                            scaleX = (currentW.toFloat() / endW.toFloat().coerceAtLeast(1f)).coerceIn(0.25f, 1.35f)
+                            scaleY = (currentH.toFloat() / endH.toFloat().coerceAtLeast(1f)).coerceIn(0.25f, 1.35f)
+                            alpha = menuContentAlpha
+                            val focusProgress = (morphProgress / 0.65f).coerceIn(0f, 1f)
+                            val contentBlurPx = (1f - focusProgress) * 7.dp.toPx()
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && contentBlurPx >= 0.8f) {
+                                renderEffect = AndroidRenderEffect.createBlurEffect(
+                                    contentBlurPx,
+                                    contentBlurPx,
+                                    Shader.TileMode.DECAL
+                                ).asComposeRenderEffect()
+                            }
+                        }
+                        .padding(vertical = verticalPadDp)
+                ) {
+                    // Pílula deslizante de hover/arrasto (idêntica a ios_038..ios_052 no vídeo)
+                    if (hoverPillAlphaAnim.value > 0.01f) {
+                        val pillOffsetY = with(density) { (hoverPillIndexAnim.value * rowHeightPx).toDp() }
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 7.dp)
+                                .offset(y = pillOffsetY)
+                                .fillMaxWidth()
+                                .height(rowHeightDp)
+                                .graphicsLayer {
+                                    alpha = hoverPillAlphaAnim.value
+                                }
+                                .clip(ContinuousRoundedRectangle(16.dp))
+                                .background(
+                                    if (isLight) Color.Black.copy(alpha = 0.075f)
+                                    else Color.White.copy(alpha = 0.13f)
+                                )
+                        )
+                    }
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        req.items.forEachIndexed { index, item ->
+                            val isHovered = hoveredIndex == index
+                            val rowScale by animateFloatAsState(
+                                targetValue = if (isHovered) 1.02f else 1f,
+                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                label = "menuItemScale"
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(rowHeightDp)
+                                    .padding(horizontal = 7.dp)
+                                    .graphicsLayer {
+                                        scaleX = rowScale
+                                        scaleY = rowScale
+                                    }
+                                    .clip(ContinuousRoundedRectangle(16.dp))
+                                    .background(
+                                        if (item.selected && hoverPillAlphaAnim.value < 0.2f) {
+                                            activeAccent.copy(alpha = if (isLight) 0.09f else 0.15f)
+                                        } else {
+                                            Color.Transparent
+                                        }
+                                    )
+                                    .padding(horizontal = 13.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.width(18.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (item.selected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = activeAccent,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = item.label,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (item.selected) activeAccent else s.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (item.icon != null) {
+                                        Icon(
+                                            imageVector = item.icon,
+                                            contentDescription = null,
+                                            tint = if (item.selected) activeAccent else s.textSecondary,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                    }
+                                }
+
+                                if (index < req.items.lastIndex) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 6.dp)
+                                            .height(0.5.dp)
+                                            .background(
+                                                if (isLight) Color.Black.copy(alpha = 0.08f)
+                                                else Color.White.copy(alpha = 0.11f)
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 5.4 AppleMenuPicker (Pop-up Menu Picker com efeito gelatinoso iOS 26 Liquid Glass real sobre o conteúdo da tela).
+ */

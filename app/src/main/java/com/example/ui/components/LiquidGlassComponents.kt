@@ -2713,11 +2713,7 @@ fun <T> AppleMenuPicker(
                     shape = { ContinuousCapsule },
                     highlight = {
                         Highlight.Default.copy(
-                            alpha = lerp(
-                                if (isLight) 0.80f else 0.64f,
-                                0.96f,
-                                pickerPressProgress
-                            ) * triggerMorphAlpha
+                            alpha = (if (isLight) 0.80f else 0.64f) * triggerMorphAlpha
                         )
                     },
                     shadow = {
@@ -2794,24 +2790,7 @@ fun <T> AppleMenuPicker(
                         }
                     }
                 }
-                .drawWithContent {
-                    drawContent()
-                    val light = pickerPressProgress.coerceIn(0f, 1f)
-                    if (light > 0.001f) {
-                        val origin = Offset(
-                            pickerLightOrigin.x.coerceIn(0f, size.width),
-                            pickerLightOrigin.y.coerceIn(0f, size.height)
-                        )
-                        drawRoundRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.24f * light), Color.Transparent),
-                                center = origin,
-                                radius = size.maxDimension.coerceAtLeast(1f) * 0.75f
-                            ),
-                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
-                        )
-                    }
-                }
+                // PICKER_STABLE_PRESS_COLOR_V10: retain the resting surface color while held.
                 .clip(ContinuousCapsule)
                 .clickable(
                     interactionSource = pickerInteractions,
