@@ -1,0 +1,114 @@
+name: Build signed APK and publish update
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/scripts/configure_android_release.py'
+      - '.github/workflows/release-apk.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signed-apk-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Require permanent signing secrets
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$KEY_B64" && test -n "$KEY_PASSWORD" || { echo '::error::Cadastre ANDROID_KEYSTORE_BASE64 e ANDROID_KEYSTORE_PASSWORD nos Repository Secrets antes de gerar o primeiro APK.'; exit 1; }
+          umask 077
+          printf '%s' "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/quadrinheiro-release.p12"
+          keytool -exportcert -keystore "$RUNNER_TEMP/quadrinheiro-release.p12" -storetype PKCS12 -alias upload -storepass:env KEY_PASSWORD > "$RUNNER_TEMP/release-cert.der"
+          actual=$(sha256sum "$RUNNER_TEMP/release-cert.der" | cut -d' ' -f1)
+          expected=$(tr -d '\r\n ' < docs/release-signing-sha256.txt)
+          test "$actual" = "$expected" || { echo '::error::A chave não corresponde ao certificado permanente do aplicativo.'; exit 1; }
+      - name: Optional Firebase client configuration
+        env:
+          GOOGLE_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_JSON" ]; then printf '%s' "$GOOGLE_JSON" | base64 --decode > app/google-services.json; fi
+      - name: Integrate updater and release version inputs
+        run: python3 .github/scripts/configure_android_release.py
+      - name: Version
+        run: |
+          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Test and assemble signed release
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/quadrinheiro-release.p12
+          KEYSTORE_TYPE: PKCS12
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: gradle :app:testReleaseUnitTest :app:assembleRelease -PreleaseVersionCode="$VERSION_CODE" -PreleaseVersionName="$VERSION_NAME" --no-daemon --console=plain
+      - name: Verify APK and create update manifest
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/quadrinheiro.apk
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          "$signer" verify --verbose --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-verification.txt"
+          cat "$RUNNER_TEMP/apk-verification.txt"
+          actual=$(grep 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/apk-verification.txt" | awk '{print $NF}')
+          expected=$(tr -d '\r\n ' < docs/release-signing-sha256.txt)
+          test "$actual" = "$expected"
+          python3 - <<'PY'
+          import os, json, hashlib
+          from pathlib import Path
+          apk = Path('dist/quadrinheiro.apk')
+          metadata = {
+              'applicationId': 'com.aistudio.quadrinheiro.lqglas',
+              'versionCode': int(os.environ['VERSION_CODE']),
+              'versionName': os.environ['VERSION_NAME'],
+              'minSdk': 24,
+              'certificateSha256': Path('docs/release-signing-sha256.txt').read_text().strip(),
+              'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
+              'apkUrl': 'https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/releases/download/' + os.environ['RELEASE_TAG'] + '/quadrinheiro.apk',
+              'sourceCommit': os.environ['GITHUB_SHA']
+          }
+          Path('dist/update.json').write_text(json.dumps(metadata, indent=2) + '\n')
+          Path('dist/SHA256SUMS.txt').write_text(metadata['sha256'] + '  quadrinheiro.apk\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Quadrinheiro-${{ env.VERSION_NAME }}
+          path: dist/
+          if-no-files-found: error
+      - name: Publish immutable public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then echo '::error::Esta versão já foi publicada. Não sobrescrever APKs de uma versão existente.'; exit 1; fi
+          if gh release view --json tagName --jq .tagName > "$RUNNER_TEMP/latest-tag.txt" 2>/dev/null; then
+            latest=$(cat "$RUNNER_TEMP/latest-tag.txt")
+            if [[ "$latest" =~ ^v1\.0\.([0-9]+)$ ]]; then test "$GITHUB_RUN_NUMBER" -gt "${BASH_REMATCH[1]}" || { echo '::error::Não publicar versão anterior à atual.'; exit 1; }; fi
+          fi
+          gh release create "$RELEASE_TAG" dist/quadrinheiro.apk dist/update.json dist/SHA256SUMS.txt --target "$GITHUB_SHA" --title "Quadrinheiro $VERSION_NAME" --generate-notes
+      - name: Delete temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/quadrinheiro-release.p12" "$RUNNER_TEMP/release-cert.der" app/google-services.json
