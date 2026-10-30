@@ -1,0 +1,482 @@
+=== SettingsScreen.kt:317
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = profile.name.ifBlank { "Leitor" },
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = themeColors.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(themeColors.accent.copy(alpha = 0.09f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = profile.handle.ifBlank { "@leitor" },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = themeColors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        Text(
+                            text = profile.bio.ifBlank { "Meta: $readComicsCount/${profile.yearlyGoal} no ano" },
+                            fontSize = 12.sp,
+                            color = themeColors.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Conta, sincronização na nuvem e perfil",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = themeColors.accent
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = themeColors.textTertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+=== SettingsScreen.kt:1618
+                                                }
+                                                Text(
+                                                    text = if (ep.ok) "Online (${ep.ms} ms)" else "Limite de cota / Fallback ativo",
+                                                    fontSize = 12.sp,
+                                                    fontFamily = SpaceGroteskTabularFamily,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = s.textSecondary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // SUB-TELA 7: MEU PERFIL
+                "profile" -> {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                            Column {
+                                Text(
+                                    text = "Identidade do colecionador e metas",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = s.textSecondary
+                                )
+                                Text(
+                                    text = "Meu Perfil",
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = s.textPrimary
+                                )
+                            }
+
+                            // Cartão de Foto de Perfil + Seletor de Avatares Apple
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .contentMaterialSurface(RoundedCornerShape(24.dp))
+                                    .padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box {
+                                    UserAvatar(profile = profile, sizeDp = 88)
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+=== SettingsScreen.kt:1676
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CameraAlt,
+                                            contentDescription = "Enviar foto do aparelho",
+                                            tint = s.textPrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
+
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = profile.name.ifBlank { "Leitor" },
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = s.textPrimary
+                                    )
+                                    Text(
+                                        text = "${profile.handle.ifBlank { "@leitor" }} • ${profile.favoriteUniverse.ifBlank { "Colecionador" }}",
+                                        fontSize = 12.sp,
+                                        color = s.textSecondary
+                                    )
+                                }
+
+                                if (profile.avatarUrl.isNotBlank()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(s.accentBg)
+                                                .clickable {
+                                                    avatarPickerLauncher.launch(
+                                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                    )
+                                                }
+                                                .padding(horizontal = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CameraAlt,
+                                                contentDescription = null,
+                                                tint = s.accentText,
+                                                modifier = Modifier.size(15.dp)
+=== SettingsScreen.kt:1873
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .contentMaterialSurface(RoundedCornerShape(24.dp))
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Nome de exibição", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.name,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(name = v) } },
+                                            placeholder = "Seu nome",
+                                            leadingIcon = Icons.Default.Person
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Identificador (@usuario)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.handle,
+                                            onChange = { v ->
+                                                val formatted = if (v.startsWith("@")) v else "@${v.trimStart('@')}"
+                                                viewModel.updateProfile { it.copy(handle = formatted) }
+                                            },
+                                            placeholder = "@seu_usuario"
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Biografia / Frase do leitor", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.bio,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(bio = v) } },
+                                            placeholder = "Ex: Fã de Vertigo, mangás seinen e edições definitivas"
+                                        )
+                                    }
+
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Editora ou universo favorito", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
+                                            Text("Destacado no cabeçalho do seu perfil", fontSize = 12.sp, color = s.textSecondary)
+                                        }
+                                        AppleMenuPicker(
+                                            value = profile.favoriteUniverse,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(favoriteUniverse = v) } },
+                                            options = listOf(
+=== SettingsScreen.kt:1876
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Nome de exibição", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.name,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(name = v) } },
+                                            placeholder = "Seu nome",
+                                            leadingIcon = Icons.Default.Person
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Identificador (@usuario)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.handle,
+                                            onChange = { v ->
+                                                val formatted = if (v.startsWith("@")) v else "@${v.trimStart('@')}"
+                                                viewModel.updateProfile { it.copy(handle = formatted) }
+                                            },
+                                            placeholder = "@seu_usuario"
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Biografia / Frase do leitor", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textSecondary)
+                                        AppleTextField(
+                                            value = profile.bio,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(bio = v) } },
+                                            placeholder = "Ex: Fã de Vertigo, mangás seinen e edições definitivas"
+                                        )
+                                    }
+
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Editora ou universo favorito", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
+                                            Text("Destacado no cabeçalho do seu perfil", fontSize = 12.sp, color = s.textSecondary)
+                                        }
+                                        AppleMenuPicker(
+                                            value = profile.favoriteUniverse,
+                                            onChange = { v -> viewModel.updateProfile { it.copy(favoriteUniverse = v) } },
+                                            options = listOf(
+                                                SegmentOption("DC / Vertigo", "DC / Vertigo"),
+                                                SegmentOption("Marvel Comics", "Marvel Comics"),
+                                                SegmentOption("Mangá & Seinen", "Mangá & Seinen"),
+=== SettingsScreen.kt:2177
+        // - Ao rolar a tela: desaparece suavemente enquanto o usuário rola e reaparece quando a rolagem para.
+        // - Fora do topo: a escrita recolhe com animação suave, mantendo apenas o ícone em uma bolinha Liquid Glass.
+        if (settingsSubPage != null) {
+            val isAtTop by remember {
+                derivedStateOf {
+                    listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 28
+                }
+            }
+            val isScrolling = listState.isScrollInProgress
+
+            val previousPageLabel = remember(settingsParentPage) {
+                when (settingsParentPage) {
+                    "appearance" -> "Aparência"
+                    "liquidGlass" -> "Liquid Glass"
+                    "accessibility" -> "Acessibilidade"
+                    "libraryConfig" -> "Biblioteca"
+                    "diaryConfig" -> "Diário"
+                    "searchConfig" -> "Catálogo"
+                    "profile" -> "Meu Perfil"
+                    "backupConfig" -> "Backup"
+                    else -> "Ajustes"
+                }
+            }
+
+            val backBtnAlpha by animateFloatAsState(
+                targetValue = if (isScrolling) 0f else 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.86f,
+                    stiffness = if (isScrolling) 420f else 260f
+                ),
+                label = "iosBackBtnAlpha"
+            )
+            val backBtnScale by animateFloatAsState(
+                targetValue = if (isScrolling) 0.86f else 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.82f,
+                    stiffness = 320f
+                ),
+                label = "iosBackBtnScale"
+            )
+            val startPadDp by animateDpAsState(
+                targetValue = if (isAtTop) 10.dp else 10.dp,
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 320f),
+                label = "iosBackBtnStartPad"
+            )
+            val endPadDp by animateDpAsState(
+                targetValue = if (isAtTop) 15.dp else 10.dp,
+                animationSpec = spring(dampingRatio = 0.85f, stiffness = 320f),
+                label = "iosBackBtnEndPad"
+            )
+=== QuadrinheiroViewModel.kt:655
+     * e faz o merge imediato com a conta autenticada (sem perder nenhum dado local).
+     */
+    private fun applyAuthenticatedSessionAndMergeLocalData(
+        userProfile: UserProfile,
+        wasGuestBefore: Boolean
+    ) {
+        val startedFromSettingsModal = _showAuthModalFromSettings.value
+        val nowMs = System.currentTimeMillis()
+        storage.saveAuthSession(userProfile)
+        _currentUserProfile.value = userProfile
+        _authUiState.value = AuthUiState.Authenticated
+        _showAuthModalFromSettings.value = false
+        _authFeedback.value = null
+
+        if (!startedFromSettingsModal) {
+            resetToReadingHome()
+            startSessionEntryTransition()
+        }
+
+        // Atualiza o ReaderProfile com o nome/foto da conta se ainda estiver com o nome padrão
+        val currentProf = _profile.value
+        val shouldUpdateName = currentProf.name.isBlank() ||
+            currentProf.name == "Felipe" ||
+            currentProf.name.equals("Leitor Convidado", ignoreCase = true) ||
+            currentProf.name.equals("Leitor", ignoreCase = true)
+        val mergedReaderProfile = currentProf.copy(
+            name = if (shouldUpdateName && userProfile.displayName.isNotBlank()) userProfile.displayName else currentProf.name,
+            handle = if (currentProf.handle == "@felipe_hqs" || currentProf.handle.isBlank()) {
+                val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
+                    .lowercase()
+                    .replace(Regex("[^a-z0-9_]"), "")
+                    .take(18)
+                if (baseHandle.isNotBlank()) "@$baseHandle" else currentProf.handle
+            } else currentProf.handle,
+            avatarUrl = if (currentProf.avatarUrl.isBlank() && !userProfile.photoUrl.isNullOrBlank()) {
+                userProfile.photoUrl
+            } else currentProf.avatarUrl,
+            updatedAt = nowMs,
+            isDirty = true
+        )
+        _profile.value = mergedReaderProfile
+
+        // Se o usuário veio do Modo Convidado ou tinha obras locais, marca todas como isDirty = true
+        // para garantir que 100% do acervo local suba no merge com o Firestore
+        if (wasGuestBefore || _comics.value.isNotEmpty()) {
+            val dirtyMarkedComics = _comics.value.map { comic ->
+                comic.copy(
+                    updatedAt = maxOf(comic.updatedAt, nowMs),
+                    isDirty = true
+                )
+            }
+            _comics.value = dirtyMarkedComics
+        }
+        persistAll()
+
+        if (userProfile.provider == "google") {
+            val cloudAuthUser = CloudAuthUser(
+                uid = userProfile.uid,
+                displayName = userProfile.displayName,
+                email = userProfile.email,
+                photoUrl = userProfile.photoUrl
+            )
+            _cloudUser.value = cloudAuthUser
+            startOrStopCloudListeners(cloudAuthUser)
+            syncNowWithCloud()
+        }
+    }
+
+    fun loginWithEmail(email: String, pass: String) {
+        if (_isAuthLoading.value) return
+        val wasGuest = _authUiState.value == AuthUiState.Guest || storage.isGuestMode()
+        viewModelScope.launch {
+            _isAuthLoading.value = true
+            _authFeedback.value = null
+            val result = authManager.signInWithEmail(email, pass)
+            _isAuthLoading.value = false
+            result.onSuccess { userProfile ->
+                applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
+                showNotice(
+                    if (wasGuest) "Bem-vindo, ${userProfile.displayName}! Acervo local vinculado à sua conta."
+                    else "Bem-vindo de volta, ${userProfile.displayName}!"
+                )
+            }.onFailure { err ->
+                _authFeedback.value = (err.message ?: "Não foi possível entrar com E-mail e Senha.") to true
+            }
+        }
+    }
+=== QuadrinheiroViewModel.kt:1027
+    }
+
+    fun updateProfile(transform: (ReaderProfile) -> ReaderProfile) {
+        val nowMs = System.currentTimeMillis()
+        val next = transform(_profile.value).copy(
+            updatedAt = nowMs,
+            isDirty = true
+        )
+        _profile.value = next
+        persistAll()
+        val uid = _cloudUser.value?.uid
+        val repo = cloudRepo
+        if (uid != null && repo != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { repo.saveUserProfile(uid, next) }.onSuccess {
+                    markProfileCleanInMemoryAndStorage(nowMs)
+                }.onFailure {
+                    QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
+                }
+            }
+        } else {
+            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
+        }
+    }
+
+    fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        _appSettings.value = transform(_appSettings.value)
+        persistAll()
+    }
+
+    fun setShelfSection(section: String) {
+        if (section != _shelfSection.value && section == "diary") {
+            scrollMemory["tab:shelf:diary"] = 0 to 0
+        }
+        _shelfSection.value = section
+        savedStateHandle["shelfSection"] = section
+    }
+
+    fun setShelfStatus(status: String) {
+        _shelfStatus.value = status
+        savedStateHandle["shelfStatus"] = status
+    }
+
+    fun setShelfGenre(genre: String) {
+        _shelfGenre.value = genre
+        savedStateHandle["shelfGenre"] = genre
+    }
+
+    fun toggleShelfLayout() {
+        val next = when (_shelfLayout.value) {
+            "grid" -> "list"
+            "list" -> "sequences"
+            else -> "grid"
+        }
+        _shelfLayout.value = next
+        savedStateHandle["shelfLayout"] = next
+    }
+
+    fun setShelfLayout(layout: String) {
+        _shelfLayout.value = layout
+        savedStateHandle["shelfLayout"] = layout
+    }
+
+    fun setShelfSort(sort: String) {
+        _shelfSort.value = sort
+    }
+
+    fun setShelfFilterQuery(q: String) {
+        _shelfFilterQuery.value = q
+    }
+
+    fun setSearchSourceFilter(f: String) {
+        _searchSourceFilter.value = f
+    }
+
+    fun setSearchQuery(q: String) {
+        _searchQuery.value = q
+        savedStateHandle["searchQuery"] = q
+        val isQuickPill = CuratedCatalog.quickSearchSuggestions.any { it.equals(q.trim(), ignoreCase = true) }
+        triggerOnlineSearchIfNeeded(immediate = isQuickPill || q.isBlank())
+    }
+
+    fun triggerImmediateSearch() {
+        triggerOnlineSearchIfNeeded(immediate = true)
+    }
+
+    private fun triggerOnlineSearchIfNeeded(immediate: Boolean = false) {

@@ -1,5 +1,7 @@
 package com.example
 
+import com.example.ui.components.dismissFocusOnBackgroundTap
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -214,7 +216,10 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            QuadrinheiroApp()
+            // APP_BACKGROUND_FOCUS_V5: settings and inline sheets inherit background tap dismissal.
+            Box(Modifier.fillMaxSize().dismissFocusOnBackgroundTap()) {
+                QuadrinheiroApp()
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.animateContentSize
+
 import androidx.compose.animation.core.tween
 
 import androidx.compose.animation.core.spring
@@ -123,12 +125,14 @@ fun AuthCredentialsFieldsSection(
     val focus = LocalFocusManager.current
     val registering = form.mode != AuthMode.LOGIN
     val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        AnimatedVisibility(
-            visible = registering,
-            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
-            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
-        ) {
+    // AUTH_UNIFIED_HEIGHT_V5: a single size animation, not two competing field springs.
+    Column(
+        modifier = Modifier.fillMaxWidth().animateContentSize(
+            animationSpec = tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (registering) {
             OutlinedTextField(
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -188,11 +192,7 @@ fun AuthCredentialsFieldsSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (registering) ImeAction.Next else ImeAction.Done),
             keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }, onDone = { onSubmit() })
         )
-        AnimatedVisibility(
-            visible = registering,
-            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
-            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
-        ) {
+        if (registering) {
             OutlinedTextField(
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
