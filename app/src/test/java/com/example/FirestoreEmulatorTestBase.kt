@@ -11,7 +11,6 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.MemoryCacheSettings
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -31,42 +30,47 @@ abstract class FirestoreEmulatorTestBase {
     lateinit var auth: FirebaseAuth
     lateinit var context: Context
     lateinit var databaseId: String
-    private var isolatedApp: FirebaseApp? = null
 
     @Before
     open fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        // Match firebase.ci.json explicitly; never create an implicit open-rules database.
         databaseId = "(default)"
+
+        synchronized(FirestoreEmulatorTestBase::class.java) {
+            val existing = FirebaseApp.getApps(context).firstOrNull { it.name == TEST_APP_NAME }
+            val app = existing ?: FirebaseApp.initializeApp(
+                context,
+                FirebaseOptions.Builder()
+                    .setProjectId(PROJECT_ID)
+                    .setApiKey("fake-api-key-for-emulator")
+                    .setApplicationId("1:1234567890:android:abcdef")
+                    .build(),
+                TEST_APP_NAME
+            )
+            check(app.options.projectId == PROJECT_ID) { "Rule tests must use only the demo Firebase project" }
+            db = FirebaseFirestore.getInstance(app, databaseId)
+            auth = FirebaseAuth.getInstance(app)
+            if (existing == null) {
+                // Configure SDK clients once, before their first operation.
+                db.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
+                db.firestoreSettings = FirebaseFirestoreSettings.Builder()
+                    .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+                    .build()
+                auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
+            }
+        }
+
+        // Reset test state, not FirebaseApp: Auth internals can retain app references.
+        auth.signOut()
         resetEmulator("http://$EMULATOR_HOST:$FIRESTORE_PORT/emulator/v1/projects/$PROJECT_ID/databases/$databaseId/documents")
         resetEmulator("http://$EMULATOR_HOST:$AUTH_PORT/emulator/v1/projects/$PROJECT_ID/accounts")
-
-        // Never reuse the production/default FirebaseApp, even when google-services.json exists.
-        val app = FirebaseApp.initializeApp(
-            context,
-            FirebaseOptions.Builder()
-                .setProjectId(PROJECT_ID)
-                .setApiKey("fake-api-key-for-emulator")
-                .setApplicationId("1:1234567890:android:abcdef")
-                .build(),
-            "rules-test-${UUID.randomUUID()}"
-        )
-        isolatedApp = app
-        db = FirebaseFirestore.getInstance(app, databaseId)
-        db.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-        db.firestoreSettings = FirebaseFirestoreSettings.Builder()
-            .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-            .build()
-        auth = FirebaseAuth.getInstance(app)
-        auth.useEmulator(EMULATOR_HOST, AUTH_PORT)
     }
 
     @After
     open fun tearDown() {
         if (::auth.isInitialized) auth.signOut()
-        if (::db.isInitialized) db.terminate()
-        isolatedApp?.delete()
-        isolatedApp = null
+        // Do not delete FirebaseApp or terminate the shared Firestore client here.
+        // Emulator data is reset before each test; the JVM owns SDK lifetime.
     }
 
     protected suspend fun signInTestUser(
@@ -99,6 +103,7 @@ abstract class FirestoreEmulatorTestBase {
     }
 
     companion object {
+        private const val TEST_APP_NAME = "quadrinheiro-rules-emulator-tests"
         const val EMULATOR_HOST = "127.0.0.1"
         const val FIRESTORE_PORT = 8085
         const val AUTH_PORT = 9099
