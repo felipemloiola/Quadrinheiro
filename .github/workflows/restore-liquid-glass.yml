@@ -1,0 +1,49 @@
+name: Restore original LiquidGlassComponents
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-liquid-glass.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: restore-liquid-glass
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Restore exact original file with overwrite protection
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt'
+          source='beb025309581603bad3eb756277f263090080b93'
+          original='2404cd43e9bbe6caa4b0a5685f455932b4d315f7'
+          damaged='e4d37e14da978fe91134d3135e8f280e4427fe20'
+          current=$(git rev-parse "HEAD:$file")
+          if [ "$current" = "$original" ]; then
+            echo 'Original file already restored.'
+            exit 0
+          fi
+          if [ "$current" != "$damaged" ]; then
+            echo 'File changed since inspection; refusing to overwrite.'
+            exit 1
+          fi
+          test "$(git rev-parse "$source:$file")" = "$original"
+          git show "$source:$file" > "$file"
+          test "$(git hash-object "$file")" = "$original"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$file"
+          git commit -m 'fix: restore complete original LiquidGlassComponents after accidental replacement'
+          git push origin HEAD:main
