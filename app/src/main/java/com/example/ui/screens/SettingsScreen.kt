@@ -499,6 +499,8 @@ fun SettingsTabScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     QuadrinheiroLogo(
+                        // SETTINGS_LOGO_ADAPTIVE_V8
+                        adaptiveBadgeBackground = true,
                         modifier = Modifier
                             .size(42.dp)
                             .clip(com.kyant.shapes.ContinuousRoundedRectangle(12.dp))

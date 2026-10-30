@@ -36,7 +36,8 @@ import com.example.ui.theme.PlusJakartaSansFamily
 enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
 
 @Composable
-private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier) {
+// ADAPTIVE_LOGO_BADGE_V8: opt-in for Settings only.
+private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier, adaptiveBackground: Boolean = false) {
     val theme = LocalIOS27Theme.current
     val original = variant == QuadrinheiroLogoVariant.Primary
     val accent = theme.accent
@@ -62,7 +63,12 @@ private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier) {
     }
     val sized = if (modifier == Modifier) Modifier.size(64.dp) else modifier
     val framed = if (variant == QuadrinheiroLogoVariant.Badge) {
-        sized.background(theme.bgPrimary, RoundedCornerShape(12.dp))
+        sized.background(
+            if (adaptiveBackground && theme.isDark) {
+                androidx.compose.ui.graphics.lerp(theme.bgPrimary, theme.textPrimary, 0.08f)
+            } else theme.bgPrimary,
+            RoundedCornerShape(12.dp)
+        )
     } else sized
     Box(framed, contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize(0.78f)) {
@@ -81,10 +87,11 @@ fun QuadrinheiroLogo(
     modifier: Modifier = Modifier,
     titleVisible: Boolean = false,
     subtitle: String? = null,
-    leadingIcon: ImageVector? = null
+    leadingIcon: ImageVector? = null,
+    adaptiveBadgeBackground: Boolean = false
 ) {
     if (!titleVisible && subtitle.isNullOrBlank() && leadingIcon == null) {
-        LogoMark(variant, modifier)
+        LogoMark(variant, modifier, adaptiveBadgeBackground)
         return
     }
     val theme = LocalIOS27Theme.current

@@ -1,0 +1,4 @@
+OK app/src/main/java/com/example/ui/components/QuadrinheiroLogo.kt
+OK app/src/main/java/com/example/ui/screens/SettingsScreen.kt
+OK app/src/main/java/com/kyant/backdrop/catalog/utils/DragGestureInspector.kt
+Manual verification required: stationary tap opens menu; held diagonal drag moves only control; release/cancel restores animation; Settings logo in light/dark themes.
