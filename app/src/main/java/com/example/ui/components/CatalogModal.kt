@@ -261,7 +261,8 @@ fun CatalogSheetModal(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .layerBackdrop(sheetBackdrop)
+                    // SINGLE_PASS_SHEET_BACKDROP_V16: only this background capture, not controls.
+                    .layerBackdrop(sheetBackdrop, reuseRecordedContent = true)
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,

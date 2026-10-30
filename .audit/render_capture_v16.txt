@@ -1,0 +1,5 @@
+OK app/src/main/java/com/kyant/backdrop/backdrops/LayerBackdrop.kt
+OK app/src/main/java/com/kyant/backdrop/backdrops/LayerBackdropModifier.kt
+OK app/src/main/java/com/example/MainActivity.kt
+OK app/src/main/java/com/example/ui/components/CatalogModal.kt
+Single-pass rendering is opt-in and restricted to three default-content sources. Custom callbacks, shaders, blur values, offscreen blending, touch handlers, animations and collection data are not removed. Emulator pixel/touch tests and unit tests must pass before commit. No S23 frame-rate measurement is claimed.

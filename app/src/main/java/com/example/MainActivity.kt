@@ -413,6 +413,7 @@ fun QuadrinheiroApp(
         val s = mat.scheme
         val themeColors = LocalIOS27Theme.current
         val isDark = !s.isLight
+        // SINGLE_PASS_APP_BACKDROPS_V16: retain all rendering recipes; reuse recorded content.
         val backgroundBackdrop = rememberLayerBackdrop()
         val mainContentBackdrop = rememberLayerBackdrop()
 
@@ -546,7 +547,7 @@ fun QuadrinheiroApp(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .layerBackdrop(mainContentBackdrop)
+                        .layerBackdrop(mainContentBackdrop, reuseRecordedContent = true)
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
                     // Usa a PRÓPRIA IMAGEM DA CAPA da HQ em leitura com desfoque atmosférico e efeitos (igual ao iOS / Apple Books)
@@ -559,7 +560,7 @@ fun QuadrinheiroApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .layerBackdrop(backgroundBackdrop)
+                            .layerBackdrop(backgroundBackdrop, reuseRecordedContent = true)
                             .background(themeColors.bgPrimary)
                     ) {
                         // A. Gradiente escultural base do tema + luz ambiente suave
