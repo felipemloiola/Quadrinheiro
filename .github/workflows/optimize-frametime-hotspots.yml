@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: frametime-hotspots-validation
@@ -43,11 +44,22 @@ jobs:
         run: |
           firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:testDebugUnitTest :app:compileDebugKotlin --no-daemon --console=plain"
       - name: Commit validated changes
+        id: commit
         run: |
           git fetch origin main
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/src/main/java/com/example/ui/components/AmbientImageProcessor.kt app/src/main/java/com/example/ui/screens/MainTabsScreens.kt .audit/frametime_hotspots_v17.txt
-          if git diff --cached --quiet; then exit 0; fi
+          if git diff --cached --quiet; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git commit -m 'perf: reduce ambient color extraction thread hops and cache list item metadata'
+          git pull --rebase origin main
           git push origin HEAD:main
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+      - name: Trigger release APK build after successful patch
+        if: steps.commit.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-apk.yml --ref main
