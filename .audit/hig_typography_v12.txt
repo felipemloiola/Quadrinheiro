@@ -1,0 +1,3 @@
+OK native sans-serif family and 15 text styles
+OK single user text scale; native weights; no synthetic text shadow
+Android native sans-serif, not SF Pro. Explicit per-screen sizes are preserved. Compilation, tests, font-scale layouts and device visual checks remain to be verified.

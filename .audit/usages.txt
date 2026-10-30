@@ -16,7 +16,7 @@
                 // Modal de Autenticação (quando aberto a partir da tela de Ajustes no Modo Convidado para vincular conta)
                 AnimatedVisibility(
                     visible = showAuthModalFromSettings,
-=== app/src/main/java/com/example/ui/components/CatalogModal.kt:1371
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:1376
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically

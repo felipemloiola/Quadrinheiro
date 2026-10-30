@@ -2,88 +2,47 @@ package com.example.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.R
 
-val PlusJakartaSansFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans, FontWeight.Normal)
-)
+// APP_HIG_TEXT_STYLES_V12: Android adaptation, not Apple's proprietary SF font.
+val AppSansFamily = FontFamily.SansSerif
 
-val SpaceGroteskTabularFamily = FontFamily(
-    Font(R.font.space_grotesk, FontWeight.Normal)
-)
+// Compatibility aliases for existing screens; both now resolve to the same native family.
+val PlusJakartaSansFamily = AppSansFamily
+val SpaceGroteskTabularFamily = AppSansFamily
 
 fun buildQuadrinheiroTypography(scaleFactor: Float, forceBold: Boolean): Typography {
+    val scale = if (scaleFactor.isFinite()) scaleFactor.coerceIn(0.5f, 3f) else 1f
     fun weight(base: FontWeight): FontWeight = if (forceBold) {
-        when {
-            base.weight <= 400 -> FontWeight.Bold
-            base.weight <= 500 -> FontWeight.ExtraBold
-            else -> FontWeight.Black
-        }
+        if (base.weight < FontWeight.SemiBold.weight) FontWeight.SemiBold else FontWeight.Bold
     } else base
-
+    fun style(size: Float, leading: Float, base: FontWeight = FontWeight.Normal) = TextStyle(
+        fontFamily = AppSansFamily,
+        fontWeight = weight(base),
+        fontSynthesis = FontSynthesis.None,
+        fontSize = (size * scale).sp,
+        lineHeight = (leading * scale).sp,
+        letterSpacing = 0.sp
+    )
+    // Apple HIG hierarchy adapted to Android sp; not a pixel-identical iOS rendering.
     return Typography(
-        displayLarge = TextStyle(
-            fontFamily = SpaceGroteskTabularFamily,
-            fontWeight = weight(FontWeight.Bold),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (34f * scaleFactor).sp,
-            lineHeight = (40f * scaleFactor).sp,
-            letterSpacing = (-0.5).sp
-        ),
-        headlineMedium = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.Bold),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (24f * scaleFactor).sp,
-            lineHeight = (30f * scaleFactor).sp,
-            letterSpacing = (-0.3).sp
-        ),
-        titleLarge = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.Bold),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (19f * scaleFactor).sp,
-            lineHeight = (25f * scaleFactor).sp
-        ),
-        titleMedium = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.SemiBold),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (16f * scaleFactor).sp,
-            lineHeight = (22f * scaleFactor).sp
-        ),
-        bodyLarge = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.Normal),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (15f * scaleFactor).sp,
-            lineHeight = (22f * scaleFactor).sp
-        ),
-        bodyMedium = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.Normal),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (13.5f * scaleFactor).sp,
-            lineHeight = (19f * scaleFactor).sp
-        ),
-        labelLarge = TextStyle(
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = weight(FontWeight.SemiBold),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (13f * scaleFactor).sp,
-            lineHeight = (18f * scaleFactor).sp
-        ),
-        labelSmall = TextStyle(
-            fontFamily = SpaceGroteskTabularFamily,
-            fontWeight = weight(FontWeight.Medium),
-            fontSynthesis = FontSynthesis.All,
-            fontSize = (11f * scaleFactor).sp,
-            lineHeight = (15f * scaleFactor).sp
-        )
+        displayLarge = style(34f, 41f, FontWeight.Bold),
+        displayMedium = style(28f, 34f),
+        displaySmall = style(22f, 28f),
+        headlineLarge = style(28f, 34f),
+        headlineMedium = style(22f, 28f),
+        headlineSmall = style(20f, 25f),
+        titleLarge = style(20f, 25f, FontWeight.SemiBold),
+        titleMedium = style(17f, 22f, FontWeight.SemiBold),
+        titleSmall = style(15f, 20f, FontWeight.SemiBold),
+        bodyLarge = style(17f, 22f),
+        bodyMedium = style(15f, 20f),
+        bodySmall = style(13f, 18f),
+        labelLarge = style(16f, 21f, FontWeight.Medium),
+        labelMedium = style(12f, 16f, FontWeight.Medium),
+        labelSmall = style(11f, 13f, FontWeight.Medium)
     )
 }

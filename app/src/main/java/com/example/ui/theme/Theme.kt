@@ -551,9 +551,10 @@ fun QuadrinheiroTheme(
         }
     }
 
+    // APP_HIG_THEME_SCALE_V12: LocalDensity applies the user scale exactly once.
     val typography = remember(dynamicScale, settings.boldText) {
         buildQuadrinheiroTypography(
-            scaleFactor = dynamicScale,
+            scaleFactor = 1f,
             forceBold = settings.boldText
         )
     }
@@ -574,7 +575,7 @@ fun QuadrinheiroTheme(
     val customFontResolver = remember(settings.boldText, baseConfig) {
         val cfg = Configuration(baseConfig)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            cfg.fontWeightAdjustment = if (settings.boldText) 300 else 0
+            cfg.fontWeightAdjustment = if (settings.boldText) 300 else baseConfig.fontWeightAdjustment
         }
         createFontFamilyResolver(context.createConfigurationContext(cfg))
     }
@@ -582,7 +583,7 @@ fun QuadrinheiroTheme(
     val customDensity = remember(baseDensity, dynamicScale, settings.boldText) {
         Density(
             density = baseDensity.density,
-            fontScale = baseDensity.fontScale * dynamicScale * (if (settings.boldText) 1.03f else 1f)
+            fontScale = baseDensity.fontScale * dynamicScale
         )
     }
 
@@ -600,18 +601,12 @@ fun QuadrinheiroTheme(
             typography = typography
         ) {
             ProvideTextStyle(
-                value = LocalTextStyle.current.copy(
-                    fontFamily = PlusJakartaSansFamily,
-                    fontWeight = if (settings.boldText) FontWeight.Bold else FontWeight.Normal,
-                    fontSynthesis = FontSynthesis.All,
-                    letterSpacing = if (settings.boldText) 0.2.sp else LocalTextStyle.current.letterSpacing,
-                    shadow = if (settings.boldText) {
-                        androidx.compose.ui.graphics.Shadow(
-                            color = scheme.textPrimary.copy(alpha = 0.70f),
-                            offset = androidx.compose.ui.geometry.Offset(0.95f, 0.15f),
-                            blurRadius = 0.1f
-                        )
-                    } else null
+                value = typography.bodyLarge.copy(
+                    fontFamily = AppSansFamily,
+                    fontWeight = if (settings.boldText) FontWeight.SemiBold else FontWeight.Normal,
+                    fontSynthesis = FontSynthesis.None,
+                    letterSpacing = 0.sp,
+                    shadow = null
                 ),
                 content = content
             )
