@@ -1701,38 +1701,7 @@ fun SettingsTabScreen(
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(40.dp)
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(s.accentBg)
-                                                .clickable {
-                                                    avatarPickerLauncher.launch(
-                                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                                    )
-                                                }
-                                                .padding(horizontal = 14.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CameraAlt,
-                                                contentDescription = null,
-                                                tint = s.accentText,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Trocar foto",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = s.accentText,
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
+                                        // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
 
                                         Row(
                                             modifier = Modifier
@@ -1776,35 +1745,7 @@ fun SettingsTabScreen(
                                         }
                                     }
                                 } else {
-                                    Row(
-                                        modifier = Modifier
-                                            .height(40.dp)
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .background(s.accentBg)
-                                            .clickable {
-                                                avatarPickerLauncher.launch(
-                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                                )
-                                            }
-                                            .padding(horizontal = 20.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CameraAlt,
-                                            contentDescription = null,
-                                            tint = s.accentText,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                        Text(
-                                            text = "Escolher foto do aparelho",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = s.accentText,
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
+                                    // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
                                 }
 
                                 if (profile.avatarUrl.isBlank()) {

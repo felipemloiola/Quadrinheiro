@@ -523,7 +523,12 @@ fun CatalogSheetModal(
                                 currentPageProvider = { draftComic.currentPage },
                                 pageCount = draftComic.pageCount,
                                 accentColor = s.accentColor,
-                                onChangePage = { v -> draftComic = draftComic.copy(currentPage = v) }
+                                onChangePage = { v ->
+                                    // MOMENT_PAGE_ONE_WAY_V11: progress updates the note page, never the reverse.
+                                    val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
+                                    draftComic = draftComic.copy(currentPage = nextPage)
+                                    momentPageInput = nextPage.toString()
+                                }
                             )
                         }
 
