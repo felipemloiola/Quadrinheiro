@@ -1,6 +1,6 @@
 # Quadrinheiro
 
-![Quadrinheiro Logo](https://github.com/felipemloiola/Quadrinheiro/raw/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)
+![Quadrinheiro Logo](https://github.com/felipemloiola/Quadrinheiro/raw/main/branding/quadrinheiro-logo.svg)
 
 > A neo-comic Liquid Glass library and reading diary for comics, graphic novels and manga.
 
