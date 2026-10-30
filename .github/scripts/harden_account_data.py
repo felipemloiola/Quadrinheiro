@@ -171,7 +171,7 @@ class AccountPersistenceRegressionTest {
             photoUrl = null, isGuest = false, provider = "email"))
     }
 
-    private fun comic(title: String) = ComicEntry(id = "shared-id", title = title,
+    private fun comic(title: String) = ComicEntry(id = "shared-id", externalId = "shared-external-id", title = title,
         authors = "Author", publisher = "Publisher", updatedAt = 100L, isDirty = true)
 
     @Test
