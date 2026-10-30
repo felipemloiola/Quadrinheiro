@@ -35,6 +35,7 @@ jobs:
           python3 .github/scripts/audit_more.py
           python3 .github/scripts/audit_more2.py
           if [ -f .github/scripts/apply_patches_3.py ]; then python3 .github/scripts/apply_patches_3.py; fi
+          python3 .github/scripts/polish_glass_controls.py
       - name: Resolve Gradle version
         id: gv
         run: |
