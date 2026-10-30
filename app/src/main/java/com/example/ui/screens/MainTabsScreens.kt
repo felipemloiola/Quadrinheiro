@@ -561,7 +561,7 @@ private fun ComicGridCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .shadow(6.dp, RoundedCornerShape(cardCorner))
+                .shadow(2.dp, RoundedCornerShape(cardCorner))
                 .clip(RoundedCornerShape(cardCorner))
         ) {
             BookCover(

@@ -3,14 +3,8 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -58,8 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.geometry.Offset
@@ -69,8 +61,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -93,11 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import com.example.R
-import com.example.data.CuratedCatalog
 import com.example.model.AuthFeedbackBanner
 import com.example.model.AuthFeedbackType
 import com.example.model.AuthFormState
@@ -119,30 +105,23 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.shapes.Capsule
 import com.kyant.shapes.ContinuousCapsule
 import com.kyant.shapes.ContinuousRoundedRectangle
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Tokens visuais centralizados da AuthScreen alinhados ao sistema Liquid Glass do Quadrinheiro.
  */
 object AuthGlassDesignTokens {
-    val CardCornerRadius: Dp = 28.dp
-    val CardElevation: Dp = 16.dp
-    val EmblemCornerRadius: Dp = 24.dp
-    val EmblemElevation: Dp = 14.dp
-    val InputCornerRadius: Dp = 16.dp
-    val BannerCornerRadius: Dp = 16.dp
-    val GuestCardCornerRadius: Dp = 20.dp
+    val CardCornerRadius: Dp = 24.dp
+    val CardElevation: Dp = 8.dp
+    val EmblemCornerRadius: Dp = 18.dp
+    val EmblemElevation: Dp = 4.dp
+    val InputCornerRadius: Dp = 14.dp
+    val BannerCornerRadius: Dp = 14.dp
+    val GuestCardCornerRadius: Dp = 16.dp
 
     val ErrorSemanticColor = Color(0xFFF43F5E)
     val SuccessSemanticColor = Color(0xFF10B981)
-    val OrbSecondaryBlue = Color(0xFF2563EB)
-    val OrbViolet = Color(0xFF8B5CF6)
-    val OrbCyan = Color(0xFF06B6D4)
 
-    fun coverSilhouetteAlpha(isLight: Boolean): Float = if (isLight) 0.16f else 0.22f
-    fun activeSegmentAlpha(isLight: Boolean): Float = if (isLight) 0.22f else 0.36f
-    fun orbIntensityMultiplier(isLight: Boolean): Float = if (isLight) 0.65f else 1f
+    fun activeSegmentAlpha(isLight: Boolean): Float = if (isLight) 0.18f else 0.28f
 }
 
 /**
@@ -184,24 +163,28 @@ fun Modifier.authEmblemGlassSurface(
         .background(
             brush = Brush.linearGradient(
                 colors = listOf(
-                    themeColors.accent.copy(alpha = 0.34f),
-                    themeColors.accentSecondary.copy(alpha = 0.24f)
+                    themeColors.accent.copy(alpha = 0.25f),
+                    themeColors.accentSecondary.copy(alpha = 0.16f)
                 )
             ),
             shape = shape
         )
         .border(
-            width = 1.1.dp,
+            width = 1.dp,
             brush = Brush.linearGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.45f),
-                    Color.White.copy(alpha = 0.10f)
+                    Color.White.copy(alpha = 0.35f),
+                    Color.White.copy(alpha = 0.08f)
                 )
             ),
             shape = shape
         )
 }
 
+/**
+ * Fundo atmosférico sutil e estático: gradiente suave com brilhos ambientais e vinheta.
+ * Elimina loops de animação contínuos na GPU para máxima fluidez e consistência visual.
+ */
 @Composable
 internal fun AuthBackdropLayer(
     backdrop: LayerBackdrop,
@@ -211,19 +194,27 @@ internal fun AuthBackdropLayer(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val themeColors = LocalIOS27Theme.current
-    val context = LocalContext.current
-
-    val showcaseCovers = remember {
-        CuratedCatalog.curatedComicsCatalog
-            .filter { it.coverUrl.isNotBlank() }
-            .take(3)
-    }
 
     val vignetteColors = remember(themeColors.bgPrimary, isLight) {
         listOf(
-            themeColors.bgPrimary.copy(alpha = if (isLight) 0.28f else 0.34f),
-            themeColors.bgPrimary.copy(alpha = if (isLight) 0.52f else 0.58f),
-            themeColors.bgPrimary.copy(alpha = if (isLight) 0.82f else 0.88f)
+            themeColors.bgPrimary.copy(alpha = if (isLight) 0.25f else 0.35f),
+            themeColors.bgPrimary.copy(alpha = if (isLight) 0.55f else 0.65f),
+            themeColors.bgPrimary.copy(alpha = if (isLight) 0.85f else 0.92f)
+        )
+    }
+
+    val primaryGlow = remember(themeColors.accent, isLight) {
+        listOf(
+            themeColors.accent.copy(alpha = if (isLight) 0.14f else 0.20f),
+            themeColors.accent.copy(alpha = 0.05f),
+            Color.Transparent
+        )
+    }
+    val secondaryGlow = remember(themeColors.accentSecondary, isLight) {
+        listOf(
+            themeColors.accentSecondary.copy(alpha = if (isLight) 0.12f else 0.16f),
+            themeColors.accentSecondary.copy(alpha = 0.04f),
+            Color.Transparent
         )
     }
 
@@ -233,80 +224,36 @@ internal fun AuthBackdropLayer(
             .layerBackdrop(backdrop)
             .background(themeColors.bgPrimary)
     ) {
-        if (!reduceTransparency && !themeColors.isAllBlack) {
-            val infiniteTransition = rememberInfiniteTransition(label = "authLiquidOrbs")
-            val orbPhaseState = infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = (2f * Math.PI).toFloat(),
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 16000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val maxDim = size.maxDimension
+
+            // 1. Gradiente linear base suave
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(s.gradLinearStart, s.gradLinearMid, s.gradLinearEnd),
+                    start = Offset.Zero,
+                    end = Offset(w, h)
                 ),
-                label = "orbPhase"
-            )
-            val pulseState = infiniteTransition.animateFloat(
-                initialValue = 0.88f,
-                targetValue = 1.14f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 5400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "orbPulse"
+                alpha = if (themeColors.isAllBlack) 0.08f else if (isLight) 0.65f else 0.45f
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 28.dp)
-                    .alpha(AuthGlassDesignTokens.coverSilhouetteAlpha(isLight))
-                    .blur(26.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                showcaseCovers.forEachIndexed { idx, comic ->
-                    val req = remember(comic.coverUrl, context) {
-                        ImageRequest.Builder(context)
-                            .data(comic.coverUrl)
-                            .size(120, 180)
-                            .allowHardware(true)
-                            .allowRgb565(true)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            .build()
-                    }
-                    AsyncImage(
-                        model = req,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(if (idx == 1) 0.78f else 0.64f)
-                            .clip(RoundedCornerShape(28.dp))
-                    )
-                }
-            }
-
-            // Leitura diferida (() -> Float): atualiza apenas a fase de Draw da GPU sem recompor a árvore
-            AuthAnimatedOrbsCanvas(
-                phaseProvider = { orbPhaseState.value },
-                pulseProvider = { pulseState.value },
-                primaryAccent = themeColors.accent,
-                secondaryAccent = themeColors.accentSecondary,
-                gradStart = s.gradLinearStart,
-                gradMid = s.gradLinearMid,
-                gradEnd = s.gradLinearEnd,
-                isLight = isLight
-            )
-        } else {
-            // Modo econômico / Reduzir Transparência / OLED All-Black: gradiente estático sem loop de GPU
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            // 2. Brilhos radiais estáticos ambientais
+            if (!reduceTransparency && !themeColors.isAllBlack) {
                 drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(s.gradLinearStart, s.gradLinearMid, s.gradLinearEnd),
-                        start = Offset.Zero,
-                        end = Offset(size.width, size.height)
-                    ),
-                    alpha = if (themeColors.isAllBlack) 0.1f else 0.85f
+                    brush = Brush.radialGradient(
+                        colors = primaryGlow,
+                        center = Offset(w * 0.25f, h * 0.22f),
+                        radius = maxDim * 0.55f
+                    )
+                )
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = secondaryGlow,
+                        center = Offset(w * 0.75f, h * 0.70f),
+                        radius = maxDim * 0.50f
+                    )
                 )
             }
         }
@@ -320,130 +267,38 @@ internal fun AuthBackdropLayer(
 }
 
 @Composable
-internal fun AuthAnimatedOrbsCanvas(
-    phaseProvider: () -> Float,
-    pulseProvider: () -> Float,
-    primaryAccent: Color,
-    secondaryAccent: Color,
-    gradStart: Color,
-    gradMid: Color,
-    gradEnd: Color,
-    isLight: Boolean
-) {
-    val alphaMult = AuthGlassDesignTokens.orbIntensityMultiplier(isLight)
-    val orb1Colors = remember(primaryAccent, alphaMult) {
-        listOf(
-            primaryAccent.copy(alpha = 0.32f * alphaMult),
-            AuthGlassDesignTokens.OrbSecondaryBlue.copy(alpha = 0.12f * alphaMult),
-            Color.Transparent
-        )
-    }
-    val orb2Colors = remember(secondaryAccent, alphaMult) {
-        listOf(
-            AuthGlassDesignTokens.OrbViolet.copy(alpha = 0.28f * alphaMult),
-            secondaryAccent.copy(alpha = 0.12f * alphaMult),
-            Color.Transparent
-        )
-    }
-    val orb3Colors = remember(alphaMult) {
-        listOf(
-            AuthGlassDesignTokens.OrbCyan.copy(alpha = 0.25f * alphaMult),
-            AuthGlassDesignTokens.SuccessSemanticColor.copy(alpha = 0.08f * alphaMult),
-            Color.Transparent
-        )
-    }
-    val baseGradColors = remember(gradStart, gradMid, gradEnd) {
-        listOf(gradStart, gradMid, gradEnd)
-    }
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        drawRect(
-            brush = Brush.linearGradient(
-                colors = baseGradColors,
-                start = Offset.Zero,
-                end = Offset(size.width, size.height)
-            ),
-            alpha = if (isLight) 0.75f else 0.55f
-        )
-
-        val phase = phaseProvider()
-        val pulse = pulseProvider()
-        val w = size.width
-        val h = size.height
-        val maxDim = size.maxDimension
-
-        val orb1Center = Offset(
-            x = w * (0.25f + 0.14f * cos(phase)),
-            y = h * (0.20f + 0.10f * sin(phase))
-        )
-        val orb2Center = Offset(
-            x = w * (0.78f + 0.12f * sin(phase * 0.85f)),
-            y = h * (0.48f + 0.12f * cos(phase * 0.85f))
-        )
-        val orb3Center = Offset(
-            x = w * (0.42f + 0.15f * cos(phase * 1.15f + 1.4f)),
-            y = h * (0.82f + 0.08f * sin(phase * 1.15f + 1.4f))
-        )
-
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = orb1Colors,
-                center = orb1Center,
-                radius = maxDim * 0.62f * pulse
-            )
-        )
-
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = orb2Colors,
-                center = orb2Center,
-                radius = maxDim * 0.58f * (2f - pulse * 0.85f)
-            )
-        )
-
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = orb3Colors,
-                center = orb3Center,
-                radius = maxDim * 0.55f * pulse
-            )
-        )
-    }
-}
-
-@Composable
 internal fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val themeColors = LocalIOS27Theme.current
     val emblemCd = stringResource(R.string.auth_cd_brand_emblem)
 
     Box(
         modifier = Modifier
-            .size(76.dp)
+            .size(50.dp)
             .authEmblemGlassSurface()
             .semantics { contentDescription = emblemCd },
         contentAlignment = Alignment.Center
     ) {
         QuadrinheiroLogo(
             modifier = Modifier
-                .size(46.dp)
-                .clip(ContinuousRoundedRectangle(14.dp))
+                .size(30.dp)
+                .clip(ContinuousRoundedRectangle(10.dp))
         )
     }
 
-    Spacer(modifier = Modifier.height(14.dp))
+    Spacer(modifier = Modifier.height(6.dp))
 
     Text(
         text = stringResource(R.string.app_name),
         fontFamily = SpaceGroteskTabularFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
-        letterSpacing = (-0.8).sp,
+        fontSize = 24.sp,
+        letterSpacing = (-0.5).sp,
         color = themeColors.textPrimary,
         textAlign = TextAlign.Center,
         modifier = Modifier.semantics { heading() }
     )
 
-    Spacer(modifier = Modifier.height(4.dp))
+    Spacer(modifier = Modifier.height(2.dp))
 
     Text(
         text = stringResource(
@@ -452,11 +307,13 @@ internal fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
         ),
         fontFamily = PlusJakartaSansFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 13.5.sp,
-        lineHeight = 19.sp,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
         color = themeColors.textSecondary,
         textAlign = TextAlign.Center,
-        modifier = Modifier.padding(horizontal = 12.dp)
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(horizontal = 8.dp)
     )
 }
 
@@ -472,9 +329,9 @@ internal fun AuthModeSegmentedToggle(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(40.dp)
             .inputWellSurface(shape = ContinuousCapsule)
-            .padding(4.dp)
+            .padding(3.dp)
     ) {
         val segmentWidth = maxWidth / 2
         val indicatorOffset by animateDpAsState(
@@ -491,7 +348,7 @@ internal fun AuthModeSegmentedToggle(
                 .offset(x = indicatorOffset)
                 .width(segmentWidth)
                 .fillMaxHeight()
-                .liquidGlassNavSurface(shape = ContinuousCapsule, elevation = 4.dp)
+                .liquidGlassNavSurface(shape = ContinuousCapsule, elevation = 3.dp)
                 .background(
                     color = themeColors.accent.copy(alpha = AuthGlassDesignTokens.activeSegmentAlpha(isLight)),
                     shape = ContinuousCapsule
@@ -528,7 +385,7 @@ internal fun AuthModeSegmentedToggle(
                     Text(
                         text = tabLabel,
                         fontFamily = PlusJakartaSansFamily,
-                        fontSize = 13.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                         color = textColor
                     )
@@ -613,85 +470,107 @@ internal fun AuthCredentialsFieldsSection(
     val themeColors = LocalIOS27Theme.current
     val focusManager = LocalFocusManager.current
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Campo Nome (visível apenas no modo REGISTER)
-        AnimatedVisibility(
-            visible = form.mode == AuthMode.REGISTER,
-            enter = fadeIn(tween(220)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(180)) + shrinkVertically(tween(180))
-        ) {
+    AnimatedContent(
+        targetState = form.mode,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(160)) togetherWith fadeOut(animationSpec = tween(120))
+        },
+        label = "authFormCrossfade"
+    ) { mode ->
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Campo Nome (apenas no modo REGISTER)
+            if (mode == AuthMode.REGISTER) {
+                AuthGlassTextField(
+                    value = form.name,
+                    onValueChange = onNameChange,
+                    placeholder = stringResource(R.string.auth_field_name_placeholder),
+                    leadingIcon = LucideIcons.Person,
+                    accentColor = themeColors.accent,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    ),
+                    testTag = "auth_name_input"
+                )
+            }
+
+            // Campo E-mail
             AuthGlassTextField(
-                value = form.name,
-                onValueChange = onNameChange,
-                label = stringResource(R.string.auth_field_name_label),
-                placeholder = stringResource(R.string.auth_field_name_placeholder),
-                leadingIcon = LucideIcons.Person,
+                value = form.email,
+                onValueChange = onEmailChange,
+                placeholder = stringResource(R.string.auth_field_email_placeholder),
+                leadingIcon = LucideIcons.Mail,
                 accentColor = themeColors.accent,
                 keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words,
-                    keyboardType = KeyboardType.Text,
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
                 ),
                 keyboardActions = KeyboardActions(
                     onNext = { focusManager.moveFocus(FocusDirection.Down) }
                 ),
-                testTag = "auth_name_input"
+                testTag = "auth_email_input"
             )
-        }
 
-        // Campo E-mail
-        AuthGlassTextField(
-            value = form.email,
-            onValueChange = onEmailChange,
-            label = stringResource(R.string.auth_field_email_label),
-            placeholder = stringResource(R.string.auth_field_email_placeholder),
-            leadingIcon = LucideIcons.Mail,
-            accentColor = themeColors.accent,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { focusManager.moveFocus(FocusDirection.Down) }
-            ),
-            testTag = "auth_email_input"
-        )
+            // Campo Senha
+            AuthGlassTextField(
+                value = form.password,
+                onValueChange = onPasswordChange,
+                placeholder = stringResource(R.string.auth_field_password_placeholder),
+                leadingIcon = LucideIcons.Lock,
+                accentColor = themeColors.accent,
+                isPassword = true,
+                passwordVisible = form.isPasswordVisible,
+                onTogglePasswordVisibility = onTogglePasswordVisible,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    keyboardType = KeyboardType.Password,
+                    imeAction = if (mode == AuthMode.REGISTER) ImeAction.Next else ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { onSubmit() }
+                ),
+                testTag = "auth_password_input"
+            )
 
-        // Campo Senha
-        AuthGlassTextField(
-            value = form.password,
-            onValueChange = onPasswordChange,
-            label = stringResource(R.string.auth_field_password_label),
-            placeholder = stringResource(R.string.auth_field_password_placeholder),
-            leadingIcon = LucideIcons.Lock,
-            accentColor = themeColors.accent,
-            isPassword = true,
-            passwordVisible = form.isPasswordVisible,
-            onTogglePasswordVisibility = onTogglePasswordVisible,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                keyboardType = KeyboardType.Password,
-                imeAction = if (form.mode == AuthMode.REGISTER) ImeAction.Next else ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { focusManager.moveFocus(FocusDirection.Down) },
-                onDone = { onSubmit() }
-            ),
-            testTag = "auth_password_input"
-        )
+            // Campo Confirmar Senha (apenas no modo REGISTER)
+            if (mode == AuthMode.REGISTER) {
+                val matchIndicator: (@Composable () -> Unit)? = if (form.confirmPassword.isNotEmpty()) {
+                    {
+                        val indicatorColor = if (form.passwordsMatch) {
+                            AuthGlassDesignTokens.SuccessSemanticColor
+                        } else {
+                            AuthGlassDesignTokens.ErrorSemanticColor
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(indicatorColor.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (form.passwordsMatch) Icons.Default.Check else Icons.Default.Close,
+                                contentDescription = if (form.passwordsMatch) {
+                                    stringResource(R.string.auth_passwords_match)
+                                } else {
+                                    stringResource(R.string.auth_passwords_mismatch)
+                                },
+                                tint = indicatorColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                } else null
 
-        // Campo Confirmar Senha (visível apenas no modo REGISTER)
-        AnimatedVisibility(
-            visible = form.mode == AuthMode.REGISTER,
-            enter = fadeIn(tween(220)) + expandVertically(tween(220)),
-            exit = fadeOut(tween(180)) + shrinkVertically(tween(180))
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AuthGlassTextField(
                     value = form.confirmPassword,
                     onValueChange = onConfirmPasswordChange,
-                    label = stringResource(R.string.auth_field_confirm_password_label),
                     placeholder = stringResource(R.string.auth_field_confirm_password_placeholder),
                     leadingIcon = LucideIcons.Lock,
                     accentColor = if (form.showPasswordMismatchWarning) {
@@ -702,6 +581,7 @@ internal fun AuthCredentialsFieldsSection(
                     isPassword = true,
                     passwordVisible = form.isConfirmPasswordVisible,
                     onTogglePasswordVisibility = onToggleConfirmPasswordVisible,
+                    trailingStatus = matchIndicator,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         keyboardType = KeyboardType.Password,
@@ -712,63 +592,30 @@ internal fun AuthCredentialsFieldsSection(
                     ),
                     testTag = "auth_confirm_password_input"
                 )
-
-                if (form.confirmPassword.isNotEmpty()) {
-                    val statusColor = if (form.passwordsMatch) {
-                        AuthGlassDesignTokens.SuccessSemanticColor
-                    } else {
-                        AuthGlassDesignTokens.ErrorSemanticColor
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .semantics { liveRegion = LiveRegionMode.Polite }
-                    ) {
-                        Icon(
-                            imageVector = if (form.passwordsMatch) Icons.Default.Check else Icons.Default.Close,
-                            contentDescription = null,
-                            tint = statusColor,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = stringResource(
-                                if (form.passwordsMatch) R.string.auth_passwords_match
-                                else R.string.auth_passwords_mismatch
-                            ),
-                            fontFamily = PlusJakartaSansFamily,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = statusColor
-                        )
-                    }
-                }
-            }
-        }
-
-        // Link "Esqueci minha senha" (com alvo de toque mínimo de 48dp para acessibilidade)
-        AnimatedVisibility(visible = form.mode == AuthMode.LOGIN) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Box(
+            } else {
+                // Link "Esqueci minha senha" compacto à direita no modo LOGIN
+                Row(
                     modifier = Modifier
-                        .defaultMinSize(minHeight = 48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable(role = Role.Button, onClick = onForgotPassword)
-                        .padding(horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(top = 1.dp),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text(
-                        text = stringResource(R.string.auth_forgot_password),
-                        fontFamily = PlusJakartaSansFamily,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = themeColors.accent,
-                        modifier = Modifier.testTag("auth_forgot_password_button")
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(role = Role.Button, onClick = onForgotPassword)
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.auth_forgot_password),
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = themeColors.accent,
+                            modifier = Modifier.testTag("auth_forgot_password_button")
+                        )
+                    }
                 }
             }
         }
@@ -787,7 +634,7 @@ internal fun AuthPrimaryActionsSection(
 ) {
     val themeColors = LocalIOS27Theme.current
 
-    // 1. Botão Principal de Ação reutilizando `tintedLiquidBlueButton` oficial do sistema
+    // 1. Botão Principal de Ação (44.dp de altura)
     val primaryInteraction = remember { MutableInteractionSource() }
     val isPrimaryPressed by primaryInteraction.collectIsPressedAsState()
     val primaryPressProgress by animateFloatAsState(
@@ -799,7 +646,7 @@ internal fun AuthPrimaryActionsSection(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(44.dp)
             .tintedLiquidBlueButton(
                 backdrop = backdrop,
                 pressProgress = primaryPressProgress,
@@ -821,14 +668,14 @@ internal fun AuthPrimaryActionsSection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.2.dp,
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
                     color = Color.White
                 )
                 Text(
                     text = stringResource(R.string.auth_submitting),
                     fontFamily = PlusJakartaSansFamily,
-                    fontSize = 15.sp,
+                    fontSize = 14.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
@@ -837,7 +684,7 @@ internal fun AuthPrimaryActionsSection(
             AnimatedContent(
                 targetState = authMode,
                 transitionSpec = {
-                    fadeIn(tween(180)) togetherWith fadeOut(tween(140))
+                    fadeIn(tween(160)) togetherWith fadeOut(tween(120))
                 },
                 label = "primaryAuthLabel"
             ) { mode ->
@@ -851,7 +698,7 @@ internal fun AuthPrimaryActionsSection(
                             else R.string.auth_submit_register
                         ),
                         fontFamily = PlusJakartaSansFamily,
-                        fontSize = 15.5.sp,
+                        fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -859,7 +706,7 @@ internal fun AuthPrimaryActionsSection(
                         imageVector = LucideIcons.ArrowRight,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -870,7 +717,7 @@ internal fun AuthPrimaryActionsSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -895,121 +742,93 @@ internal fun AuthPrimaryActionsSection(
         )
     }
 
-    // 3. Botão "Continuar com o Google" usando `liquidGlassNavSurface` oficial
+    // 3. Botões Circulares de Autenticação Rápida (Google & Convidado lado a lado)
     val googleInteraction = remember { MutableInteractionSource() }
     val isGooglePressed by googleInteraction.collectIsPressedAsState()
     val googleScale by animateFloatAsState(
-        targetValue = if (isGooglePressed) 0.97f else 1f,
+        targetValue = if (isGooglePressed) 0.92f else 1f,
         animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
         label = "googleBtnScale"
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp)
-            .graphicsLayer {
-                scaleX = googleScale
-                scaleY = googleScale
-            }
-            .liquidGlassNavSurface(shape = Capsule(), elevation = 8.dp)
-            .clickable(
-                interactionSource = googleInteraction,
-                indication = null,
-                enabled = !isLoading,
-                role = Role.Button,
-                onClick = onLoginWithGoogle
-            )
-            .testTag("auth_google_button"),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .background(Color.White),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = LucideIcons.GoogleIcon,
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Text(
-                text = stringResource(R.string.auth_continue_google),
-                fontFamily = PlusJakartaSansFamily,
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = themeColors.textPrimary
-            )
-        }
-    }
-
-    // 4. Botão "Explorar como Convidado (Offline)" usando `inputWellSurface`
     val guestInteraction = remember { MutableInteractionSource() }
     val isGuestPressed by guestInteraction.collectIsPressedAsState()
     val guestScale by animateFloatAsState(
-        targetValue = if (isGuestPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 400f),
+        targetValue = if (isGuestPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
         label = "guestBtnScale"
     )
 
-    Column(
+    val continueGoogleCd = stringResource(R.string.auth_continue_google)
+    val continueGuestCd = stringResource(
+        if (isLinkingFromGuest) R.string.auth_continue_guest_linking
+        else R.string.auth_continue_guest
+    )
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .graphicsLayer {
-                scaleX = guestScale
-                scaleY = guestScale
-            }
-            .inputWellSurface(shape = ContinuousRoundedRectangle(AuthGlassDesignTokens.GuestCardCornerRadius))
-            .clickable(
-                interactionSource = guestInteraction,
-                indication = null,
-                enabled = !isLoading,
-                role = Role.Button,
-                onClick = onContinueAsGuest
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .testTag("auth_guest_button"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Círculo 1: Login com Google (apenas o 'G' da logo sem fundo branco, sobre a superfície translúcida)
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .graphicsLayer {
+                    scaleX = googleScale
+                    scaleY = googleScale
+                }
+                .liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
+                .clickable(
+                    interactionSource = googleInteraction,
+                    indication = null,
+                    enabled = !isLoading,
+                    role = Role.Button,
+                    onClick = onLoginWithGoogle
+                )
+                .semantics { contentDescription = continueGoogleCd }
+                .testTag("auth_google_button"),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = LucideIcons.GoogleIcon,
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(18.dp))
+
+        // Círculo 2: Modo Convidado
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .graphicsLayer {
+                    scaleX = guestScale
+                    scaleY = guestScale
+                }
+                .liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
+                .clickable(
+                    interactionSource = guestInteraction,
+                    indication = null,
+                    enabled = !isLoading,
+                    role = Role.Button,
+                    onClick = onContinueAsGuest
+                )
+                .semantics { contentDescription = continueGuestCd }
+                .testTag("auth_guest_button"),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = LucideIcons.UserCheck,
                 contentDescription = null,
                 tint = themeColors.accent,
-                modifier = Modifier.size(17.dp)
-            )
-            Text(
-                text = stringResource(
-                    if (isLinkingFromGuest) R.string.auth_continue_guest_linking
-                    else R.string.auth_continue_guest
-                ),
-                fontFamily = PlusJakartaSansFamily,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = themeColors.textPrimary
+                modifier = Modifier.size(20.dp)
             )
         }
-        Text(
-            text = stringResource(R.string.auth_guest_subtitle),
-            fontFamily = PlusJakartaSansFamily,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-            color = themeColors.textSecondary,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
@@ -1017,13 +836,13 @@ internal fun AuthPrimaryActionsSection(
 internal fun AuthGlassTextField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: String,
     placeholder: String,
     leadingIcon: ImageVector,
     accentColor: Color,
     isPassword: Boolean = false,
     passwordVisible: Boolean = false,
     onTogglePasswordVisibility: (() -> Unit)? = null,
+    trailingStatus: (@Composable () -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     testTag: String = ""
@@ -1041,103 +860,96 @@ internal fun AuthGlassTextField(
     val showPwdCd = stringResource(R.string.auth_cd_show_password)
     val hidePwdCd = stringResource(R.string.auth_cd_hide_password)
 
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(
-            text = label,
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        interactionSource = interactionSource,
+        textStyle = TextStyle(
             fontFamily = PlusJakartaSansFamily,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = themeColors.textSecondary,
-            modifier = Modifier.padding(start = 4.dp)
-        )
-
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            interactionSource = interactionSource,
-            textStyle = TextStyle(
-                fontFamily = PlusJakartaSansFamily,
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = themeColors.textPrimary
-            ),
-            cursorBrush = SolidColor(accentColor),
-            visualTransformation = if (isPassword && !passwordVisible) {
-                PasswordVisualTransformation()
-            } else {
-                VisualTransformation.None
-            },
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { if (testTag.isNotEmpty()) it.testTag(testTag) else it },
-            decorationBox = { innerTextField ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .inputWellSurface(shape = fieldShape)
-                        .border(
-                            width = if (isFocused) 1.4.dp else 0.dp,
-                            color = borderColor,
-                            shape = fieldShape
-                        )
-                        .padding(start = 14.dp, end = if (isPassword) 4.dp else 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = null,
-                        tint = if (isFocused) accentColor else themeColors.textSecondary,
-                        modifier = Modifier.size(18.dp)
+            fontSize = 13.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = themeColors.textPrimary
+        ),
+        cursorBrush = SolidColor(accentColor),
+        visualTransformation = if (isPassword && !passwordVisible) {
+            PasswordVisualTransformation()
+        } else {
+            VisualTransformation.None
+        },
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (testTag.isNotEmpty()) it.testTag(testTag) else it },
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .inputWellSurface(shape = fieldShape)
+                    .border(
+                        width = if (isFocused) 1.2.dp else 0.dp,
+                        color = borderColor,
+                        shape = fieldShape
                     )
+                    .padding(start = 12.dp, end = if (isPassword || trailingStatus != null) 4.dp else 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = if (isFocused) accentColor else themeColors.textSecondary,
+                    modifier = Modifier.size(17.dp)
+                )
 
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 13.sp,
+                            color = themeColors.textTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+
+                if (trailingStatus != null) {
+                    trailingStatus()
+                }
+
+                if (isPassword && onTogglePasswordVisibility != null) {
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.CenterStart
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                role = Role.Button,
+                                onClick = onTogglePasswordVisibility
+                            )
+                            .semantics {
+                                contentDescription = if (passwordVisible) hidePwdCd else showPwdCd
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        if (value.isEmpty()) {
-                            Text(
-                                text = placeholder,
-                                fontFamily = PlusJakartaSansFamily,
-                                fontSize = 14.sp,
-                                color = themeColors.textTertiary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        innerTextField()
-                    }
-
-                    if (isPassword && onTogglePasswordVisibility != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .clickable(
-                                    role = Role.Button,
-                                    onClick = onTogglePasswordVisibility
-                                )
-                                .semantics {
-                                    contentDescription = if (passwordVisible) hidePwdCd else showPwdCd
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (passwordVisible) LucideIcons.EyeOff else LucideIcons.Eye,
-                                contentDescription = null,
-                                tint = themeColors.textSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = if (passwordVisible) LucideIcons.EyeOff else LucideIcons.Eye,
+                            contentDescription = null,
+                            tint = themeColors.textSecondary,
+                            modifier = Modifier.size(17.dp)
+                        )
                     }
                 }
             }
-        )
-    }
+        }
+    )
 }

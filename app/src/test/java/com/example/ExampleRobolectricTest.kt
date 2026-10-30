@@ -27,12 +27,18 @@ class ExampleRobolectricTest {
 
         val storage = SafeStorage(context)
         val state = storage.loadState()
-        assertTrue(state.comics.isNotEmpty())
+        // Clean onboarding starts with empty collection as requested
+        assertTrue(state.comics.isEmpty())
+
+        // Save a collection and verify ZIP generation
+        storage.saveState(CuratedCatalog.initialUserCollection, state.profile, state.settings)
+        val populatedState = storage.loadState()
+        assertTrue(populatedState.comics.isNotEmpty())
 
         val zipBytes = storage.buildStandaloneIOS27ZipBytes(
-            comics = state.comics,
-            profile = state.profile,
-            settings = state.settings
+            comics = populatedState.comics,
+            profile = populatedState.profile,
+            settings = populatedState.settings
         )
         // Verify PK\x03\x04 ZIP magic header
         assertTrue(zipBytes.size > 256)

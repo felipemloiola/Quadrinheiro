@@ -352,26 +352,26 @@ class SafeStorage(context: Context) {
         val persistedTranslations = loadTranslationCache()
         val raw = getItem(STORAGE_KEY)
         if (raw == null) {
-            val starter = CuratedCatalog.initialUserCollection
+            val isGuest = isGuestMode()
+            val starter = if (isGuest || !hasCompletedAuthOnboarding()) emptyList() else CuratedCatalog.initialUserCollection
             PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
             return StoredState(
                 comics = starter,
-                profile = ReaderProfile(),
+                profile = if (isGuest) ReaderProfile(name = "Leitor Convidado", handle = "@convidado") else ReaderProfile(),
                 settings = AppSettings()
             )
         }
         return try {
             val root = JSONObject(raw)
             val comicsArr = root.optJSONArray("comics")
-            val comics = if (comicsArr != null && comicsArr.length() > 0) parseComics(comicsArr) else CuratedCatalog.initialUserCollection
+            // Se comicsArr foi salvo (mesmo que vazio []), respeita a coleção vazia sem forçar CuratedCatalog!
+            val comics = if (comicsArr != null) parseComics(comicsArr) else emptyList()
             PortugueseComicTranslator.seedPersistedTranslations(comics, persistedTranslations)
             val profile = root.optJSONObject("profile")?.let { parseProfile(it) } ?: ReaderProfile()
             val settings = root.optJSONObject("settings")?.let { parseSettings(it) } ?: AppSettings()
             StoredState(comics, profile, settings)
         } catch (_: Throwable) {
-            val starter = CuratedCatalog.initialUserCollection
-            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
-            StoredState(starter, ReaderProfile(), AppSettings())
+            StoredState(emptyList(), ReaderProfile(), AppSettings())
         }
     }
 

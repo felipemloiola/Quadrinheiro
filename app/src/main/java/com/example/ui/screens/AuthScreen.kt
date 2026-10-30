@@ -288,22 +288,22 @@ private fun AuthGlassScreenShell(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 18.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 460.dp)
+                .widthIn(max = 420.dp)
         ) {
             if (onDismissModal != null) {
                 val closeCd = stringResource(R.string.auth_cd_close_modal)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(48.dp)
-                        .liquidGlassNavSurface(shape = CircleShape, elevation = 6.dp)
+                        .size(44.dp)
+                        .liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
                         .clickable(role = Role.Button) { onDismissModal() }
                         .semantics { contentDescription = closeCd }
                         .testTag("auth_close_modal_button"),
@@ -322,22 +322,22 @@ private fun AuthGlassScreenShell(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 AuthBrandHeader(isLinkingFromGuest = isLinkingFromGuest)
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .authGlassCardSurface()
-                        .padding(horizontal = 20.dp, vertical = 22.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     content = content
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }

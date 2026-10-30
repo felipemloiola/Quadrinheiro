@@ -5,113 +5,244 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.shapes.ContinuousRoundedRectangle
 
 /**
- * Logo oficial do aplicativo Quadrinheiro:
- * Inspirado nos quadros e sarjetas (gutters) clássicos de histórias em quadrinhos,
- * com três painéis coloridos vibrantes (Magenta/Vermelho, Âmbar/Amarelo, Azul)
- * separados por sarjetas limpas que mantêm proporção perfeita de 1:1.
+ * Logotipo oficial do aplicativo "Quadrinheiro" construído puramente via Canvas.
+ *
+ * Conceito Criativo: "Página de HQ em Origâmi"
+ * Os painéis clássicos de quadrinhos e as linhas de sarjeta (gutters) se fundem
+ * em dobras isométricas tridimensionais formando a letra "Q".
+ *
+ * Diretrizes:
+ * 1. Ilusão Tridimensional (Folded Origami Look): Gradientes suaves simulam iluminação
+ *    em diferentes ângulos de inclinação das facetas de papel dobrado.
+ * 2. Cauda do "Q" Dinâmica: O bloco inferior direito projeta-se em ângulo agudo para fora
+ *    do limite imaginário, quebrando a rigidez do quadrado em um corte de ação moderno.
+ * 3. Cortes de Mangá/Ação: Polígonos irregulares com ângulos dinâmicos.
+ * 4. Paleta Neo-Comic:
+ *    - Painel Esquerdo: Vermelho Carmim -> Rosa Neon
+ *    - Painel Superior: Amarelo Ouro -> Laranja Vibrante
+ *    - Painel Inferior (Cauda do Q): Azul Royal -> Ciano Elétrico
+ * 5. Sarjetas transparentes e vazias separando os blocos com respiro orgânico.
  */
 @Composable
 fun QuadrinheiroLogo(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDesc: String = "Logotipo do Quadrinheiro"
 ) {
     Canvas(
         modifier = modifier
-            .aspectRatio(1f) // keep perfect square
+            .aspectRatio(1f)
+            .semantics { contentDescription = contentDesc }
     ) {
         val w = size.width
         val h = size.height
 
-        // Gutters (sarjetas) ~4% of width
-        val gutter = w * 0.04f
-        val halfGutter = gutter / 2f
+        // -------------------------------------------------------------------------
+        // 1. PALETA NEO-COMIC COM GRADIENTES TRIDIMENSIONAIS (ILUMINAÇÃO DE ORIGÂMI)
+        // -------------------------------------------------------------------------
 
-        // Slanted divider between left and right blocks.
-        // Wider at the top, narrower at the bottom (leaning to the left).
-        val dividerTopX = w * 0.40f
-        val dividerBottomX = w * 0.28f
+        // Painel Esquerdo: Vermelho Carmim rico para Rosa Neon elétrico
+        val leftPanelBrush = Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFFF1493), // Rosa Neon (reflexo superior/externo)
+                Color(0xFFE11D48), // Vermelho Carmim (tom médio)
+                Color(0xFF881337)  // Carmim Profundo (sombra na sarjeta)
+            ),
+            start = Offset(w * 0.08f, h * 0.12f),
+            end = Offset(w * 0.36f, h * 0.78f)
+        )
 
-        // Helper: x on the slanted divider for a given y, with optional offset
-        fun slantedX(y: Float, offset: Float = 0f): Float {
-            val t = y / h
-            val baseX = dividerTopX + (dividerBottomX - dividerTopX) * t
-            return baseX + offset
-        }
+        // Painel Superior: Amarelo Ouro quente para Laranja Vibrante
+        val topPanelBrush = Brush.linearGradient(
+            colors = listOf(
+                Color(0xFFFFD000), // Amarelo Ouro
+                Color(0xFFFF9100), // Âmbar Intenso
+                Color(0xFFFF3D00)  // Laranja Vibrante de Ação
+            ),
+            start = Offset(w * 0.44f, h * 0.08f),
+            end = Offset(w * 0.90f, h * 0.45f)
+        )
 
-        // Horizontal divider between top (yellow) and bottom (blue) right blocks.
-        val horizontalCenterY = h * 0.52f
-        val topBlockBottomY = horizontalCenterY - halfGutter
-        val bottomBlockTopY = horizontalCenterY + halfGutter
+        // Painel Inferior (Cauda do Q): Azul Royal Noturno para Ciano Elétrico
+        val bottomTailBrush = Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF1E3A8A), // Azul Royal Noturno (sombra de vinco)
+                Color(0xFF2563EB), // Azul Royal Vibrante
+                Color(0xFF00B4D8), // Azul Elétrico
+                Color(0xFF00F5FF)  // Ciano Elétrico (na ponta da cauda)
+            ),
+            start = Offset(w * 0.30f, h * 0.68f),
+            end = Offset(w * 0.98f, h * 0.95f)
+        )
 
-        // Colors (Material-style vibrant palette)
-        val magentaRed = Color(0xFFF50057)  // Vibrant Pink/Red
-        val amberYellow = Color(0xFFFFC107) // Amber
-        val blue = Color(0xFF2196F3)        // Vibrant Blue
-        val gutterColor = Color.White
+        // Brilho de crista/dobra de papel (origami facet highlight)
+        val foldSpecularBrush = Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.38f),
+                Color.White.copy(alpha = 0.08f),
+                Color.Transparent
+            ),
+            start = Offset(w * 0.10f, h * 0.10f),
+            end = Offset(w * 0.70f, h * 0.70f)
+        )
 
-        // 1) Left vertical trapezoid (magenta red)
-        val leftPath = Path().apply {
-            moveTo(0f, 0f)
-            lineTo(slantedX(0f, -halfGutter), 0f)
-            lineTo(slantedX(h, -halfGutter), h)
-            lineTo(0f, h)
+        // -------------------------------------------------------------------------
+        // 2. POLÍGONOS MODERNOS (PATH) COM SARJETAS VAZIAS TRANSPARENTES
+        // -------------------------------------------------------------------------
+
+        // A) PAINEL ESQUERDO: Coluna esquerda angular formando o primeiro arco do "Q"
+        val leftPanelPath = Path().apply {
+            moveTo(w * 0.36f, h * 0.08f)
+            lineTo(w * 0.12f, h * 0.18f)
+            lineTo(w * 0.06f, h * 0.50f)
+            lineTo(w * 0.16f, h * 0.82f)
+            lineTo(w * 0.28f, h * 0.74f)
+            lineTo(w * 0.33f, h * 0.60f)
+            lineTo(w * 0.29f, h * 0.48f)
+            lineTo(w * 0.34f, h * 0.28f)
             close()
         }
-        drawPath(path = leftPath, color = magentaRed)
 
-        // 2) Top-right block (yellow), with left border following the slanted divider
-        val topRightPath = Path().apply {
-            moveTo(slantedX(0f, +halfGutter), 0f)
-            lineTo(w, 0f)
-            lineTo(w, topBlockBottomY)
-            lineTo(slantedX(topBlockBottomY, +halfGutter), topBlockBottomY)
+        // B) PAINEL SUPERIOR: Coroa superior e ombro direito do "Q"
+        val topPanelPath = Path().apply {
+            moveTo(w * 0.43f, h * 0.08f)
+            lineTo(w * 0.70f, h * 0.08f)
+            lineTo(w * 0.90f, h * 0.22f)
+            lineTo(w * 0.90f, h * 0.45f)
+            lineTo(w * 0.65f, h * 0.45f)
+            lineTo(w * 0.62f, h * 0.36f)
+            lineTo(w * 0.49f, h * 0.27f)
+            lineTo(w * 0.41f, h * 0.28f)
             close()
         }
-        drawPath(path = topRightPath, color = amberYellow)
 
-        // 3) Bottom-right block (blue), separated by a clean horizontal gutter
-        val bottomRightPath = Path().apply {
-            moveTo(slantedX(bottomBlockTopY, +halfGutter), bottomBlockTopY)
-            lineTo(w, bottomBlockTopY)
-            lineTo(w, h)
-            lineTo(slantedX(h, +halfGutter), h)
+        // C) PAINEL INFERIOR & CAUDA DO "Q":
+        // Fecha o loop inferior e se projeta agressivamente para fora no canto inferior direito
+        val bottomTailPath = Path().apply {
+            moveTo(w * 0.65f, h * 0.52f)
+            lineTo(w * 0.88f, h * 0.52f)
+            lineTo(w * 0.84f, h * 0.65f)
+
+            // --- CAUDA DO Q (PROJEÇÃO DINÂMICA FORA DO CORPO) ---
+            lineTo(w * 0.98f, h * 0.86f) // Aresta superior externa da cauda
+            lineTo(w * 0.95f, h * 0.95f) // Vértice afiado da cauda
+            lineTo(w * 0.73f, h * 0.87f) // Corte inferior voltando ao arco
+
+            lineTo(w * 0.52f, h * 0.90f)
+            lineTo(w * 0.29f, h * 0.85f)
+            lineTo(w * 0.38f, h * 0.68f)
+            lineTo(w * 0.50f, h * 0.64f)
             close()
         }
-        drawPath(path = bottomRightPath, color = blue)
 
-        // 4) Vertical white gutter (slanted strip between left and right blocks)
-        val verticalGutterPath = Path().apply {
-            moveTo(slantedX(0f, -halfGutter), 0f)
-            lineTo(slantedX(0f, +halfGutter), 0f)
-            lineTo(slantedX(h, +halfGutter), h)
-            lineTo(slantedX(h, -halfGutter), h)
+        // -------------------------------------------------------------------------
+        // 3. FACETAS DE DOBRA EM ORIGÂMI (EFEITO ISOMÉTRICO 3D)
+        // -------------------------------------------------------------------------
+
+        // Sub-faceta superior do painel esquerdo (simula dobra iluminada)
+        val leftUpperFacet = Path().apply {
+            moveTo(w * 0.36f, h * 0.08f)
+            lineTo(w * 0.12f, h * 0.18f)
+            lineTo(w * 0.06f, h * 0.50f)
+            lineTo(w * 0.29f, h * 0.48f)
+            lineTo(w * 0.34f, h * 0.28f)
             close()
         }
-        drawPath(path = verticalGutterPath, color = gutterColor)
 
-        // 5) Horizontal white gutter (straight line between yellow and blue blocks)
-        drawRect(
-            color = gutterColor,
-            topLeft = Offset(slantedX(horizontalCenterY, +halfGutter), horizontalCenterY - halfGutter),
-            size = Size(
-                width = w - slantedX(horizontalCenterY, +halfGutter),
-                height = gutter
+        // Sub-faceta da cauda do Q (crista luminosa em ciano)
+        val tailLightFacet = Path().apply {
+            moveTo(w * 0.65f, h * 0.52f)
+            lineTo(w * 0.88f, h * 0.52f)
+            lineTo(w * 0.84f, h * 0.65f)
+            lineTo(w * 0.98f, h * 0.86f)
+            lineTo(w * 0.95f, h * 0.95f)
+            lineTo(w * 0.50f, h * 0.64f)
+            close()
+        }
+
+        // -------------------------------------------------------------------------
+        // 4. DESENHO DOS PAINÉIS PRINCIPAIS COM OS GRADIENTES
+        // -------------------------------------------------------------------------
+
+        // Painel Esquerdo (Vermelho Carmim -> Rosa Neon)
+        drawPath(path = leftPanelPath, brush = leftPanelBrush)
+
+        // Painel Superior (Amarelo Ouro -> Laranja Vibrante)
+        drawPath(path = topPanelPath, brush = topPanelBrush)
+
+        // Painel Inferior + Cauda Dinâmica (Azul Royal -> Ciano Elétrico)
+        drawPath(path = bottomTailPath, brush = bottomTailBrush)
+
+        // -------------------------------------------------------------------------
+        // 5. ILUMINAÇÃO DE DOBRA (3D ORIGAMI OVERLAYS)
+        // -------------------------------------------------------------------------
+
+        // Reflexo de luz na dobra superior esquerda
+        drawPath(
+            path = leftUpperFacet,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.26f),
+                    Color.White.copy(alpha = 0.04f),
+                    Color.Transparent
+                ),
+                start = Offset(w * 0.12f, h * 0.18f),
+                end = Offset(w * 0.30f, h * 0.50f)
             )
+        )
+
+        // Reflexo na lâmina da cauda do Q
+        drawPath(
+            path = tailLightFacet,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.22f),
+                    Color(0xFF00F5FF).copy(alpha = 0.35f),
+                    Color.Transparent
+                ),
+                start = Offset(w * 0.65f, h * 0.52f),
+                end = Offset(w * 0.98f, h * 0.95f)
+            )
+        )
+
+        // -------------------------------------------------------------------------
+        // 6. LINHAS DE CRISTA (ARESTAS DE PAPEL AFIADAS)
+        // -------------------------------------------------------------------------
+        val strokeWidthPx = (w * 0.012f).coerceAtLeast(1.2f)
+
+        drawPath(
+            path = leftPanelPath,
+            brush = foldSpecularBrush,
+            style = Stroke(width = strokeWidthPx)
+        )
+        drawPath(
+            path = topPanelPath,
+            brush = foldSpecularBrush,
+            style = Stroke(width = strokeWidthPx)
+        )
+        drawPath(
+            path = bottomTailPath,
+            brush = foldSpecularBrush,
+            style = Stroke(width = strokeWidthPx)
         )
     }
 }
@@ -133,7 +264,7 @@ fun QuadrinheiroLogoBadge(
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                spotColor = Color(0xFFF50057).copy(alpha = 0.35f)
+                spotColor = Color(0xFFE11D48).copy(alpha = 0.35f)
             )
             .clip(shape)
             .background(
@@ -158,8 +289,7 @@ fun QuadrinheiroLogoBadge(
     ) {
         QuadrinheiroLogo(
             modifier = Modifier
-                .size(sizeDp)
-                .clip(shape)
+                .fillMaxSize(0.82f)
         )
     }
 }

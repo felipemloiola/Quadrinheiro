@@ -11,13 +11,13 @@
 
     <!-- Auth Form Fields -->
     <string name="auth_field_name_label">Seu Nome ou Apelido</string>
-    <string name="auth_field_name_placeholder">Ex: Felipe Colecionador</string>
+    <string name="auth_field_name_placeholder">Nome ou Apelido</string>
     <string name="auth_field_email_label">E-mail</string>
-    <string name="auth_field_email_placeholder">seu@email.com</string>
+    <string name="auth_field_email_placeholder">E-mail (ex: seu@email.com)</string>
     <string name="auth_field_password_label">Senha</string>
-    <string name="auth_field_password_placeholder">Mínimo de 6 caracteres</string>
+    <string name="auth_field_password_placeholder">Senha (mínimo de 6 caracteres)</string>
     <string name="auth_field_confirm_password_label">Confirmar Senha</string>
-    <string name="auth_field_confirm_password_placeholder">Repita sua senha</string>
+    <string name="auth_field_confirm_password_placeholder">Confirme sua senha</string>
     <string name="auth_passwords_match">Senhas conferem</string>
     <string name="auth_passwords_mismatch">As senhas não coincidem</string>
     <string name="auth_forgot_password">Esqueci minha senha</string>

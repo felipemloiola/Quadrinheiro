@@ -295,22 +295,33 @@ fun SettingsTabScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = profile.name.ifBlank { "Leitor" },
-                                fontSize = 17.sp,
+                                fontSize = 15.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = themeColors.textPrimary,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
-                            Text(
-                                text = profile.handle.ifBlank { "@leitor" },
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = themeColors.textTertiary
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(themeColors.accent.copy(alpha = 0.09f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = profile.handle.ifBlank { "@leitor" },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = themeColors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         Text(
                             text = profile.bio.ifBlank { "Meta: $readComicsCount/${profile.yearlyGoal} no ano" },
@@ -320,7 +331,7 @@ fun SettingsTabScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Foto de perfil, bio e metas de leitura",
+                            text = "Conta, sincronização na nuvem e perfil",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = themeColors.accent
@@ -332,20 +343,6 @@ fun SettingsTabScreen(
                         tint = themeColors.textTertiary,
                         modifier = Modifier.size(18.dp)
                     )
-                }
-            }
-
-            // Card de Conta e Sincronização na Nuvem no topo dos Ajustes
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Conta e Sincronização na Nuvem",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = themeColors.textSecondary,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                    CloudSyncCard(viewModel = viewModel)
                 }
             }
 
@@ -2770,54 +2767,48 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(themeColors.accent)
+                        .height(44.dp)
+                        .liquidGlassNavSurface(shape = RoundedCornerShape(14.dp), elevation = 3.dp)
                         .clickable(enabled = !isAuthLoading && !isSyncing) {
                             viewModel.loginWithGoogle(context)
                         }
-                        .padding(vertical = 11.dp, horizontal = 14.dp),
+                        .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(CircleShape)
-                                .background(Color.White),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.GoogleIcon,
-                                contentDescription = null,
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = LucideIcons.GoogleIcon,
+                            contentDescription = null,
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Text(
                             text = "Vincular com Google",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = themeColors.textPrimary
                         )
                     }
                 }
 
-                // Botão 2: Criar Conta / Entrar com E-mail
+                // Botão 2: Criar Conta / Entrar com E-mail + Sair
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .height(44.dp)
                             .inputWellSurface(RoundedCornerShape(14.dp))
                             .clickable(enabled = !isAuthLoading) {
                                 viewModel.openAuthModalForLinking(AuthMode.REGISTER)
                             }
-                            .padding(vertical = 10.dp, horizontal = 10.dp),
+                            .padding(horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -2831,8 +2822,8 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
-                                text = "Criar Conta / Entrar com E-mail",
-                                fontSize = 12.5.sp,
+                                text = "Criar Conta / E-mail",
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = s.textPrimary,
                                 maxLines = 1,
@@ -2843,19 +2834,32 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
 
                     Box(
                         modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
                             .inputWellSurface(RoundedCornerShape(14.dp))
                             .clickable(enabled = !isAuthLoading) {
                                 viewModel.logout(context)
                             }
-                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                            .padding(horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = LucideIcons.LogOut,
-                            contentDescription = "Voltar à tela de login",
-                            tint = s.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.LogOut,
+                                contentDescription = "Sair",
+                                tint = Color(0xFFF43F5E),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Sair",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFF43F5E)
+                            )
+                        }
                     }
                 }
             }
@@ -2865,34 +2869,29 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(themeColors.accent.copy(alpha = 0.14f))
-                        .border(
-                            width = 0.8.dp,
-                            color = themeColors.accent.copy(alpha = 0.35f),
-                            shape = RoundedCornerShape(14.dp)
-                        )
+                        .height(44.dp)
+                        .liquidGlassNavSurface(shape = RoundedCornerShape(14.dp), elevation = 3.dp)
                         .clickable(enabled = !isSyncing && !isAuthLoading) {
                             viewModel.loginWithGoogle(context)
                         }
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                        .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Icon(
                             imageVector = LucideIcons.GoogleIcon,
                             contentDescription = null,
                             tint = Color.Unspecified,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = "Vincular Google para Backup na Nuvem",
-                            fontSize = 12.5.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = themeColors.accent
+                            color = themeColors.textPrimary
                         )
                     }
                 }
@@ -2900,14 +2899,16 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .height(44.dp)
                         .inputWellSurface(RoundedCornerShape(14.dp))
                         .clickable(enabled = !isSyncing) { viewModel.syncNowWithCloud() }
-                        .padding(vertical = 10.dp),
+                        .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -2921,7 +2922,7 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (isSyncing) "Sincronizando..." else "Sincronizar Agora",
+                            text = if (isSyncing) "Sincronizando..." else "Sincronizar",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = s.textPrimary
@@ -2932,9 +2933,10 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .height(44.dp)
                         .inputWellSurface(RoundedCornerShape(14.dp))
                         .clickable { viewModel.logout(context) }
-                        .padding(vertical = 10.dp),
+                        .padding(horizontal = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(

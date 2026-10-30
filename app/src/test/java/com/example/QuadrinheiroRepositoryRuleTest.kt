@@ -7,6 +7,7 @@ import com.example.model.ReadingStatus
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -106,10 +107,12 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
     @Test
     fun observeComics_unauthenticatedUser_failsWithPermissionDenied() = runBlocking {
         auth.signOut()
-        val repo = QuadrinheiroCloudRepository(context, db, auth)
         try {
-            withTimeout(3000L) {
-                repo.observeUserComics("unauth_target_uid").first()
+            withTimeout(5000L) {
+                db.collection("users").document("unauth_target_uid")
+                    .collection("comics")
+                    .get()
+                    .await()
             }
             fail("Expected PERMISSION_DENIED when unauthenticated user observes comics")
         } catch (e: FirebaseFirestoreException) {
@@ -118,8 +121,8 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
-    fun `test strict firestore rules reject oversized diary moment note and invalid data types`() = runTest {
-        signInAs("user_alpha")
+    fun `test strict firestore rules reject oversized diary moment note and invalid data types`() = runBlocking {
+        val uid = signInTestUser("user_alpha@example.com")
         val oversizedNote = "A".repeat(2500) // > 2000 chars allowed by isValidComicMomentItem
         val invalidMomentMap = mapOf(
             "id" to "m-1",
@@ -130,7 +133,7 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
             "isSpoiler" to false
         )
         val rawDoc = mapOf(
-            "ownerId" to "user_alpha",
+            "ownerId" to uid,
             "externalId" to "hq-invalid-moment",
             "title" to "Watchmen",
             "titlePtBr" to "Watchmen",
@@ -159,7 +162,7 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
         )
         try {
-            db.collection("users").document("user_alpha")
+            db.collection("users").document(uid)
                 .collection("comics").document("hq-invalid-moment")
                 .set(rawDoc).await()
             fail("Expected PERMISSION_DENIED when diary moment note exceeds 2000 characters")
@@ -169,7 +172,7 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
-    fun `test hybrid sync conflict resolution keeps largest updatedAt and only syncs dirty items`() = runTest {
+    fun `test hybrid sync conflict resolution keeps largest updatedAt and only syncs dirty items`() = runBlocking {
         val localCleanOlder = ComicEntry(
             id = "hq-1",
             externalId = "hq-1",

@@ -410,9 +410,15 @@ class QuadrinheiroViewModel(
                 _comics.value = healedList
                 persistAll()
             }
-            prefetchCovers(_comics.value.take(10))
-            delay(800)
-            prefetchCovers(CuratedCatalog.curatedComicsCatalog.take(12))
+            // Prefetch leve e prioritário: apenas 4 capas do acervo ativo (em leitura ou topo)
+            val initialCoversToWarm = _comics.value.filter { it.status == ReadingStatus.READING }.ifEmpty { _comics.value.take(4) }
+            prefetchCovers(initialCoversToWarm.take(4))
+
+            // Catálogo curado pré-aquecido apenas sob demanda e com limite de 4 itens após 3 segundos
+            delay(3000)
+            if (_comics.value.isEmpty()) {
+                prefetchCovers(CuratedCatalog.curatedComicsCatalog.take(4))
+            }
             searchEngine.prewarmPopularSearches()
             if (_searchQuery.value.isNotBlank()) {
                 triggerOnlineSearchIfNeeded()
@@ -747,12 +753,17 @@ class QuadrinheiroViewModel(
     }
 
     fun enterAsGuest() {
-        val guestProfile = authManager.continueAsGuest(_profile.value.name.ifBlank { "Leitor Convidado" })
+        val guestProfile = authManager.continueAsGuest("Leitor Convidado")
         _currentUserProfile.value = guestProfile
         _authUiState.value = AuthUiState.Guest
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
-        showNotice("Modo Convidado ativo — seus quadrinhos ficam salvos neste aparelho")
+        // Modo Convidado inicializa zerado (sem quadrinhos pré-carregados e com perfil neutro)
+        _comics.value = emptyList()
+        _profile.value = ReaderProfile(name = "Leitor Convidado", handle = "@convidado")
+        _activeReadingComicId.value = null
+        persistAll()
+        showNotice("Modo Convidado ativo — sua biblioteca começa zerada")
     }
 
     fun resetPassword(email: String) {
@@ -842,13 +853,17 @@ class QuadrinheiroViewModel(
     }
 
     private fun prefetchCovers(items: List<ComicEntry>) {
+        if (items.isEmpty()) return
         val loader = appContext.imageLoader
+        val isHd = _appSettings.value.hdCovers
+        val targetW = if (isHd) 200 else 140
+        val targetH = (targetW * 1.5f).toInt()
         items.forEach { item ->
             val url = item.coverUrl.trim().replace("http://", "https://")
             if (url.startsWith("https://")) {
                 val req = ImageRequest.Builder(appContext)
                     .data(url)
-                    .size(240, 360)
+                    .size(targetW, targetH)
                     .precision(coil.size.Precision.INEXACT)
                     .allowRgb565(true)
                     .memoryCacheKey(url)
