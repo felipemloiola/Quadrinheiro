@@ -38,6 +38,7 @@ jobs:
           python3 .github/scripts/polish_glass_controls.py
           python3 .github/scripts/normalize_menu_press.py
           python3 .github/scripts/fix_profile_moment.py
+          python3 .github/scripts/apply_hig_typography.py
           python3 .github/scripts/extract_profile_moment.py
       - name: Resolve Gradle version
         id: gv
