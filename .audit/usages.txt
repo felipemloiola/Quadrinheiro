@@ -79,7 +79,7 @@ fun Modifier.authGlassCardSurface(): Modifier = composed {
 fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val theme = LocalIOS27Theme.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false)
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(104.dp))
         Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
         Text(
             if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",

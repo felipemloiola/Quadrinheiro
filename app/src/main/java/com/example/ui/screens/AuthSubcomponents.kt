@@ -1,5 +1,19 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.tween
+
+import androidx.compose.animation.core.spring
+
+import androidx.compose.animation.shrinkVertically
+
+import androidx.compose.animation.expandVertically
+
+import androidx.compose.animation.fadeOut
+
+import androidx.compose.animation.fadeIn
+
+import androidx.compose.animation.AnimatedVisibility
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,8 +71,8 @@ fun Modifier.authGlassCardSurface(): Modifier = composed {
 @Composable
 fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val theme = LocalIOS27Theme.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(104.dp))
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(120.dp))
         Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
         Text(
             if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
@@ -110,7 +124,12 @@ fun AuthCredentialsFieldsSection(
     val registering = form.mode != AuthMode.LOGIN
     val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (registering) OutlinedTextField(
+        AnimatedVisibility(
+            visible = registering,
+            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
+            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
+        ) {
+            OutlinedTextField(
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
@@ -128,6 +147,7 @@ fun AuthCredentialsFieldsSection(
             modifier = Modifier.fillMaxWidth().testTag("auth_name_field"),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), keyboardActions = next
         )
+        }
         OutlinedTextField(
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -168,7 +188,12 @@ fun AuthCredentialsFieldsSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (registering) ImeAction.Next else ImeAction.Done),
             keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }, onDone = { onSubmit() })
         )
-        if (registering) OutlinedTextField(
+        AnimatedVisibility(
+            visible = registering,
+            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
+            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
+        ) {
+            OutlinedTextField(
             shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
@@ -189,6 +214,7 @@ fun AuthCredentialsFieldsSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onSubmit() })
         )
+        }
         if (!registering) TextButton(onClick = onForgotPassword, modifier = Modifier.align(Alignment.End)) {
             Text("Esqueci minha senha", color = LocalIOS27Theme.current.accent)
         }
@@ -229,3 +255,5 @@ fun AuthPrimaryActionsSection(
         )
     }
 }
+
+// AUTH_FORM_MOTION_V4

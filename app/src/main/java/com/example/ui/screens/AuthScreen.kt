@@ -1,5 +1,15 @@
 package com.example.ui.screens
 
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.ui.input.pointer.PointerEventPass
+
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+
+import androidx.compose.foundation.gestures.awaitFirstDown
+
+import androidx.compose.foundation.gestures.awaitEachGesture
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -106,6 +116,7 @@ fun AuthScreen(
     val themeColors = LocalIOS27Theme.current
     val appSettings = LocalAppSettings.current
     val focusManager = LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     var authMode by rememberSaveable { mutableStateOf(initialMode) }
     var nameInput by rememberSaveable { mutableStateOf("") }
@@ -185,6 +196,19 @@ fun AuthScreen(
                 .fillMaxSize()
                 .background(themeColors.bgPrimary)
                 .testTag("auth_screen_root")
+                // AUTH_OUTSIDE_FOCUS_V4: observe unconsumed taps, never steal field/button taps.
+                .pointerInput(focusManager, keyboard) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                        if (!down.isConsumed) {
+                            val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+                            if (up != null && !up.isConsumed) {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                            }
+                        }
+                    }
+                }
         ) {
             // 1. Camada de Fundo Imersiva gravada no authBackdrop (respeita tema Claro/Escuro e Reduzir Transparência)
             AuthBackdropLayer(
@@ -202,6 +226,8 @@ fun AuthScreen(
                 AuthModeSegmentedToggle(
                     selectedMode = formState.mode,
                     onSelectMode = { nextMode ->
+                        focusManager.clearFocus()
+                        keyboard?.hide()
                         authMode = nextMode
                         localBanner = null
                         onClearFeedback()
@@ -324,7 +350,7 @@ private fun AuthGlassScreenShellContent(
 
                 AuthBrandHeader(isLinkingFromGuest = isLinkingFromGuest)
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Column(
                     modifier = Modifier
