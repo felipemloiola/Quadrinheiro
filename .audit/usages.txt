@@ -1,4 +1,4 @@
-=== app/src/main/java/com/example/MainActivity.kt:1043
+=== app/src/main/java/com/example/MainActivity.kt:1047
                                     )
                                 }
                             }
@@ -106,7 +106,7 @@ fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
 
                             Box(
                                 modifier = Modifier
-=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:501
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:514
             item {
                 Column(
                     modifier = Modifier
@@ -124,7 +124,7 @@ fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
                     )
                     Text(
                         text = "Quadrinheiro",
-=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1222
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1235
                                         }
                                         AppleMenuPicker(
                                             value = appSettings.defaultShelfSort,

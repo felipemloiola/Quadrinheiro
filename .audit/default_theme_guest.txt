@@ -1,6 +1,3 @@
-SKIP: app/src/main/java/com/example/model/Models.kt
-SKIP: app/src/main/java/com/example/ui/theme/Theme.kt
-SKIP: app/src/main/java/com/example/data/SafeStorage.kt
-SKIP: app/src/main/java/com/example/MainActivity.kt
-SKIP: app/src/main/java/com/example/ui/screens/SettingsScreen.kt
-SKIP: app/src/main/java/com/example/data/QuadrinheiroAuthManager.kt
+Legacy V7 mutating transformations retired; no Kotlin files changed by this script.
+CHECK: refactored SafeStorage retains missing-preference defaults and isolated state loaders.
+Guest UI, theme, typography and auth implementations are not reapplied or overwritten.

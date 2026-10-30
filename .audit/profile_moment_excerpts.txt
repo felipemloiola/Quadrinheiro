@@ -353,216 +353,216 @@
  1554          }
  1555  
  1556          // Indicador visual desenhado inteiramente na fase de draw com leitura diferida de estado
-=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:164-233
-  164      val config = LocalConfiguration.current
-  165  
-  166      var newTagInput by remember { mutableStateOf("") }
-  167      var confirmClearAll by remember { mutableStateOf(false) }
-  168  
-  169      val readComicsCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
-  170      val totalPagesRead = remember(comics) {
-  171          comics.sumOf {
-  172              when (it.status) {
-  173                  ReadingStatus.READ -> it.pageCount
-  174                  ReadingStatus.READING -> it.currentPage
-  175                  ReadingStatus.WANT_TO_READ -> 0
-  176              }
-  177          }
-  178      }
-  179  
-  180      // Back handler inside Settings sub-pages
-  181      BackHandler(enabled = settingsSubPage != null) {
-  182          viewModel.goBackSettings()
-  183      }
-  184  
-  185      // Route key for current settings view (root or sub-page)
-  186      val routeKey = viewModel.getCurrentRouteKey("settings", settingsSubPage)
-  187  
-  188      // Gallery photo picker for Avatar
-  189      val avatarPickerLauncher = rememberLauncherForActivityResult(
-  190          contract = ActivityResultContracts.PickVisualMedia()
-  191      ) { uri ->
-  192          if (uri != null) {
-  193              try {
-  194                  context.contentResolver.openInputStream(uri)?.use { stream ->
-  195                      val bmp = BitmapFactory.decodeStream(stream)
-  196                      if (bmp != null) {
-  197                          val minSide = min(bmp.width, bmp.height)
-  198                          val sx = (bmp.width - minSide) / 2
-  199                          val sy = (bmp.height - minSide) / 2
-  200                          val cropped = Bitmap.createBitmap(bmp, sx, sy, minSide, minSide)
-  201                          val scaled = Bitmap.createScaledBitmap(cropped, 240, 240, true)
-  202                          val baos = ByteArrayOutputStream()
-  203                          scaled.compress(Bitmap.CompressFormat.JPEG, 86, baos)
-  204                          val b64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-  205                          viewModel.updateProfile { it.copy(avatarUrl = b64) }
-  206                          viewModel.showNotice("Foto de perfil atualizada")
-  207                      }
-  208                  }
-  209              } catch (_: Throwable) {
-  210              }
-  211          }
-  212      }
-  213  
-  214      // Export / Import JSON Launchers & Android ZIP Launcher
-  215      val exportJsonLauncher = rememberLauncherForActivityResult(
-  216          contract = ActivityResultContracts.CreateDocument("application/json")
-  217      ) { uri ->
-  218          if (uri != null) {
-  219              try {
-  220                  context.contentResolver.openOutputStream(uri)?.use { out ->
-  221                      out.write(viewModel.exportBackupJson().toByteArray(Charsets.UTF_8))
-  222                  }
-  223                  viewModel.showNotice("Backup JSON exportado")
-  224              } catch (_: Throwable) {
-  225              }
-  226          }
-  227      }
-  228  
-  229      val importJsonLauncher = rememberLauncherForActivityResult(
-  230          contract = ActivityResultContracts.OpenDocument()
-  231      ) { uri ->
-  232          if (uri != null) {
-  233              try {
-=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1644-1713
- 1644                                  Text(
- 1645                                      text = "Meu Perfil",
- 1646                                      fontSize = 28.sp,
- 1647                                      fontWeight = FontWeight.Bold,
- 1648                                      color = s.textPrimary
- 1649                                  )
- 1650                              }
- 1651  
- 1652                              // Cartão de Foto de Perfil + Seletor de Avatares Apple
- 1653                              Column(
- 1654                                  modifier = Modifier
- 1655                                      .fillMaxWidth()
- 1656                                      .contentMaterialSurface(RoundedCornerShape(24.dp))
- 1657                                      .padding(20.dp),
- 1658                                  horizontalAlignment = Alignment.CenterHorizontally,
- 1659                                  verticalArrangement = Arrangement.spacedBy(14.dp)
- 1660                              ) {
- 1661                                  Box {
- 1662                                      UserAvatar(profile = profile, sizeDp = 88)
- 1663                                      Box(
- 1664                                          modifier = Modifier
- 1665                                              .align(Alignment.BottomEnd)
- 1666                                              .size(32.dp)
- 1667                                              .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
- 1668                                              .clickable {
- 1669                                                  avatarPickerLauncher.launch(
- 1670                                                      PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
- 1671                                                  )
- 1672                                              },
- 1673                                          contentAlignment = Alignment.Center
- 1674                                      ) {
- 1675                                          Icon(
- 1676                                              imageVector = Icons.Default.CameraAlt,
- 1677                                              contentDescription = "Enviar foto do aparelho",
- 1678                                              tint = s.textPrimary,
- 1679                                              modifier = Modifier.size(15.dp)
- 1680                                          )
- 1681                                      }
- 1682                                  }
- 1683  
- 1684                                  Column(horizontalAlignment = Alignment.CenterHorizontally) {
- 1685                                      Text(
- 1686                                          text = if (isGuest) "Convidado" else profile.name.ifBlank { "Leitor" },
- 1687                                          fontSize = 16.sp,
- 1688                                          fontWeight = FontWeight.Bold,
- 1689                                          color = s.textPrimary
- 1690                                      )
- 1691                                      Text(
- 1692                                          text = "${profile.handle.ifBlank { "@leitor" }} • ${profile.favoriteUniverse.ifBlank { "Colecionador" }}",
- 1693                                          fontSize = 12.sp,
- 1694                                          color = s.textSecondary
- 1695                                      )
- 1696                                  }
- 1697  
- 1698                                  if (profile.avatarUrl.isNotBlank()) {
- 1699                                      Row(
- 1700                                          modifier = Modifier.fillMaxWidth(),
- 1701                                          horizontalArrangement = Arrangement.spacedBy(10.dp),
- 1702                                          verticalAlignment = Alignment.CenterVertically
- 1703                                      ) {
- 1704                                          // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
- 1705  
- 1706                                          Row(
- 1707                                              modifier = Modifier
- 1708                                                  .weight(1f)
- 1709                                                  .height(40.dp)
- 1710                                                  .clip(RoundedCornerShape(999.dp))
- 1711                                                  .background(
- 1712                                                      Color(0xFFF43F5E).copy(
- 1713                                                          alpha = if (s.isLight) 0.10f else 0.14f
-=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1730-1799
- 1730                                                  imageVector = Icons.Default.DeleteOutline,
- 1731                                                  contentDescription = null,
- 1732                                                  tint = Color(0xFFF87171),
- 1733                                                  modifier = Modifier.size(15.dp)
- 1734                                              )
- 1735                                              Spacer(modifier = Modifier.width(6.dp))
- 1736                                              Text(
- 1737                                                  text = "Remover foto",
- 1738                                                  fontSize = 12.sp,
- 1739                                                  fontWeight = FontWeight.SemiBold,
- 1740                                                  color = Color(0xFFF87171),
- 1741                                                  maxLines = 1,
- 1742                                                  softWrap = false,
- 1743                                                  overflow = TextOverflow.Ellipsis
- 1744                                              )
- 1745                                          }
- 1746                                      }
- 1747                                  } else {
- 1748                                      // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
- 1749                                  }
- 1750  
- 1751                                  if (profile.avatarUrl.isBlank()) {
- 1752                                      HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
- 1753  
- 1754                                      Text(
- 1755                                          text = "Acabamento do emblema quando sem foto",
- 1756                                          fontSize = 11.sp,
- 1757                                          fontWeight = FontWeight.SemiBold,
- 1758                                          color = s.textSecondary
- 1759                                      )
- 1760  
- 1761                                      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
- 1762                                          AppleAvatarPreset.entries.forEach { preset ->
- 1763                                              val active = profile.avatarPreset == preset.id
- 1764                                              val startC = if (preset == AppleAvatarPreset.THEME) themeColors.accent else preset.startColor
- 1765                                              val endC = if (preset == AppleAvatarPreset.THEME) themeColors.accentSecondary else preset.endColor
- 1766                                              val avgLum = (
- 1767                                                  (0.2126f * startC.red + 0.7152f * startC.green + 0.0722f * startC.blue) +
- 1768                                                      (0.2126f * endC.red + 0.7152f * endC.green + 0.0722f * endC.blue)
- 1769                                                  ) * 0.5f
- 1770                                              val checkTint = if (avgLum > 0.55f) Color(0xFF0A0A0E) else Color.White
- 1771                                              Box(
- 1772                                                  modifier = Modifier
- 1773                                                      .size(32.dp)
- 1774                                                      .clip(CircleShape)
- 1775                                                      .background(
- 1776                                                          Brush.linearGradient(listOf(startC, endC))
- 1777                                                      )
- 1778                                                      .border(
- 1779                                                          width = if (active) 2.dp else 0.8.dp,
- 1780                                                          color = if (active) s.textPrimary else s.textSecondary.copy(alpha = 0.25f),
- 1781                                                          shape = CircleShape
- 1782                                                      )
- 1783                                                      .clickable {
- 1784                                                          viewModel.updateProfile { it.copy(avatarPreset = preset.id) }
- 1785                                                      },
- 1786                                                  contentAlignment = Alignment.Center
- 1787                                              ) {
- 1788                                                  if (active) {
- 1789                                                      Icon(
- 1790                                                          imageVector = Icons.Default.Check,
- 1791                                                          contentDescription = null,
- 1792                                                          tint = checkTint,
- 1793                                                          modifier = Modifier.size(14.dp)
- 1794                                                      )
- 1795                                                  }
- 1796                                              }
- 1797                                          }
- 1798                                      }
- 1799                                  }
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:177-246
+  177          if (usernameVerification.status == UsernameAvailabilityStatus.IDLE) {
+  178              handleInputDraft = profile.handle
+  179          }
+  180      }
+  181  
+  182      val readComicsCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
+  183      val totalPagesRead = remember(comics) {
+  184          comics.sumOf {
+  185              when (it.status) {
+  186                  ReadingStatus.READ -> it.pageCount
+  187                  ReadingStatus.READING -> it.currentPage
+  188                  ReadingStatus.WANT_TO_READ -> 0
+  189              }
+  190          }
+  191      }
+  192  
+  193      // Back handler inside Settings sub-pages
+  194      BackHandler(enabled = settingsSubPage != null) {
+  195          viewModel.goBackSettings()
+  196      }
+  197  
+  198      // Route key for current settings view (root or sub-page)
+  199      val routeKey = viewModel.getCurrentRouteKey("settings", settingsSubPage)
+  200  
+  201      // Gallery photo picker for Avatar
+  202      val avatarPickerLauncher = rememberLauncherForActivityResult(
+  203          contract = ActivityResultContracts.PickVisualMedia()
+  204      ) { uri ->
+  205          if (uri != null) {
+  206              try {
+  207                  context.contentResolver.openInputStream(uri)?.use { stream ->
+  208                      val bmp = BitmapFactory.decodeStream(stream)
+  209                      if (bmp != null) {
+  210                          val minSide = min(bmp.width, bmp.height)
+  211                          val sx = (bmp.width - minSide) / 2
+  212                          val sy = (bmp.height - minSide) / 2
+  213                          val cropped = Bitmap.createBitmap(bmp, sx, sy, minSide, minSide)
+  214                          val scaled = Bitmap.createScaledBitmap(cropped, 200, 200, true)
+  215                          val baos = ByteArrayOutputStream()
+  216                          scaled.compress(Bitmap.CompressFormat.JPEG, 82, baos)
+  217                          val b64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+  218                          viewModel.updateProfile { it.copy(avatarUrl = b64) }
+  219                          viewModel.showNotice("Foto de perfil salva na sua conta")
+  220                      }
+  221                  }
+  222              } catch (_: Throwable) {
+  223              }
+  224          }
+  225      }
+  226  
+  227      // Export / Import JSON Launchers & Android ZIP Launcher
+  228      val exportJsonLauncher = rememberLauncherForActivityResult(
+  229          contract = ActivityResultContracts.CreateDocument("application/json")
+  230      ) { uri ->
+  231          if (uri != null) {
+  232              try {
+  233                  context.contentResolver.openOutputStream(uri)?.use { out ->
+  234                      out.write(viewModel.exportBackupJson().toByteArray(Charsets.UTF_8))
+  235                  }
+  236                  viewModel.showNotice("Backup JSON exportado")
+  237              } catch (_: Throwable) {
+  238              }
+  239          }
+  240      }
+  241  
+  242      val importJsonLauncher = rememberLauncherForActivityResult(
+  243          contract = ActivityResultContracts.OpenDocument()
+  244      ) { uri ->
+  245          if (uri != null) {
+  246              try {
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1657-1726
+ 1657                                  Text(
+ 1658                                      text = "Meu Perfil",
+ 1659                                      fontSize = 28.sp,
+ 1660                                      fontWeight = FontWeight.Bold,
+ 1661                                      color = s.textPrimary
+ 1662                                  )
+ 1663                              }
+ 1664  
+ 1665                              // Cartão de Foto de Perfil + Seletor de Avatares Apple
+ 1666                              Column(
+ 1667                                  modifier = Modifier
+ 1668                                      .fillMaxWidth()
+ 1669                                      .contentMaterialSurface(RoundedCornerShape(24.dp))
+ 1670                                      .padding(20.dp),
+ 1671                                  horizontalAlignment = Alignment.CenterHorizontally,
+ 1672                                  verticalArrangement = Arrangement.spacedBy(14.dp)
+ 1673                              ) {
+ 1674                                  Box {
+ 1675                                      UserAvatar(profile = profile, sizeDp = 88)
+ 1676                                      Box(
+ 1677                                          modifier = Modifier
+ 1678                                              .align(Alignment.BottomEnd)
+ 1679                                              .size(32.dp)
+ 1680                                              .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
+ 1681                                              .clickable {
+ 1682                                                  avatarPickerLauncher.launch(
+ 1683                                                      PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+ 1684                                                  )
+ 1685                                              },
+ 1686                                          contentAlignment = Alignment.Center
+ 1687                                      ) {
+ 1688                                          Icon(
+ 1689                                              imageVector = Icons.Default.CameraAlt,
+ 1690                                              contentDescription = "Enviar foto do aparelho",
+ 1691                                              tint = s.textPrimary,
+ 1692                                              modifier = Modifier.size(15.dp)
+ 1693                                          )
+ 1694                                      }
+ 1695                                  }
+ 1696  
+ 1697                                  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+ 1698                                      Text(
+ 1699                                          text = if (isGuest) "Convidado" else profile.name.ifBlank { "Leitor" },
+ 1700                                          fontSize = 16.sp,
+ 1701                                          fontWeight = FontWeight.Bold,
+ 1702                                          color = s.textPrimary
+ 1703                                      )
+ 1704                                      Text(
+ 1705                                          text = "${profile.handle.ifBlank { "@leitor" }} • ${profile.favoriteUniverse.ifBlank { "Colecionador" }}",
+ 1706                                          fontSize = 12.sp,
+ 1707                                          color = s.textSecondary
+ 1708                                      )
+ 1709                                  }
+ 1710  
+ 1711                                  if (profile.avatarUrl.isNotBlank()) {
+ 1712                                      Row(
+ 1713                                          modifier = Modifier.fillMaxWidth(),
+ 1714                                          horizontalArrangement = Arrangement.spacedBy(10.dp),
+ 1715                                          verticalAlignment = Alignment.CenterVertically
+ 1716                                      ) {
+ 1717                                          // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
+ 1718  
+ 1719                                          Row(
+ 1720                                              modifier = Modifier
+ 1721                                                  .weight(1f)
+ 1722                                                  .height(40.dp)
+ 1723                                                  .clip(RoundedCornerShape(999.dp))
+ 1724                                                  .background(
+ 1725                                                      Color(0xFFF43F5E).copy(
+ 1726                                                          alpha = if (s.isLight) 0.10f else 0.14f
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1743-1812
+ 1743                                                  imageVector = Icons.Default.DeleteOutline,
+ 1744                                                  contentDescription = null,
+ 1745                                                  tint = Color(0xFFF87171),
+ 1746                                                  modifier = Modifier.size(15.dp)
+ 1747                                              )
+ 1748                                              Spacer(modifier = Modifier.width(6.dp))
+ 1749                                              Text(
+ 1750                                                  text = "Remover foto",
+ 1751                                                  fontSize = 12.sp,
+ 1752                                                  fontWeight = FontWeight.SemiBold,
+ 1753                                                  color = Color(0xFFF87171),
+ 1754                                                  maxLines = 1,
+ 1755                                                  softWrap = false,
+ 1756                                                  overflow = TextOverflow.Ellipsis
+ 1757                                              )
+ 1758                                          }
+ 1759                                      }
+ 1760                                  } else {
+ 1761                                      // PROFILE_SINGLE_PHOTO_ACTION_V11: use the camera beside the avatar.
+ 1762                                  }
+ 1763  
+ 1764                                  if (profile.avatarUrl.isBlank()) {
+ 1765                                      HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+ 1766  
+ 1767                                      Text(
+ 1768                                          text = "Acabamento do emblema quando sem foto",
+ 1769                                          fontSize = 11.sp,
+ 1770                                          fontWeight = FontWeight.SemiBold,
+ 1771                                          color = s.textSecondary
+ 1772                                      )
+ 1773  
+ 1774                                      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+ 1775                                          AppleAvatarPreset.entries.forEach { preset ->
+ 1776                                              val active = profile.avatarPreset == preset.id
+ 1777                                              val startC = if (preset == AppleAvatarPreset.THEME) themeColors.accent else preset.startColor
+ 1778                                              val endC = if (preset == AppleAvatarPreset.THEME) themeColors.accentSecondary else preset.endColor
+ 1779                                              val avgLum = (
+ 1780                                                  (0.2126f * startC.red + 0.7152f * startC.green + 0.0722f * startC.blue) +
+ 1781                                                      (0.2126f * endC.red + 0.7152f * endC.green + 0.0722f * endC.blue)
+ 1782                                                  ) * 0.5f
+ 1783                                              val checkTint = if (avgLum > 0.55f) Color(0xFF0A0A0E) else Color.White
+ 1784                                              Box(
+ 1785                                                  modifier = Modifier
+ 1786                                                      .size(32.dp)
+ 1787                                                      .clip(CircleShape)
+ 1788                                                      .background(
+ 1789                                                          Brush.linearGradient(listOf(startC, endC))
+ 1790                                                      )
+ 1791                                                      .border(
+ 1792                                                          width = if (active) 2.dp else 0.8.dp,
+ 1793                                                          color = if (active) s.textPrimary else s.textSecondary.copy(alpha = 0.25f),
+ 1794                                                          shape = CircleShape
+ 1795                                                      )
+ 1796                                                      .clickable {
+ 1797                                                          viewModel.updateProfile { it.copy(avatarPreset = preset.id) }
+ 1798                                                      },
+ 1799                                                  contentAlignment = Alignment.Center
+ 1800                                              ) {
+ 1801                                                  if (active) {
+ 1802                                                      Icon(
+ 1803                                                          imageVector = Icons.Default.Check,
+ 1804                                                          contentDescription = null,
+ 1805                                                          tint = checkTint,
+ 1806                                                          modifier = Modifier.size(14.dp)
+ 1807                                                      )
+ 1808                                                  }
+ 1809                                              }
+ 1810                                          }
+ 1811                                      }
+ 1812                                  }
