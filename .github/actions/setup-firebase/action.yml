@@ -1,0 +1,18 @@
+name: Set up verified Firebase CLI
+description: Install a fixed official Linux x64 Firebase executable without npm dependency resolution.
+runs:
+  using: composite
+  steps:
+    - name: Download and verify official Firebase executable
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(uname -s)" = Linux && test "$(uname -m)" = x86_64 || { echo '::error::This installer supports Linux x64 runners only.'; exit 1; }
+        directory="$RUNNER_TEMP/verified-firebase-cli"
+        mkdir -p "$directory"
+        executable="$directory/firebase"
+        curl --fail --location --retry 3 --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$executable" 'https://github.com/firebase/firebase-tools/releases/download/v15.22.4/firebase-tools-linux'
+        printf '%s  %s\n' '9f20848be954b4c30d323d10d93311c991ae4508dbc782c4a076530cc84412c1' "$executable" | sha256sum --check --status || { echo '::error::Firebase executable checksum mismatch; refusing to run it.'; exit 1; }
+        chmod 700 "$executable"
+        "$executable" --version
+        echo "$directory" >> "$GITHUB_PATH"

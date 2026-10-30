@@ -12,6 +12,7 @@ on:
       - 'firebase.ci.json'
       - 'firestore.rules'
       - 'firestore.indexes.json'
+      - '.github/actions/setup-firebase/**'
       - '.github/scripts/configure_android_release.py'
       - '.github/workflows/release-apk.yml'
 
@@ -41,6 +42,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+      - name: Install fixed and verified Firebase CLI without npm
+        uses: ./.github/actions/setup-firebase
       - name: Require permanent signing secrets
         env:
           KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -83,7 +86,7 @@ jobs:
           if [ -z "$task" ]; then echo '::error::Nenhuma tarefa de testes compatível foi encontrada.'; exit 1; fi
           echo "Tarefa de testes selecionada: :app:$task" | tee ci-reports/selected-tests.txt
           echo "Test task selected: :app:$task; local Auth/Firestore emulators; production rules unchanged." >> "$GITHUB_STEP_SUMMARY"
-          npx --yes firebase-tools@14 emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$task :app:assembleRelease -PreleaseVersionCode=$VERSION_CODE -PreleaseVersionName=$VERSION_NAME --no-daemon --console=plain"
+          firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$task :app:assembleRelease -PreleaseVersionCode=$VERSION_CODE -PreleaseVersionName=$VERSION_NAME --no-daemon --console=plain"
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
