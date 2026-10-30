@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.layout.heightIn
+
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -2690,6 +2692,7 @@ fun <T> AppleMenuPicker(
     ) {
         Row(
             modifier = Modifier
+                .heightIn(min = 48.dp)
                 .graphicsLayer {
                     // Cross-morph progressivo com a gota do LiquidGlassMenuOverlayHost:
                     // Ao fechar, o botão reaparece suavemente enquanto a gota se funde nele, sem nunca piscar!
@@ -2769,7 +2772,7 @@ fun <T> AppleMenuPicker(
                     }
                 )
                 .then(triggerHighlight.modifier)
-                .then(triggerHighlight.gestureModifier)
+                // SORT_PICKER_SINGLE_TOUCH_HANDLER: clickable owns touch; no competing decorative gesture
                 .clip(ContinuousCapsule)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },

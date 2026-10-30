@@ -1,0 +1,1 @@
+OK: removed competing decorative gesture from AppleMenuPicker; clickable retained; minimum touch height 48dp. Runtime touch test pending.
