@@ -368,7 +368,20 @@ class SafeStorage(context: Context) {
             val comics = if (comicsArr != null) parseComics(comicsArr) else emptyList()
             PortugueseComicTranslator.seedPersistedTranslations(comics, persistedTranslations)
             val profile = root.optJSONObject("profile")?.let { parseProfile(it) } ?: ReaderProfile()
-            val settings = root.optJSONObject("settings")?.let { parseSettings(it) } ?: AppSettings()
+            // STORAGE_SYSTEM_DEFAULTS_V7: preserve saved choices and default only missing preferences.
+            val settings = root.optJSONObject("settings")?.let { saved ->
+                val parsed = parseSettings(saved)
+                val defaults = AppSettings()
+                val savedMode = saved.optString("colorScheme", "").lowercase()
+                parsed.copy(
+                    themeId = if (!saved.has("themeId") || saved.optString("themeId", "").isBlank()) defaults.themeId else parsed.themeId,
+                    colorScheme = when (savedMode) {
+                        "system", "light", "dark" -> savedMode
+                        "" -> defaults.colorScheme
+                        else -> parsed.colorScheme
+                    }
+                )
+            } ?: AppSettings()
             StoredState(comics, profile, settings)
         } catch (_: Throwable) {
             StoredState(emptyList(), ReaderProfile(), AppSettings())

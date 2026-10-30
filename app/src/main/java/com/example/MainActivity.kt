@@ -239,7 +239,12 @@ fun QuadrinheiroApp(
     val settingsParentPage by viewModel.settingsParentPage.collectAsState()
 
     val comics by viewModel.comics.collectAsState()
-    val profile by viewModel.profile.collectAsState()
+    val storedProfile by viewModel.profile.collectAsState()
+    // GUEST_PRESENTATION_V7: presentation only; never overwrite account data.
+    val profile = if (authUiState == AuthUiState.Guest) storedProfile.copy(
+        name = "Convidado", handle = "", bio = "", favoriteUniverse = "",
+        avatarUrl = "", avatarPreset = "theme", showGoalOnHome = false
+    ) else storedProfile
     val appSettings by viewModel.appSettings.collectAsState()
 
     val shelfSection by viewModel.shelfSection.collectAsState()

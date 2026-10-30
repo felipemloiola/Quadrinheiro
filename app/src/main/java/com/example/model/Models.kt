@@ -595,8 +595,9 @@ data class ReaderProfile(
 @Stable
 @Immutable
 data class AppSettings(
-    val themeId: String = "midnightSlate",
-    val colorScheme: String = "dark", // "dark" | "light"
+    // SYSTEM_MONO_DEFAULT_V7: only new or missing preferences use these defaults.
+    val themeId: String = "SYSTEM_MONO",
+    val colorScheme: String = "system", // "dark" | "light"
     val glassLevel: Int = 26, // 0 = Clear, 100 = Tinted
     val glassVariant: String = "regular", // "regular" | "clear"
     val edgeRefraction: Boolean = true,

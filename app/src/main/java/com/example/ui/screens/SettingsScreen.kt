@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.AccessibilityNew
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -146,6 +149,17 @@ fun SettingsTabScreen(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val themeColors = LocalIOS27Theme.current
+    // GUEST_SETTINGS_V7: no personal profile or goal editors for guests.
+    val sessionState by viewModel.authUiState.collectAsStateWithLifecycle()
+    val isGuest = sessionState == AuthUiState.Guest
+    if (isGuest && settingsSubPage == "profile") {
+        GuestProfilePanel(
+            onBack = viewModel::goBackSettings,
+            onLogin = { viewModel.openAuthModalForLinking(AuthMode.LOGIN) },
+            onRegister = { viewModel.openAuthModalForLinking(AuthMode.REGISTER) }
+        )
+        return
+    }
     val context = LocalContext.current
     val config = LocalConfiguration.current
 
@@ -299,7 +313,7 @@ fun SettingsTabScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = profile.name.ifBlank { "Leitor" },
+                                text = if (isGuest) "Convidado" else profile.name.ifBlank { "Leitor" },
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = themeColors.textPrimary,
@@ -307,7 +321,7 @@ fun SettingsTabScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
                             )
-                            Box(
+                            if (!isGuest) Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(themeColors.accent.copy(alpha = 0.09f))
@@ -323,7 +337,7 @@ fun SettingsTabScreen(
                                 )
                             }
                         }
-                        Text(
+                        if (!isGuest) Text(
                             text = profile.bio.ifBlank { "Meta: $readComicsCount/${profile.yearlyGoal} no ano" },
                             fontSize = 12.sp,
                             color = themeColors.textSecondary,
@@ -362,7 +376,7 @@ fun SettingsTabScreen(
                             .contentMaterialSurface(RoundedCornerShape(24.dp))
                     ) {
                         SettingsMenuRow(
-                            icon = { Icon(LucideIcons.SlidersHorizontal, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
+                            icon = { Icon(Icons.Outlined.Palette, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Aparência",
                             subtitle = "Modo ${if (themeColors.isDark) "Escuro" else "Claro"} • Liquid Glass (${appSettings.glassLevel}%)",
                             trailingValue = AppTheme.fromId(appSettings.themeId).label,
@@ -374,7 +388,7 @@ fun SettingsTabScreen(
                         )
                         HorizontalDivider(color = themeColors.divider, thickness = 0.5.dp)
                         SettingsMenuRow(
-                            icon = { Icon(LucideIcons.Maximize2, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
+                            icon = { Icon(Icons.Outlined.AccessibilityNew, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Acessibilidade e Contraste",
                             subtitle = null,
                             trailingValue = if (appSettings.reduceTransparency || appSettings.increaseContrast || appSettings.boldText) "Personalizado" else "Padrão",
@@ -1667,7 +1681,7 @@ fun SettingsTabScreen(
 
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = profile.name.ifBlank { "Leitor" },
+                                        text = if (isGuest) "Convidado" else profile.name.ifBlank { "Leitor" },
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = s.textPrimary

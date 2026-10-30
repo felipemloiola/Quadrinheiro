@@ -1,0 +1,6 @@
+OK: app/src/main/java/com/example/model/Models.kt
+OK: app/src/main/java/com/example/ui/theme/Theme.kt
+OK: app/src/main/java/com/example/data/SafeStorage.kt
+OK: app/src/main/java/com/example/MainActivity.kt
+OK: app/src/main/java/com/example/ui/screens/SettingsScreen.kt
+OK: app/src/main/java/com/example/data/QuadrinheiroAuthManager.kt

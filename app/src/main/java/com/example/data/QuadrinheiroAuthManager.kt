@@ -73,7 +73,7 @@ class QuadrinheiroAuthManager(
         if (storage.isGuestMode() || storage.hasCompletedAuthOnboarding()) {
             val guestProfile = UserProfile(
                 uid = "guest_local",
-                displayName = fallbackReaderName.ifBlank { "Leitor Convidado" },
+                displayName = fallbackReaderName.ifBlank { "Convidado" },
                 email = null,
                 photoUrl = null,
                 isGuest = true,
@@ -296,10 +296,10 @@ class QuadrinheiroAuthManager(
     /**
      * Ativa o Modo Convidado Offline-First imediatamente, preservando todo o acervo local.
      */
-    fun continueAsGuest(customDisplayName: String = "Leitor Convidado"): UserProfile {
+    fun continueAsGuest(customDisplayName: String = "Convidado"): UserProfile {
         val guestProfile = UserProfile(
             uid = "guest_local",
-            displayName = customDisplayName.ifBlank { "Leitor Convidado" },
+            displayName = customDisplayName.ifBlank { "Convidado" },
             email = null,
             photoUrl = null,
             isGuest = true,
@@ -377,3 +377,5 @@ class QuadrinheiroAuthManager(
         }
     }
 }
+
+// GUEST_LABEL_V7

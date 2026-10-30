@@ -386,10 +386,20 @@ fun QuadrinheiroTheme(
     settings: AppSettings,
     content: @Composable () -> Unit
 ) {
-    val isDark = settings.colorScheme != "light"
-    val appTheme = remember(settings.themeId) { AppTheme.fromId(settings.themeId) }
+    // SYSTEM_MONO_THEME_V7: explicit user choices always take precedence.
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = when (settings.colorScheme.lowercase()) {
+        "system" -> systemDark
+        "light" -> false
+        else -> true
+    }
+    val appTheme = remember(settings.themeId, isDark) {
+        if (settings.themeId == "SYSTEM_MONO") {
+            if (isDark) AppTheme.WHITE else AppTheme.BLACK
+        } else AppTheme.fromId(settings.themeId)
+    }
     val themeState = remember(appTheme, isDark) { getIOS27ThemeColors(appTheme, isDark) }
-    val themeDef = remember(settings.themeId) { IOS27ThemeDef.fromId(settings.themeId) }
+    val themeDef = remember(settings.themeId) { if (settings.themeId == "SYSTEM_MONO") IOS27ThemeDef.MONOCHROME else IOS27ThemeDef.fromId(settings.themeId) }
     val rawScheme = remember(themeDef, isDark, themeState) {
         val baseScheme = if (isDark) themeDef.dark else themeDef.light
         baseScheme.copy(
