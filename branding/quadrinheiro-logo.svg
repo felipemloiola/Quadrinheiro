@@ -1,15 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
   <defs>
-    <!-- Left panel: Vermelho Carmim -> Rosa Neon (mesmos valores do VectorDrawable) -->
+    <!-- Painel esquerdo: Vermelho Carmim -> Rosa Neon -->
     <linearGradient id="gradLeft" x1="25" y1="26.3" x2="44.8" y2="75.1" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FF1493" />
       <stop offset="0.5" stop-color="#E11D48" />
       <stop offset="1" stop-color="#881337" />
     </linearGradient>
-    <!-- Sub-faceta de destaque no painel esquerdo -->
+
+    <!-- Sub-faceta de destaque no painel esquerdo (usando alfa correto) -->
     <linearGradient id="gradLeftHighlight" x1="28.9" y1="32.9" x2="40.1" y2="52.7" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#3DFFFFFF" />
-      <stop offset="1" stop-color="#00FFFFFF" />
+      <!-- #3DFFFFFF -> branco com ~0.24 de opacidade -->
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.24" />
+      <!-- #00FFFFFF -> branco totalmente transparente -->
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
 
     <!-- Painel superior: Amarelo Ouro -> Laranja Vibrante -->
@@ -26,11 +29,15 @@
       <stop offset="0.75" stop-color="#00B4D8" />
       <stop offset="1" stop-color="#00F5FF" />
     </linearGradient>
-    <!-- Sub-faceta luminosa da cauda do Q -->
+
+    <!-- Sub-faceta luminosa da cauda do Q (com alfa correto) -->
     <linearGradient id="gradTailHighlight" x1="63.9" y1="55.3" x2="85.7" y2="83.7" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#33FFFFFF" />
-      <stop offset="0.6" stop-color="#5900F5FF" />
-      <stop offset="1" stop-color="#0000F5FF" />
+      <!-- #33FFFFFF -> branco com ~0.2 de opacidade -->
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.2" />
+      <!-- #5900F5FF -> ciano #00F5FF com ~0.35 de opacidade -->
+      <stop offset="0.6" stop-color="#00F5FF" stop-opacity="0.35" />
+      <!-- #0000F5FF -> ciano totalmente transparente -->
+      <stop offset="1" stop-color="#00F5FF" stop-opacity="0" />
     </linearGradient>
 
     <style type="text/css">
