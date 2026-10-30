@@ -1,0 +1,144 @@
+=== app/src/main/java/com/example/MainActivity.kt:1033
+                                    )
+                                }
+                            }
+                        },
+                        onDismiss = { viewModel.setShowManualModal(false) }
+                    )
+                }
+
+                // Host Flutuante de Menus Liquid Glass (ex.: "Mais Recentes" na Biblioteca e seletores de Ajustes)
+                com.example.ui.components.LiquidGlassMenuOverlayHost(
+                    state = menuHostState,
+                    backdrop = mainContentBackdrop
+                )
+
+                // Modal de Autenticação (quando aberto a partir da tela de Ajustes no Modo Convidado para vincular conta)
+                AnimatedVisibility(
+                    visible = showAuthModalFromSettings,
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:1371
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        QuadrinheiroLogo(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(com.kyant.shapes.ContinuousRoundedRectangle(8.dp))
+                        )
+                        Text(
+                            text = "Quadrinheiro",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+=== app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:2410
+                            )
+                            chosen.onClick()
+                            state.dismissMenu(req.id)
+                        }
+                    }
+                }
+                .clip(ContinuousRoundedRectangle(currentRadiusDp))
+        ) {
+            // 1. Conteúdo da pílula de origem ("Mais Recentes ⌄") dentro da gota durante o início da abertura e o fim do fechamento
+            val triggerContentAlpha = ((0.36f - morphProgress) / 0.36f).coerceIn(0f, 1f)
+            if (triggerContentAlpha > 0.01f && req.triggerLabel.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .align(if (alignRight) Alignment.TopEnd else Alignment.TopStart)
+                        .width(with(density) { startW.toDp() })
+                        .height(with(density) { startH.toDp() })
+                        .graphicsLayer {
+=== app/src/main/java/com/example/ui/components/QuadrinheiroLogo.kt:35
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.PlusJakartaSansFamily
+
+enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
+
+@Composable
+fun QuadrinheiroLogo(
+    variant: QuadrinheiroLogoVariant = QuadrinheiroLogoVariant.Primary,
+    modifier: Modifier = Modifier,
+    titleVisible: Boolean = true,
+    subtitle: String? = null,
+    leadingIcon: ImageVector? = null
+) {
+    val theme = LocalIOS27Theme.current
+    val original = variant == QuadrinheiroLogoVariant.Primary
+=== app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt:49
+fun Modifier.authGlassCardSurface(): Modifier = composed {
+    background(LocalIOS27Theme.current.bgPrimary, RoundedCornerShape(22.dp))
+}
+
+@Composable
+fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
+    val theme = LocalIOS27Theme.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false)
+        Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
+        Text(
+            if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
+            style = MaterialTheme.typography.bodySmall,
+            color = theme.textSecondary
+        )
+    }
+}
+=== app/src/main/java/com/example/ui/screens/MainTabsScreens.kt:811
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AppleMenuPicker(
+                                value = shelfSort,
+                                onChange = onChangeShelfSort,
+                                options = listOf(
+                                    SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
+                                    SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
+                                    SegmentOption("TITLE", "Título (A–Z)", Icons.AutoMirrored.Filled.MenuBook),
+                                    SegmentOption("YEAR", "Ano de Lançamento", Icons.Default.CalendarMonth)
+                                )
+                            )
+
+                            Box(
+                                modifier = Modifier
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:487
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    QuadrinheiroLogo(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(com.kyant.shapes.ContinuousRoundedRectangle(12.dp))
+                    )
+                    Text(
+                        text = "Quadrinheiro",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+=== app/src/main/java/com/example/ui/screens/SettingsScreen.kt:1206
+                                        }
+                                        AppleMenuPicker(
+                                            value = appSettings.defaultShelfSort,
+                                            onChange = { v ->
+                                                viewModel.updateSettings { it.copy(defaultShelfSort = v) }
+                                                viewModel.setShelfSort(v)
+                                            },
+                                            options = listOf(
+                                                SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
+                                                SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
+                                                SegmentOption("TITLE", "Título (A–Z)", Icons.AutoMirrored.Filled.MenuBook),
+                                                SegmentOption("YEAR", "Ano de Lançamento", Icons.Default.CalendarMonth)
+                                            )
+                                        )
+                                    }
+                                }
+                            }

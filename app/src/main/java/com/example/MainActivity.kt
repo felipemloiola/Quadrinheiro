@@ -260,6 +260,8 @@ fun QuadrinheiroApp(
     val isSheetExpanded by viewModel.isSheetExpanded.collectAsState()
     val manualForm by viewModel.manualForm.collectAsState()
     val toast by viewModel.toast.collectAsState()
+    val isLoggingOut by viewModel.isLoggingOut.collectAsState()
+    val isEnteringApp by viewModel.isEnteringApp.collectAsState()
 
     // Persistent LazyListState per route key so scroll position is preserved across tabs, library sections & settings sub-menus
     val currentRouteKey = remember(activeTab, settingsSubPage, shelfSection) {
@@ -359,10 +361,25 @@ fun QuadrinheiroApp(
     }
 
     QuadrinheiroTheme(settings = appSettings) {
+        if (isLoggingOut) {
+            SessionTransitionScreen("Saindo da conta…")
+            return@QuadrinheiroTheme
+        }
+        if (isEnteringApp && authUiState != AuthUiState.Unauthenticated) {
+            SessionTransitionScreen("Preparando sua coleção…")
+            return@QuadrinheiroTheme
+        }
+
         // ROTEAMENTO CONDICIONAL SÍNCRONO NO BOOT (SEM FLASH DE TELA):
         // Se o usuário ainda não tiver sessão ativa nem tiver escolhido o Modo Convidado,
         // renderiza exclusivamente a AuthScreen edge-to-edge.
         if (authUiState == AuthUiState.Unauthenticated) {
+            androidx.compose.animation.AnimatedVisibility(
+                visibleState = remember {
+                    androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
+                },
+                enter = fadeIn(tween(450))
+            ) {
             AuthScreen(
                 uiState = authScreenUiState,
                 isLinkingFromGuest = false,
@@ -376,6 +393,7 @@ fun QuadrinheiroApp(
                     onDismissModal = null
                 )
             )
+            }
             return@QuadrinheiroTheme
         }
 
@@ -1632,3 +1650,35 @@ fun QuadrinheiroAppPreview() {
     QuadrinheiroApp()
 }
 
+@Composable
+private fun SessionTransitionScreen(message: String) {
+    val themeColors = LocalIOS27Theme.current
+    val visibleState = remember {
+        androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(themeColors.bgPrimary),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(visibleState = visibleState, enter = fadeIn(tween(300))) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    color = themeColors.accent,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(32.dp)
+                )
+                Text(
+                    text = message,
+                    color = themeColors.textSecondary,
+                    fontSize = 14.sp,
+                    fontFamily = PlusJakartaSansFamily
+                )
+            }
+        }
+    }
+}

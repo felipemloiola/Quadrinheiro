@@ -1,0 +1,5 @@
+e: file:///home/runner/work/Quadrinheiro/Quadrinheiro/app/src/main/java/com/example/data/QuadrinheiroAuthManager.kt:111:43 Unresolved reference 'default_web_client_id'.
+e: file:///home/runner/work/Quadrinheiro/Quadrinheiro/app/src/main/java/com/example/data/QuadrinheiroCloudRepository.kt:349:64 Unresolved reference 'default_web_client_id'.
+e: file:///home/runner/work/Quadrinheiro/Quadrinheiro/app/src/main/java/com/example/data/QuadrinheiroCloudRepository.kt:381:64 Unresolved reference 'default_web_client_id'.
+* What went wrong:
+BUILD FAILED in 1m 51s

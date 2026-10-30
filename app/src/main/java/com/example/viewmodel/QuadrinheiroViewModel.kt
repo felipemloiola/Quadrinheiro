@@ -96,6 +96,12 @@ class QuadrinheiroViewModel(
     private val _isAuthLoading = MutableStateFlow(false)
     val isAuthLoading: StateFlow<Boolean> = _isAuthLoading.asStateFlow()
 
+    private val _isLoggingOut = MutableStateFlow(false)
+    val isLoggingOut: StateFlow<Boolean> = _isLoggingOut.asStateFlow()
+
+    private val _isEnteringApp = MutableStateFlow(false)
+    val isEnteringApp: StateFlow<Boolean> = _isEnteringApp.asStateFlow()
+
     // Pair(mensagemPtBr, isError)
     private val _authFeedback = MutableStateFlow<Pair<String, Boolean>?>(null)
     val authFeedback: StateFlow<Pair<String, Boolean>?> = _authFeedback.asStateFlow()
@@ -162,11 +168,11 @@ class QuadrinheiroViewModel(
 
     // 'home' | 'shelf' | 'diary' | 'settings' | 'search'
     // SavedStateHandle preserves tab & sub-page when minimizing/backgrounding, resetting to 'home' only if the app is closed.
-    private val _activeTab = MutableStateFlow(savedStateHandle.get<String>("activeTab") ?: "home")
+    private val _activeTab = MutableStateFlow("home")
     val activeTab: StateFlow<String> = _activeTab.asStateFlow()
 
     // Memoriza o último índice válido da cápsula (0..3)
-    private val _lastCapsuleIndex = MutableStateFlow(savedStateHandle.get<Int>("lastCapsuleIndex") ?: 0)
+    private val _lastCapsuleIndex = MutableStateFlow(0)
     val lastCapsuleIndex: StateFlow<Int> = _lastCapsuleIndex.asStateFlow()
 
     // Sidebar state (NavigationSplitView / sidebarAdaptable)
@@ -605,6 +611,28 @@ class QuadrinheiroViewModel(
         }
     }
 
+    fun resetToReadingHome() {
+        _activeTab.value = "home"
+        savedStateHandle["activeTab"] = "home"
+        _lastCapsuleIndex.value = 0
+        savedStateHandle["lastCapsuleIndex"] = 0
+        _shelfSection.value = "shelf"
+        savedStateHandle["shelfSection"] = "shelf"
+        _settingsSubPage.value = null
+        _settingsParentPage.value = null
+        savedStateHandle["settingsSubPage"] = null
+        savedStateHandle["settingsParentPage"] = null
+        _isSidebarOpen.value = false
+    }
+
+    private fun startSessionEntryTransition() {
+        _isEnteringApp.value = true
+        viewModelScope.launch {
+            delay(700)
+            _isEnteringApp.value = false
+        }
+    }
+
     fun clearAuthFeedback() {
         _authFeedback.value = null
     }
@@ -628,12 +656,18 @@ class QuadrinheiroViewModel(
         userProfile: UserProfile,
         wasGuestBefore: Boolean
     ) {
+        val startedFromSettingsModal = _showAuthModalFromSettings.value
         val nowMs = System.currentTimeMillis()
         storage.saveAuthSession(userProfile)
         _currentUserProfile.value = userProfile
         _authUiState.value = AuthUiState.Authenticated
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
+
+        if (!startedFromSettingsModal) {
+            resetToReadingHome()
+            startSessionEntryTransition()
+        }
 
         // Atualiza o ReaderProfile com o nome/foto da conta se ainda estiver com o nome padrão
         val currentProf = _profile.value
@@ -763,6 +797,8 @@ class QuadrinheiroViewModel(
         _profile.value = ReaderProfile(name = "Leitor Convidado", handle = "@convidado")
         _activeReadingComicId.value = null
         persistAll()
+        resetToReadingHome()
+        startSessionEntryTransition()
         showNotice("Modo Convidado ativo — sua biblioteca começa zerada")
     }
 
@@ -782,6 +818,11 @@ class QuadrinheiroViewModel(
     }
 
     fun logout(activityContext: Context? = null) {
+        _isLoggingOut.value = true
+        viewModelScope.launch {
+            delay(6000)
+            _isLoggingOut.value = false
+        }
         viewModelScope.launch {
             cloudProfileJob?.cancel()
             cloudComicsJob?.cancel()
@@ -790,7 +831,10 @@ class QuadrinheiroViewModel(
             _currentUserProfile.value = null
             _showAuthModalFromSettings.value = false
             _authFeedback.value = null
+            delay(450)
+            resetToReadingHome()
             _authUiState.value = AuthUiState.Unauthenticated
+            _isLoggingOut.value = false
             showNotice("Sessão encerrada com segurança")
         }
     }
