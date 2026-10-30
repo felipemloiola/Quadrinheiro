@@ -1,2 +1,2 @@
-OK: removed picker white press overlay; retained resting edge-highlight strength, base surface color, click handlers and scale animation.
+SKIP: stable picker press color already applied
 Device verification pending: compare stationary tap, held touch and expanded-menu item press in light/dark themes. Shared gesture detector and tab bar not modified by this patch.
