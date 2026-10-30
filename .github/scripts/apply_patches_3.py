@@ -3,7 +3,7 @@ from pathlib import Path
 report = []
 def once(t, old, new):
     if t.count(old) != 1:
-        raise RuntimeError('Expected one anchor; this file was not written: ' + old[:90])
+        raise RuntimeError('Expected one anchor; this file not written: ' + old[:100])
     return t.replace(old, new, 1)
 
 def edit(path, marker, fn):
@@ -18,53 +18,62 @@ def edit(path, marker, fn):
     p.write_bytes(result.replace('\n', '\r\n').encode('utf-8') if crlf else result.encode('utf-8'))
     report.append('OK: ' + path)
 
-def auth(t):
-    old = '''AnimatedVisibility(
-            visible = registering,
-            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
-            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
-        ) {'''
+def picker(t):
+    a = t.index('fun <T> AppleMenuPicker(')
+    b = t.find('\n@Composable', a)
+    if b < 0:
+        b = len(t)
+    s = t[a:b]
+    s = once(s, '    val pickerInteractions = remember { MutableInteractionSource() }', '''    // PICKER_PRESS_LIGHT_V6: observe finger position without consuming clicks.
+    var pickerLightOrigin by remember { mutableStateOf(Offset.Zero) }
+    val pickerInteractions = remember { MutableInteractionSource() }''')
+    old = '''                .clip(ContinuousCapsule)
+                .clickable('''
+    new = '''                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        pickerLightOrigin = down.position
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.firstOrNull()?.let { pickerLightOrigin = it.position }
+                            if (event.changes.none { it.pressed }) break
+                        }
+                    }
+                }
+                .drawWithContent {
+                    drawContent()
+                    val light = pickerPressProgress.coerceIn(0f, 1f)
+                    if (light > 0.001f) {
+                        val origin = Offset(
+                            pickerLightOrigin.x.coerceIn(0f, size.width),
+                            pickerLightOrigin.y.coerceIn(0f, size.height)
+                        )
+                        drawRoundRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.24f * light), Color.Transparent),
+                                center = origin,
+                                radius = size.maxDimension.coerceAtLeast(1f) * 0.75f
+                            ),
+                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                        )
+                    }
+                }
+                .clip(ContinuousCapsule)
+                .clickable('''
+    s = once(s, old, new)
+    return t[:a] + s + t[b:]
+
+def auth_id(t):
+    return once(t, 'appContext.getString(R.string.default_web_client_id).trim()', 'GoogleClientId.optional(appContext) /* GOOGLE_CLIENT_ID_RUNTIME_V6 */')
+
+def repo_id(t):
+    old = 'appContext.getString(R.string.default_web_client_id)'
     if t.count(old) != 2:
-        raise RuntimeError('Expected two animated registration fields')
-    t = t.replace(old, 'if (registering) {')
-    t = once(t, '    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {', '''    // AUTH_UNIFIED_HEIGHT_V5: a single size animation, not two competing field springs.
-    Column(
-        modifier = Modifier.fillMaxWidth().animateContentSize(
-            animationSpec = tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-        ),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {''')
-    if 'import androidx.compose.animation.animateContentSize\n' not in t:
-        t = once(t, 'package com.example.ui.screens\n', 'package com.example.ui.screens\n\nimport androidx.compose.animation.animateContentSize\n')
-    return t
+        raise RuntimeError('Expected two Google client ID uses; repository not written')
+    return t.replace(old, 'GoogleClientId.required(appContext) /* GOOGLE_CLIENT_ID_RUNTIME_V6 */')
 
-def main(t):
-    t = once(t, '''        setContent {
-            QuadrinheiroApp()
-        }''', '''        setContent {
-            // APP_BACKGROUND_FOCUS_V5: settings and inline sheets inherit background tap dismissal.
-            Box(Modifier.fillMaxSize().dismissFocusOnBackgroundTap()) {
-                QuadrinheiroApp()
-            }
-        }''')
-    return once(t, 'package com.example\n', 'package com.example\n\nimport com.example.ui.components.dismissFocusOnBackgroundTap\n')
-
-edit('app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt', 'AUTH_UNIFIED_HEIGHT_V5', auth)
-edit('app/src/main/java/com/example/MainActivity.kt', 'APP_BACKGROUND_FOCUS_V5', main)
-
-out = []
-p = Path('app/src/main/java/com/example/ui/screens/SettingsScreen.kt')
-lines = p.read_text(encoding='utf-8').splitlines()
-for i, line in enumerate(lines):
-    if ('profile.handle' in line or 'copy(handle' in line or '"profile" ->' in line or 'Dialog(' in line):
-        out.append('=== SettingsScreen.kt:%d' % (i + 1))
-        out.extend(lines[max(0, i - 18):min(len(lines), i + 32)])
-p = Path('app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt')
-lines = p.read_text(encoding='utf-8').splitlines()
-for i, line in enumerate(lines):
-    if ('fun updateProfile(' in line or 'fun applyAuthenticatedSessionAndMergeLocalData(' in line):
-        out.append('=== QuadrinheiroViewModel.kt:%d' % (i + 1))
-        out.extend(lines[max(0, i - 2):min(len(lines), i + 85)])
+edit('app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt', 'PICKER_PRESS_LIGHT_V6', picker)
+edit('app/src/main/java/com/example/data/QuadrinheiroAuthManager.kt', 'GOOGLE_CLIENT_ID_RUNTIME_V6', auth_id)
+edit('app/src/main/java/com/example/data/QuadrinheiroCloudRepository.kt', 'GOOGLE_CLIENT_ID_RUNTIME_V6', repo_id)
 Path('.audit').mkdir(exist_ok=True)
-Path('.audit/profile_editing.txt').write_text('\n'.join(out), encoding='utf-8')
-Path('.audit/focus_and_motion.txt').write_text('\n'.join(report), encoding='utf-8')
+Path('.audit/press_icon_build.txt').write_text('\n'.join(report), encoding='utf-8')
