@@ -59,13 +59,33 @@ jobs:
           echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=v1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-      - name: Test and assemble signed release
+      - name: Discover tests and assemble signed release
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/quadrinheiro-release.p12
           KEYSTORE_TYPE: PKCS12
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: gradle :app:testReleaseUnitTest :app:assembleRelease -PreleaseVersionCode="$VERSION_CODE" -PreleaseVersionName="$VERSION_NAME" --no-daemon --console=plain
+        run: |
+          mkdir -p ci-reports
+          args=(-PreleaseVersionCode="$VERSION_CODE" -PreleaseVersionName="$VERSION_NAME" --no-daemon --console=plain)
+          gradle :app:tasks --all "${args[@]}" | tee ci-reports/app-tasks.txt
+          task=$(awk '$1 ~ /^testRelease(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt)
+          if [ -z "$task" ]; then task=$(awk '$1 ~ /^testDebug(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt); fi
+          if [ -z "$task" ]; then task=$(awk '$1 == "test" {print $1; exit}' ci-reports/app-tasks.txt); fi
+          if [ -z "$task" ]; then echo '::error::Nenhuma tarefa de testes compatível foi encontrada. Consulte app-tasks.txt; a publicação foi bloqueada, sem ignorar testes.'; exit 1; fi
+          echo "Tarefa de testes selecionada: :app:$task" | tee ci-reports/selected-tests.txt
+          echo "Test task selected: :app:$task" >> "$GITHUB_STEP_SUMMARY"
+          gradle ":app:$task" :app:assembleRelease "${args[@]}"
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-diagnostics-${{ github.run_number }}
+          path: |
+            ci-reports/
+            app/build/reports/tests/
+            app/build/test-results/
+          if-no-files-found: ignore
       - name: Verify APK and create update manifest
         run: |
           mkdir -p dist
