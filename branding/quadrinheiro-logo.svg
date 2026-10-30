@@ -1,68 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
   <defs>
-    <!-- Left panel: Carmine Red -> Neon Pink (with deep accent) -->
+    <!-- Left panel: Vermelho Carmim -> Rosa Neon (mesmos valores do VectorDrawable) -->
     <linearGradient id="gradLeft" x1="25" y1="26.3" x2="44.8" y2="75.1" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FF1493" />
       <stop offset="0.5" stop-color="#E11D48" />
       <stop offset="1" stop-color="#881337" />
     </linearGradient>
-    <!-- Highlight facet on left panel -->
+    <!-- Sub-faceta de destaque no painel esquerdo -->
     <linearGradient id="gradLeftHighlight" x1="28.9" y1="32.9" x2="40.1" y2="52.7" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#3DFFFFFF" />
       <stop offset="1" stop-color="#00FFFFFF" />
     </linearGradient>
 
-    <!-- Top panel: Golden Yellow -> Vibrant Orange -->
+    <!-- Painel superior: Amarelo Ouro -> Laranja Vibrante -->
     <linearGradient id="gradTop" x1="49.4" y1="26.3" x2="80.4" y2="50.7" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFD000" />
       <stop offset="0.45" stop-color="#FF9100" />
       <stop offset="1" stop-color="#FF3D00" />
     </linearGradient>
 
-    <!-- Tail panel: Royal Blue -> Electric Cyan -->
+    <!-- Painel inferior / cauda do Q: Azul Royal -> Ciano Elétrico -->
     <linearGradient id="gradTail" x1="40.1" y1="63.2" x2="85.7" y2="83.7" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#1E3A8A" />
       <stop offset="0.35" stop-color="#2563EB" />
       <stop offset="0.75" stop-color="#00B4D8" />
       <stop offset="1" stop-color="#00F5FF" />
     </linearGradient>
-    <!-- Highlight facet on tail -->
+    <!-- Sub-faceta luminosa da cauda do Q -->
     <linearGradient id="gradTailHighlight" x1="63.9" y1="55.3" x2="85.7" y2="83.7" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#33FFFFFF" />
       <stop offset="0.6" stop-color="#5900F5FF" />
       <stop offset="1" stop-color="#0000F5FF" />
     </linearGradient>
 
-    <!-- Common stroke color for panel edges -->
     <style type="text/css">
       .panel-edge { stroke: rgba(255,255,255,0.3); stroke-width: 1; stroke-linejoin: round; }
     </style>
   </defs>
 
-  <!-- Left panel (origami folded) -->
+  <!-- 1. PAINEL ESQUERDO -->
   <path
     class="panel-edge"
     fill="url(#gradLeft)"
     d="M44.8,26.3 L28.9,32.9 L25,54 L31.6,75.1 L39.5,69.8 L42.8,60.6 L40.1,52.7 L43.4,39.5 Z" />
 
-  <!-- Left panel highlight facet -->
+  <!-- Sub-faceta do painel esquerdo -->
   <path
     fill="url(#gradLeftHighlight)"
     d="M44.8,26.3 L28.9,32.9 L25,54 L40.1,52.7 L43.4,39.5 Z" />
 
-  <!-- Top panel -->
+  <!-- 2. PAINEL SUPERIOR -->
   <path
     class="panel-edge"
     fill="url(#gradTop)"
     d="M49.4,26.3 L67.2,26.3 L80.4,35.5 L80.4,50.7 L63.9,50.7 L61.9,44.8 L53.3,38.8 L48.1,39.5 Z" />
 
-  <!-- Tail / lower panel extending beyond the square (Q tail) -->
+  <!-- 3. PAINEL INFERIOR / CAUDA DO Q -->
   <path
     class="panel-edge"
     fill="url(#gradTail)"
     d="M63.9,55.3 L79.1,55.3 L76.4,63.9 L85.7,77.8 L83.7,83.7 L69.2,78.4 L55.3,80.4 L40.1,77.1 L46.1,65.9 L54,63.2 Z" />
 
-  <!-- Tail highlight facet -->
+  <!-- Sub-faceta luminosa da cauda do Q -->
   <path
     fill="url(#gradTailHighlight)"
     d="M63.9,55.3 L79.1,55.3 L76.4,63.9 L85.7,77.8 L83.7,83.7 L54,63.2 Z" />
