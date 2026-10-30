@@ -1,0 +1,260 @@
+=== DEF app/src/main/java/com/example/ui/components/CatalogModalSubcomponents.kt:378
+@Composable
+internal fun CatalogStatusSegmentedBar(
+    value: ReadingStatus,
+    onChange: (ReadingStatus) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AppleSegmentedPicker(
+        options = listOf(
+            SegmentOption(ReadingStatus.READ, "Lido"),
+            SegmentOption(ReadingStatus.READING, "Lendo"),
+            SegmentOption(ReadingStatus.WANT_TO_READ, "Quero Ler")
+        ),
+        value = value,
+        onChange = onChange,
+        modifier = modifier.fillMaxWidth()
+    )
+}
+
+/**
+ * Card horizontal interativo para visualizar e navegar pelas edições da mesma sequência.
+ */
+@Composable
+fun ComicSequenceCarouselCard(
+    currentComic: ComicEntry,
+    allUserComics: List<ComicEntry>,
+    onlineSequencePool: List<ComicEntry>,
+    spine3d: Boolean,
+    onSelectSequenceIssue: (ComicEntry) -> Unit,
+    onAddNextIssue: ((ComicEntry) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+
+    val cacheKey = remember(
+        currentComic.id,
+        currentComic.externalId,
+        currentComic.title,
+        currentComic.seriesName,
+        currentComic.issueNumber,
+        allUserComics.size,
+        onlineSequencePool.size
+    ) {
+        SeriesSequenceEngine.buildCacheKey(currentComic, allUserComics.size, onlineSequencePool.size)
+    }
+
+    var sequenceGroupState by remember(currentComic.id, currentComic.externalId) {
+        mutableStateOf(
+            SeriesSequenceEngine.getCachedSequenceForComic(
+                target = currentComic,
+                userComics = allUserComics,
+                extraOnlineComics = onlineSequencePool
+            )
+        )
+    }
+
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1432
+@Composable
+fun LiquidGlassSegmentedControl(
+    tabs: List<String>,
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+    tabIcons: List<ImageVector?>? = null
+) {
+    val isLightTheme = !LocalIsDarkTheme.current
+    val themeColors = LocalIOS27Theme.current
+    val accentColor = themeColors.accent
+    val containerColor =
+        if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
+        else Color(0xFF121212).copy(0.4f)
+    val contentColor = if (isLightTheme) Color.Black else Color.White
+    val tabsCount = tabs.size.coerceAtLeast(1)
+    val tabsBackdrop = rememberLayerBackdrop()
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val density = LocalDensity.current
+        val tabWidth = with(density) {
+            (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
+        }
+
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
+            derivedStateOf {
+                val fraction = (offsetAnimation.value / constraints.maxWidth.coerceAtLeast(1)).fastCoerceIn(-1f, 1f)
+                with(density) {
+                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+                }
+            }
+        }
+
+        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val animationScope = rememberCoroutineScope()
+        var didDrag by remember { mutableStateOf(false) }
+
+        val dampedDragAnimation = remember(animationScope, tabsCount) {
+            DampedDragAnimation(
+                animationScope = animationScope,
+                initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
+                valueRange = 0f..(tabsCount - 1).toFloat(),
+                visibilityThreshold = 0.001f,
+                initialScale = 1f,
+                pressedScale = 56f / 40f,
+                onDragStarted = {},
+                onDragStopped = {
+                    // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
+                    val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
+                    didDrag = false
+                    if (selectedIndex != targetIndex) {
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1707
+@Composable
+fun AppleSegmentedPicker(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    icons: List<ImageVector?>? = null,
+    backdrop: Backdrop? = null
+) {
+    val effectiveBackdrop = backdrop ?: LocalLiquidGlassBackdrop.current ?: rememberLayerBackdrop()
+    LiquidGlassSegmentedControl(
+        tabs = options,
+        selectedIndex = selectedIndex,
+        onTabSelected = onSelect,
+        backdrop = effectiveBackdrop,
+        modifier = modifier,
+        tabIcons = icons
+    )
+}
+
+@Composable
+fun <T> AppleSegmentedPicker(
+    options: List<SegmentOption<T>>,
+    value: T,
+    onChange: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    forceLensPreview: Boolean = false,
+    backdrop: Backdrop? = null
+) {
+    val labels = remember(options) { options.map { it.label } }
+    val icons = remember(options) { options.map { it.icon } }
+    val selectedIndex = remember(options, value) {
+        options.indexOfFirst { it.value == value }.coerceAtLeast(0)
+    }
+    AppleSegmentedPicker(
+        options = labels,
+        selectedIndex = selectedIndex,
+        onSelect = { idx ->
+            options.getOrNull(idx)?.let { onChange(it.value) }
+        },
+        modifier = modifier,
+        icons = icons,
+        backdrop = backdrop
+    )
+}
+
+/**
+ * 5.4b LiquidGlassModeSwitcher (Baseado diretamente no código JS `trackPrevious(switcher)` e CSS `.switcher`
+ * com camada de fundo `Modifier.liquidGlass()` isolada para manter o texto nítido).
+ */
+@Composable
+fun LiquidGlassModeSwitcher(
+    isLightMode: Boolean,
+    onSelectMode: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1727
+@Composable
+fun <T> AppleSegmentedPicker(
+    options: List<SegmentOption<T>>,
+    value: T,
+    onChange: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    forceLensPreview: Boolean = false,
+    backdrop: Backdrop? = null
+) {
+    val labels = remember(options) { options.map { it.label } }
+    val icons = remember(options) { options.map { it.icon } }
+    val selectedIndex = remember(options, value) {
+        options.indexOfFirst { it.value == value }.coerceAtLeast(0)
+    }
+    AppleSegmentedPicker(
+        options = labels,
+        selectedIndex = selectedIndex,
+        onSelect = { idx ->
+            options.getOrNull(idx)?.let { onChange(it.value) }
+        },
+        modifier = modifier,
+        icons = icons,
+        backdrop = backdrop
+    )
+}
+
+/**
+ * 5.4b LiquidGlassModeSwitcher (Baseado diretamente no código JS `trackPrevious(switcher)` e CSS `.switcher`
+ * com camada de fundo `Modifier.liquidGlass()` isolada para manter o texto nítido).
+ */
+@Composable
+fun LiquidGlassModeSwitcher(
+    isLightMode: Boolean,
+    onSelectMode: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val mat = LocalAppleMaterials.current
+    val selectedIdx = if (isLightMode) 0 else 1
+    var previousIdx by remember { mutableIntStateOf(selectedIdx) }
+    val scaleToggle = remember { Animatable(1f) }
+    var originX by remember { mutableFloatStateOf(0.5f) }
+
+    LaunchedEffect(selectedIdx) {
+        if (selectedIdx != previousIdx) {
+            originX = if (previousIdx < selectedIdx) 0f else 1f
+            previousIdx = selectedIdx
+            scaleToggle.snapTo(1f)
+            scaleToggle.animateTo(
+                targetValue = 1f,
+                animationSpec = keyframes {
+                    durationMillis = 440
+                    1.0f at 0
+                    1.16f at 220
+                    1.0f at 440
+                }
+            )
+=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/components/CatalogModal.kt:1183
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .padding(bottom = 12.dp)
+                .clip(shape)
+                .clickable(enabled = false) {}
+        ) {
+            Box(
+=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/screens/MainTabsScreens.kt:368
+                            fontWeight = FontWeight.SemiBold,
+                            color = themeColors.accent,
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .clickable { onOpenProfileSettings() }
+                        )
+                    }
+=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/screens/MainTabsSubcomponents.kt:576
+                        if (entry.status == ReadingStatus.READ && entry.review.isNotBlank()) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .clickable(enabled = isSpoilerHidden) {
+                                        revealedSpoilers[entry.id] = true
+                                    }
+=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/screens/MainTabsSubcomponents.kt:786
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .inputWellSurface(RoundedCornerShape(999.dp))
+                        .clickable { onSelectSavedComic(savedEntry) }
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
