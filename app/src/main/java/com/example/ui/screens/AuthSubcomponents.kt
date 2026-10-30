@@ -1,1 +1,179 @@
-(omitted here because already committed via create_or_update_file)
+package com.example.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import com.example.model.AuthFeedbackBanner
+import com.example.model.AuthFormState
+import com.example.model.AuthMode
+import com.example.ui.components.QuadrinheiroLogo
+import com.example.ui.components.QuadrinheiroLogoVariant
+import com.example.ui.theme.LocalIOS27Theme
+import com.kyant.backdrop.Backdrop
+
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun AuthBackdropLayer(backdrop: Backdrop, reduceTransparency: Boolean, isLight: Boolean) {
+    // Static background: no continuous animation, image decoding or blur.
+    Box(Modifier.fillMaxSize().background(LocalIOS27Theme.current.bgPrimary))
+}
+
+fun Modifier.authGlassCardSurface(): Modifier = composed {
+    background(LocalIOS27Theme.current.bgPrimary, RoundedCornerShape(22.dp))
+}
+
+@Composable
+fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
+    val theme = LocalIOS27Theme.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false)
+        Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
+        Text(
+            if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
+            style = MaterialTheme.typography.bodySmall,
+            color = theme.textSecondary
+        )
+    }
+}
+
+@Composable
+fun AuthModeSegmentedToggle(selectedMode: AuthMode, onSelectMode: (AuthMode) -> Unit) {
+    val theme = LocalIOS27Theme.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AuthMode.values().forEach { mode ->
+            val selected = mode == selectedMode
+            FilterChip(
+                selected = selected,
+                onClick = { onSelectMode(mode) },
+                label = { Text(if (mode == AuthMode.LOGIN) "Entrar" else "Criar conta") },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                colors = FilterChipDefaults.filterChipColors(
+                    labelColor = theme.textSecondary,
+                    selectedLabelColor = theme.textPrimary,
+                    selectedContainerColor = theme.accent.copy(alpha = 0.15f)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun AuthFeedbackBannerCard(banner: AuthFeedbackBanner?) {
+    if (banner == null) return
+    val theme = LocalIOS27Theme.current
+    Text(
+        text = banner.message,
+        color = if (banner.isError) MaterialTheme.colorScheme.error else theme.textPrimary,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
+    )
+}
+
+@Composable
+fun AuthCredentialsFieldsSection(
+    form: AuthFormState,
+    onNameChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onTogglePasswordVisible: () -> Unit,
+    onToggleConfirmPasswordVisible: () -> Unit,
+    onForgotPassword: () -> Unit,
+    onSubmit: () -> Unit
+) {
+    val focus = LocalFocusManager.current
+    val registering = form.mode != AuthMode.LOGIN
+    val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (registering) OutlinedTextField(
+            value = form.name, onValueChange = onNameChange,
+            label = { Text("Nome") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("auth_name_field"),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), keyboardActions = next
+        )
+        OutlinedTextField(
+            value = form.email, onValueChange = onEmailChange,
+            label = { Text("E-mail") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("auth_email_field"),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+            keyboardActions = next
+        )
+        OutlinedTextField(
+            value = form.password, onValueChange = onPasswordChange,
+            label = { Text("Senha") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("auth_password_field"),
+            visualTransformation = if (form.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = { TextButton(onClick = onTogglePasswordVisible) { Text(if (form.isPasswordVisible) "Ocultar" else "Mostrar") } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (registering) ImeAction.Next else ImeAction.Done),
+            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }, onDone = { onSubmit() })
+        )
+        if (registering) OutlinedTextField(
+            value = form.confirmPassword, onValueChange = onConfirmPasswordChange,
+            label = { Text("Confirmar senha") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("auth_confirm_password_field"),
+            visualTransformation = if (form.isConfirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = { TextButton(onClick = onToggleConfirmPasswordVisible) { Text(if (form.isConfirmPasswordVisible) "Ocultar" else "Mostrar") } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onSubmit() })
+        )
+        if (!registering) TextButton(onClick = onForgotPassword, modifier = Modifier.align(Alignment.End)) {
+            Text("Esqueci minha senha", color = LocalIOS27Theme.current.accent)
+        }
+    }
+}
+
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun AuthPrimaryActionsSection(
+    authMode: AuthMode,
+    isLoading: Boolean,
+    isLinkingFromGuest: Boolean,
+    backdrop: Backdrop,
+    onSubmitPrimary: () -> Unit,
+    onLoginWithGoogle: () -> Unit,
+    onContinueAsGuest: () -> Unit
+) {
+    val theme = LocalIOS27Theme.current
+    val foreground = if (theme.accent.luminance() > 0.179f) Color.Black else Color.White
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = onSubmitPrimary, enabled = !isLoading,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_primary_button"),
+            colors = ButtonDefaults.buttonColors(containerColor = theme.accent, contentColor = foreground)
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = theme.textPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Aguarde…")
+            } else Text(if (authMode == AuthMode.LOGIN) "Entrar na coleção" else "Criar conta")
+        }
+        OutlinedButton(
+            onClick = onLoginWithGoogle, enabled = !isLoading,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_google_button")
+        ) { Text("Continuar com Google", color = theme.textPrimary) }
+        if (!isLinkingFromGuest) TextButton(
+            onClick = onContinueAsGuest, enabled = !isLoading,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_guest_button")
+        ) { Text("Explorar como convidado", color = theme.textSecondary) }
+    }
+}
