@@ -74,7 +74,9 @@ def settings(t):
     if end < 0:
         end = len(t)
     body = t[start:end]
-    body = once(body, '    val themeColors = LocalIOS27Theme.current', '''    val themeColors = LocalIOS27Theme.current
+    body = once(body, '    val mat = LocalAppleMaterials.current\n    val s = mat.scheme\n    val themeColors = LocalIOS27Theme.current', '''    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+    val themeColors = LocalIOS27Theme.current
     // GUEST_SETTINGS_V7: no personal profile or goal editors for guests.
     val sessionState by viewModel.authUiState.collectAsStateWithLifecycle()
     val isGuest = sessionState == AuthUiState.Guest
