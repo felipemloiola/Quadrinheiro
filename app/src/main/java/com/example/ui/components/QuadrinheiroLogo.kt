@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.LocalIOS27Theme
 import com.kyant.shapes.ContinuousRoundedRectangle
 
 /**
@@ -248,7 +249,53 @@ fun QuadrinheiroLogo(
 }
 
 /**
+ * Variante temática para uso dentro do app, adaptando fundo à paleta atual.
+ * O logo original é preservado para a tela de login; nos demais contextos,
+ * use esta versão para integrar com o tema claro/escuro.
+ */
+@Composable
+fun QuadrinheiroLogoThemed(
+    modifier: Modifier = Modifier,
+    contentDesc: String = "Logotipo do Quadrinheiro (tema)"
+) {
+    val themeColors = LocalIOS27Theme.current
+    val shape = ContinuousRoundedRectangle(14.dp)
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        themeColors.bgPrimary.copy(alpha = if (themeColors.isDark) 0.60f else 0.40f),
+                        themeColors.accent.copy(alpha = 0.16f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.45f),
+                        Color.White.copy(alpha = 0.12f)
+                    )
+                ),
+                shape = shape
+            )
+            .semantics { contentDescription = contentDesc },
+        contentAlignment = Alignment.Center
+    ) {
+        QuadrinheiroLogo(
+            modifier = Modifier.fillMaxSize(0.78f),
+            contentDesc = contentDesc
+        )
+    }
+}
+
+/**
  * Emblema em Liquid Glass com o QuadrinheiroLogo emoldurado com cantos contínuos e brilho óptico.
+ * Usado principalmente em contextos de ícone; o logo dentro do badge é ligeiramente menor
+ * e o fundo acompanha o tema atual para evitar a sensação de "vazar".
  */
 @Composable
 fun QuadrinheiroLogoBadge(
@@ -257,21 +304,23 @@ fun QuadrinheiroLogoBadge(
     cornerRadius: Dp = 16.dp,
     elevation: Dp = 8.dp
 ) {
+    val themeColors = LocalIOS27Theme.current
     val shape = ContinuousRoundedRectangle(cornerRadius)
+
     Box(
         modifier = modifier
             .size(sizeDp)
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                spotColor = Color(0xFFE11D48).copy(alpha = 0.35f)
+                spotColor = themeColors.accent.copy(alpha = 0.35f)
             )
             .clip(shape)
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.22f),
-                        Color.White.copy(alpha = 0.08f)
+                        themeColors.bgPrimary.copy(alpha = if (themeColors.isDark) 0.70f else 0.45f),
+                        themeColors.bgPrimary.copy(alpha = if (themeColors.isDark) 0.90f else 0.65f)
                     )
                 )
             )
@@ -288,8 +337,7 @@ fun QuadrinheiroLogoBadge(
         contentAlignment = Alignment.Center
     ) {
         QuadrinheiroLogo(
-            modifier = Modifier
-                .fillMaxSize(0.82f)
+            modifier = Modifier.fillMaxSize(0.70f)
         )
     }
 }
