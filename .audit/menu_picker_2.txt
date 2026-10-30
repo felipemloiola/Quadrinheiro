@@ -1,0 +1,181 @@
+=== app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:2594 (lines +120..+300)
+                            color = Color.Black.copy(alpha = (if (isLight) 0.12f else 0.28f) * triggerMorphAlpha)
+                        )
+                    },
+                    innerShadow = {
+                        InnerShadow(
+                            radius = 5.dp,
+                            alpha = lerp(if (isLight) 0.18f else 0.30f, 0.38f, triggerHighlight.pressProgress) * triggerMorphAlpha
+                        )
+                    },
+                    effects = {
+                        if (!settings.reduceTransparency) {
+                            vibrancy()
+                        }
+                        val blurPx = effectiveBlurDp.toPx()
+                        if (blurPx >= 1f && !blurPx.isNaN()) {
+                            blur(blurPx)
+                        }
+                        if (refractionMult > 0f && size.isSpecified && size.width > 4f && size.height > 4f) {
+                            val boost = 1f + 0.30f * triggerHighlight.pressProgress
+                            val maxAllowedHeight = min(size.width, size.height) * 0.46f
+                            lens(
+                                refractionHeight = ((14f * refractionMult * boost).dp.toPx()).coerceAtMost(maxAllowedHeight),
+                                refractionAmount = (28f * refractionMult * boost).dp.toPx(),
+                                depthEffect = true,
+                                chromaticAberration = chromaticAberration
+                            )
+                        }
+                    },
+                    layerBlock = {
+                        if (size.isSpecified && size.width > 0f && size.height > 0f) {
+                            val width = size.width
+                            val height = size.height
+                            val progress = triggerHighlight.pressProgress
+                            val scale = lerp(1f, 1f + 5f.dp.toPx() / height, progress) * triggerMorphScale
+
+                            val maxOffset = size.minDimension
+                            val initialDerivative = 0.055f
+                            val offset = triggerHighlight.offset
+                            translationX = maxOffset * tanh(initialDerivative * offset.x / maxOffset)
+                            translationY = maxOffset * tanh(initialDerivative * offset.y / maxOffset)
+
+                            val maxDragScale = 6f.dp.toPx() / height
+                            val offsetAngle = atan2(offset.y, offset.x)
+                            scaleX =
+                                scale +
+                                    maxDragScale * abs(cos(offsetAngle) * offset.x / size.maxDimension) *
+                                    (width / height).fastCoerceAtMost(1f)
+                            scaleY =
+                                scale +
+                                    maxDragScale * abs(sin(offsetAngle) * offset.y / size.maxDimension) *
+                                    (height / width).fastCoerceAtMost(1f)
+                        }
+                    },
+                    onDrawSurface = {
+                        drawRect(baseSurfaceColor)
+                    }
+                )
+                .then(triggerHighlight.modifier)
+                .then(triggerHighlight.gestureModifier)
+                .clip(ContinuousCapsule)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    val nextOpen = !open
+                    open = nextOpen
+                    if (menuHost != null) {
+                        if (nextOpen && anchorBounds.width > 0 && anchorBounds.height > 0) {
+                            // Dispara no mesmo frame do clique para zero atraso na abertura!
+                            menuHost.showMenu(
+                                LiquidGlassMenuRequest(
+                                    id = menuId,
+                                    anchorBounds = anchorBounds,
+                                    triggerLabel = currentOpt.label,
+                                    triggerIcon = Icons.Default.UnfoldMore,
+                                    items = menuItems,
+                                    onDismiss = { open = false }
+                                )
+                            )
+                        } else if (!nextOpen) {
+                            menuHost.dismissMenu(menuId)
+                        }
+                    }
+                }
+                .padding(horizontal = 13.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = currentOpt.label,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (open) activeAccent else s.textPrimary,
+                maxLines = 1
+            )
+            Icon(
+                imageVector = Icons.Default.UnfoldMore,
+                contentDescription = null,
+                tint = (if (open) activeAccent else s.textPrimary).copy(alpha = 0.85f),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        // Fallback seguro caso LocalLiquidGlassMenuHost não esteja presente em um Preview isolado
+        if (open && menuHost == null) {
+            val popoverShape = remember { ContinuousRoundedRectangle(24.dp) }
+            val positionProvider = remember(density) {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize
+                    ): IntOffset {
+                        val marginPx = with(density) { 8.dp.roundToPx() }
+                        val minEdgeMargin = with(density) { 12.dp.roundToPx() }
+                        val targetX = anchorBounds.right - popupContentSize.width
+                        val maxX = (windowSize.width - popupContentSize.width - minEdgeMargin).coerceAtLeast(minEdgeMargin)
+                        val x = targetX.coerceIn(minEdgeMargin, maxX)
+                        val y = anchorBounds.bottom + marginPx
+                        return IntOffset(x, y)
+                    }
+                }
+            }
+
+            Popup(
+                popupPositionProvider = positionProvider,
+                onDismissRequest = { open = false },
+                properties = PopupProperties(focusable = true)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .shadow(
+                            shape = { popoverShape },
+                            shadow = {
+                                Shadow(
+                                    radius = 22.dp,
+                                    offset = DpOffset(0.dp, 8.dp),
+                                    color = Color.Black.copy(alpha = if (isLight) 0.18f else 0.40f)
+                                )
+                            }
+                        )
+                        .highlight(
+                            shape = { popoverShape },
+                            highlight = { Highlight.Default }
+                        )
+                        .clip(popoverShape)
+                        .background(baseSurfaceColor)
+                        .width(238.dp)
+                        .padding(vertical = 6.dp)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        options.forEach { opt ->
+                            val active = opt.value == value
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onChange(opt.value)
+                                        open = false
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.width(18.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (active) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = activeAccent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = opt.label,
