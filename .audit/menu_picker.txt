@@ -1,0 +1,133 @@
+=== app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:2594
+ */
+@Composable
+fun <T> AppleMenuPicker(
+    options: List<SegmentOption<T>>,
+    value: T,
+    onChange: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val mat = LocalAppleMaterials.current
+    val s = mat.scheme
+    val isLight = s.isLight
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val density = LocalDensity.current
+    val backdrop = rememberCurrentBackdrop()
+    val menuHost = LocalLiquidGlassMenuHost.current
+    val menuId = remember { "apple_menu_${System.nanoTime()}" }
+
+    var open by remember { mutableStateOf(false) }
+    var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
+    val currentOpt = options.firstOrNull { it.value == value } ?: options.first()
+    val currentOnChange by rememberUpdatedState(onChange)
+
+    val animationScope = rememberCoroutineScope()
+    val triggerHighlight = remember(animationScope) {
+        InteractiveHighlight(animationScope = animationScope)
+    }
+
+    // Progresso contínuo (0f..1f) da gota do menu para cross-morph suave sem nunca piscar ou sumir o botão
+    val hostProgress = menuHost?.progressForMenu(menuId) ?: 0f
+    val triggerMorphAlpha = (1f - (hostProgress / 0.34f)).coerceIn(0f, 1f)
+    val triggerMorphScale = lerp(1f, 0.94f, (hostProgress / 0.45f).coerceIn(0f, 1f))
+
+    val menuItems = remember(options, value) {
+        options.mapIndexed { idx, opt ->
+            LiquidGlassMenuItemData(
+                label = opt.label,
+                icon = opt.icon,
+                selected = opt.value == value,
+                showDividerBelow = idx < options.lastIndex,
+                onClick = {
+                    currentOnChange(opt.value)
+                    open = false
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(open, anchorBounds, menuItems, currentOpt.label, menuHost) {
+        if (menuHost != null) {
+            if (open && anchorBounds.width > 0 && anchorBounds.height > 0) {
+                menuHost.showMenu(
+                    LiquidGlassMenuRequest(
+                        id = menuId,
+                        anchorBounds = anchorBounds,
+                        triggerLabel = currentOpt.label,
+                        triggerIcon = Icons.Default.UnfoldMore,
+                        items = menuItems,
+                        onDismiss = { open = false }
+                    )
+                )
+            } else if (!open && menuHost.currentRequest?.id == menuId) {
+                menuHost.dismissMenu(menuId)
+            }
+        }
+    }
+
+    androidx.compose.runtime.DisposableEffect(menuId, menuHost) {
+        onDispose {
+            menuHost?.dismissMenu(menuId)
+        }
+    }
+
+    val effectiveBlurDp = if (settings.reduceTransparency) 20.dp else (4.5f * settings.glassBlurIntensity).coerceIn(2f, 14f).dp
+    val refractionMult = if (!settings.reduceTransparency && settings.enableLensRefraction) settings.glassIntensity.coerceIn(0.7f, 2.2f) else 0f
+    val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
+    val glassAlpha = ((if (isLight) 0.24f else 0.28f) * settings.glassOpacity).coerceIn(0.10f, 0.65f)
+    val baseSurfaceColor = if (isLight) Color.White.copy(alpha = glassAlpha) else Color(0xFF16161C).copy(alpha = glassAlpha)
+    val activeAccent = if (isLight && s.accentColor == Color.White) s.textPrimary else s.accentColor
+
+    Box(
+        modifier = modifier.onGloballyPositioned { coords ->
+            if (coords.isAttached) {
+                val pos = coords.positionInRoot()
+                val sz = coords.size
+                val newBounds = IntRect(
+                    left = pos.x.roundToInt(),
+                    top = pos.y.roundToInt(),
+                    right = (pos.x + sz.width).roundToInt(),
+                    bottom = (pos.y + sz.height).roundToInt()
+                )
+                if (anchorBounds != newBounds) {
+                    anchorBounds = newBounds
+                    if (open) {
+                        menuHost?.updateAnchorBounds(menuId, newBounds)
+                    }
+                }
+            }
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .graphicsLayer {
+                    // Cross-morph progressivo com a gota do LiquidGlassMenuOverlayHost:
+                    // Ao fechar, o botão reaparece suavemente enquanto a gota se funde nele, sem nunca piscar!
+                    alpha = triggerMorphAlpha
+                }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { ContinuousCapsule },
+                    highlight = {
+                        Highlight.Default.copy(
+                            alpha = lerp(
+                                if (isLight) 0.80f else 0.64f,
+                                0.96f,
+                                triggerHighlight.pressProgress
+                            ) * triggerMorphAlpha
+                        )
+                    },
+                    shadow = {
+                        Shadow(
+                            radius = 8.dp,
+                            offset = DpOffset(0.dp, 3.dp),
+                            color = Color.Black.copy(alpha = (if (isLight) 0.12f else 0.28f) * triggerMorphAlpha)
+                        )
+                    },
+                    innerShadow = {
+                        InnerShadow(
+                            radius = 5.dp,
+                            alpha = lerp(if (isLight) 0.18f else 0.30f, 0.38f, triggerHighlight.pressProgress) * triggerMorphAlpha
+                        )
+                    },
+                    effects = {

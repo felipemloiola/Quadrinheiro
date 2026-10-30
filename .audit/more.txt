@@ -124,7 +124,7 @@
                                         scaleX = 1.14f
                                         scaleY = 1.14f
                                     }
-                                    .blur(14.dp)
+                                    /* LAG_FIX_NO_FULLSCREEN_BLUR: 28x42 source is already soft when upscaled */
                                     .alpha(0.32f)
                             )
 
