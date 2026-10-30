@@ -104,19 +104,29 @@ jobs:
           test -n "$signer"
           "$signer" verify --verbose --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-verification.txt"
           cat "$RUNNER_TEMP/apk-verification.txt"
-          actual=$(grep 'Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/apk-verification.txt" | awk '{print $NF}')
-          expected=$(tr -d '\r\n ' < docs/release-signing-sha256.txt)
-          test "$actual" = "$expected"
           python3 - <<'PY'
-          import os, json, hashlib
+          import os, json, hashlib, re
           from pathlib import Path
+          report = (Path(os.environ['RUNNER_TEMP']) / 'apk-verification.txt').read_text()
+          expected = Path('docs/release-signing-sha256.txt').read_text().strip().lower()
+          if not re.fullmatch(r'[a-f0-9]{64}', expected):
+              raise SystemExit('Invalid pinned signing certificate fingerprint')
+          signer_counts = re.findall(r'^Number of signers:\s*(\d+)\s*$', report, re.M)
+          if signer_counts != ['1']:
+              raise SystemExit('APK must have exactly one verified signer')
+          fingerprints = {value.lower() for value in re.findall(
+              r'^(?:Signer #\d+|V\d+(?:\.\d+)* Signer): certificate SHA-256 digest:\s*([0-9a-fA-F]{64})\s*$',
+              report, re.M
+          )}
+          if fingerprints != {expected}:
+              raise SystemExit('APK certificate missing, unrecognized, or different from the permanent signing key')
           apk = Path('dist/quadrinheiro.apk')
           metadata = {
               'applicationId': 'com.aistudio.quadrinheiro.lqglas',
               'versionCode': int(os.environ['VERSION_CODE']),
               'versionName': os.environ['VERSION_NAME'],
               'minSdk': 24,
-              'certificateSha256': Path('docs/release-signing-sha256.txt').read_text().strip(),
+              'certificateSha256': expected,
               'sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
               'apkUrl': 'https://github.com/' + os.environ['GITHUB_REPOSITORY'] + '/releases/download/' + os.environ['RELEASE_TAG'] + '/quadrinheiro.apk',
               'sourceCommit': os.environ['GITHUB_SHA']
