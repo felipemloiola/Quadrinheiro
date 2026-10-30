@@ -1,6 +1,8 @@
 # Quadrinheiro
 
-![Quadrinheiro Logo](https://github.com/felipemloiola/Quadrinheiro/raw/main/branding/quadrinheiro-logo.svg)
+<p align="left">
+  <img src="https://github.com/felipemloiola/Quadrinheiro/raw/main/branding/quadrinheiro-logo.svg" alt="Quadrinheiro Logo" width="120" />
+</p>
 
 > A neo-comic Liquid Glass library and reading diary for comics, graphic novels and manga.
 
