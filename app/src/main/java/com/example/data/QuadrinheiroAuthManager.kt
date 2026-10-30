@@ -108,7 +108,7 @@ class QuadrinheiroAuthManager(
 
     private fun resolveServerClientId(): String {
         val fromDefaultRes = runCatching {
-            appContext.getString(R.string.default_web_client_id).trim()
+            GoogleClientId.optional(appContext) /* GOOGLE_CLIENT_ID_RUNTIME_V6 */
         }.getOrDefault("")
         if (fromDefaultRes.isNotEmpty() && !fromDefaultRes.startsWith("YOUR_")) {
             return fromDefaultRes

@@ -2614,6 +2614,8 @@ fun <T> AppleMenuPicker(
     val currentOnChange by rememberUpdatedState(onChange)
 
     // GLASS_PRESS_FEEDBACK_V2: one touch handler for both click and press.
+    // PICKER_PRESS_LIGHT_V6: observe finger position without consuming clicks.
+    var pickerLightOrigin by remember { mutableStateOf(Offset.Zero) }
     val pickerInteractions = remember { MutableInteractionSource() }
     val pickerPressed by pickerInteractions.collectIsPressedAsState()
     val pickerPressProgress by animateFloatAsState(
@@ -2781,6 +2783,35 @@ fun <T> AppleMenuPicker(
                 )
                 // Press animation is driven by the clickable interaction source.
                 // SORT_PICKER_SINGLE_TOUCH_HANDLER: clickable owns touch; no competing decorative gesture
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        pickerLightOrigin = down.position
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.firstOrNull()?.let { pickerLightOrigin = it.position }
+                            if (event.changes.none { it.pressed }) break
+                        }
+                    }
+                }
+                .drawWithContent {
+                    drawContent()
+                    val light = pickerPressProgress.coerceIn(0f, 1f)
+                    if (light > 0.001f) {
+                        val origin = Offset(
+                            pickerLightOrigin.x.coerceIn(0f, size.width),
+                            pickerLightOrigin.y.coerceIn(0f, size.height)
+                        )
+                        drawRoundRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.24f * light), Color.Transparent),
+                                center = origin,
+                                radius = size.maxDimension.coerceAtLeast(1f) * 0.75f
+                            ),
+                            cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                        )
+                    }
+                }
                 .clip(ContinuousCapsule)
                 .clickable(
                     interactionSource = pickerInteractions,

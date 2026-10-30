@@ -1,4 +1,4 @@
-=== app/src/main/java/com/example/MainActivity.kt:1033
+=== app/src/main/java/com/example/MainActivity.kt:1038
                                     )
                                 }
                             }
@@ -70,7 +70,7 @@ fun QuadrinheiroLogo(
 ) {
     if (!titleVisible && subtitle.isNullOrBlank() && leadingIcon == null) {
         LogoMark(variant, modifier)
-=== app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt:75
+=== app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt:77
 fun Modifier.authGlassCardSurface(): Modifier = composed {
     liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 0.dp)
 }

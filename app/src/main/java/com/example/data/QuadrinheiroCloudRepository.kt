@@ -346,7 +346,7 @@ class QuadrinheiroCloudRepository(
     suspend fun signInWithGoogleInteractive(activityContext: Context): Result<CloudAuthUser> {
         return try {
             val credentialManager = CredentialManager.create(activityContext)
-            val serverClientId = appContext.getString(R.string.default_web_client_id)
+            val serverClientId = GoogleClientId.required(appContext) /* GOOGLE_CLIENT_ID_RUNTIME_V6 */
             val googleOption = GetSignInWithGoogleOption.Builder(serverClientId).build()
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(googleOption)
@@ -378,7 +378,7 @@ class QuadrinheiroCloudRepository(
         }
         return try {
             val credentialManager = CredentialManager.create(activityContext)
-            val serverClientId = appContext.getString(R.string.default_web_client_id)
+            val serverClientId = GoogleClientId.required(appContext) /* GOOGLE_CLIENT_ID_RUNTIME_V6 */
             val silentOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(true)
                 .setServerClientId(serverClientId)
