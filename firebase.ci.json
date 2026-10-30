@@ -1,15 +1,23 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71",
+      "database": "(default)",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }
   ],
   "emulators": {
-    "firestore": { "host": "127.0.0.1", "port": 8085 },
-    "auth": { "host": "127.0.0.1", "port": 9099 },
-    "ui": { "enabled": false },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8085
+    },
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
+    },
+    "ui": {
+      "enabled": false
+    },
     "singleProjectMode": true
   }
 }

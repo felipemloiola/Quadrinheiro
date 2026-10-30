@@ -248,15 +248,15 @@ class SafeStorage(context: Context) {
                 val emailKey = keys.next()
                 val acctObj = root.optJSONObject(emailKey) ?: continue
                 if (acctObj.optString("uid", "") == uid) {
-                    if (displayName.isNotBlank()) {
+                    if (displayName.isNotBlank() && acctObj.optString("displayName", "") != displayName) {
                         acctObj.put("displayName", displayName)
                         changed = true
                     }
-                    if (handle.isNotBlank()) {
+                    if (handle.isNotBlank() && acctObj.optString("handle", "") != handle) {
                         acctObj.put("handle", handle)
                         changed = true
                     }
-                    if (!photoUrl.isNullOrBlank()) {
+                    if (!photoUrl.isNullOrBlank() && acctObj.optString("photoUrl", "") != photoUrl) {
                         acctObj.put("photoUrl", photoUrl)
                         changed = true
                     }
@@ -392,6 +392,24 @@ class SafeStorage(context: Context) {
         }
     }
 
+    // ACCOUNT_SCOPE_HARDENING_V13: inactive accounts never modify another account's mirror.
+    private fun syncStateKeys(ownerUid: String?): List<String> {
+        val session = loadAuthSession()
+        if (ownerUid == "guest_local" ||
+            (ownerUid == null && (isGuestMode() || session?.isGuest == true))) {
+            return emptyList()
+        }
+        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() }
+            ?: session?.takeIf { !it.isGuest }?.uid
+        return buildList {
+            if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
+            val isActiveOwner = session != null && !session.isGuest && session.uid == resolvedUid
+            if (isActiveOwner || (ownerUid == null && resolvedUid.isNullOrBlank())) {
+                add(STORAGE_KEY)
+            }
+        }
+    }
+
     @Synchronized
     fun markComicsSynced(
         syncedIds: Set<String>,
@@ -399,12 +417,7 @@ class SafeStorage(context: Context) {
         ownerUid: String? = null
     ) {
         if (syncedIds.isEmpty()) return
-        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() && it != "guest_local" }
-            ?: loadAuthSession()?.takeIf { !it.isGuest }?.uid
-        val targetKeys = buildList {
-            if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
-            add(STORAGE_KEY)
-        }
+        val targetKeys = syncStateKeys(ownerUid)
         for (targetKey in targetKeys) {
             try {
                 val rawState = getItem(targetKey) ?: continue
@@ -438,12 +451,7 @@ class SafeStorage(context: Context) {
         syncedAtMillis: Long = System.currentTimeMillis(),
         ownerUid: String? = null
     ) {
-        val resolvedUid = ownerUid?.takeIf { it.isNotBlank() && it != "guest_local" }
-            ?: loadAuthSession()?.takeIf { !it.isGuest }?.uid
-        val targetKeys = buildList {
-            if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
-            add(STORAGE_KEY)
-        }
+        val targetKeys = syncStateKeys(ownerUid)
         for (targetKey in targetKeys) {
             try {
                 val rawState = getItem(targetKey) ?: continue
@@ -576,13 +584,18 @@ class SafeStorage(context: Context) {
 
         if (!resolvedUid.isNullOrBlank()) {
             setItem(accountStateKey(resolvedUid), json)
-            setItem(STORAGE_KEY, json)
+            if (ownerUid == null || (activeSession != null && !activeSession.isGuest && activeSession.uid == resolvedUid)) {
+                setItem(STORAGE_KEY, json)
+            }
             syncAccountMetadata(
                 uid = resolvedUid,
                 displayName = profile.name,
                 handle = profile.handle,
                 photoUrl = profile.avatarUrl.takeIf { it.isNotBlank() }
             )
+        } else {
+            // Preserve legacy/local persistence when no account was selected.
+            setItem(STORAGE_KEY, json)
         }
     }
 

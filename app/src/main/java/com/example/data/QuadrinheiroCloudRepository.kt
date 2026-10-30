@@ -36,6 +36,7 @@ import com.google.firebase.firestore.ServerTimestamp
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
@@ -586,7 +587,7 @@ class QuadrinheiroCloudRepository(
     fun observeUserProfile(userId: String): Flow<CloudUserProfile?> = callbackFlow {
         val path = "users/$userId"
         val registration = db.collection("users").document(userId)
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
                 if (error != null) {
                     try {
                         handleFirestoreError(error, OperationType.GET, path, auth)
@@ -608,7 +609,7 @@ class QuadrinheiroCloudRepository(
         val registration = db.collection("users").document(userId)
             .collection("comics")
             .orderBy("updatedAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
                 if (error != null) {
                     try {
                         handleFirestoreError(error, OperationType.LIST, path, auth)
@@ -625,7 +626,7 @@ class QuadrinheiroCloudRepository(
         awaitClose {
             registration.remove()
         }
-    }
+    }.conflate() // COLLECTION_SNAPSHOT_BACKGROUND_V15: retain the newest full collection snapshot.
 
     suspend fun checkUsernameAvailability(
         rawHandle: String,

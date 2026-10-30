@@ -66,7 +66,10 @@ class QuadrinheiroSyncWorker(
             }
 
             Result.success()
-        } catch (_: Throwable) {
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            // WORKER_CANCELLATION_V13: cancellation is not a retryable sync failure.
+            throw cancel
+        } catch (_: Exception) {
             if (runAttemptCount < 3) {
                 Result.retry()
             } else {

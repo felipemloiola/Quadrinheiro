@@ -418,16 +418,14 @@ class QuadrinheiroViewModel(
             delay(1200)
 
             // Auto-heal any existing user comics that still have missing or slow OpenLibrary cover URLs
+            // INDEXED_CATALOG_HEALING_V15: build lookup tables once, not one catalog scan per HQ.
+            val healingOwner = activeOwnerUid()
+            val healingComics = _comics.value
+            val catalogIndex = com.example.data.CatalogMatchIndex(CuratedCatalog.curatedComicsCatalog)
             var updatedAny = false
-            val healedList = _comics.value.map { comic ->
+            val healedList = healingComics.map { comic ->
                 val isCurated = comic.id.startsWith("cat-") || comic.id.startsWith("init-") || comic.externalId.startsWith("cat-")
-                val catalogHit = CuratedCatalog.curatedComicsCatalog.firstOrNull {
-                    it.externalId == comic.externalId ||
-                        it.id == comic.id ||
-                        it.id == comic.id.replace("init-", "cat-") ||
-                        (comic.isbn.isNotBlank() && it.isbn == comic.isbn) ||
-                        it.title.equals(comic.title, ignoreCase = true)
-                }
+                val catalogHit = catalogIndex.findMatch(comic)
                 val needsCoverUpdate = comic.coverUrl.isBlank() ||
                     comic.coverUrl.contains("covers.openlibrary.org") ||
                     (catalogHit != null && isCurated && comic.coverUrl != catalogHit.coverUrl) ||
@@ -466,9 +464,10 @@ class QuadrinheiroViewModel(
                 }
             }
 
-            if (updatedAny) {
+            if (updatedAny && activeOwnerUid() == healingOwner && (_comics.value === healingComics)) {
+                // Do not overwrite edits or another account while cover resolution was running.
                 _comics.value = healedList
-                persistAll()
+                persistAll(healingOwner)
             }
             // Prefetch leve e prioritário: apenas 4 capas do acervo ativo (em leitura ou topo)
             val initialCoversToWarm = _comics.value.filter { it.status == ReadingStatus.READING }.ifEmpty { _comics.value.take(4) }
@@ -1141,11 +1140,15 @@ class QuadrinheiroViewModel(
     }
 
     private fun persistAll(ownerUid: String? = null) {
+        // PERSIST_SNAPSHOT_V13: bind the data snapshot to its owner before the debounce.
         val resolvedUid = ownerUid ?: activeOwnerUid()
+        val comicsSnapshot = _comics.value
+        val profileSnapshot = _profile.value
+        val settingsSnapshot = _appSettings.value
         persistJob?.cancel()
         persistJob = viewModelScope.launch(Dispatchers.IO) {
             delay(80)
-            storage.saveState(_comics.value, _profile.value, _appSettings.value, resolvedUid)
+            storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
         }
     }
 

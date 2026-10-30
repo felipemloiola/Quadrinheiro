@@ -1,0 +1,5 @@
+OK app/src/main/java/com/example/data/SafeStorage.kt
+OK app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt
+OK app/src/main/java/com/example/data/QuadrinheiroSyncWorker.kt
+OK CI database aligned to test fixture; production firebase.json/rules unchanged
+No UI, gesture, signing-key or production security-rule changes. Tests must pass before committing. Remaining review items: logout/login races, same-account edits during in-flight sync, username verification on network failure, and legacy-state migration.

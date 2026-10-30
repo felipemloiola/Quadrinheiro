@@ -1,0 +1,3 @@
+OK app/src/main/java/com/example/data/QuadrinheiroCloudRepository.kt
+OK app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt
+Snapshot conversion uses a shared background executor; only full remote snapshots are conflated. Catalog lookups preserve original first-match precedence. Healing results cannot overwrite a changed source list or owner. No graphics, gestures, database schema or collection limits changed. Device frame times have not been measured. Remaining hotspots to profile: synchronous initial load, whole-state JSON writes, library filters and cover image rendering.
