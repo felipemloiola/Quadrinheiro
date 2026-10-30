@@ -226,7 +226,7 @@ fun LiquidGlassModeSwitcher(
                     1.0f at 440
                 }
             )
-=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/components/CatalogModal.kt:1188
+=== PADDING-BEFORE-CLICKABLE app/src/main/java/com/example/ui/components/CatalogModal.kt:1189
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .padding(bottom = 12.dp)

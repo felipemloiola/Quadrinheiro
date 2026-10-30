@@ -1,4 +1,4 @@
-=== app/src/main/java/com/example/MainActivity.kt:553 [hasReadingCoverBg]
+=== app/src/main/java/com/example/MainActivity.kt:554 [hasReadingCoverBg]
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
                     // Usa a PRÓPRIA IMAGEM DA CAPA da HQ em leitura com desfoque atmosférico e efeitos (igual ao iOS / Apple Books)
                     val hasReadingCoverBg = isFirstFrameRendered &&
@@ -10,7 +10,7 @@
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .layerBackdrop(backgroundBackdrop)
+                            .layerBackdrop(backgroundBackdrop, reuseRecordedContent = true)
                             .background(themeColors.bgPrimary)
                     ) {
                         // A. Gradiente escultural base do tema + luz ambiente suave
@@ -46,7 +46,7 @@
                                         radius = size.maxDimension * 0.82f
                                     )
                                 )
-=== app/src/main/java/com/example/MainActivity.kt:576 [hasReadingCoverBg]
+=== app/src/main/java/com/example/MainActivity.kt:577 [hasReadingCoverBg]
                                         end = Offset(size.width, size.height)
                                     ),
                                     alpha = if (hasReadingCoverBg) 0.35f else 0.85f
@@ -94,7 +94,7 @@
                         // Desfoque orgânico de 14.dp + opacidade calibrada (32% em ambos os modos claro e escuro) para iluminação ambiente viva e equilibrada
                         if (hasReadingCoverBg) {
                             val bgCoverRequest = remember(resolvedCoverUrl, context) {
-=== app/src/main/java/com/example/MainActivity.kt:619 [hasReadingCoverBg]
+=== app/src/main/java/com/example/MainActivity.kt:620 [hasReadingCoverBg]
                         // B. A própria imagem da HQ em leitura como iluminação difusa perceptível e elegante
                         // Desfoque orgânico de 14.dp + opacidade calibrada (32% em ambos os modos claro e escuro) para iluminação ambiente viva e equilibrada
                         if (hasReadingCoverBg) {

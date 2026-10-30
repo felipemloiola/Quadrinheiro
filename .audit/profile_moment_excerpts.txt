@@ -69,77 +69,77 @@
   216                  .memoryCachePolicy(CachePolicy.ENABLED)
   217                  .diskCachePolicy(CachePolicy.ENABLED)
   218                  .networkCachePolicy(CachePolicy.ENABLED)
-=== app/src/main/java/com/example/ui/components/CatalogModal.kt:497-566
-  497                                      text = "Na sua Fila de Leitura (Quero Ler)",
-  498                                      fontSize = 12.5.sp,
-  499                                      fontWeight = FontWeight.SemiBold,
-  500                                      color = s.textPrimary
-  501                                  )
-  502                                  Text(
-  503                                      text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
-  504                                      fontSize = 11.5.sp,
-  505                                      lineHeight = 15.sp,
-  506                                      color = s.textSecondary
-  507                                  )
-  508                              }
-  509                          }
-  510                      } else {
-  511                          // Item 3: Data da Leitura (com Mini Calendário) & Releitura
-  512                          CatalogReadingDateAndRereadsSection(
-  513                              draftComic = draftComic,
-  514                              allowRereads = appSettings.allowRereads,
-  515                              showMiniCalendar = showMiniCalendar,
-  516                              onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
-  517                              onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
-  518                          )
-  519  
-  520                          // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
-  521                          if (draftComic.status == ReadingStatus.READING) {
-  522                              CatalogReadingProgressSection(
-  523                                  currentPageProvider = { draftComic.currentPage },
-  524                                  pageCount = draftComic.pageCount,
-  525                                  accentColor = s.accentColor,
-  526                                  onChangePage = { v ->
-  527                                      // MOMENT_PAGE_ONE_WAY_V11: progress updates the note page, never the reverse.
-  528                                      val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
-  529                                      draftComic = draftComic.copy(currentPage = nextPage)
-  530                                      momentPageInput = nextPage.toString()
-  531                                  }
-  532                              )
-  533                          }
-  534  
-  535                          // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
-  536                          if (draftComic.status == ReadingStatus.READ) {
-  537                              // Item 5: Avaliar + Gostei (Coração)
-  538                              CatalogRatingAndFavoriteSection(
-  539                                  draftComic = draftComic,
-  540                                  halfStarRatings = appSettings.halfStarRatings,
-  541                                  onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
-  542                              )
-  543  
-  544                              // Item 6: Resenha / Comentários
-  545                              CatalogReviewCommentsSection(
-  546                                  reviewText = draftComic.review,
-  547                                  isExpanded = isSheetExpanded,
-  548                                  onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
-  549                              )
-  550                          }
-  551                      }
-  552  
-  553                      // Item 7: Seção Própria e Exclusiva de Tags
-  554                      CatalogTagsSection(
-  555                          tags = draftComic.tags,
-  556                          quickReviewTags = appSettings.quickReviewTags,
-  557                          comicTagInput = comicTagInput,
-  558                          onChangeComicTagInput = { comicTagInput = it },
-  559                          onUpdateTags = { nextTags -> draftComic = draftComic.copy(tags = nextTags) }
-  560                      )
-  561  
-  562                      // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
-  563                      val addCurrentMoment = {
-  564                          val cleanNote = momentNoteInput.trim()
-  565                          if (cleanNote.isNotEmpty()) {
-  566                              val pageNum = momentPageInput.toIntOrNull() ?: 0
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:498-567
+  498                                      text = "Na sua Fila de Leitura (Quero Ler)",
+  499                                      fontSize = 12.5.sp,
+  500                                      fontWeight = FontWeight.SemiBold,
+  501                                      color = s.textPrimary
+  502                                  )
+  503                                  Text(
+  504                                      text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
+  505                                      fontSize = 11.5.sp,
+  506                                      lineHeight = 15.sp,
+  507                                      color = s.textSecondary
+  508                                  )
+  509                              }
+  510                          }
+  511                      } else {
+  512                          // Item 3: Data da Leitura (com Mini Calendário) & Releitura
+  513                          CatalogReadingDateAndRereadsSection(
+  514                              draftComic = draftComic,
+  515                              allowRereads = appSettings.allowRereads,
+  516                              showMiniCalendar = showMiniCalendar,
+  517                              onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
+  518                              onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+  519                          )
+  520  
+  521                          // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
+  522                          if (draftComic.status == ReadingStatus.READING) {
+  523                              CatalogReadingProgressSection(
+  524                                  currentPageProvider = { draftComic.currentPage },
+  525                                  pageCount = draftComic.pageCount,
+  526                                  accentColor = s.accentColor,
+  527                                  onChangePage = { v ->
+  528                                      // MOMENT_PAGE_ONE_WAY_V11: progress updates the note page, never the reverse.
+  529                                      val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
+  530                                      draftComic = draftComic.copy(currentPage = nextPage)
+  531                                      momentPageInput = nextPage.toString()
+  532                                  }
+  533                              )
+  534                          }
+  535  
+  536                          // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
+  537                          if (draftComic.status == ReadingStatus.READ) {
+  538                              // Item 5: Avaliar + Gostei (Coração)
+  539                              CatalogRatingAndFavoriteSection(
+  540                                  draftComic = draftComic,
+  541                                  halfStarRatings = appSettings.halfStarRatings,
+  542                                  onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+  543                              )
+  544  
+  545                              // Item 6: Resenha / Comentários
+  546                              CatalogReviewCommentsSection(
+  547                                  reviewText = draftComic.review,
+  548                                  isExpanded = isSheetExpanded,
+  549                                  onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
+  550                              )
+  551                          }
+  552                      }
+  553  
+  554                      // Item 7: Seção Própria e Exclusiva de Tags
+  555                      CatalogTagsSection(
+  556                          tags = draftComic.tags,
+  557                          quickReviewTags = appSettings.quickReviewTags,
+  558                          comicTagInput = comicTagInput,
+  559                          onChangeComicTagInput = { comicTagInput = it },
+  560                          onUpdateTags = { nextTags -> draftComic = draftComic.copy(tags = nextTags) }
+  561                      )
+  562  
+  563                      // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
+  564                      val addCurrentMoment = {
+  565                          val cleanNote = momentNoteInput.trim()
+  566                          if (cleanNote.isNotEmpty()) {
+  567                              val pageNum = momentPageInput.toIntOrNull() ?: 0
 === app/src/main/java/com/example/ui/components/CatalogModalSubcomponents.kt:1237-1306
  1237                                  color = if (isSelected) Color.Transparent
  1238                                  else if (s.isLight) Color.Black.copy(alpha = 0.16f)

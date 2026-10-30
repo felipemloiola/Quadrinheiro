@@ -1,4 +1,4 @@
-=== app/src/main/java/com/example/MainActivity.kt:1047
+=== app/src/main/java/com/example/MainActivity.kt:1048
                                     )
                                 }
                             }
@@ -16,7 +16,7 @@
                 // Modal de Autenticação (quando aberto a partir da tela de Ajustes no Modo Convidado para vincular conta)
                 AnimatedVisibility(
                     visible = showAuthModalFromSettings,
-=== app/src/main/java/com/example/ui/components/CatalogModal.kt:1376
+=== app/src/main/java/com/example/ui/components/CatalogModal.kt:1377
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically

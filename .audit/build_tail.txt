@@ -1,5 +1,5 @@
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1793398859936.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1793400335154.json
 
-BUILD SUCCESSFUL in 1m 4s
+BUILD SUCCESSFUL in 1m 2s
 8 actionable tasks: 1 executed, 7 from cache
 Configuration cache entry stored.
