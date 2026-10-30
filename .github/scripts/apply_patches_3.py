@@ -3,7 +3,7 @@ from pathlib import Path
 report = []
 def once(t, old, new):
     if t.count(old) != 1:
-        raise RuntimeError('Expected one anchor; nothing written for this file: ' + old[:90])
+        raise RuntimeError('Expected one anchor; nothing written for this file: ' + old[:100])
     return t.replace(old, new, 1)
 
 def edit(path, marker, fn):
@@ -14,63 +14,85 @@ def edit(path, marker, fn):
     if marker in t:
         report.append('SKIP: ' + path)
         return
-    t = fn(t)
-    p.write_bytes(t.replace('\n', '\r\n').encode('utf-8') if crlf else t.encode('utf-8'))
+    result = fn(t)
+    p.write_bytes(result.replace('\n', '\r\n').encode('utf-8') if crlf else result.encode('utf-8'))
     report.append('OK: ' + path)
 
-def auth(t):
-    t = once(t, 'QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false)', 'QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(104.dp))')
-    start = t.index('@Composable\nfun AuthModeSegmentedToggle(')
-    end = t.index('@Composable\nfun AuthFeedbackBannerCard(', start)
-    t = t[:start] + '''@Composable
-fun AuthModeSegmentedToggle(selectedMode: AuthMode, onSelectMode: (AuthMode) -> Unit) {
-    // AUTH_CIRCULAR_ACTIONS_V3: use the app's existing glass segmented picker.
-    com.example.ui.components.AppleSegmentedPicker(
-        options = AuthMode.values().map {
-            com.example.ui.components.SegmentOption(it, if (it == AuthMode.LOGIN) "Entrar" else "Criar conta")
-        },
-        value = selectedMode,
-        onChange = onSelectMode,
-        modifier = Modifier.fillMaxWidth()
-    )
-}
+def subcomponents(t):
+    t = once(t, 'modifier = Modifier.size(104.dp)', 'modifier = Modifier.size(120.dp)')
+    t = once(t, 'Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp))', 'Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp))')
+    for imp in ['androidx.compose.animation.AnimatedVisibility', 'androidx.compose.animation.fadeIn', 'androidx.compose.animation.fadeOut', 'androidx.compose.animation.expandVertically', 'androidx.compose.animation.shrinkVertically', 'androidx.compose.animation.core.spring', 'androidx.compose.animation.core.tween']:
+        if 'import ' + imp + '\n' not in t:
+            t = once(t, 'package com.example.ui.screens\n', 'package com.example.ui.screens\n\nimport ' + imp + '\n')
+    anchor = 'if (registering) OutlinedTextField('
+    if t.count(anchor) != 2:
+        raise RuntimeError('Expected exactly two registration-only fields; nothing written')
+    for _ in range(2):
+        a = t.index(anchor)
+        call_start = a + len('if (registering) ')
+        pos = call_start + len('OutlinedTextField(')
+        depth = 1
+        quoted = False
+        escaped = False
+        while depth and pos < len(t):
+            c = t[pos]
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif c == '\\':
+                    escaped = True
+                elif c == '"':
+                    quoted = False
+            elif c == '"':
+                quoted = True
+            elif c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+            pos += 1
+        if depth:
+            raise RuntimeError('Unbalanced field call; nothing written')
+        replacement = '''AnimatedVisibility(
+            visible = registering,
+            enter = fadeIn(tween(220)) + expandVertically(animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f)),
+            exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(220))
+        ) {
+            ''' + t[call_start:pos] + '\n        }'
+        t = t[:a] + replacement + t[pos:]
+    return t + '\n// AUTH_FORM_MOTION_V4\n'
 
-''' + t[end:]
-    old = '''        OutlinedButton(
-            onClick = onLoginWithGoogle, enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_google_button")
-        ) { Text("Continuar com Google", color = theme.textPrimary) }
-        if (!isLinkingFromGuest) TextButton(
-            onClick = onContinueAsGuest, enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_guest_button")
-        ) { Text("Explorar como convidado", color = theme.textSecondary) }'''
-    new = '''        Spacer(Modifier.height(6.dp))
-        AuthAlternativeActions(
-            enabled = !isLoading,
-            showGuest = !isLinkingFromGuest,
-            onGoogle = onLoginWithGoogle,
-            onGuest = onContinueAsGuest
-        )'''
-    return once(t, old, new)
+def screen(t):
+    for imp in ['androidx.compose.foundation.gestures.awaitEachGesture', 'androidx.compose.foundation.gestures.awaitFirstDown', 'androidx.compose.foundation.gestures.waitForUpOrCancellation', 'androidx.compose.ui.input.pointer.PointerEventPass', 'androidx.compose.ui.input.pointer.pointerInput']:
+        if 'import ' + imp + '\n' not in t:
+            t = once(t, 'package com.example.ui.screens\n', 'package com.example.ui.screens\n\nimport ' + imp + '\n')
+    t = once(t, '    val focusManager = LocalFocusManager.current', '    val focusManager = LocalFocusManager.current\n    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current')
+    t = once(t, '.testTag("auth_screen_root")', '''.testTag("auth_screen_root")
+                // AUTH_OUTSIDE_FOCUS_V4: observe unconsumed taps, never steal field/button taps.
+                .pointerInput(focusManager, keyboard) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                        if (!down.isConsumed) {
+                            val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+                            if (up != null && !up.isConsumed) {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                            }
+                        }
+                    }
+                }''')
+    t = once(t, '''                    onSelectMode = { nextMode ->
+                        authMode = nextMode''', '''                    onSelectMode = { nextMode ->
+                        focusManager.clearFocus()
+                        keyboard?.hide()
+                        authMode = nextMode''')
+    t = once(t, '''                AuthBrandHeader(isLinkingFromGuest = isLinkingFromGuest)
 
-def shell(t):
-    t = once(t, 'private fun AuthGlassScreenShell(\n', 'private fun AuthGlassScreenShellContent(\n')
-    return t + '''
+                Spacer(modifier = Modifier.height(10.dp))''', '''                AuthBrandHeader(isLinkingFromGuest = isLinkingFromGuest)
 
-// AUTH_SPRING_ENTRANCE_V3
-@Composable
-private fun AuthGlassScreenShell(
-    isLinkingFromGuest: Boolean,
-    onDismissModal: (() -> Unit)?,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    AuthGlassEntrance {
-        AuthGlassScreenShellContent(isLinkingFromGuest, onDismissModal, content)
-    }
-}
-'''
+                Spacer(modifier = Modifier.height(16.dp))''')
+    return t
 
-edit('app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt', 'AUTH_CIRCULAR_ACTIONS_V3', auth)
-edit('app/src/main/java/com/example/ui/screens/AuthScreen.kt', 'AUTH_SPRING_ENTRANCE_V3', shell)
+edit('app/src/main/java/com/example/ui/screens/AuthSubcomponents.kt', 'AUTH_FORM_MOTION_V4', subcomponents)
+edit('app/src/main/java/com/example/ui/screens/AuthScreen.kt', 'AUTH_OUTSIDE_FOCUS_V4', screen)
 Path('.audit').mkdir(exist_ok=True)
-Path('.audit/auth_refinement.txt').write_text('\n'.join(report), encoding='utf-8')
+Path('.audit/auth_polish.txt').write_text('\n'.join(report), encoding='utf-8')
