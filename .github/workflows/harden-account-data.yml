@@ -1,0 +1,65 @@
+name: Validate account data hardening
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/harden_account_data.py'
+      - '.github/workflows/harden-account-data.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: account-data-hardening
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Apply bounded patches in the validation workspace
+        run: python3 .github/scripts/harden_account_data.py
+      - name: Run regression tests and compile with isolated Firebase emulators
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+        run: |
+          npx --yes firebase-tools@14 emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:testDebugUnitTest :app:compileDebugKotlin --no-daemon --console=plain"
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-hardening-diagnostics-${{ github.run_number }}
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+            firebase-debug.log
+            firestore-debug.log
+            .audit/account_hardening_v13.txt
+          if-no-files-found: ignore
+      - name: Commit validated changes without overwriting newer AI Studio work
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA" || { echo '::error::A main mudou durante os testes. Nenhuma alteração validada será publicada sobre código mais recente; execute novamente na main atual.'; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/example/data/SafeStorage.kt app/src/main/java/com/example/data/QuadrinheiroSyncWorker.kt app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt app/src/test/java/com/example/AccountPersistenceRegressionTest.kt firebase.ci.json .audit/account_hardening_v13.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix: validated account persistence and CI isolation hardening'
+          git push origin HEAD:main
