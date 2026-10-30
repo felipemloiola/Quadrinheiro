@@ -58,7 +58,7 @@ fun Modifier.authGlassCardSurface(): Modifier = composed {
 fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val theme = LocalIOS27Theme.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false)
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(104.dp))
         Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
         Text(
             if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
@@ -70,23 +70,15 @@ fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
 
 @Composable
 fun AuthModeSegmentedToggle(selectedMode: AuthMode, onSelectMode: (AuthMode) -> Unit) {
-    val theme = LocalIOS27Theme.current
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        AuthMode.values().forEach { mode ->
-            val selected = mode == selectedMode
-            FilterChip(
-                selected = selected,
-                onClick = { onSelectMode(mode) },
-                label = { Text(if (mode == AuthMode.LOGIN) "Entrar" else "Criar conta") },
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    labelColor = theme.textSecondary,
-                    selectedLabelColor = theme.textPrimary,
-                    selectedContainerColor = theme.accent.copy(alpha = 0.15f)
-                )
-            )
-        }
-    }
+    // AUTH_CIRCULAR_ACTIONS_V3: use the app's existing glass segmented picker.
+    com.example.ui.components.AppleSegmentedPicker(
+        options = AuthMode.values().map {
+            com.example.ui.components.SegmentOption(it, if (it == AuthMode.LOGIN) "Entrar" else "Criar conta")
+        },
+        value = selectedMode,
+        onChange = onSelectMode,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -228,13 +220,12 @@ fun AuthPrimaryActionsSection(
                 Text("Aguarde…")
             } else Text(if (authMode == AuthMode.LOGIN) "Entrar na coleção" else "Criar conta")
         }
-        OutlinedButton(
-            onClick = onLoginWithGoogle, enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_google_button")
-        ) { Text("Continuar com Google", color = theme.textPrimary) }
-        if (!isLinkingFromGuest) TextButton(
-            onClick = onContinueAsGuest, enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_guest_button")
-        ) { Text("Explorar como convidado", color = theme.textSecondary) }
+        Spacer(Modifier.height(6.dp))
+        AuthAlternativeActions(
+            enabled = !isLoading,
+            showGuest = !isLinkingFromGuest,
+            onGoogle = onLoginWithGoogle,
+            onGuest = onContinueAsGuest
+        )
     }
 }

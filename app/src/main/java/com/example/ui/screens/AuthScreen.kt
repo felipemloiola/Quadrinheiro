@@ -272,7 +272,7 @@ fun AuthScreen(
  * Mantém layout mais compacto, alinhado aos demais cards do app.
  */
 @Composable
-private fun AuthGlassScreenShell(
+private fun AuthGlassScreenShellContent(
     isLinkingFromGuest: Boolean,
     onDismissModal: (() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit
@@ -338,5 +338,18 @@ private fun AuthGlassScreenShell(
                 Spacer(modifier = Modifier.height(6.dp))
             }
         }
+    }
+}
+
+
+// AUTH_SPRING_ENTRANCE_V3
+@Composable
+private fun AuthGlassScreenShell(
+    isLinkingFromGuest: Boolean,
+    onDismissModal: (() -> Unit)?,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    AuthGlassEntrance {
+        AuthGlassScreenShellContent(isLinkingFromGuest, onDismissModal, content)
     }
 }
