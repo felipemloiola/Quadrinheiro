@@ -55,7 +55,7 @@ fun ComicSequenceCarouselCard(
         )
     }
 
-=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1432
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1434
 @Composable
 fun LiquidGlassSegmentedControl(
     tabs: List<String>,
@@ -112,7 +112,7 @@ fun LiquidGlassSegmentedControl(
                     val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
                     didDrag = false
                     if (selectedIndex != targetIndex) {
-=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1707
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1709
 @Composable
 fun AppleSegmentedPicker(
     options: List<String>,
@@ -169,7 +169,7 @@ fun LiquidGlassModeSwitcher(
     onSelectMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1727
+=== DEF app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:1729
 @Composable
 fun <T> AppleSegmentedPicker(
     options: List<SegmentOption<T>>,

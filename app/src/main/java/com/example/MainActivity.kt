@@ -1667,8 +1667,8 @@ private fun SessionTransitionScreen(message: String) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    color = themeColors.accent,
+                com.example.ui.components.IOSLoadingIndicator(
+                    color = themeColors.textSecondary,
                     strokeWidth = 3.dp,
                     modifier = Modifier.size(32.dp)
                 )
@@ -1682,3 +1682,5 @@ private fun SessionTransitionScreen(message: String) {
         }
     }
 }
+
+// IOS_SESSION_INDICATOR_V2

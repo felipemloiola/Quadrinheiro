@@ -30,16 +30,28 @@ import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.QuadrinheiroLogoVariant
 import com.example.ui.theme.LocalIOS27Theme
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import androidx.compose.ui.graphics.Brush
+import com.example.ui.components.liquidGlass
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
 fun AuthBackdropLayer(backdrop: Backdrop, reduceTransparency: Boolean, isLight: Boolean) {
-    // Static background: no continuous animation, image decoding or blur.
-    Box(Modifier.fillMaxSize().background(LocalIOS27Theme.current.bgPrimary))
+    // GLASS_AUTH_STYLE_V2: static theme gradient recorded for the glass surfaces.
+    val theme = LocalIOS27Theme.current
+    val layerModifier = if (backdrop is LayerBackdrop) Modifier.layerBackdrop(backdrop) else Modifier
+    Box(layerModifier.fillMaxSize().background(
+        Brush.verticalGradient(listOf(
+            theme.bgPrimary,
+            androidx.compose.ui.graphics.lerp(theme.bgPrimary, theme.accent, if (reduceTransparency) 0.03f else 0.12f),
+            theme.bgPrimary
+        ))
+    ))
 }
 
 fun Modifier.authGlassCardSurface(): Modifier = composed {
-    background(LocalIOS27Theme.current.bgPrimary, RoundedCornerShape(22.dp))
+    liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 0.dp)
 }
 
 @Composable
@@ -101,17 +113,42 @@ fun AuthCredentialsFieldsSection(
     onForgotPassword: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    val theme = LocalIOS27Theme.current
     val focus = LocalFocusManager.current
     val registering = form.mode != AuthMode.LOGIN
     val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (registering) OutlinedTextField(
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = theme.textPrimary,
+                unfocusedTextColor = theme.textPrimary,
+                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
+                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
+                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
+                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
+                focusedLabelColor = theme.accent,
+                unfocusedLabelColor = theme.textSecondary,
+                cursorColor = theme.accent
+            ),
             value = form.name, onValueChange = onNameChange,
             label = { Text("Nome") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_name_field"),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), keyboardActions = next
         )
         OutlinedTextField(
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = theme.textPrimary,
+                unfocusedTextColor = theme.textPrimary,
+                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
+                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
+                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
+                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
+                focusedLabelColor = theme.accent,
+                unfocusedLabelColor = theme.textSecondary,
+                cursorColor = theme.accent
+            ),
             value = form.email, onValueChange = onEmailChange,
             label = { Text("E-mail") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_email_field"),
@@ -119,6 +156,18 @@ fun AuthCredentialsFieldsSection(
             keyboardActions = next
         )
         OutlinedTextField(
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = theme.textPrimary,
+                unfocusedTextColor = theme.textPrimary,
+                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
+                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
+                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
+                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
+                focusedLabelColor = theme.accent,
+                unfocusedLabelColor = theme.textSecondary,
+                cursorColor = theme.accent
+            ),
             value = form.password, onValueChange = onPasswordChange,
             label = { Text("Senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_password_field"),
@@ -128,6 +177,18 @@ fun AuthCredentialsFieldsSection(
             keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }, onDone = { onSubmit() })
         )
         if (registering) OutlinedTextField(
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = theme.textPrimary,
+                unfocusedTextColor = theme.textPrimary,
+                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
+                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
+                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
+                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
+                focusedLabelColor = theme.accent,
+                unfocusedLabelColor = theme.textSecondary,
+                cursorColor = theme.accent
+            ),
             value = form.confirmPassword, onValueChange = onConfirmPasswordChange,
             label = { Text("Confirmar senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_confirm_password_field"),
@@ -162,7 +223,7 @@ fun AuthPrimaryActionsSection(
             colors = ButtonDefaults.buttonColors(containerColor = theme.accent, contentColor = foreground)
         ) {
             if (isLoading) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = theme.textPrimary)
+                com.example.ui.components.IOSLoadingIndicator(Modifier.size(20.dp), color = theme.textPrimary)
                 Spacer(Modifier.width(8.dp))
                 Text("Aguarde…")
             } else Text(if (authMode == AuthMode.LOGIN) "Entrar na coleção" else "Criar conta")

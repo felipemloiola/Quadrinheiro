@@ -34,7 +34,7 @@
                             text = "Quadrinheiro",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-=== app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:2410
+=== app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt:2412
                             )
                             chosen.onClick()
                             state.dismissMenu(req.id)

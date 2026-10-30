@@ -2613,6 +2613,14 @@ fun <T> AppleMenuPicker(
     val currentOpt = options.firstOrNull { it.value == value } ?: options.first()
     val currentOnChange by rememberUpdatedState(onChange)
 
+    // GLASS_PRESS_FEEDBACK_V2: one touch handler for both click and press.
+    val pickerInteractions = remember { MutableInteractionSource() }
+    val pickerPressed by pickerInteractions.collectIsPressedAsState()
+    val pickerPressProgress by animateFloatAsState(
+        targetValue = if (pickerPressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+        label = "pickerGlassPress"
+    )
     val animationScope = rememberCoroutineScope()
     val triggerHighlight = remember(animationScope) {
         InteractiveHighlight(animationScope = animationScope)
@@ -2706,7 +2714,7 @@ fun <T> AppleMenuPicker(
                             alpha = lerp(
                                 if (isLight) 0.80f else 0.64f,
                                 0.96f,
-                                triggerHighlight.pressProgress
+                                pickerPressProgress
                             ) * triggerMorphAlpha
                         )
                     },
@@ -2720,7 +2728,7 @@ fun <T> AppleMenuPicker(
                     innerShadow = {
                         InnerShadow(
                             radius = 5.dp,
-                            alpha = lerp(if (isLight) 0.18f else 0.30f, 0.38f, triggerHighlight.pressProgress) * triggerMorphAlpha
+                            alpha = lerp(if (isLight) 0.18f else 0.30f, 0.38f, pickerPressProgress) * triggerMorphAlpha
                         )
                     },
                     effects = {
@@ -2732,7 +2740,7 @@ fun <T> AppleMenuPicker(
                             blur(blurPx)
                         }
                         if (refractionMult > 0f && size.isSpecified && size.width > 4f && size.height > 4f) {
-                            val boost = 1f + 0.30f * triggerHighlight.pressProgress
+                            val boost = 1f + 0.30f * pickerPressProgress
                             val maxAllowedHeight = min(size.width, size.height) * 0.46f
                             lens(
                                 refractionHeight = ((14f * refractionMult * boost).dp.toPx()).coerceAtMost(maxAllowedHeight),
@@ -2746,7 +2754,7 @@ fun <T> AppleMenuPicker(
                         if (size.isSpecified && size.width > 0f && size.height > 0f) {
                             val width = size.width
                             val height = size.height
-                            val progress = triggerHighlight.pressProgress
+                            val progress = pickerPressProgress
                             val scale = lerp(1f, 1f + 5f.dp.toPx() / height, progress) * triggerMorphScale
 
                             val maxOffset = size.minDimension
@@ -2771,11 +2779,11 @@ fun <T> AppleMenuPicker(
                         drawRect(baseSurfaceColor)
                     }
                 )
-                .then(triggerHighlight.modifier)
+                // Press animation is driven by the clickable interaction source.
                 // SORT_PICKER_SINGLE_TOUCH_HANDLER: clickable owns touch; no competing decorative gesture
                 .clip(ContinuousCapsule)
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = pickerInteractions,
                     indication = null
                 ) {
                     val nextOpen = !open
