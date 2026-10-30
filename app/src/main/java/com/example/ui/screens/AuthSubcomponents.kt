@@ -271,17 +271,15 @@ internal fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val themeColors = LocalIOS27Theme.current
     val emblemCd = stringResource(R.string.auth_cd_brand_emblem)
 
+    // Logo "solto" na tela de login, sem moldura em Liquid Glass
     Box(
         modifier = Modifier
             .size(50.dp)
-            .authEmblemGlassSurface()
             .semantics { contentDescription = emblemCd },
         contentAlignment = Alignment.Center
     ) {
         QuadrinheiroLogo(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(ContinuousRoundedRectangle(10.dp))
+            modifier = Modifier.fillMaxSize(0.9f)
         )
     }
 
