@@ -132,6 +132,7 @@ import com.example.ui.components.rememberDampedDragAnimation
 import com.example.ui.components.rememberInteractiveHighlight
 import com.example.ui.components.tintedLiquidBlueButton
 import com.example.ui.screens.AuthScreen
+import com.example.ui.screens.WelcomeIntroScreen
 import com.example.ui.screens.DiaryChronologicalTab
 import com.example.ui.screens.HomeReadingNowTab
 import com.example.ui.screens.SearchMultiApiTab
@@ -399,6 +400,28 @@ fun QuadrinheiroApp(
         }
         if (isEnteringApp && authUiState != AuthUiState.Unauthenticated) {
             SessionTransitionScreen("Preparando sua coleção…")
+            return@QuadrinheiroTheme
+        }
+
+        // WELCOME_ONBOARDING_FLOW_V18: Welcome Intro Screen exclusively on fresh install
+        val contextApp = androidx.compose.ui.platform.LocalContext.current
+        val safeStorage = remember { com.example.data.SafeStorage(contextApp) }
+        var hasSeenWelcomeIntro by remember { mutableStateOf(safeStorage.hasCompletedWelcomeIntro()) }
+
+        if (!hasSeenWelcomeIntro && authUiState == AuthUiState.Unauthenticated) {
+            androidx.compose.animation.AnimatedVisibility(
+                visibleState = remember {
+                    androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
+                },
+                enter = fadeIn(tween(450))
+            ) {
+                WelcomeIntroScreen(
+                    onContinue = {
+                        safeStorage.setCompletedWelcomeIntro(true)
+                        hasSeenWelcomeIntro = true
+                    }
+                )
+            }
             return@QuadrinheiroTheme
         }
 

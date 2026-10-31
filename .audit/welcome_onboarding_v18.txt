@@ -1,0 +1,3 @@
+OK app/src/main/java/com/example/data/SafeStorage.kt
+OK app/src/main/java/com/example/MainActivity.kt
+Welcome Intro screen created and plugged into first-launch flow before login.

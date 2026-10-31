@@ -31,6 +31,7 @@ class SafeStorage(context: Context) {
         const val AUTH_SESSION_KEY = "quadrinheiro_auth_session_v1"
         const val GUEST_MODE_KEY = "quadrinheiro_guest_mode_v1"
         const val AUTH_ONBOARDING_KEY = "quadrinheiro_auth_onboarding_done_v1"
+        const val WELCOME_INTRO_KEY = "quadrinheiro_welcome_intro_seen_v1"
         const val LOCAL_ACCOUNTS_KEY = "quadrinheiro_local_email_accounts_v1"
         const val LOCAL_HANDLES_KEY = "quadrinheiro_local_handles_registry_v1"
         const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
@@ -135,6 +136,15 @@ class SafeStorage(context: Context) {
     @Synchronized
     fun setCompletedAuthOnboarding(completed: Boolean) {
         setItem(AUTH_ONBOARDING_KEY, if (completed) "true" else "false")
+    }
+
+    @Synchronized
+    fun setCompletedWelcomeIntro(completed: Boolean) {
+        setItem(WELCOME_INTRO_KEY, if (completed) "true" else "false")
+    }
+
+    fun hasCompletedWelcomeIntro(): Boolean {
+        return getItem(WELCOME_INTRO_KEY) == "true"
     }
 
     fun hasCompletedAuthOnboarding(): Boolean {
