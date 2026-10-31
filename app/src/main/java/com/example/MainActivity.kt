@@ -228,6 +228,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // HW_DISPLAY_MODE_V19: Maximize refresh rate (up to 120Hz) and lock window display mode
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            try {
+                val display = display
+                if (display != null) {
+                    val modes = display.supportedModes
+                    val maxMode = modes.maxByOrNull { it.refreshRate }
+                    if (maxMode != null && maxMode.refreshRate >= 90f) {
+                        window.attributes = window.attributes.apply {
+                            preferredDisplayModeId = maxMode.modeId
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
         enableEdgeToEdge()
         setContent {
             // APP_BACKGROUND_FOCUS_V5: settings and inline sheets inherit background tap dismissal.
