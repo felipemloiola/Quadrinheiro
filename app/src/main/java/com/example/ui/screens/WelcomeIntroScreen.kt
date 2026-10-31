@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,15 +41,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.ui.components.LucideIcons
 import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.QuadrinheiroLogoVariant
@@ -69,10 +67,14 @@ private data class AppleFeatureRow(
 
 /**
  * Tela de Entrada e Boas-vindas (Apple-style Onboarding & Welcome Flow):
- * 1. Simetria Vertical Estrita: A distância da borda superior até a logo e a distância da base do
- *    botão até a borda inferior são rigorosamente idênticas (distância do topo == distância da base).
- * 2. Espaçamento Coeso: O botão de ação fica a exatos 24dp imediatamente abaixo de "Busca Online e Nuvem".
- * 3. Animação Fluida: Transição com curva física de mola autêntica do iOS.
+ * 1. Arquitetura 100% Contínua e Coreografada: A logo sobe com prioridade de camada (z-index),
+ *    os textos iniciais desvanecem imediatamente e o título "Bem-vindo" junto aos recursos
+ *    surgem com delay elegante (apenas após a logo desimpedir o caminho central).
+ * 2. Simetria Vertical Estrita: A distância do topo da tela à logo e da base do botão à borda
+ *    inferior são rigorosamente iguais, centralizando o conteúdo em qualquer proporção de tela.
+ * 3. Botão Coeso a 24dp: O botão de ação fica a exatamente 24dp abaixo de "Busca Online e Nuvem".
+ * 4. Animação Fluida iOS: Logo sobe suavemente e desescala, botão desce suavemente e textos transitam
+ *    com física de mola crítica do iOS (Spring.DampingRatioNoBouncy).
  */
 @Composable
 fun WelcomeIntroScreen(
@@ -111,12 +113,12 @@ fun WelcomeIntroScreen(
         }
     }
 
-    // Curva física de mola autêntica do iOS (resposta suave e amortecimento natural)
+    // Curva de mola contínua, crítica e ultra-fluida do iOS (sem saltos de limiar, sem overshoot brusco)
     val transitionProgress by animateFloatAsState(
         targetValue = if (isFeaturesView) 1f else 0f,
         animationSpec = spring(
-            dampingRatio = 0.82f,
-            stiffness = 260f
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = 300f
         ),
         label = "welcomeFlowProgress"
     )
@@ -153,9 +155,10 @@ fun WelcomeIntroScreen(
 
     val buttonTextColor = if (theme.accent.luminance() > 0.179f) Color.Black else Color.White
 
-    // Medição dinâmica em tempo real da altura real do bloco de conteúdo
-    var measuredContentHeightPx by remember { mutableStateOf(0) }
-    val measuredContentHeightDp = with(density) { measuredContentHeightPx.toDp() }
+    // Distâncias de viagem calculadas estritamente em pixels para execução via RenderThread (GPU)
+    val logoTravelPx = with(density) { 170.dp.toPx() }
+    val buttonTravelPx = with(density) { 218.dp.toPx() }
+    val splashTravelPx = with(density) { 170.dp.toPx() }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -163,246 +166,210 @@ fun WelcomeIntroScreen(
             .background(backgroundBrush)
             .padding(horizontal = 28.dp)
             .testTag("welcome_intro_root"),
-        contentAlignment = Alignment.TopCenter
+        contentAlignment = Alignment.Center
     ) {
-        val totalScreenHeight = maxHeight
-
-        // Altura real ou estimada do conteúdo do bloco
-        val estimatedSplashHeight = 240.dp
-        val estimatedFeaturesHeight = 520.dp
-        val actualContentHeight = if (measuredContentHeightDp > 100.dp) {
-            measuredContentHeightDp
-        } else {
-            lerp(estimatedSplashHeight, estimatedFeaturesHeight, transitionProgress)
-        }
-
-        // Espaçador perfeitamente simétrico: (altura total da tela - altura do conteúdo) / 2
-        // Garante rigorosamente que a distância do topo até a logo seja idêntica à distância do botão até a base da tela
-        val symmetricPadding = ((totalScreenHeight - actualContentHeight) / 2f).coerceAtLeast(36.dp)
-
-        // Tamanho da logo: 96dp na capa inicial -> 60dp no topo da tela de recursos
-        val iconSize = lerp(96.dp, 60.dp, transitionProgress)
-
-        // Distância entre a base da logo e o topo do título: 10dp na capa -> 14dp nos recursos
-        val currentLogoToTitleSpacer = lerp(10.dp, 14.dp, transitionProgress)
-
-        // Altura animada da área de conteúdo (64dp da capa -> 404dp dos recursos)
-        val contentBoxHeight = lerp(64.dp, 404.dp, transitionProgress)
-        val contentBoxModifier = if (transitionProgress < 0.99f) {
-            Modifier
-                .fillMaxWidth()
-                .height(contentBoxHeight)
-        } else {
-            Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-        }
-
-        // Espaçamento estrito de 20dp na capa e 24dp imediatamente abaixo de "Busca Online e Nuvem"
-        val currentButtonTopSpacer = lerp(20.dp, 24.dp, transitionProgress)
-
+        // Container principal que centraliza perfeitamente no eixo vertical
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .widthIn(max = 520.dp)
-                .verticalScroll(scrollState, enabled = transitionProgress > 0.92f),
+                .verticalScroll(scrollState, enabled = isFeaturesView),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. Espaçador do Topo (distância do topo da tela até a logo)
-            Spacer(modifier = Modifier.height(symmetricPadding))
-
-            // 2. Bloco de Conteúdo Medido Unificado (Logo + Textos + Recursos + Botão)
-            Column(
+            // 1. Logo Oficial (escala e viaja suavemente do centro para o topo com prioridade de camada zIndex)
+            QuadrinheiroLogo(
+                variant = QuadrinheiroLogoVariant.Primary,
+                titleVisible = false,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .onSizeChanged { measuredContentHeightPx = it.height },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Ícone Hero oficial
-                QuadrinheiroLogo(
-                    variant = QuadrinheiroLogoVariant.Primary,
-                    titleVisible = false,
-                    modifier = Modifier
-                        .size(iconSize)
-                        .testTag("welcome_hero_logo")
-                )
-
-                // Espaçamento de design entre a base do logo e o topo do título
-                Spacer(modifier = Modifier.height(currentLogoToTitleSpacer))
-
-                // Conteúdo central / de recursos com transição coordenada
-                Box(
-                    modifier = contentBoxModifier,
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    // 1. TELA INICIAL (CAPA): Nome do app e subtítulo minimalista centralizados
-                    if (transitionProgress < 0.99f) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    alpha = (1f - transitionProgress * 2.2f).coerceIn(0f, 1f)
-                                    translationY = -transitionProgress * 20f
-                                },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "Quadrinheiro",
-                                fontSize = 34.sp,
-                                lineHeight = 40.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = SfProDisplayFontFamily,
-                                letterSpacing = 0.37.sp,
-                                color = theme.textPrimary,
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Sua biblioteca definitiva de quadrinhos",
-                                fontSize = 15.sp,
-                                lineHeight = 20.sp,
-                                fontWeight = FontWeight.Normal,
-                                fontFamily = SfProTextFontFamily,
-                                letterSpacing = (-0.2).sp,
-                                color = theme.textSecondary,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                    .zIndex(10f)
+                    .size(60.dp)
+                    .graphicsLayer {
+                        val p = transitionProgress.coerceIn(0f, 1f)
+                        translationY = (1f - p) * logoTravelPx
+                        val scale = 1.55f - 0.55f * p
+                        scaleX = scale
+                        scaleY = scale
                     }
+                    .testTag("welcome_hero_logo")
+            )
 
-                    // 2. TELA DE RECURSOS: Título Large Title e lista de 4 recursos do HIG
-                    if (transitionProgress > 0.01f) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .graphicsLayer {
-                                    alpha = ((transitionProgress - 0.2f) / 0.8f).coerceIn(0f, 1f)
-                                    translationY = (1f - transitionProgress) * 36f
-                                },
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // Título Apple HIG: Large Title em SF Pro Display Bold
-                            Text(
-                                text = "Bem-vindo ao\nQuadrinheiro",
-                                fontSize = 34.sp,
-                                lineHeight = 40.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = SfProDisplayFontFamily,
-                                letterSpacing = 0.37.sp,
-                                color = theme.textPrimary,
-                                textAlign = TextAlign.Center
-                            )
+            Spacer(modifier = Modifier.height(14.dp))
 
-                            Spacer(modifier = Modifier.height(26.dp))
+            // 2. Área Central de Conteúdo (layout fixo, transições 100% por opacidade e deslocamento GPU)
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // Conteúdo da Tela 2: Recursos Canônicos (revelados com fade apenas após a logo desimpedir o caminho)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            val p = transitionProgress.coerceIn(0f, 1f)
+                            // Abertura escalonada: surge graciosamente a partir de p >= 0.44f
+                            val contentProgress = ((p - 0.44f) / 0.56f).coerceIn(0f, 1f)
+                            alpha = contentProgress
+                            translationY = (1f - contentProgress) * 22f
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Bem-vindo ao\nQuadrinheiro",
+                        fontSize = 34.sp,
+                        lineHeight = 40.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = SfProDisplayFontFamily,
+                        letterSpacing = 0.37.sp,
+                        color = theme.textPrimary,
+                        textAlign = TextAlign.Center
+                    )
 
-                            // Lista canônica de recursos da Apple (espaçamento de 18dp entre itens)
-                            Column(
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        features.forEach { feature ->
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(18.dp)
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.Top
                             ) {
-                                features.forEach { feature ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(46.dp)
-                                                .clip(ContinuousRoundedRectangle(13.dp))
-                                                .background(
-                                                    feature.tintColor.copy(alpha = if (s.isLight) 0.12f else 0.18f)
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = feature.icon,
-                                                contentDescription = null,
-                                                tint = feature.tintColor,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .clip(ContinuousRoundedRectangle(13.dp))
+                                        .background(
+                                            feature.tintColor.copy(alpha = if (s.isLight) 0.12f else 0.18f)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = feature.icon,
+                                        contentDescription = null,
+                                        tint = feature.tintColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
 
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                                        ) {
-                                            Text(
-                                                text = feature.title,
-                                                fontSize = 16.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontFamily = SfProTextFontFamily,
-                                                letterSpacing = (-0.3).sp,
-                                                color = theme.textPrimary
-                                            )
-                                            Text(
-                                                text = feature.subtitle,
-                                                fontSize = 14.sp,
-                                                lineHeight = 19.sp,
-                                                fontWeight = FontWeight.Normal,
-                                                fontFamily = SfProTextFontFamily,
-                                                letterSpacing = (-0.2).sp,
-                                                color = theme.textSecondary
-                                            )
-                                        }
-                                    }
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = feature.title,
+                                        fontSize = 16.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = SfProTextFontFamily,
+                                        letterSpacing = (-0.3).sp,
+                                        color = theme.textPrimary
+                                    )
+                                    Text(
+                                        text = feature.subtitle,
+                                        fontSize = 14.sp,
+                                        lineHeight = 19.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        fontFamily = SfProTextFontFamily,
+                                        letterSpacing = (-0.2).sp,
+                                        color = theme.textSecondary
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // Espaçamento estrito de 24dp imediatamente após "Busca Online e Nuvem"
-                Spacer(modifier = Modifier.height(currentButtonTopSpacer))
-
-                // Botão de Ação ("Entrar" -> "Continuar")
-                Button(
-                    onClick = {
-                        if (!isFeaturesView) {
-                            isFeaturesView = true
-                        } else {
-                            onContinue()
-                        }
-                    },
+                // Conteúdo da Tela 1: Textos da Capa (desvanecem rapidamente na saída liberando a área)
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag(if (isFeaturesView) "welcome_primary_button" else "welcome_start_button"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = theme.accent,
-                        contentColor = buttonTextColor
-                    )
+                        .graphicsLayer {
+                            val p = transitionProgress.coerceIn(0f, 1f)
+                            translationY = (1f - p) * splashTravelPx
+                            // Desvanece nos primeiros 30% da animação para deixar o caminho livre para a subida da logo
+                            alpha = (1f - p * 3.3f).coerceIn(0f, 1f)
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Entrar",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = SfProTextFontFamily,
-                            letterSpacing = (-0.3).sp,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = (1f - transitionProgress * 2.2f).coerceIn(0f, 1f)
-                                translationY = -transitionProgress * 12f
-                            }
-                        )
-                        Text(
-                            text = "Continuar",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = SfProTextFontFamily,
-                            letterSpacing = (-0.3).sp,
-                            modifier = Modifier.graphicsLayer {
-                                alpha = ((transitionProgress - 0.35f) / 0.65f).coerceIn(0f, 1f)
-                                translationY = (1f - transitionProgress) * 12f
-                            }
-                        )
-                    }
+                    Text(
+                        text = "Quadrinheiro",
+                        fontSize = 34.sp,
+                        lineHeight = 40.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = SfProDisplayFontFamily,
+                        letterSpacing = 0.37.sp,
+                        color = theme.textPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Sua biblioteca definitiva de quadrinhos",
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = SfProTextFontFamily,
+                        letterSpacing = (-0.2).sp,
+                        color = theme.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 
-            // 3. Espaçador da Base (rigorosamente igual ao do topo: distância do topo == distância da base)
-            Spacer(modifier = Modifier.height(symmetricPadding))
+            // Espaçamento estrito de 24dp imediatamente após "Busca Online e Nuvem"
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 3. Botão de Ação ("Entrar" -> "Continuar") com descida e transição suaves
+            Button(
+                onClick = {
+                    if (!isFeaturesView) {
+                        isFeaturesView = true
+                    } else if (transitionProgress >= 0.85f) {
+                        onContinue()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .graphicsLayer {
+                        val p = transitionProgress.coerceIn(0f, 1f)
+                        translationY = -(1f - p) * buttonTravelPx
+                    }
+                    .testTag(if (isFeaturesView) "welcome_primary_button" else "welcome_start_button"),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = theme.accent,
+                    contentColor = buttonTextColor
+                )
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Entrar",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = SfProTextFontFamily,
+                        letterSpacing = (-0.3).sp,
+                        modifier = Modifier.graphicsLayer {
+                            val p = transitionProgress.coerceIn(0f, 1f)
+                            alpha = (1f - p * 3f).coerceIn(0f, 1f)
+                            translationY = -p * 8f
+                        }
+                    )
+                    Text(
+                        text = "Continuar",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = SfProTextFontFamily,
+                        letterSpacing = (-0.3).sp,
+                        modifier = Modifier.graphicsLayer {
+                            val p = transitionProgress.coerceIn(0f, 1f)
+                            val contentProgress = ((p - 0.44f) / 0.56f).coerceIn(0f, 1f)
+                            alpha = contentProgress
+                            translationY = (1f - contentProgress) * 8f
+                        }
+                    )
+                }
+            }
         }
     }
 }
