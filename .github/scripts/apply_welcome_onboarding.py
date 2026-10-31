@@ -123,7 +123,6 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sparkles
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -214,6 +213,7 @@ fun WelcomeIntroScreen(
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
 
+    // Animação de entrada e respiração da luz ambiente
     var isReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(60)
@@ -250,8 +250,10 @@ fun WelcomeIntroScreen(
             .background(theme.bgPrimary)
             .testTag("welcome_intro_root")
     ) {
+        // 1. Fundo com Luzes Atmosféricas Liquid Glass
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawRect(theme.bgPrimary)
+            // Gradiente escultural de base
             drawRect(
                 brush = Brush.radialGradient(
                     colors = listOf(
@@ -275,6 +277,7 @@ fun WelcomeIntroScreen(
             )
         }
 
+        // 2. Conteúdo Responsivo e Pager de Apresentação
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -285,6 +288,7 @@ fun WelcomeIntroScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Topo: Botão Pular
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -306,6 +310,7 @@ fun WelcomeIntroScreen(
                 }
             }
 
+            // Centro: Logo, Pager e Destaques Visuais
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -313,6 +318,7 @@ fun WelcomeIntroScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+                // Logo central com badge de luz translúcida
                 Box(
                     modifier = Modifier
                         .size(112.dp)
@@ -340,6 +346,7 @@ fun WelcomeIntroScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                // Pager com os 3 slides de apresentação
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier
@@ -429,6 +436,7 @@ fun WelcomeIntroScreen(
                     }
                 }
 
+                // Indicador de Páginas estilo Apple Pill
                 Row(
                     modifier = Modifier.padding(top = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -457,6 +465,7 @@ fun WelcomeIntroScreen(
                 }
             }
 
+            // Base: Botão de Avançar / Começar
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
