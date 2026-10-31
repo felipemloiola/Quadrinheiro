@@ -55,23 +55,34 @@ class MultiApiSearchEngine {
             maxRequestsPerHost = 24
         }
 
-        var sharedHttpClient: OkHttpClient = OkHttpClient.Builder()
-            .dns(ipv4FirstDns)
-            .dispatcher(fastImageAndApiDispatcher)
-            .addInterceptor { chain ->
-                val orig = chain.request()
-                val reqBuilder = orig.newBuilder()
-                if (orig.header("User-Agent") == null) {
-                    reqBuilder.header(
-                        "User-Agent",
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
-                    )
+        private val defaultHttpClient: OkHttpClient by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+            OkHttpClient.Builder()
+                .dns(ipv4FirstDns)
+                .dispatcher(fastImageAndApiDispatcher)
+                .addInterceptor { chain ->
+                    val orig = chain.request()
+                    val reqBuilder = orig.newBuilder()
+                    if (orig.header("User-Agent") == null) {
+                        reqBuilder.header(
+                            "User-Agent",
+                            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+                        )
+                    }
+                    chain.proceed(reqBuilder.build())
                 }
-                chain.proceed(reqBuilder.build())
+                .connectTimeout(6000, TimeUnit.MILLISECONDS)
+                .readTimeout(8000, TimeUnit.MILLISECONDS)
+                .build()
+        }
+
+        @Volatile
+        private var customHttpClient: OkHttpClient? = null
+
+        var sharedHttpClient: OkHttpClient
+            get() = customHttpClient ?: defaultHttpClient
+            set(value) {
+                customHttpClient = value
             }
-            .connectTimeout(6000, TimeUnit.MILLISECONDS)
-            .readTimeout(8000, TimeUnit.MILLISECONDS)
-            .build()
 
         @Volatile
         private var isCacheInitialized = false

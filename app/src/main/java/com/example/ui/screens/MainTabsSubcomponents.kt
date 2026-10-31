@@ -293,19 +293,38 @@ fun DiaryAnalyticsSummaryCard(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
 
-    val ratedComics = remember(comics) { comics.filter { it.status == ReadingStatus.READ && it.rating > 0f } }
-    val avgRating = remember(ratedComics) {
-        if (ratedComics.isEmpty()) 0f
-        else ratedComics.map { it.rating }.average().toFloat()
-    }
-    val totalLoggedPages = remember(comics) {
-        comics.sumOf {
-            when (it.status) {
-                ReadingStatus.READ -> it.pageCount
-                ReadingStatus.READING -> it.currentPage
-                ReadingStatus.WANT_TO_READ -> 0
+    val (ratedCount, avgRating, totalLoggedPages, readCount, starCounts) = remember(comics) {
+        var rated = 0
+        var ratingSum = 0f
+        var pages = 0
+        var read = 0
+        val countsByStar = IntArray(6)
+        for (c in comics) {
+            when (c.status) {
+                ReadingStatus.READ -> {
+                    read++
+                    pages += c.pageCount
+                    if (c.rating > 0f) {
+                        rated++
+                        ratingSum += c.rating
+                        val starIdx = c.rating.roundToInt().coerceIn(1, 5)
+                        countsByStar[starIdx]++
+                    }
+                }
+                ReadingStatus.READING -> {
+                    pages += c.currentPage
+                }
+                ReadingStatus.WANT_TO_READ -> Unit
             }
         }
+        val avg = if (rated > 0) ratingSum / rated.toFloat() else 0f
+        DiaryAnalyticsStats(
+            ratedCount = rated,
+            avgRating = avg,
+            totalLoggedPages = pages,
+            readCount = read,
+            starCounts = countsByStar
+        )
     }
 
     Row(
@@ -335,7 +354,7 @@ fun DiaryAnalyticsSummaryCard(
                 starColor = s.starColor
             )
             Text(
-                text = "${ratedComics.size} avaliadas",
+                text = "$ratedCount avaliadas",
                 fontSize = 10.sp,
                 color = s.textTertiary
             )
@@ -345,12 +364,10 @@ fun DiaryAnalyticsSummaryCard(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            val totalRated = ratedComics.size.coerceAtLeast(1)
+            val totalRated = ratedCount.coerceAtLeast(1)
             val barTrackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
             for (star in 5 downTo 1) {
-                val countForStar = remember(ratedComics, star) {
-                    ratedComics.count { it.rating.roundToInt() == star }
-                }
+                val countForStar = starCounts[star]
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -395,13 +412,21 @@ fun DiaryAnalyticsSummaryCard(
                 color = s.accentColor
             )
             Text(
-                text = "${comics.count { it.status == ReadingStatus.READ }} concluídas",
+                text = "$readCount concluídas",
                 fontSize = 10.sp,
                 color = s.textSecondary
             )
         }
     }
 }
+
+private data class DiaryAnalyticsStats(
+    val ratedCount: Int,
+    val avgRating: Float,
+    val totalLoggedPages: Int,
+    val readCount: Int,
+    val starCounts: IntArray
+)
 
 /**
  * Grupo mensal de entradas do Diário Cronológico.

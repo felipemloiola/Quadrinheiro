@@ -945,4 +945,22 @@ object CuratedCatalog {
             addedAt = "2026-10-20T21:00:00Z"
         )
     )
+
+    private val coverUrlByLowerTitle: Map<String, String> by lazy {
+        val map = HashMap<String, String>(curatedComicsCatalog.size * 2)
+        for (comic in curatedComicsCatalog) {
+            val key = comic.title.trim().lowercase()
+            if (key.isNotEmpty() && comic.coverUrl.isNotBlank() && !map.containsKey(key)) {
+                map[key] = comic.coverUrl
+            }
+        }
+        map
+    }
+
+    fun findCoverUrlByTitle(rawTitle: String): String? {
+        val key = rawTitle.trim().lowercase()
+        if (key.isEmpty()) return null
+        return coverUrlByLowerTitle[key]
+    }
 }
+

@@ -36,6 +36,9 @@ class SafeStorage(context: Context) {
         const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
         const val GUEST_STATE_KEY = "quadrinheiro_guest_isolated_state_v1"
         private val memoryFallback = java.util.concurrent.ConcurrentHashMap<String, String>()
+        private val catalogMatchIndex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            CatalogMatchIndex(CuratedCatalog.curatedComicsCatalog)
+        }
     }
 
     private fun accountStateKey(uid: String): String {
@@ -526,7 +529,6 @@ class SafeStorage(context: Context) {
     }
 
     fun loadState(): StoredState {
-        val persistedTranslations = loadTranslationCache()
         val activeSession = loadAuthSession()
         if (isGuestMode() || activeSession?.isGuest == true) {
             return loadGuestState()
@@ -547,10 +549,13 @@ class SafeStorage(context: Context) {
                 settings = AppSettings()
             )
         }
+        val persistedTranslations = loadTranslationCache()
         val raw = getItem(STORAGE_KEY)
         if (raw == null) {
             val starter = if (!hasCompletedAuthOnboarding()) emptyList() else CuratedCatalog.initialUserCollection
-            PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
+            if (starter.isNotEmpty() || persistedTranslations.isNotEmpty()) {
+                PortugueseComicTranslator.seedPersistedTranslations(starter, persistedTranslations)
+            }
             return StoredState(
                 comics = starter,
                 profile = ReaderProfile(),
@@ -898,13 +903,21 @@ class SafeStorage(context: Context) {
             val isbnVal = obj.optString("isbn", "")
             val rawCover = obj.optString("coverUrl", "").trim()
             val isCuratedItem = idVal.startsWith("cat-") || idVal.startsWith("init-") || extIdVal.startsWith("cat-")
-            val catalogMatch = CuratedCatalog.curatedComicsCatalog.firstOrNull {
-                it.id == idVal ||
-                    it.externalId == extIdVal ||
-                    it.id == extIdVal ||
-                    it.id == idVal.replace("init-", "cat-") ||
-                    (isbnVal.isNotBlank() && it.isbn == isbnVal) ||
-                    (it.title.equals(titleVal, ignoreCase = true) && (rawCover.isBlank() || rawCover.contains("covers.openlibrary.org")))
+            val needsCoverHealing = isCuratedItem ||
+                rawCover.isBlank() ||
+                rawCover.contains("covers.openlibrary.org") ||
+                rawCover.contains("BMY1_cover.jpg") ||
+                rawCover.contains("BMDKR_cover.jpg")
+            val catalogMatch = if (needsCoverHealing) {
+                catalogMatchIndex.findByFields(
+                    idVal = idVal,
+                    extIdVal = extIdVal,
+                    isbnVal = isbnVal,
+                    titleVal = titleVal,
+                    rawCover = rawCover
+                )
+            } else {
+                null
             }
             val resolvedCover = when {
                 catalogMatch != null && isCuratedItem -> catalogMatch.coverUrl

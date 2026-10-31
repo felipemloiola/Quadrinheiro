@@ -52,6 +52,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -704,31 +708,49 @@ fun ShelfLibraryTab(
 
     val revealedSpoilers = remember { mutableStateMapOf<String, Boolean>() }
 
-    val diaryGroups = remember(comics) {
-        val logged = comics.filter { it.status != ReadingStatus.WANT_TO_READ }
-            .sortedByDescending { it.readDate.ifBlank { it.addedAt.take(10) } }
-        val map = LinkedHashMap<String, MutableList<Pair<ComicEntry, String>>>()
-        val monthNames = listOf(
-            "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-        )
-        logged.forEach { item ->
-            val dateStr = item.readDate.ifBlank { item.addedAt.take(10).ifBlank { "2026-10-14" } }
-            val parts = dateStr.split("-")
-            val y = parts.getOrNull(0) ?: "2026"
-            val mIdx = ((parts.getOrNull(1)?.toIntOrNull() ?: 10) - 1).coerceIn(0, 11)
-            val day = parts.getOrNull(2)?.take(2) ?: "01"
-            val label = "${monthNames[mIdx]} de $y"
-            map.getOrPut(label) { mutableListOf() }.add(item to day)
+    val diaryGroups = remember(comics, shelfSection) {
+        if (shelfSection != "diary") {
+            emptyList()
+        } else {
+            val logged = comics.filter { it.status != ReadingStatus.WANT_TO_READ }
+                .sortedByDescending { it.readDate.ifBlank { it.addedAt.take(10) } }
+            val map = LinkedHashMap<String, MutableList<Pair<ComicEntry, String>>>()
+            val monthNames = listOf(
+                "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+            )
+            logged.forEach { item ->
+                val dateStr = item.readDate.ifBlank { item.addedAt.take(10).ifBlank { "2026-10-14" } }
+                val parts = dateStr.split("-")
+                val y = parts.getOrNull(0) ?: "2026"
+                val mIdx = ((parts.getOrNull(1)?.toIntOrNull() ?: 10) - 1).coerceIn(0, 11)
+                val day = parts.getOrNull(2)?.take(2) ?: "01"
+                val label = "${monthNames[mIdx]} de $y"
+                map.getOrPut(label) { mutableListOf() }.add(item to day)
+            }
+            map.entries.toList()
         }
-        map.entries.toList()
+    }
+
+    val statusCounts = remember(comics) {
+        var read = 0
+        var reading = 0
+        var want = 0
+        for (c in comics) {
+            when (c.status) {
+                ReadingStatus.READ -> read++
+                ReadingStatus.READING -> reading++
+                ReadingStatus.WANT_TO_READ -> want++
+            }
+        }
+        Triple(read, reading, want)
     }
 
     val filteredShelf = remember(comics, shelfStatus, shelfGenre, shelfFilterQuery, shelfSort) {
+        val q = shelfFilterQuery.trim().lowercase()
         comics.filter { c ->
             if (shelfStatus != "ALL" && c.status.key != shelfStatus) return@filter false
             if (shelfGenre != "Todos" && c.genre != shelfGenre) return@filter false
-            val q = shelfFilterQuery.trim().lowercase()
             if (q.isNotEmpty()) {
                 val matchT = c.title.lowercase().contains(q)
                 val matchA = c.authors.lowercase().contains(q)
@@ -748,14 +770,20 @@ fun ShelfLibraryTab(
 
     val gridCols = appSettings.shelfColumns.coerceIn(2, 4)
     val gridRows = remember(filteredShelf, gridCols) { filteredShelf.chunked(gridCols) }
+    val isSequencesMode = shelfSection == "shelf" && shelfLayout == "sequences"
     val sequenceGroups by androidx.compose.runtime.produceState(
         initialValue = emptyList(),
-        key1 = filteredShelf
+        key1 = filteredShelf,
+        key2 = isSequencesMode
     ) {
-        value = SeriesSequenceEngine.groupLibraryBySequencesAsync(
-            userComics = filteredShelf,
-            catalogComics = CuratedCatalog.curatedComicsCatalog
-        )
+        value = if (isSequencesMode) {
+            SeriesSequenceEngine.groupLibraryBySequencesAsync(
+                userComics = filteredShelf,
+                catalogComics = CuratedCatalog.curatedComicsCatalog
+            )
+        } else {
+            emptyList()
+        }
     }
 
     TabScrollBackdropContainer(
@@ -861,9 +889,9 @@ fun ShelfLibraryTab(
                     onChange = onChangeShelfStatus,
                     options = listOf(
                         SegmentOption("ALL", "Todos (${comics.size})"),
-                        SegmentOption("READ", "Lidos (${comics.count { it.status == ReadingStatus.READ }})"),
-                        SegmentOption("READING", "Lendo (${comics.count { it.status == ReadingStatus.READING }})"),
-                        SegmentOption("WANT_TO_READ", "Fila (${comics.count { it.status == ReadingStatus.WANT_TO_READ }})")
+                        SegmentOption("READ", "Lidos (${statusCounts.first})"),
+                        SegmentOption("READING", "Lendo (${statusCounts.second})"),
+                        SegmentOption("WANT_TO_READ", "Fila (${statusCounts.third})")
                     )
                 )
 
@@ -1478,6 +1506,7 @@ fun SearchMultiApiTab(
     isSearchingApi: Boolean,
     searchSourceFilter: String,
     listState: LazyListState,
+    searchFocusTrigger: Long = 0L,
     onOpenSidebar: () -> Unit,
     onQuickRegister: () -> Unit,
     onChangeSearchQuery: (String) -> Unit,
@@ -1491,15 +1520,44 @@ fun SearchMultiApiTab(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val searchFocusRequester = remember { FocusRequester() }
 
-    val savedExternalIds = remember(comics) {
-        comics.mapNotNull { it.externalId.trim().lowercase().takeIf { id -> id.isNotEmpty() } }.toSet()
+    LaunchedEffect(searchFocusTrigger) {
+        if (searchFocusTrigger > 0L) {
+            runCatching {
+                searchFocusRequester.requestFocus()
+                keyboardController?.show()
+            }
+        }
     }
-    val savedIds = remember(comics) {
-        comics.mapNotNull { it.id.trim().lowercase().takeIf { id -> id.isNotEmpty() } }.toSet()
+
+    val (savedExternalIds, savedIds, savedTitles) = remember(comics) {
+        val extSet = HashSet<String>(comics.size * 2)
+        val idSet = HashSet<String>(comics.size * 2)
+        val titleSet = HashSet<String>(comics.size * 2)
+        for (c in comics) {
+            val ext = c.externalId.trim().lowercase()
+            if (ext.isNotEmpty()) extSet.add(ext)
+            val id = c.id.trim().lowercase()
+            if (id.isNotEmpty()) idSet.add(id)
+            val t = c.title.trim().lowercase()
+            if (t.isNotEmpty()) titleSet.add(t)
+        }
+        Triple(extSet, idSet, titleSet)
     }
-    val savedTitles = remember(comics) {
-        comics.mapNotNull { it.title.trim().lowercase().takeIf { t -> t.isNotEmpty() } }.toSet()
+
+    val savedEntryByIdOrExternal = remember(comics) {
+        val map = HashMap<String, ComicEntry>(comics.size * 2)
+        for (c in comics) {
+            if (c.externalId.isNotBlank() && !map.containsKey(c.externalId)) {
+                map[c.externalId] = c
+            }
+            if (c.id.isNotBlank() && !map.containsKey(c.id)) {
+                map[c.id] = c
+            }
+        }
+        map
     }
 
     val instantCuratedMatches = remember(searchQuery, savedExternalIds, savedIds, savedTitles) {
@@ -1630,6 +1688,15 @@ fun SearchMultiApiTab(
                     modifier = Modifier
                         .fillMaxWidth()
                         .liquidGlassNavSurface(RoundedCornerShape(999.dp), elevation = 8.dp)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            runCatching {
+                                searchFocusRequester.requestFocus()
+                                keyboardController?.show()
+                            }
+                        }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1669,7 +1736,9 @@ fun SearchMultiApiTab(
                                 color = s.textPrimary
                             ),
                             cursorBrush = SolidColor(s.accentColor),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester)
                         )
                     }
 
@@ -1798,9 +1867,8 @@ fun SearchMultiApiTab(
                 key = { item -> item.id.ifBlank { item.externalId.ifBlank { item.title } } },
                 contentType = { "search_result_item" }
             ) { item ->
-                val savedEntry = comics.firstOrNull {
-                    it.externalId == item.externalId || it.id == item.externalId
-                }
+                val savedEntry = savedEntryByIdOrExternal[item.externalId]
+                    ?: savedEntryByIdOrExternal[item.id]
 
                 SearchResultComicCard(
                     item = item,

@@ -81,7 +81,7 @@ class QuadrinheiroViewModel(
 
     private val appContext = application.applicationContext
     private val storage = SafeStorage(appContext)
-    private val searchEngine = MultiApiSearchEngine()
+    private val searchEngine by lazy(LazyThreadSafetyMode.PUBLICATION) { MultiApiSearchEngine() }
     private val authManager = QuadrinheiroAuthManager(appContext, storage)
     private val cloudRepo: QuadrinheiroCloudRepository? by lazy {
         runCatching { QuadrinheiroCloudRepository(appContext) }.getOrNull()
@@ -225,6 +225,10 @@ class QuadrinheiroViewModel(
     private val _scrollToTopTrigger = MutableStateFlow(0L)
     val scrollToTopTrigger: StateFlow<Long> = _scrollToTopTrigger.asStateFlow()
 
+    // Trigger para focar e abrir a caixa de pesquisa ao clicar no ícone Buscar já estando no topo da aba Buscar
+    private val _searchFocusTrigger = MutableStateFlow(0L)
+    val searchFocusTrigger: StateFlow<Long> = _searchFocusTrigger.asStateFlow()
+
     private val _shelfStatus = MutableStateFlow(savedStateHandle.get<String>("shelfStatus") ?: "ALL")
     val shelfStatus: StateFlow<String> = _shelfStatus.asStateFlow()
 
@@ -350,14 +354,13 @@ class QuadrinheiroViewModel(
                 }
         }
 
-        // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
-        if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
-            QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
-        }
-
         viewModelScope.launch(Dispatchers.IO) {
             // Defer non-critical background work until after initial Activity SurfaceSyncGroup transaction completes
             delay(600)
+            // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
+            if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
+                QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
+            }
             cloudRepo?.let { repo ->
                 val activeFbUser = repo.currentAuthUser()
                 val initialSession = storage.loadAuthSession()
@@ -696,7 +699,7 @@ class QuadrinheiroViewModel(
             val updatedShelfItem = matchedShelfComic
             if (updatedShelfItem != null) {
                 _comics.value = nextShelf
-                storage.saveState(nextShelf, _profile.value, _appSettings.value, activeOwnerUid())
+                persistAll()
                 val uid = activeCloudUid()
                 val repo = cloudRepo
                 if (uid != null && repo != null) {
@@ -1176,6 +1179,10 @@ class QuadrinheiroViewModel(
 
     fun requestScrollToTop() {
         _scrollToTopTrigger.value = System.nanoTime()
+    }
+
+    fun requestSearchFocus() {
+        _searchFocusTrigger.value = System.nanoTime()
     }
 
     fun switchMainTab(nextTab: String) {

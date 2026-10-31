@@ -31,57 +31,76 @@ object PortugueseComicTranslator {
     var onTranslationPersisted: ((ComicEntry) -> Unit)? = null
 
     // Palavras exclusivas de edições alemãs, francesas ou italianas que poluem buscas de HQs
-    private val foreignEditionNoiseRegex = Regex(
-        """(?i)\b(?:der\s+beginn\s+einer|er\s+hat\s+nicht|band\s+\d+|bd\.\s*\d+|sammelband|ausgabe|panini\s+verlags|auf\s+deutsch|édition\s+intégrale|tome\s+\d+|edizione\s+italiana|fumetti)\b"""
-    )
+    private val foreignEditionNoiseRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:der\s+beginn\s+einer|er\s+hat\s+nicht|band\s+\d+|bd\.\s*\d+|sammelband|ausgabe|panini\s+verlags|auf\s+deutsch|édition\s+intégrale|tome\s+\d+|edizione\s+italiana|fumetti)\b"""
+        )
+    }
 
-    private val bundleNoiseRegex = Regex(
-        """(?i)\b(?:box\s+set|slipcase|bundle|collection\s+vol\.\s*\d+[-–]\d+|vols?\.?\s*\d+\s*[-–]\s*\d+|issues\s*#?\d+\s*[-–]\s*#?\d+)\b"""
-    )
+    private val bundleNoiseRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:box\s+set|slipcase|bundle|collection\s+vol\.\s*\d+[-–]\d+|vols?\.?\s*\d+\s*[-–]\s*\d+|issues\s*#?\d+\s*[-–]\s*#?\d+)\b"""
+        )
+    }
 
-    private val germanSynopsisIndicators = Regex(
-        """(?i)\b(?:der|die|das|und|nicht|einer|einem|einen|ist|mit|auf|für|von|dem|den|sich|auch|wird|wurde|hat|haben)\b"""
-    )
+    private val germanSynopsisIndicators by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:der|die|das|und|nicht|einer|einem|einen|ist|mit|auf|für|von|dem|den|sich|auch|wird|wurde|hat|haben)\b"""
+        )
+    }
 
-    private val englishSynopsisIndicators = Regex(
-        """(?i)\b(?:the|and|with|from|that|this|his|her|their|into|after|before|when|where|while|against|between|through|collects|collecting|issues|written\s+by|illustrated\s+by|new\s+york\s+times|bestselling|storyline|chapter\s+one|caped\s+crusader|dark\s+knight|gotham\s+city)\b"""
-    )
+    private val englishSynopsisIndicators by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:the|and|with|from|that|this|his|her|their|into|after|before|when|where|while|against|between|through|collects|collecting|issues|written\s+by|illustrated\s+by|new\s+york\s+times|bestselling|storyline|chapter\s+one|caped\s+crusader|dark\s+knight|gotham\s+city)\b"""
+        )
+    }
 
-    private val portugueseSynopsisIndicators = Regex(
-        """(?i)\b(?:para|como|uma|pelo|pela|dos|das|nos|nas|seu|sua|seus|suas|mais|quando|onde|após|entre|contra|história|edição|publicada|escrita|ilustrada|quadrinhos|capítulo|cidade|herói|mundo)\b"""
-    )
+    private val portugueseSynopsisIndicators by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:para|como|uma|pelo|pela|dos|das|nos|nas|seu|sua|seus|suas|mais|quando|onde|após|entre|contra|história|edição|publicada|escrita|ilustrada|quadrinhos|capítulo|cidade|herói|mundo)\b"""
+        )
+    }
 
-    private val parentheticalYearBeforeIssueRegex = Regex(
-        """\s*\(\d{4}\s*(?:[-–]\s*\d{0,4})?\)\s*(?=#\d+|Vol\.|Volume|Ed\.)""",
-        RegexOption.IGNORE_CASE
-    )
-    private val parentheticalEditionNoiseRegex = Regex(
-        """(?i)\s*\((?:english|german|french|spanish|italian|us|uk)?\s*(?:edition|version|tpb|hardcover| paperback|ebook|digital|comics?)\)"""
-    )
-    private val bilingualDuplicateParentheticalRegex = Regex(
-        """(?i)\s*\(\s*(?:Kingdom\s+Come|Civil\s+War|Invincible|The\s+Dark\s+Knight\s+Returns|Year\s+One|Born\s+Again|The\s+Killing\s+Joke)\s*\)"""
-    )
-    private val whitespaceRegex = Regex("""\s+""")
-    private val hashIssueDetectRegex = Regex("""#\s*\d+\b""")
-    private val ptAccentsRegex = Regex("""[ãõçáéíóúâêô]""", RegexOption.IGNORE_CASE)
-    private val htmlTagRegex = Regex("<[^>]*>?")
-    private val diacriticsRegex = Regex("\\p{InCombiningDiacriticalMarks}+")
-    private val canonicalEditionStripRegex = Regex(
-        """(?i)\b(?:edicao\s+definitiva|edicao\s+de\s+luxo|edicao\s+absoluta|edicao\s+de\s+aniversario|edicao\s+de\s+colecionador|capa\s+dura|encadernado|tpb|hardcover|deluxe|omnibus|compendio|vizbig|completo|the\s+perfect\s+edition)\b"""
-    )
-    private val wordUmSuffixRegex = Regex("""\b(?:ano|volume|vol|livro|parte|edicao|ed)\s+um\b""")
-    private val anoUmNormalizedRegex = Regex("""\bano\s+um_1\b""")
-    private val volUmNormalizedRegex = Regex("""\b(?:volume|vol)\s+um_1\b""")
-    private val livroUmNormalizedRegex = Regex("""\blivro\s+um_1\b""")
-    private val volNumberNormalizedRegex = Regex("""\b(?:volume|livro|tomo|band|bd)\s*(\d+)\b""")
-    private val nonAlphaNumSpaceRegex = Regex("""[^a-z0-9\s]""")
+    private val parentheticalYearBeforeIssueRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """\s*\(\d{4}\s*(?:[-–]\s*\d{0,4})?\)\s*(?=#\d+|Vol\.|Volume|Ed\.)""",
+            RegexOption.IGNORE_CASE
+        )
+    }
+    private val parentheticalEditionNoiseRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\s*\((?:english|german|french|spanish|italian|us|uk)?\s*(?:edition|version|tpb|hardcover| paperback|ebook|digital|comics?)\)"""
+        )
+    }
+    private val bilingualDuplicateParentheticalRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\s*\(\s*(?:Kingdom\s+Come|Civil\s+War|Invincible|The\s+Dark\s+Knight\s+Returns|Year\s+One|Born\s+Again|The\s+Killing\s+Joke)\s*\)"""
+        )
+    }
+    private val whitespaceRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\s+""") }
+    private val hashIssueDetectRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""#\s*\d+\b""") }
+    private val ptAccentsRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""[ãõçáéíóúâêô]""", RegexOption.IGNORE_CASE) }
+    private val htmlTagRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("<[^>]*>?") }
+    private val diacriticsRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("\\p{InCombiningDiacriticalMarks}+") }
+    private val canonicalEditionStripRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        Regex(
+            """(?i)\b(?:edicao\s+definitiva|edicao\s+de\s+luxo|edicao\s+absoluta|edicao\s+de\s+aniversario|edicao\s+de\s+colecionador|capa\s+dura|encadernado|tpb|hardcover|deluxe|omnibus|compendio|vizbig|completo|the\s+perfect\s+edition)\b"""
+        )
+    }
+    private val wordUmSuffixRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\b(?:ano|volume|vol|livro|parte|edicao|ed)\s+um\b""") }
+    private val anoUmNormalizedRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\bano\s+um_1\b""") }
+    private val volUmNormalizedRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\b(?:volume|vol)\s+um_1\b""") }
+    private val livroUmNormalizedRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\blivro\s+um_1\b""") }
+    private val volNumberNormalizedRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\b(?:volume|livro|tomo|band|bd)\s*(\d+)\b""") }
+    private val nonAlphaNumSpaceRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""[^a-z0-9\s]""") }
 
     private val catalogByWorkKey: Map<String, List<ComicEntry>> by lazy {
         CuratedCatalog.curatedComicsCatalog.groupBy { canonicalWorkKey(it.title) }
     }
 
     // Mapeamento direto de títulos e subtítulos consagrados EN/DE -> PT-BR
-    private val canonicalTitleReplacements: List<Pair<Regex, String>> = listOf(
+    private val canonicalTitleReplacements: List<Pair<Regex, String>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        listOf(
         // Batman
         Regex("""(?i)\bAbsolute\s+Batman\s*[-–—:]?\s*(?:Bd\.|Band|Vol\.?|Volume|Book|#)?\s*0*(\d+)\b""") to "Batman Absoluto #$1",
         Regex("""(?i)\bAbsolute\s+Batman\b""") to "Batman Absoluto",
@@ -266,7 +285,8 @@ object PortugueseComicTranslator {
         Regex("""(?i)\bAnniversary\s+Edition\b""") to "Edição de Aniversário",
         Regex("""(?i)\bCompendium\b""") to "Compêndio",
         Regex("""(?i)\bOrigins\b""") to "Origens"
-    )
+        )
+    }
 
     /**
      * Detecta se um título ou descrição veio em alemão, francês ou italiano ou é um box/pacote repetido.
@@ -597,9 +617,64 @@ object PortugueseComicTranslator {
         return canonicalWorkKey(entry.title)
     }
 
+    @Volatile
+    private var isCuratedCatalogSeeded = false
+
+    private fun ensureCuratedCatalogSeeded() {
+        if (isCuratedCatalogSeeded) return
+        synchronized(this) {
+            if (isCuratedCatalogSeeded) return
+            isCuratedCatalogSeeded = true
+            seedComicEntriesInternal(CuratedCatalog.curatedComicsCatalog, allowRegexFallback = false)
+        }
+    }
+
     fun getCachedTranslationForComicId(comicId: String): CachedComicTranslation? {
         if (comicId.isBlank()) return null
-        return comicIdTranslationCache[comicId]
+        comicIdTranslationCache[comicId]?.let { return it }
+        if (comicId.startsWith("cat-") || comicId.startsWith("init-")) {
+            ensureCuratedCatalogSeeded()
+            return comicIdTranslationCache[comicId]
+        }
+        return null
+    }
+
+    private fun seedComicEntriesInternal(
+        comics: List<ComicEntry>,
+        allowRegexFallback: Boolean
+    ) {
+        comics.forEach { c ->
+            val key = if (c.id.isNotBlank()) c.id.trim() else if (c.externalId.isNotBlank()) c.externalId.trim() else canonicalWorkKey(c.title)
+            val extKey = c.externalId.trim()
+            val tPt = c.titlePtBr.ifBlank {
+                if (c.id.startsWith("cat-") || c.id.startsWith("init-")) c.title else ""
+            }
+            val sPt = c.synopsisPtBr.ifBlank {
+                if ((c.id.startsWith("cat-") || c.id.startsWith("init-") || isPortugueseText(c.synopsis)) &&
+                    c.synopsis.isNotBlank() &&
+                    !c.synopsis.contains("Apple Books") &&
+                    !c.synopsis.contains("Google Books")
+                ) {
+                    c.synopsis
+                } else {
+                    ""
+                }
+            }
+            if (tPt.isNotBlank() || sPt.isNotBlank()) {
+                val resolvedTitle = when {
+                    tPt.isNotBlank() -> tPt
+                    allowRegexFallback -> translateTitleToPtBr(c.title)
+                    else -> c.title
+                }
+                val cached = CachedComicTranslation(
+                    titlePtBr = resolvedTitle,
+                    synopsisPtBr = sPt,
+                    isFinalSynopsis = sPt.isNotBlank()
+                )
+                if (key.isNotBlank()) comicIdTranslationCache[key] = cached
+                if (extKey.isNotBlank()) comicIdTranslationCache[extKey] = cached
+            }
+        }
     }
 
     /**
@@ -620,33 +695,8 @@ object PortugueseComicTranslator {
                 )
             }
         }
-        val allSeedComics = comics + CuratedCatalog.curatedComicsCatalog
-        allSeedComics.forEach { c ->
-            val key = resolveComicCacheKey(c)
-            val extKey = c.externalId.trim()
-            val tPt = c.titlePtBr.ifBlank {
-                if (c.id.startsWith("cat-") || c.id.startsWith("init-")) c.title else ""
-            }
-            val sPt = c.synopsisPtBr.ifBlank {
-                if ((c.id.startsWith("cat-") || c.id.startsWith("init-") || isPortugueseText(c.synopsis)) &&
-                    c.synopsis.isNotBlank() &&
-                    !c.synopsis.contains("Apple Books") &&
-                    !c.synopsis.contains("Google Books")
-                ) {
-                    c.synopsis
-                } else {
-                    ""
-                }
-            }
-            if (tPt.isNotBlank() || sPt.isNotBlank()) {
-                val cached = CachedComicTranslation(
-                    titlePtBr = tPt.ifBlank { translateTitleToPtBr(c.title) },
-                    synopsisPtBr = sPt,
-                    isFinalSynopsis = sPt.isNotBlank()
-                )
-                if (key.isNotBlank()) comicIdTranslationCache[key] = cached
-                if (extKey.isNotBlank()) comicIdTranslationCache[extKey] = cached
-            }
+        if (comics.isNotEmpty()) {
+            seedComicEntriesInternal(comics, allowRegexFallback = false)
         }
     }
 
@@ -674,6 +724,7 @@ object PortugueseComicTranslator {
      * reutiliza `synopsisPtBr` apenas se já estiver em cache para este `comicId`.
      */
     fun localizeComicMetadataOnly(entry: ComicEntry): ComicEntry {
+        ensureCuratedCatalogSeeded()
         val key = resolveComicCacheKey(entry)
         val extKey = entry.externalId.trim()
         val cached = comicIdTranslationCache[key] ?: if (extKey.isNotBlank()) comicIdTranslationCache[extKey] else null
@@ -732,6 +783,7 @@ object PortugueseComicTranslator {
      * - Assim que traduzir a sinopse ou título, salva no `SafeStorage` e no `QuadrinheiroCloudRepository` via `onTranslationPersisted`.
      */
     fun localizeComic(entry: ComicEntry, allowNetworkTranslation: Boolean = false): ComicEntry {
+        ensureCuratedCatalogSeeded()
         val key = resolveComicCacheKey(entry)
         val extKey = entry.externalId.trim()
         val cached = comicIdTranslationCache[key] ?: if (extKey.isNotBlank()) comicIdTranslationCache[extKey] else null

@@ -38,6 +38,10 @@ import com.kyant.backdrop.shadow.InnerShadowElement
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.backdrop.shadow.ShadowElement
 
+object BackdropFirstFrameGate {
+    var firstFrameReady by mutableStateOf(true)
+}
+
 private val DefaultHighlight = { Highlight.Default }
 private val DefaultShadow = { Shadow.Default }
 private val DefaultOnDrawBackdrop: DrawScope.(DrawScope.() -> Unit) -> Unit = { it() }
@@ -314,22 +318,29 @@ private class DrawBackdropNode(
     }
 
     override fun ContentDrawScope.draw() {
-        if (effectScope.update(this)) {
-            updateEffects()
+        val effectsReady = BackdropFirstFrameGate.firstFrameReady
+        if (effectsReady) {
+            if (effectScope.update(this)) {
+                updateEffects()
+            }
         }
 
         onDrawBehind?.invoke(this)
-        drawBackdropLayer()
+        if (effectsReady) {
+            drawBackdropLayer()
+        }
         onDrawSurface?.invoke(this)
         drawContent()
         onDrawFront?.invoke(this)
 
-        exportedBackdrop?.graphicsLayer?.let { layer ->
-            recordLayer(layer) {
-                onDrawBehind?.invoke(this)
-                drawBackdropLayer()
-                onDrawSurface?.invoke(this)
-                onDrawFront?.invoke(this)
+        if (effectsReady) {
+            exportedBackdrop?.graphicsLayer?.let { layer ->
+                recordLayer(layer) {
+                    onDrawBehind?.invoke(this)
+                    drawBackdropLayer()
+                    onDrawSurface?.invoke(this)
+                    onDrawFront?.invoke(this)
+                }
             }
         }
     }
@@ -356,6 +367,7 @@ private class DrawBackdropNode(
     }
 
     private fun observeEffects() {
+        if (effectScope.size == androidx.compose.ui.geometry.Size.Zero) return
         observeReads { updateEffects() }
     }
 
@@ -370,8 +382,6 @@ private class DrawBackdropNode(
     override fun onAttach() {
         val graphicsContext = requireGraphicsContext()
         graphicsLayer = graphicsContext.createGraphicsLayer()
-
-        observeEffects()
     }
 
     override fun onDetach() {

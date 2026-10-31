@@ -26,11 +26,14 @@ data class SeriesSequenceGroup(
     val displayTitle: String,
     val issues: List<SequenceIssueItem>,
     val nextIssueNumber: Int,
-    val missingIssueNumbers: List<Int> = emptyList()
+    val missingIssueNumbers: List<Int> = emptyList(),
+    val isRecommendationMode: Boolean = false,
+    val recommendationSubtitle: String = "",
+    val recommendations: List<SequenceIssueItem> = emptyList()
 ) {
-    val savedCount: Int get() = issues.count { it.isSavedInLibrary }
-    val readCount: Int get() = issues.count { it.savedEntry?.status == ReadingStatus.READ }
-    val totalCount: Int get() = issues.size
+    val savedCount: Int get() = if (isRecommendationMode) recommendations.count { it.isSavedInLibrary } else issues.count { it.isSavedInLibrary }
+    val readCount: Int get() = if (isRecommendationMode) recommendations.count { it.savedEntry?.status == ReadingStatus.READ } else issues.count { it.savedEntry?.status == ReadingStatus.READ }
+    val totalCount: Int get() = if (isRecommendationMode) recommendations.size else issues.size
 }
 
 object SeriesSequenceEngine {
@@ -87,18 +90,112 @@ object SeriesSequenceEngine {
         "kodansha"
     )
 
+    private val knownStandaloneGraphicNovels = setOf(
+        "watchmen",
+        "maus",
+        "daytripper",
+        "v de vinganca",
+        "v de vingança",
+        "piada mortal",
+        "killing joke",
+        "ano um",
+        "year one",
+        "persepolis",
+        "persépolis",
+        "retalhos",
+        "blankets",
+        "reino do amanha",
+        "reino do amanhã",
+        "kingdom come",
+        "grandes astros",
+        "all-star superman",
+        "guerra civil",
+        "civil war",
+        "marvels",
+        "queda de murdock",
+        "born again",
+        "ultima cacada de kraven",
+        "última caçada de kraven",
+        "kraven",
+        "homem-aranha: azul",
+        "spider-man: blue",
+        "uzumaki",
+        "contrato com deus",
+        "contract with god",
+        "do inferno",
+        "from hell",
+        "monstro do pantano",
+        "monstro do pântano",
+        "asilo arkham",
+        "arkham asylum",
+        "longo dia das bruxas",
+        "long halloween",
+        "fenix negra",
+        "fênix negra",
+        "dias de um futuro esquecido",
+        "days of future past",
+        "origens",
+        "ghost world",
+        "castelo de areia",
+        "dois irmaos",
+        "dois irmãos"
+    )
+
+    private val curatedAffinities: Map<String, List<String>> = mapOf(
+        "watchmen" to listOf("v de vinganca", "monstro do pantano", "cavaleiro das trevas", "piada mortal", "sandman", "reino do amanha"),
+        "v de vinganca" to listOf("watchmen", "monstro do pantano", "cavaleiro das trevas", "sandman", "piada mortal"),
+        "monstro do pantano" to listOf("sandman", "watchmen", "v de vinganca", "hellblazer"),
+        "maus" to listOf("persepolis", "daytripper", "retalhos", "watchmen", "sandman", "hellboy"),
+        "persepolis" to listOf("maus", "daytripper", "retalhos", "watchmen", "sandman"),
+        "daytripper" to listOf("retalhos", "persepolis", "maus", "sandman", "watchmen"),
+        "retalhos" to listOf("daytripper", "persepolis", "maus", "sandman"),
+        "piada mortal" to listOf("cavaleiro das trevas", "ano um", "watchmen", "v de vinganca", "queda de murdock"),
+        "ano um" to listOf("cavaleiro das trevas", "piada mortal", "queda de murdock", "homem-aranha: azul", "watchmen"),
+        "reino do amanha" to listOf("marvels", "grandes astros", "watchmen", "guerra civil"),
+        "grandes astros" to listOf("reino do amanha", "marvels", "watchmen", "cavaleiro das trevas"),
+        "queda de murdock" to listOf("ano um", "cavaleiro das trevas", "homem-aranha: azul", "watchmen"),
+        "homem-aranha: azul" to listOf("queda de murdock", "ultima cacada de kraven", "marvels", "cavaleiro das trevas"),
+        "ultima cacada de kraven" to listOf("homem-aranha: azul", "queda de murdock", "cavaleiro das trevas", "watchmen"),
+        "marvels" to listOf("reino do amanha", "grandes astros", "guerra civil", "watchmen"),
+        "guerra civil" to listOf("marvels", "reino do amanha", "invencivel", "dias de um futuro"),
+        "uzumaki" to listOf("berserk", "akira", "monster", "vagabond", "vinland saga"),
+        "akira" to listOf("berserk", "uzumaki", "monster", "vagabond", "vinland saga"),
+        "berserk" to listOf("vagabond", "vinland saga", "monster", "uzumaki", "akira"),
+        "monster" to listOf("vagabond", "berserk", "akira", "uzumaki", "vinland saga"),
+        "vagabond" to listOf("berserk", "vinland saga", "monster", "akira", "uzumaki"),
+        "sandman" to listOf("watchmen", "monstro do pantano", "daytripper", "hellboy", "saga"),
+        "hellboy" to listOf("sandman", "watchmen", "monstro do pantano", "saga"),
+        "saga" to listOf("sandman", "invencivel", "hellboy", "daytripper")
+    )
+
+    private val primaryAuthorCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val issueNumberCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val baseSeriesCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val normalizeKeyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    private val catalogByNormalizedSeries: Map<String, List<ComicEntry>> by lazy {
+        CuratedCatalog.curatedComicsCatalog.groupBy { normalizeKey(inferBaseSeriesTitle(it)) }
+    }
+
     fun stripAccents(input: String): String {
         val normalized = Normalizer.normalize(input, Normalizer.Form.NFD)
         return normalized.replace(diacriticsRegex, "")
     }
 
     fun extractPrimaryAuthor(authors: String): String {
-        val first = authors.split(authorDelimiterRegex)
+        val trimmed = authors.trim()
+        if (trimmed.isEmpty()) return ""
+        primaryAuthorCache[trimmed]?.let { return it }
+        val first = trimmed.split(authorDelimiterRegex)
             .map { it.trim() }
             .firstOrNull { candidate ->
                 candidate.isNotBlank() && !ignoredAuthorTokens.contains(candidate.lowercase())
             }
-        return first ?: authors.trim()
+        val result = first ?: trimmed
+        if (primaryAuthorCache.size < 4096) {
+            primaryAuthorCache[trimmed] = result
+        }
+        return result
     }
 
     fun inferIssueNumber(comic: ComicEntry): Int {
@@ -114,6 +211,18 @@ object SeriesSequenceEngine {
     }
 
     fun inferIssueNumber(rawTitle: String): Int {
+        val trimmedRaw = rawTitle.trim()
+        if (trimmedRaw.isEmpty()) return 0
+        issueNumberCache[trimmedRaw]?.let { return it }
+
+        val computed = computeIssueNumberUncached(trimmedRaw)
+        if (issueNumberCache.size < 4096) {
+            issueNumberCache[trimmedRaw] = computed
+        }
+        return computed
+    }
+
+    private fun computeIssueNumberUncached(rawTitle: String): Int {
         val title = PortugueseComicTranslator.translateTitleToPtBr(rawTitle).trim()
 
         hashIssueRegex.find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let {
@@ -145,6 +254,18 @@ object SeriesSequenceEngine {
     }
 
     fun inferBaseSeriesTitle(rawTitle: String): String {
+        val trimmedRaw = rawTitle.trim()
+        if (trimmedRaw.isEmpty()) return ""
+        baseSeriesCache[trimmedRaw]?.let { return it }
+
+        val computed = computeBaseSeriesTitleUncached(trimmedRaw)
+        if (baseSeriesCache.size < 4096) {
+            baseSeriesCache[trimmedRaw] = computed
+        }
+        return computed
+    }
+
+    private fun computeBaseSeriesTitleUncached(rawTitle: String): String {
         var working = PortugueseComicTranslator.translateTitleToPtBr(rawTitle).trim()
 
         // Strip parenthetical metadata like "(Vol. 1)", "(Edição Definitiva)", "(2016)"
@@ -199,10 +320,17 @@ object SeriesSequenceEngine {
     }
 
     fun normalizeKey(text: String): String {
-        return stripAccents(text.lowercase())
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return ""
+        normalizeKeyCache[trimmed]?.let { return it }
+        val computed = stripAccents(trimmed.lowercase())
             .replace(nonAlphaNumSpaceRegex, " ")
             .replace(whitespaceRegex, " ")
             .trim()
+        if (normalizeKeyCache.size < 4096) {
+            normalizeKeyCache[trimmed] = computed
+        }
+        return computed
     }
 
     /**
@@ -273,13 +401,19 @@ object SeriesSequenceEngine {
     ): SeriesSequenceGroup {
         val localizedTarget = PortugueseComicTranslator.localizeComicMetadataOnly(target)
         val baseTitle = inferBaseSeriesTitle(localizedTarget)
+        val normalizedBaseTitle = normalizeKey(baseTitle)
         val primaryAuthor = extractPrimaryAuthor(localizedTarget.authors)
         val seqKey = buildSequenceKey(localizedTarget)
         val targetIssue = inferIssueNumber(localizedTarget)
 
-        // Gather all matching candidates
+        // Gather matching candidates using normalized base title bucket when available
         val matchingUser = userComics.filter { isSameSequence(localizedTarget, it) }
-        val matchingCatalog = catalogComics.filter { isSameSequence(localizedTarget, it) }
+        val catalogCandidates = if (catalogComics === CuratedCatalog.curatedComicsCatalog) {
+            catalogByNormalizedSeries[normalizedBaseTitle].orEmpty()
+        } else {
+            catalogComics
+        }
+        val matchingCatalog = catalogCandidates.filter { isSameSequence(localizedTarget, it) }
         val matchingOnline = if (matchingCatalog.count { inferIssueNumber(it) > 0 } >= 3) {
             // Se o catálogo curado já possui a sequência completa verificada (ex: Matt Fraction #1-#5),
             // não polui com resultados desordenados da internet
@@ -307,6 +441,24 @@ object SeriesSequenceEngine {
         val hasNumberedSequence = targetIssue > 0 ||
             combinedPool.count { inferIssueNumber(it) > 0 } >= 2
 
+        // Pre-index userComics for O(1) lookup instead of scanning userComics per candidate
+        val userById = HashMap<String, ComicEntry>(userComics.size * 2)
+        val userByExtId = HashMap<String, ComicEntry>(userComics.size * 2)
+        val userByWorkKey = HashMap<String, ComicEntry>(userComics.size * 2)
+        val matchingUserByIssue = HashMap<Int, ComicEntry>()
+        for (u in userComics) {
+            if (u.id.isNotBlank() && !userById.containsKey(u.id)) userById[u.id] = u
+            if (u.externalId.isNotBlank() && !userByExtId.containsKey(u.externalId)) userByExtId[u.externalId] = u
+            val uWorkKey = PortugueseComicTranslator.canonicalWorkKey(u.title)
+            if (uWorkKey.isNotBlank() && !userByWorkKey.containsKey(uWorkKey)) userByWorkKey[uWorkKey] = u
+        }
+        for (u in matchingUser) {
+            val uIssue = inferIssueNumber(u)
+            if (uIssue > 0 && !matchingUserByIssue.containsKey(uIssue)) {
+                matchingUserByIssue[uIssue] = u
+            }
+        }
+
         // Deduplica rigorosamente por número da edição E por título canônico em português
         // (impedindo "Batman: Ano Um" + "Batman: Year One" ou múltiplas edições da mesma obra)
         val byIssueKey = LinkedHashMap<Int, SequenceIssueItem>()
@@ -319,16 +471,14 @@ object SeriesSequenceEngine {
 
             // Se a sequência principal é numerada (#1, #2, #3...), ignora edições avulsas sem número vindas da internet
             if (hasNumberedSequence && issueNum <= 0 && candidate.id != localizedTarget.id) {
-                val isUserSaved = userComics.any { it.id == rawCandidate.id }
+                val isUserSaved = userById.containsKey(rawCandidate.id)
                 if (!isUserSaved) continue
             }
 
-            val savedMatch = userComics.firstOrNull { u ->
-                (rawCandidate.id.isNotBlank() && u.id == rawCandidate.id) ||
-                    (rawCandidate.externalId.isNotBlank() && u.externalId == rawCandidate.externalId) ||
-                    (issueNum > 0 && isSameSequence(u, candidate) && inferIssueNumber(u) == issueNum) ||
-                    PortugueseComicTranslator.canonicalWorkKey(u.title) == workKey
-            }
+            val savedMatch = (if (rawCandidate.id.isNotBlank()) userById[rawCandidate.id] else null)
+                ?: (if (rawCandidate.externalId.isNotBlank()) userByExtId[rawCandidate.externalId] else null)
+                ?: (if (issueNum > 0) matchingUserByIssue[issueNum] else null)
+                ?: userByWorkKey[workKey]
 
             val effectiveComic = if (savedMatch != null) {
                 PortugueseComicTranslator.localizeComicMetadataOnly(savedMatch)
@@ -411,6 +561,29 @@ object SeriesSequenceEngine {
             baseTitle
         }
 
+        val isStandalone = isStandaloneGraphicNovelOrSingle(localizedTarget, sortedIssues)
+        val recommendations = if (isStandalone) {
+            findRecommendationsForComic(
+                target = localizedTarget,
+                userComics = userComics,
+                catalogComics = catalogComics
+            )
+        } else {
+            emptyList()
+        }
+
+        val recommendationSubtitle = if (isStandalone) {
+            val formatLower = localizedTarget.format.lowercase()
+            val genreLower = localizedTarget.genre.lowercase()
+            if (formatLower.contains("graphic novel") || genreLower.contains("graphic novel") || isKnownStandaloneWork(localizedTarget.title)) {
+                "Quem leu esta Graphic Novel também curtiu"
+            } else {
+                "Títulos semelhantes que você pode gostar"
+            }
+        } else {
+            ""
+        }
+
         return SeriesSequenceGroup(
             sequenceKey = seqKey,
             baseSeriesTitle = baseTitle,
@@ -418,8 +591,188 @@ object SeriesSequenceEngine {
             displayTitle = displayTitle,
             issues = sortedIssues,
             nextIssueNumber = nextIssueNumber,
-            missingIssueNumbers = missingIssues
+            missingIssueNumbers = missingIssues,
+            isRecommendationMode = isStandalone,
+            recommendationSubtitle = recommendationSubtitle,
+            recommendations = recommendations
         )
+    }
+
+    fun isKnownStandaloneWork(title: String): Boolean {
+        val norm = normalizeKey(title)
+        return knownStandaloneGraphicNovels.any { norm.contains(it) }
+    }
+
+    fun isStandaloneGraphicNovelOrSingle(
+        target: ComicEntry,
+        sequenceIssues: List<SequenceIssueItem>
+    ): Boolean {
+        // Se houver 2 ou mais edições distintas numeradas (#1, #2, #3...), é sequência serializada
+        val distinctNumbered = sequenceIssues.count { it.issueNumber > 0 }
+        if (distinctNumbered >= 2) return false
+
+        val formatLower = target.format.lowercase()
+        val genreLower = target.genre.lowercase()
+        val titleLower = target.title.lowercase()
+
+        val isGraphicNovel = formatLower.contains("graphic novel") ||
+            genreLower.contains("graphic novel") ||
+            formatLower.contains("encadernado") ||
+            formatLower.contains("capa dura") ||
+            formatLower.contains("volume único") ||
+            formatLower.contains("volume unico") ||
+            formatLower.contains("edição definitiva") ||
+            formatLower.contains("edicao definitiva") ||
+            formatLower.contains("one-shot") ||
+            formatLower.contains("oneshot") ||
+            titleLower.contains("graphic novel")
+
+        val isKnown = isKnownStandaloneWork(target.title)
+
+        // Se tem apenas 1 edição e não possui nome de série serializado ou é graphic novel conhecida
+        return isGraphicNovel || isKnown || (sequenceIssues.size <= 1 && target.seriesName.isBlank())
+    }
+
+    fun findRecommendationsForComic(
+        target: ComicEntry,
+        userComics: List<ComicEntry>,
+        catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog
+    ): List<SequenceIssueItem> {
+        val targetNormTitle = normalizeKey(target.title)
+        val targetWorkKey = PortugueseComicTranslator.canonicalWorkKey(target.title)
+        val targetAuthor = extractPrimaryAuthor(target.authors).lowercase().trim()
+        val targetGenre = target.genre.lowercase().trim()
+        val targetPublisher = target.publisher.lowercase().trim()
+
+        val userByWorkKey = HashMap<String, ComicEntry>(userComics.size * 2)
+        val userById = HashMap<String, ComicEntry>(userComics.size * 2)
+        val userByExtId = HashMap<String, ComicEntry>(userComics.size * 2)
+        for (u in userComics) {
+            if (u.id.isNotBlank()) userById[u.id] = u
+            if (u.externalId.isNotBlank()) userByExtId[u.externalId] = u
+            val wk = PortugueseComicTranslator.canonicalWorkKey(u.title)
+            if (wk.isNotBlank() && !userByWorkKey.containsKey(wk)) userByWorkKey[wk] = u
+        }
+
+        val affinities = curatedAffinities.entries.firstOrNull { (key, _) ->
+            targetWorkKey.contains(key) || targetNormTitle.contains(key)
+        }?.value.orEmpty()
+
+        val pool = LinkedHashMap<String, ComicEntry>()
+        for (c in catalogComics) {
+            val wk = PortugueseComicTranslator.canonicalWorkKey(c.title)
+            if (wk.isNotBlank() && !pool.containsKey(wk)) pool[wk] = c
+        }
+        for (u in userComics) {
+            val wk = PortugueseComicTranslator.canonicalWorkKey(u.title)
+            if (wk.isNotBlank() && !pool.containsKey(wk)) pool[wk] = u
+        }
+
+        pool.remove(targetWorkKey)
+        if (target.id.isNotBlank()) pool.remove(PortugueseComicTranslator.canonicalWorkKey(target.id))
+
+        class ScoredCandidate(val comic: ComicEntry, val score: Int, val isCurated: Boolean)
+        val scored = mutableListOf<ScoredCandidate>()
+
+        for ((workKey, rawCandidate) in pool) {
+            val candidate = PortugueseComicTranslator.localizeComicMetadataOnly(rawCandidate)
+            if (candidate.id == target.id ||
+                (target.externalId.isNotBlank() && candidate.externalId == target.externalId) ||
+                workKey == targetWorkKey
+            ) continue
+
+            var score = 0
+            var isCurated = false
+
+            val affinityIndex = affinities.indexOfFirst { aff ->
+                workKey.contains(aff) || normalizeKey(candidate.title).contains(aff)
+            }
+            if (affinityIndex >= 0) {
+                score += 150 - (affinityIndex * 15)
+                isCurated = true
+            }
+
+            val candAuthor = extractPrimaryAuthor(candidate.authors).lowercase().trim()
+            if (candAuthor.isNotBlank() && targetAuthor.isNotBlank()) {
+                if (candAuthor == targetAuthor) {
+                    score += 80
+                } else if (candidate.authors.contains(targetAuthor, ignoreCase = true) || target.authors.contains(candAuthor, ignoreCase = true)) {
+                    score += 50
+                }
+            }
+
+            val candGenre = candidate.genre.lowercase().trim()
+            if (candGenre.isNotBlank() && targetGenre.isNotBlank()) {
+                if (candGenre == targetGenre) {
+                    score += 35
+                } else if ((targetGenre.contains("vertigo") && candGenre.contains("vertigo")) ||
+                    (targetGenre.contains("manga") && candGenre.contains("manga")) ||
+                    (targetGenre.contains("graphic novel") && candGenre.contains("graphic novel"))
+                ) {
+                    score += 30
+                }
+            }
+
+            val candFormat = candidate.format.lowercase()
+            if (candFormat.contains("graphic novel") || candFormat.contains("capa dura") || candGenre.contains("graphic novel")) {
+                score += 20
+            }
+
+            val candPub = candidate.publisher.lowercase().trim()
+            if (candPub.isNotBlank() && targetPublisher.isNotBlank()) {
+                if (candPub.contains(targetPublisher) || targetPublisher.contains(candPub)) {
+                    score += 15
+                }
+            }
+
+            if (isKnownStandaloneWork(candidate.title)) {
+                score += 25
+            }
+
+            // Evita edições extras da mesma série exata
+            if (isSameSequence(target, candidate)) {
+                continue
+            }
+
+            scored.add(ScoredCandidate(candidate, score, isCurated))
+        }
+
+        var topCandidates = scored.sortedWith(
+            compareByDescending<ScoredCandidate> { it.score }
+                .thenByDescending { it.isCurated }
+                .thenByDescending { it.comic.releaseYear }
+        ).map { it.comic }.take(8)
+
+        // Fallback para assegurar um carrossel rico se houver poucos candidatos
+        if (topCandidates.size < 5) {
+            val fallbackCatalog = catalogComics.filter { c ->
+                val wk = PortugueseComicTranslator.canonicalWorkKey(c.title)
+                wk != targetWorkKey && !isSameSequence(target, c) && topCandidates.none { tc ->
+                    PortugueseComicTranslator.canonicalWorkKey(tc.title) == wk
+                }
+            }.take(6 - topCandidates.size)
+            topCandidates = topCandidates + fallbackCatalog
+        }
+
+        return topCandidates.map { cand ->
+            val candWorkKey = PortugueseComicTranslator.canonicalWorkKey(cand.title)
+            val savedMatch = (if (cand.id.isNotBlank()) userById[cand.id] else null)
+                ?: (if (cand.externalId.isNotBlank()) userByExtId[cand.externalId] else null)
+                ?: userByWorkKey[candWorkKey]
+
+            val effectiveComic = if (savedMatch != null) {
+                PortugueseComicTranslator.localizeComicMetadataOnly(savedMatch)
+            } else {
+                cand
+            }
+
+            SequenceIssueItem(
+                comic = effectiveComic,
+                issueNumber = 0,
+                isSavedInLibrary = savedMatch != null,
+                savedEntry = savedMatch
+            )
+        }
     }
 
     private val sequenceCache = java.util.concurrent.ConcurrentHashMap<String, SeriesSequenceGroup>()
@@ -459,6 +812,7 @@ object SeriesSequenceEngine {
             catalogComics = catalogComics,
             extraOnlineComics = extraOnlineComics
         ).also { computed ->
+            if (sequenceCache.size > 512) sequenceCache.clear()
             sequenceCache[key] = computed
         }
     }
@@ -526,21 +880,30 @@ object SeriesSequenceEngine {
         userComics: List<ComicEntry>,
         catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog
     ): List<SeriesSequenceGroup> {
+        if (userComics.isEmpty()) return emptyList()
         val groupsByKey = LinkedHashMap<String, MutableList<ComicEntry>>()
+        // Bucket by normalized baseSeriesTitle first so we only compare comics within the same series title bucket (O(N) vs O(N^2))
+        val keysBySeriesBucket = HashMap<String, MutableList<String>>()
         for (comic in userComics) {
-            val existingKey = groupsByKey.keys.firstOrNull { key ->
+            val seriesBucket = normalizeKey(inferBaseSeriesTitle(comic))
+            val bucketKeys = keysBySeriesBucket[seriesBucket]
+            val existingKey = bucketKeys?.firstOrNull { key ->
                 val sample = groupsByKey[key]?.firstOrNull()
                 sample != null && isSameSequence(sample, comic)
             }
             val key = existingKey ?: buildSequenceKey(comic)
-            groupsByKey.getOrPut(key) { mutableListOf() }.add(comic)
+            val groupList = groupsByKey.getOrPut(key) { mutableListOf() }
+            if (groupList.isEmpty()) {
+                keysBySeriesBucket.getOrPut(seriesBucket) { mutableListOf() }.add(key)
+            }
+            groupList.add(comic)
         }
 
         return groupsByKey.values.map { list ->
             val representative = list.first()
             findSequenceForComic(
                 target = representative,
-                userComics = userComics,
+                userComics = list,
                 catalogComics = catalogComics
             )
         }.sortedWith(
@@ -563,3 +926,4 @@ object SeriesSequenceEngine {
         )
     }
 }
+

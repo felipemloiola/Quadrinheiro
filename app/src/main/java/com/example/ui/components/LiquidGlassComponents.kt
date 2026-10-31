@@ -855,9 +855,7 @@ fun BookCover(
     val cleanSrc = remember(src, title) {
         val raw = src.trim().replace("http://", "https://")
         if (raw.isEmpty() || raw.contains("covers.openlibrary.org")) {
-            com.example.data.CuratedCatalog.curatedComicsCatalog.firstOrNull {
-                it.title.equals(title.trim(), ignoreCase = true)
-            }?.coverUrl ?: raw
+            com.example.data.CuratedCatalog.findCoverUrlByTitle(title) ?: raw
         } else {
             raw
         }

@@ -441,6 +441,7 @@ fun ComicSequenceCarouselCard(
 
     val sequenceGroup = sequenceGroupState ?: return
 
+    val isRecomMode = sequenceGroup.isRecommendationMode
     val sequenceItems = sequenceGroup.issues
     val baseSeriesTitle = sequenceGroup.baseSeriesTitle
     val primaryAuthor = sequenceGroup.primaryAuthor
@@ -450,7 +451,8 @@ fun ComicSequenceCarouselCard(
     val inShelfCount = sequenceGroup.savedCount
     val nextIssueNumber = sequenceGroup.nextIssueNumber
 
-    if (sequenceItems.size <= 1 && currentIssueNum <= 0 && currentComic.seriesName.isBlank()) return
+    if (!isRecomMode && sequenceItems.size <= 1 && currentIssueNum <= 0 && currentComic.seriesName.isBlank()) return
+    if (isRecomMode && sequenceGroup.recommendations.isEmpty()) return
 
     Column(
         modifier = modifier
@@ -470,13 +472,13 @@ fun ComicSequenceCarouselCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
-                        imageVector = LucideIcons.Layers,
+                        imageVector = if (isRecomMode) LucideIcons.Sparkles else LucideIcons.Layers,
                         contentDescription = null,
                         tint = s.accentColor,
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "SEQUÊNCIA DA SÉRIE",
+                        text = if (isRecomMode) "TÍTULOS RELACIONADOS" else "SEQUÊNCIA DA SÉRIE",
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
@@ -484,11 +486,15 @@ fun ComicSequenceCarouselCard(
                     )
                 }
                 Text(
-                    text = buildString {
-                        append(baseSeriesTitle)
-                        if (primaryAuthor.isNotBlank()) {
-                            append(" • ")
-                            append(primaryAuthor)
+                    text = if (isRecomMode) {
+                        sequenceGroup.recommendationSubtitle.ifBlank { "Quem leu esta Graphic Novel também curtiu" }
+                    } else {
+                        buildString {
+                            append(baseSeriesTitle)
+                            if (primaryAuthor.isNotBlank()) {
+                                append(" • ")
+                                append(primaryAuthor)
+                            }
                         }
                     },
                     fontSize = 13.sp,
@@ -506,7 +512,11 @@ fun ComicSequenceCarouselCard(
                     .padding(horizontal = 9.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "$inShelfCount/${sequenceItems.size} na estante",
+                    text = if (isRecomMode) {
+                        "${sequenceGroup.recommendations.size} sugestões"
+                    } else {
+                        "$inShelfCount/${sequenceItems.size} na estante"
+                    },
                     fontSize = 10.5.sp,
                     fontFamily = SpaceGroteskTabularFamily,
                     fontWeight = FontWeight.Bold,
@@ -522,7 +532,126 @@ fun ComicSequenceCarouselCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Top
         ) {
-            sequenceItems.forEach { seqItem ->
+            if (isRecomMode) {
+                sequenceGroup.recommendations.forEach { recomItem ->
+                    val userStatus = recomItem.savedEntry?.status
+                    val statusBadgeText = when (userStatus) {
+                        ReadingStatus.READ -> "✓ Lido"
+                        ReadingStatus.READING -> "Lendo"
+                        ReadingStatus.WANT_TO_READ -> "Fila"
+                        null -> "+ Ver"
+                    }
+                    val statusBadgeBg = when (userStatus) {
+                        ReadingStatus.READ -> Color(0xFF10B981).copy(alpha = 0.20f)
+                        ReadingStatus.READING -> s.accentColor.copy(alpha = 0.20f)
+                        ReadingStatus.WANT_TO_READ -> Color(0xFFF59E0B).copy(alpha = 0.20f)
+                        null -> s.accentColor.copy(alpha = 0.12f)
+                    }
+                    val statusBadgeColor = when (userStatus) {
+                        ReadingStatus.READ -> if (s.isLight) Color(0xFF047857) else Color(0xFF34D399)
+                        ReadingStatus.READING -> s.accentColor
+                        ReadingStatus.WANT_TO_READ -> if (s.isLight) Color(0xFFB45309) else Color(0xFFFBBF24)
+                        null -> s.accentColor
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .width(84.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (s.isLight) Color.White.copy(alpha = 0.65f)
+                                else Color.White.copy(alpha = 0.05f)
+                            )
+                            .border(
+                                width = 0.6.dp,
+                                color = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { onSelectSequenceIssue(recomItem.comic) }
+                            .padding(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(2f / 3f)
+                                .clip(RoundedCornerShape(8.dp))
+                        ) {
+                            BookCover(
+                                src = recomItem.comic.coverUrl,
+                                title = recomItem.comic.title,
+                                authors = recomItem.comic.authors,
+                                publisher = recomItem.comic.publisher,
+                                year = recomItem.comic.releaseYear,
+                                spine3d = spine3d,
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(4.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.Black.copy(alpha = 0.75f))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        recomItem.comic.genre.contains("Vertigo", ignoreCase = true) -> "Vertigo"
+                                        recomItem.comic.genre.contains("Mangá", ignoreCase = true) -> "Mangá"
+                                        recomItem.comic.genre.contains("Marvel", ignoreCase = true) -> "Marvel"
+                                        recomItem.comic.format.contains("Graphic", ignoreCase = true) -> "Graphic Novel"
+                                        recomItem.comic.releaseYear > 0 -> "${recomItem.comic.releaseYear}"
+                                        else -> "HQ"
+                                    },
+                                    fontSize = 8.5.sp,
+                                    fontFamily = SpaceGroteskTabularFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = recomItem.comic.title,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = s.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = SeriesSequenceEngine.extractPrimaryAuthor(recomItem.comic.authors).ifBlank { recomItem.comic.publisher },
+                            fontSize = 9.sp,
+                            color = s.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(statusBadgeBg)
+                                .padding(vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = statusBadgeText,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = statusBadgeColor,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            } else {
+                sequenceItems.forEach { seqItem ->
                 val isCurrent = seqItem.comic.id == currentComic.id ||
                     (currentComic.externalId.isNotBlank() && seqItem.comic.externalId == currentComic.externalId) ||
                     (currentIssueNum > 0 && seqItem.issueNumber == currentIssueNum)
@@ -716,6 +845,8 @@ fun ComicSequenceCarouselCard(
         }
     }
 }
+}
+
 
 /**
  * Cabeçalho da Capa, Título Editável, Autor e Metadados no Modal de Catalogação.

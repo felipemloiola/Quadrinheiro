@@ -198,28 +198,16 @@ fun SettingsTabScreen(
     // Route key for current settings view (root or sub-page)
     val routeKey = viewModel.getCurrentRouteKey("settings", settingsSubPage)
 
+    var pendingCropBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
     // Gallery photo picker for Avatar
     val avatarPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val bmp = BitmapFactory.decodeStream(stream)
-                    if (bmp != null) {
-                        val minSide = min(bmp.width, bmp.height)
-                        val sx = (bmp.width - minSide) / 2
-                        val sy = (bmp.height - minSide) / 2
-                        val cropped = Bitmap.createBitmap(bmp, sx, sy, minSide, minSide)
-                        val scaled = Bitmap.createScaledBitmap(cropped, 200, 200, true)
-                        val baos = ByteArrayOutputStream()
-                        scaled.compress(Bitmap.CompressFormat.JPEG, 82, baos)
-                        val b64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-                        viewModel.updateProfile { it.copy(avatarUrl = b64) }
-                        viewModel.showNotice("Foto de perfil salva na sua conta")
-                    }
-                }
-            } catch (_: Throwable) {
+            val bmp = com.example.ui.components.decodeAvatarBitmapFromUri(context, uri)
+            if (bmp != null) {
+                pendingCropBitmap = bmp
             }
         }
     }
@@ -2387,6 +2375,18 @@ fun SettingsTabScreen(
                     }
                 }
             }
+        }
+
+        pendingCropBitmap?.let { bmpToCrop ->
+            com.example.ui.components.ProfilePhotoCropModal(
+                bitmap = bmpToCrop,
+                onDismiss = { pendingCropBitmap = null },
+                onConfirmCrop = { croppedB64 ->
+                    pendingCropBitmap = null
+                    viewModel.updateProfile { it.copy(avatarUrl = croppedB64) }
+                    viewModel.showNotice("Foto de perfil salva na sua conta")
+                }
+            )
         }
     }
 }

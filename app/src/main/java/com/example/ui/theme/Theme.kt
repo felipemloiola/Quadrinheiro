@@ -572,12 +572,17 @@ fun QuadrinheiroTheme(
     val baseConfig = LocalConfiguration.current
     val baseDensity = LocalDensity.current
 
-    val customFontResolver = remember(settings.boldText, baseConfig) {
-        val cfg = Configuration(baseConfig)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            cfg.fontWeightAdjustment = if (settings.boldText) 300 else baseConfig.fontWeightAdjustment
+    val defaultFontResolver = LocalFontFamilyResolver.current
+    val customFontResolver = remember(settings.boldText, baseConfig, defaultFontResolver) {
+        if (!settings.boldText) {
+            defaultFontResolver
+        } else {
+            val cfg = Configuration(baseConfig)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                cfg.fontWeightAdjustment = 300
+            }
+            createFontFamilyResolver(context.createConfigurationContext(cfg))
         }
-        createFontFamilyResolver(context.createConfigurationContext(cfg))
     }
 
     val customDensity = remember(baseDensity, dynamicScale, settings.boldText) {

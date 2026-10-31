@@ -34,4 +34,28 @@ internal class CatalogMatchIndex(entries: List<ComicEntry>) {
         consider(byTitle[comic.title])
         return winner?.value
     }
+
+    fun findByFields(
+        idVal: String,
+        extIdVal: String,
+        isbnVal: String,
+        titleVal: String,
+        rawCover: String
+    ): ComicEntry? {
+        var winner: IndexedValue<ComicEntry>? = null
+        fun consider(candidate: IndexedValue<ComicEntry>?) {
+            if (candidate != null && candidate.index < (winner?.index ?: Int.MAX_VALUE)) {
+                winner = candidate
+            }
+        }
+        consider(byId[idVal])
+        consider(byExternalId[extIdVal])
+        consider(byId[extIdVal])
+        consider(byId[idVal.replace("init-", "cat-")])
+        if (isbnVal.isNotBlank()) consider(byIsbn[isbnVal])
+        if (rawCover.isBlank() || rawCover.contains("covers.openlibrary.org")) {
+            consider(byTitle[titleVal])
+        }
+        return winner?.value
+    }
 }

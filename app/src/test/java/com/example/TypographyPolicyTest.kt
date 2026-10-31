@@ -1,9 +1,11 @@
 package com.example
 
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.example.ui.theme.AppSansFamily
 import com.example.ui.theme.PlusJakartaSansFamily
+import com.example.ui.theme.SanFranciscoFontFamily
+import com.example.ui.theme.SfProDisplayFontFamily
+import com.example.ui.theme.SfProTextFontFamily
 import com.example.ui.theme.SpaceGroteskTabularFamily
 import com.example.ui.theme.buildQuadrinheiroTypography
 import org.junit.Assert.assertEquals
@@ -12,17 +14,32 @@ import org.junit.Test
 
 class TypographyPolicyTest {
     @Test
-    fun allTextRolesUseOneNativeFamily() {
+    fun allTextRolesUseAppleSanFranciscoFamiliesConformingToHIG() {
         val t = buildQuadrinheiroTypography(1f, false)
-        val roles = listOf(t.displayLarge, t.displayMedium, t.displaySmall,
-            t.headlineLarge, t.headlineMedium, t.headlineSmall,
-            t.titleLarge, t.titleMedium, t.titleSmall,
-            t.bodyLarge, t.bodyMedium, t.bodySmall,
-            t.labelLarge, t.labelMedium, t.labelSmall)
-        assertEquals(FontFamily.SansSerif, AppSansFamily)
+
+        assertEquals(SanFranciscoFontFamily, AppSansFamily)
         assertEquals(AppSansFamily, PlusJakartaSansFamily)
         assertEquals(AppSansFamily, SpaceGroteskTabularFamily)
-        roles.forEach { assertEquals(AppSansFamily, it.fontFamily) }
+
+        // Apple HIG: Display styles (>= 20sp) use SF Pro Display
+        val displayRoles = listOf(
+            t.displayLarge, t.displayMedium, t.displaySmall,
+            t.headlineLarge, t.headlineMedium, t.headlineSmall,
+            t.titleLarge
+        )
+        displayRoles.forEach {
+            assertEquals(SfProDisplayFontFamily, it.fontFamily)
+        }
+
+        // Apple HIG: Text styles (< 20sp) use SF Pro Text
+        val textRoles = listOf(
+            t.titleMedium, t.titleSmall,
+            t.bodyLarge, t.bodyMedium, t.bodySmall,
+            t.labelLarge, t.labelMedium, t.labelSmall
+        )
+        textRoles.forEach {
+            assertEquals(SfProTextFontFamily, it.fontFamily)
+        }
     }
 
     @Test

@@ -188,31 +188,44 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Configure global Coil ImageLoader with lazy OkHttp/DiskCache initialization off the UI thread
+        // Configure global Coil ImageLoader lazily off the UI startup path
         val appCtx = applicationContext
-        val fastImageLoader = ImageLoader.Builder(appCtx)
-            .okHttpClient {
-                MultiApiSearchEngine.initHttpCache(appCtx)
-                MultiApiSearchEngine.sharedHttpClient
-            }
-            .memoryCache {
-                MemoryCache.Builder(appCtx)
-                    .maxSizePercent(0.30)
-                    .strongReferencesEnabled(true)
+        Coil.setImageLoader(
+            coil.ImageLoaderFactory {
+                ImageLoader.Builder(appCtx)
+                    .okHttpClient {
+                        MultiApiSearchEngine.initHttpCache(appCtx)
+                        MultiApiSearchEngine.sharedHttpClient
+                    }
+                    .memoryCache {
+                        MemoryCache.Builder(appCtx)
+                            .maxSizePercent(0.30)
+                            .strongReferencesEnabled(true)
+                            .build()
+                    }
+                    .diskCache {
+                        DiskCache.Builder()
+                            .directory(appCtx.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
+                            .maxSizeBytes(250L * 1024L * 1024L)
+                            .build()
+                    }
+                    .crossfade(50)
+                    .allowHardware(true)
+                    .allowRgb565(true)
+                    .respectCacheHeaders(false)
                     .build()
             }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(appCtx.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                    .maxSizeBytes(250L * 1024L * 1024L)
-                    .build()
+        )
+
+        // Let the initial window SurfaceSyncGroup (wmsSync-VRI[MainActivity]#0 & VRI[MainActivity]#1)
+        // complete its first frame immediately without blocking RenderThread on 30+ cold AGSL shader
+        // compilations, then turn on full offscreen Liquid Glass effects on the very next frame.
+        com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
+        window.decorView.post {
+            android.view.Choreographer.getInstance().postFrameCallback {
+                com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
             }
-            .crossfade(50)
-            .allowHardware(true)
-            .allowRgb565(true)
-            .respectCacheHeaders(false)
-            .build()
-        Coil.setImageLoader(fastImageLoader)
+        }
 
         enableEdgeToEdge()
         setContent {
@@ -249,6 +262,7 @@ fun QuadrinheiroApp(
 
     val shelfSection by viewModel.shelfSection.collectAsState()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
+    val searchFocusTrigger by viewModel.searchFocusTrigger.collectAsState()
     val shelfStatus by viewModel.shelfStatus.collectAsState()
     val shelfGenre by viewModel.shelfGenre.collectAsState()
     val shelfLayout by viewModel.shelfLayout.collectAsState()
@@ -331,7 +345,13 @@ fun QuadrinheiroApp(
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0L) {
             isTabBarCollapsed = false
-            activeListState.animateScrollToItem(0, 0)
+            val isAtTop = activeListState.firstVisibleItemIndex == 0 &&
+                activeListState.firstVisibleItemScrollOffset <= 24
+            if (activeTab == "search" && isAtTop) {
+                viewModel.requestSearchFocus()
+            } else {
+                activeListState.animateScrollToItem(0, 0)
+            }
         }
     }
 
@@ -443,9 +463,7 @@ fun QuadrinheiroApp(
             val comic = currentlyReadingComic ?: return@LaunchedEffect
             val rawUrl = comic.coverUrl.trim().replace("http://", "https://").let { u ->
                 if (u.isEmpty() || u.contains("covers.openlibrary.org")) {
-                    com.example.data.CuratedCatalog.curatedComicsCatalog.firstOrNull {
-                        it.title.equals(comic.title.trim(), ignoreCase = true)
-                    }?.coverUrl ?: u
+                    com.example.data.CuratedCatalog.findCoverUrlByTitle(comic.title) ?: u
                 } else u
             }
             if (rawUrl.isNotEmpty() && !extractedCoverColors.containsKey(rawUrl)) {
@@ -466,9 +484,7 @@ fun QuadrinheiroApp(
             val comic = currentlyReadingComic ?: return@remember ""
             val raw = comic.coverUrl.trim().replace("http://", "https://")
             if (raw.isEmpty() || raw.contains("covers.openlibrary.org")) {
-                com.example.data.CuratedCatalog.curatedComicsCatalog.firstOrNull {
-                    it.title.equals(comic.title.trim(), ignoreCase = true)
-                }?.coverUrl ?: raw
+                com.example.data.CuratedCatalog.findCoverUrlByTitle(comic.title) ?: raw
             } else raw
         }
         val sampledCoverColor = if (resolvedCoverUrl.isNotEmpty()) extractedCoverColors[resolvedCoverUrl] else null
@@ -760,6 +776,7 @@ fun QuadrinheiroApp(
                                         isSearchingApi = isSearchingApi,
                                         searchSourceFilter = searchSourceFilter,
                                         listState = activeListState,
+                                        searchFocusTrigger = searchFocusTrigger,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },
                                         onChangeSearchQuery = viewModel::setSearchQuery,

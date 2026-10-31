@@ -33,25 +33,28 @@ import kotlinx.coroutines.withContext
 class QuadrinheiroAuthManager(
     context: Context,
     private val storage: SafeStorage = SafeStorage(context.applicationContext),
-    private val auth: FirebaseAuth? = runCatching { FirebaseAuth.getInstance() }.getOrNull()
+    private val explicitAuth: FirebaseAuth? = null
 ) {
     private val appContext = context.applicationContext
+    private val auth: FirebaseAuth? by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        explicitAuth ?: runCatching { FirebaseAuth.getInstance() }.getOrNull()
+    }
 
     /**
      * Retorna o estado inicial de autenticação de forma 100% síncrona no boot
      * para evitar qualquer flash da AuthScreen quando o usuário já tem sessão ou Modo Convidado.
      */
     fun getInitialAuthUiState(): AuthUiState {
-        val fbUser = runCatching { auth?.currentUser }.getOrNull()
-        if (fbUser != null && !fbUser.isAnonymous) {
-            return AuthUiState.Authenticated
-        }
         val savedSession = storage.loadAuthSession()
         if (savedSession != null) {
             return if (savedSession.isGuest) AuthUiState.Guest else AuthUiState.Authenticated
         }
         if (storage.isGuestMode() || storage.hasCompletedAuthOnboarding()) {
             return AuthUiState.Guest
+        }
+        val fbUser = runCatching { auth?.currentUser }.getOrNull()
+        if (fbUser != null && !fbUser.isAnonymous) {
+            return AuthUiState.Authenticated
         }
         return AuthUiState.Unauthenticated
     }
@@ -60,12 +63,6 @@ class QuadrinheiroAuthManager(
      * Retorna o perfil do usuário ativo de forma síncrona no boot.
      */
     fun getInitialUserProfile(fallbackReaderName: String = "Leitor"): UserProfile? {
-        val fbUser = runCatching { auth?.currentUser }.getOrNull()
-        if (fbUser != null && !fbUser.isAnonymous) {
-            val mapped = fbUser.toUserProfile(fallbackReaderName)
-            storage.saveAuthSession(mapped)
-            return mapped
-        }
         val saved = storage.loadAuthSession()
         if (saved != null) {
             return saved
@@ -81,6 +78,12 @@ class QuadrinheiroAuthManager(
             )
             storage.saveAuthSession(guestProfile)
             return guestProfile
+        }
+        val fbUser = runCatching { auth?.currentUser }.getOrNull()
+        if (fbUser != null && !fbUser.isAnonymous) {
+            val mapped = fbUser.toUserProfile(fallbackReaderName)
+            storage.saveAuthSession(mapped)
+            return mapped
         }
         return null
     }
