@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.example.model.AuthFeedbackBanner
 import com.example.model.AuthFormState
 import com.example.model.AuthMode
+import com.example.ui.components.LucideIcons
 import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.QuadrinheiroLogoVariant
 import com.example.ui.theme.LocalIOS27Theme
@@ -73,8 +74,8 @@ fun Modifier.authGlassCardSurface(): Modifier = composed {
 @Composable
 fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val theme = LocalIOS27Theme.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(120.dp))
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(76.dp))
         Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
         Text(
             if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
@@ -188,7 +189,19 @@ fun AuthCredentialsFieldsSection(
             label = { Text("Senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_password_field"),
             visualTransformation = if (form.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = { TextButton(onClick = onTogglePasswordVisible) { Text(if (form.isPasswordVisible) "Ocultar" else "Mostrar") } },
+            trailingIcon = {
+                IconButton(
+                    onClick = onTogglePasswordVisible,
+                    modifier = Modifier.size(48.dp).testTag("auth_toggle_password_visibility")
+                ) {
+                    Icon(
+                        imageVector = if (form.isPasswordVisible) LucideIcons.EyeOff else LucideIcons.Eye,
+                        contentDescription = if (form.isPasswordVisible) "Ocultar senha" else "Mostrar senha",
+                        tint = theme.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (registering) ImeAction.Next else ImeAction.Done),
             keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }, onDone = { onSubmit() })
         )
@@ -210,7 +223,19 @@ fun AuthCredentialsFieldsSection(
             label = { Text("Confirmar senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_confirm_password_field"),
             visualTransformation = if (form.isConfirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = { TextButton(onClick = onToggleConfirmPasswordVisible) { Text(if (form.isConfirmPasswordVisible) "Ocultar" else "Mostrar") } },
+            trailingIcon = {
+                IconButton(
+                    onClick = onToggleConfirmPasswordVisible,
+                    modifier = Modifier.size(48.dp).testTag("auth_toggle_confirm_password_visibility")
+                ) {
+                    Icon(
+                        imageVector = if (form.isConfirmPasswordVisible) LucideIcons.EyeOff else LucideIcons.Eye,
+                        contentDescription = if (form.isConfirmPasswordVisible) "Ocultar senha" else "Mostrar senha",
+                        tint = theme.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onSubmit() })
         )

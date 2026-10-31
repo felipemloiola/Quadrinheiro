@@ -1,100 +1,79 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.LucideIcons
 import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.QuadrinheiroLogoVariant
-import com.example.ui.components.liquidGlass
-import com.example.ui.components.liquidGlassNavSurface
 import com.example.ui.theme.LocalAppleMaterials
+import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
-import com.example.ui.theme.PlusJakartaSansFamily
-import com.example.ui.theme.SpaceGroteskTabularFamily
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.example.ui.theme.SfProDisplayFontFamily
+import com.example.ui.theme.SfProTextFontFamily
+import com.kyant.shapes.ContinuousRoundedRectangle
 
-private data class WelcomeSlide(
-    val badge: String,
+private data class AppleFeatureRow(
     val title: String,
     val subtitle: String,
     val icon: ImageVector,
-    val highlightA: String,
-    val highlightB: String
+    val tintColor: Color
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Tela de Entrada e Boas-vindas (Apple-style Onboarding & Welcome Flow):
+ * 1. Simetria Vertical Estrita: A distância da borda superior até a logo e a distância da base do
+ *    botão até a borda inferior são rigorosamente idênticas (distância do topo == distância da base).
+ * 2. Espaçamento Coeso: O botão de ação fica a exatos 24dp imediatamente abaixo de "Busca Online e Nuvem".
+ * 3. Animação Fluida: Transição com curva física de mola autêntica do iOS.
+ */
 @Composable
 fun WelcomeIntroScreen(
     onContinue: () -> Unit
@@ -102,340 +81,328 @@ fun WelcomeIntroScreen(
     val theme = LocalIOS27Theme.current
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
-    val scope = rememberCoroutineScope()
+    val appSettings = LocalAppSettings.current
+    val density = LocalDensity.current
 
-    val slides = remember {
-        listOf(
-            WelcomeSlide(
-                badge = "SEU ACERVO DEFINITIVO",
-                title = "O universo dos seus quadrinhos, sob medida.",
-                subtitle = "Organize encadernados, graphic novels e mangás com fichas ricas, edições, sinopses e capas em alta resolução.",
-                icon = Icons.Default.AutoStories,
-                highlightA = "Catálogo Curado & Metadados",
-                highlightB = "Organização por Estantes e Formatos"
-            ),
-            WelcomeSlide(
-                badge = "BUSCA EM TEMPO REAL",
-                title = "Pesquise em múltiplos acervos online.",
-                subtitle = "Encontre edições nacionais e internacionais com tradução automática em português e cadastro instantâneo.",
-                icon = Icons.Default.Search,
-                highlightA = "Multi-API Search Integrado",
-                highlightB = "Sinopses e Títulos em PT-BR"
-            ),
-            WelcomeSlide(
-                badge = "EXPERIÊNCIA IMERSIVA",
-                title = "Metas, diário de leitura e Liquid Glass.",
-                subtitle = "Acompanhe seu ritmo de leitura com anéis de atividade inspirados no iOS, iluminação ambiente e sincronização na nuvem.",
-                icon = Icons.Default.BarChart,
-                highlightA = "Design Óptico Liquid Glass",
-                highlightB = "Histórico & Metas Anuais"
+    // Fundo atmosférico padronizado: idêntico ao AuthBackdropLayer da tela de login
+    val backgroundBrush = remember(theme.bgPrimary, theme.accent, appSettings.reduceTransparency) {
+        val accentWeight = if (appSettings.reduceTransparency) 0.03f else 0.11f
+        Brush.verticalGradient(
+            listOf(
+                theme.bgPrimary,
+                androidx.compose.ui.graphics.lerp(theme.bgPrimary, theme.accent, accentWeight),
+                theme.bgPrimary
             )
         )
     }
 
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
+    // Estado do fluxo: false = capa inicial centrada, true = tela de recursos expandida
+    var isFeaturesView by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
-    // Animação de entrada e respiração da luz ambiente
-    var isReady by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(60)
-        isReady = true
+    // Suporte ao botão voltar do sistema para retroceder a animação suavemente
+    BackHandler(enabled = isFeaturesView) {
+        isFeaturesView = false
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "ambient_glow")
-    val glowPulse by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+    LaunchedEffect(isFeaturesView) {
+        if (!isFeaturesView && scrollState.value > 0) {
+            scrollState.animateScrollTo(0)
+        }
+    }
+
+    // Curva física de mola autêntica do iOS (resposta suave e amortecimento natural)
+    val transitionProgress by animateFloatAsState(
+        targetValue = if (isFeaturesView) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.82f,
+            stiffness = 260f
         ),
-        label = "glowPulse"
+        label = "welcomeFlowProgress"
     )
 
-    val contentAlpha by animateFloatAsState(
-        targetValue = if (isReady) 1f else 0f,
-        animationSpec = tween(650, easing = FastOutSlowInEasing),
-        label = "contentAlpha"
-    )
-    val contentScale by animateFloatAsState(
-        targetValue = if (isReady) 1f else 0.94f,
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = 320f),
-        label = "contentScale"
-    )
+    // Paleta de cores semânticas do iOS (Human Interface Guidelines)
+    val features = remember(s.isLight) {
+        listOf(
+            AppleFeatureRow(
+                title = "Sua Biblioteca de Quadrinhos",
+                subtitle = "Organize encadernados, graphic novels e mangás com sinopses completas, capas em alta definição e fichas técnicas detalhadas.",
+                icon = LucideIcons.BookOpen,
+                tintColor = if (s.isLight) Color(0xFF007AFF) else Color(0xFF0A84FF) // iOS System Blue
+            ),
+            AppleFeatureRow(
+                title = "Sequências e Recomendações",
+                subtitle = "Acompanhe edições em ordem cronológica (#1, #2, #3...) e descubra obras semelhantes para graphic novels como Watchmen e Maus.",
+                icon = LucideIcons.Layers,
+                tintColor = if (s.isLight) Color(0xFFFF9500) else Color(0xFFFF9F0A) // iOS System Orange
+            ),
+            AppleFeatureRow(
+                title = "Metas e Diário de Leitura",
+                subtitle = "Acompanhe seu ritmo de leitura com metas anuais, anéis de progresso diário e histórico de páginas lidas.",
+                icon = Icons.Default.BarChart,
+                tintColor = if (s.isLight) Color(0xFF34C759) else Color(0xFF30D158) // iOS System Green
+            ),
+            AppleFeatureRow(
+                title = "Busca Online e Nuvem",
+                subtitle = "Pesquise em múltiplos acervos online com tradução em português e mantenha seus dados salvos com o Google ou Modo Convidado.",
+                icon = Icons.Default.CloudSync,
+                tintColor = if (s.isLight) Color(0xFFAF52DE) else Color(0xFFBF5AF2) // iOS System Purple
+            )
+        )
+    }
 
     val buttonTextColor = if (theme.accent.luminance() > 0.179f) Color.Black else Color.White
 
-    Box(
+    // Medição dinâmica em tempo real da altura real do bloco de conteúdo
+    var measuredContentHeightPx by remember { mutableStateOf(0) }
+    val measuredContentHeightDp = with(density) { measuredContentHeightPx.toDp() }
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(theme.bgPrimary)
-            .testTag("welcome_intro_root")
+            .background(backgroundBrush)
+            .padding(horizontal = 28.dp)
+            .testTag("welcome_intro_root"),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // 1. Fundo com Luzes Atmosféricas Liquid Glass
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(theme.bgPrimary)
-            // Gradiente escultural de base
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        theme.accent.copy(alpha = 0.28f * glowPulse),
-                        theme.accentSecondary.copy(alpha = 0.12f * glowPulse),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.5f, size.height * 0.28f),
-                    radius = size.minDimension * 0.85f
-                )
-            )
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        s.gradTopRight.copy(alpha = 0.20f),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.85f, size.height * 0.75f),
-                    radius = size.minDimension * 0.65f
-                )
-            )
+        val totalScreenHeight = maxHeight
+
+        // Altura real ou estimada do conteúdo do bloco
+        val estimatedSplashHeight = 240.dp
+        val estimatedFeaturesHeight = 520.dp
+        val actualContentHeight = if (measuredContentHeightDp > 100.dp) {
+            measuredContentHeightDp
+        } else {
+            lerp(estimatedSplashHeight, estimatedFeaturesHeight, transitionProgress)
         }
 
-        // 2. Conteúdo Responsivo e Pager de Apresentação
+        // Espaçador perfeitamente simétrico: (altura total da tela - altura do conteúdo) / 2
+        // Garante rigorosamente que a distância do topo até a logo seja idêntica à distância do botão até a base da tela
+        val symmetricPadding = ((totalScreenHeight - actualContentHeight) / 2f).coerceAtLeast(36.dp)
+
+        // Tamanho da logo: 96dp na capa inicial -> 60dp no topo da tela de recursos
+        val iconSize = lerp(96.dp, 60.dp, transitionProgress)
+
+        // Distância entre a base da logo e o topo do título: 10dp na capa -> 14dp nos recursos
+        val currentLogoToTitleSpacer = lerp(10.dp, 14.dp, transitionProgress)
+
+        // Altura animada da área de conteúdo (64dp da capa -> 404dp dos recursos)
+        val contentBoxHeight = lerp(64.dp, 404.dp, transitionProgress)
+        val contentBoxModifier = if (transitionProgress < 0.99f) {
+            Modifier
+                .fillMaxWidth()
+                .height(contentBoxHeight)
+        } else {
+            Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+        }
+
+        // Espaçamento estrito de 20dp na capa e 24dp imediatamente abaixo de "Busca Online e Nuvem"
+        val currentButtonTopSpacer = lerp(20.dp, 24.dp, transitionProgress)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 24.dp, vertical = 18.dp)
-                .scale(contentScale),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .widthIn(max = 520.dp)
+                .verticalScroll(scrollState, enabled = transitionProgress > 0.92f),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Topo: Botão Pular
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = onContinue,
-                    modifier = Modifier.testTag("welcome_skip_button")
-                ) {
-                    Text(
-                        text = "Pular",
-                        color = theme.textSecondary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = PlusJakartaSansFamily
-                    )
-                }
-            }
+            // 1. Espaçador do Topo (distância do topo da tela até a logo)
+            Spacer(modifier = Modifier.height(symmetricPadding))
 
-            // Centro: Logo, Pager e Destaques Visuais
+            // 2. Bloco de Conteúdo Medido Unificado (Logo + Textos + Recursos + Botão)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                // Logo central com badge de luz translúcida
-                Box(
-                    modifier = Modifier
-                        .size(112.dp)
-                        .shadow(20.dp, CircleShape, spotColor = theme.accent.copy(alpha = 0.35f))
-                        .liquidGlass(shape = CircleShape, elevation = 12.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    QuadrinheiroLogo(
-                        variant = QuadrinheiroLogoVariant.Primary,
-                        titleVisible = false,
-                        modifier = Modifier.size(92.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Text(
-                    text = "Quadrinheiro",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = PlusJakartaSansFamily,
-                    letterSpacing = (-0.5).sp,
-                    color = theme.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                // Pager com os 3 slides de apresentação
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(240.dp)
-                ) { page ->
-                    val slide = slides[page]
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(theme.accent.copy(alpha = 0.12f))
-                                .border(1.dp, theme.accent.copy(alpha = 0.25f), RoundedCornerShape(999.dp))
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = slide.badge,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = theme.accent,
-                                letterSpacing = 1.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = slide.title,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = PlusJakartaSansFamily,
-                            textAlign = TextAlign.Center,
-                            color = theme.textPrimary,
-                            lineHeight = 26.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = slide.subtitle,
-                            fontSize = 13.5.sp,
-                            fontFamily = PlusJakartaSansFamily,
-                            textAlign = TextAlign.Center,
-                            color = theme.textSecondary,
-                            lineHeight = 19.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(theme.textPrimary.copy(alpha = 0.05f))
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    text = "✦ ${slide.highlightA}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = theme.textSecondary
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(theme.textPrimary.copy(alpha = 0.05f))
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    text = "✦ ${slide.highlightB}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = theme.textSecondary
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Indicador de Páginas estilo Apple Pill
-                Row(
-                    modifier = Modifier.padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    repeat(slides.size) { index ->
-                        val isSelected = pagerState.currentPage == index
-                        val pillWidth by animateFloatAsState(
-                            targetValue = if (isSelected) 24f else 8f,
-                            animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
-                            label = "pillWidth"
-                        )
-                        Box(
-                            modifier = Modifier
-                                .height(8.dp)
-                                .width(pillWidth.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(
-                                    if (isSelected) theme.accent else theme.textSecondary.copy(alpha = 0.28f)
-                                )
-                                .clickable {
-                                    scope.launch { pagerState.animateScrollToPage(index) }
-                                }
-                        )
-                    }
-                }
-            }
-
-            // Base: Botão de Avançar / Começar
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .onSizeChanged { measuredContentHeightPx = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val isLastPage = pagerState.currentPage == slides.size - 1
+                // Ícone Hero oficial
+                QuadrinheiroLogo(
+                    variant = QuadrinheiroLogoVariant.Primary,
+                    titleVisible = false,
+                    modifier = Modifier
+                        .size(iconSize)
+                        .testTag("welcome_hero_logo")
+                )
 
+                // Espaçamento de design entre a base do logo e o topo do título
+                Spacer(modifier = Modifier.height(currentLogoToTitleSpacer))
+
+                // Conteúdo central / de recursos com transição coordenada
+                Box(
+                    modifier = contentBoxModifier,
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    // 1. TELA INICIAL (CAPA): Nome do app e subtítulo minimalista centralizados
+                    if (transitionProgress < 0.99f) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    alpha = (1f - transitionProgress * 2.2f).coerceIn(0f, 1f)
+                                    translationY = -transitionProgress * 20f
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Quadrinheiro",
+                                fontSize = 34.sp,
+                                lineHeight = 40.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = SfProDisplayFontFamily,
+                                letterSpacing = 0.37.sp,
+                                color = theme.textPrimary,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Sua biblioteca definitiva de quadrinhos",
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                fontWeight = FontWeight.Normal,
+                                fontFamily = SfProTextFontFamily,
+                                letterSpacing = (-0.2).sp,
+                                color = theme.textSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    // 2. TELA DE RECURSOS: Título Large Title e lista de 4 recursos do HIG
+                    if (transitionProgress > 0.01f) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer {
+                                    alpha = ((transitionProgress - 0.2f) / 0.8f).coerceIn(0f, 1f)
+                                    translationY = (1f - transitionProgress) * 36f
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            // Título Apple HIG: Large Title em SF Pro Display Bold
+                            Text(
+                                text = "Bem-vindo ao\nQuadrinheiro",
+                                fontSize = 34.sp,
+                                lineHeight = 40.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = SfProDisplayFontFamily,
+                                letterSpacing = 0.37.sp,
+                                color = theme.textPrimary,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(26.dp))
+
+                            // Lista canônica de recursos da Apple (espaçamento de 18dp entre itens)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(18.dp)
+                            ) {
+                                features.forEach { feature ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(46.dp)
+                                                .clip(ContinuousRoundedRectangle(13.dp))
+                                                .background(
+                                                    feature.tintColor.copy(alpha = if (s.isLight) 0.12f else 0.18f)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = feature.icon,
+                                                contentDescription = null,
+                                                tint = feature.tintColor,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = feature.title,
+                                                fontSize = 16.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontFamily = SfProTextFontFamily,
+                                                letterSpacing = (-0.3).sp,
+                                                color = theme.textPrimary
+                                            )
+                                            Text(
+                                                text = feature.subtitle,
+                                                fontSize = 14.sp,
+                                                lineHeight = 19.sp,
+                                                fontWeight = FontWeight.Normal,
+                                                fontFamily = SfProTextFontFamily,
+                                                letterSpacing = (-0.2).sp,
+                                                color = theme.textSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Espaçamento estrito de 24dp imediatamente após "Busca Online e Nuvem"
+                Spacer(modifier = Modifier.height(currentButtonTopSpacer))
+
+                // Botão de Ação ("Entrar" -> "Continuar")
                 Button(
                     onClick = {
-                        if (isLastPage) {
-                            onContinue()
+                        if (!isFeaturesView) {
+                            isFeaturesView = true
                         } else {
-                            scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            }
+                            onContinue()
                         }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .shadow(8.dp, RoundedCornerShape(18.dp), spotColor = theme.accent.copy(alpha = 0.35f))
-                        .testTag("welcome_primary_button"),
-                    shape = RoundedCornerShape(18.dp),
+                        .height(50.dp)
+                        .testTag(if (isFeaturesView) "welcome_primary_button" else "welcome_start_button"),
+                    shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = theme.accent,
                         contentColor = buttonTextColor
                     )
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = if (isLastPage) "Começar" else "Continuar",
-                            fontSize = 16.sp,
+                            text = "Entrar",
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
-                            fontFamily = PlusJakartaSansFamily
+                            fontFamily = SfProTextFontFamily,
+                            letterSpacing = (-0.3).sp,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = (1f - transitionProgress * 2.2f).coerceIn(0f, 1f)
+                                translationY = -transitionProgress * 12f
+                            }
                         )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                        Text(
+                            text = "Continuar",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = SfProTextFontFamily,
+                            letterSpacing = (-0.3).sp,
+                            modifier = Modifier.graphicsLayer {
+                                alpha = ((transitionProgress - 0.35f) / 0.65f).coerceIn(0f, 1f)
+                                translationY = (1f - transitionProgress) * 12f
+                            }
                         )
                     }
                 }
             }
+
+            // 3. Espaçador da Base (rigorosamente igual ao do topo: distância do topo == distância da base)
+            Spacer(modifier = Modifier.height(symmetricPadding))
         }
     }
 }

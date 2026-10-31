@@ -20,7 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
@@ -71,8 +71,21 @@ private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier, adapt
         )
     } else sized
     Box(framed, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize(0.78f)) {
-            scale(size.width / 108f, size.height / 108f, pivot = Offset.Zero) {
+        Canvas(Modifier.fillMaxSize()) {
+            val glyphWidth = 60.7f
+            val glyphHeight = 57.4f
+            val glyphCenterX = 55.35f
+            val glyphCenterY = 55.0f
+
+            val fillRatio = if (variant == QuadrinheiroLogoVariant.Badge) 0.62f else 0.94f
+            val scaleFactor = minOf(size.width / glyphWidth, size.height / glyphHeight) * fillRatio
+
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            withTransform({
+                translate(left = cx - glyphCenterX * scaleFactor, top = cy - glyphCenterY * scaleFactor)
+                scale(scaleX = scaleFactor, scaleY = scaleFactor, pivot = Offset.Zero)
+            }) {
                 for (i in 0..2) drawPath(paths[i], brushes[i])
                 drawPath(paths[3], Brush.linearGradient(listOf(Color.White.copy(alpha = 0.24f), Color.Transparent), Offset(28.9f, 32.9f), Offset(40.1f, 52.7f)))
                 drawPath(paths[4], Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Transparent), Offset(63.9f, 55.3f), Offset(85.7f, 83.7f)))
