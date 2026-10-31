@@ -1,0 +1,65 @@
+name: Validate and apply hardware optimizations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/apply_hardware_optimizations.py'
+      - '.github/workflows/apply-hardware-optimizations.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: hw-optimizations-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - uses: ./.github/actions/setup-firebase
+      - name: Apply hardware acceleration and high refresh rate patch
+        run: python3 .github/scripts/apply_hardware_optimizations.py
+      - name: Run unit tests and compilation with isolated Firebase
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+        run: |
+          firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:testDebugUnitTest :app:compileDebugKotlin --no-daemon --console=plain"
+      - name: Commit validated hardware optimizations
+        id: commit
+        run: |
+          git fetch origin main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/AndroidManifest.xml app/src/main/java/com/example/MainActivity.kt .audit/hw_acceleration_v19.txt
+          if git diff --cached --quiet; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m 'perf: apply explicit hardware acceleration, largeHeap and high-refresh-rate window mode'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+      - name: Trigger release APK build after successful patch
+        if: steps.commit.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-apk.yml --ref main
