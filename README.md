@@ -4,177 +4,116 @@
   <img src="https://github.com/felipemloiola/Quadrinheiro/raw/main/branding/quadrinheiro-logo.svg" alt="Quadrinheiro Logo" width="120" />
 </p>
 
-> A neo-comic Liquid Glass library and reading diary for comics, graphic novels and manga.
+> O ecossistema definitivo para gerenciar, catalogar e acompanhar sua coleção de quadrinhos, graphic novels e mangás com design Liquid Glass, sincronização em nuvem e inteligência de busca.
 
-Quadrinheiro is an Android app for keeping track of the comics you own and read. You build a personal library, log your progress page by page, and keep a dated diary of everything you finish, with a rating, tags and a written review.
-
-The interface uses a dark, translucent **Liquid Glass** look inspired by modern iOS, and your data is saved to your account in the cloud so your library follows you across devices.
+O **Quadrinheiro** é um aplicativo Android nativo construído com Jetpack Compose, desenhado com acabamento translúcido inspirado na linguagem estética do iOS e otimizado para alta performance com aceleração de hardware e renderização em shaders AGSL.
 
 ![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20%2B%20Firestore-FFCA28?logo=firebase&logoColor=black)
+![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red)
 
 ---
 
-## Overview
+## Destaques do Aplicativo
 
-Quadrinheiro combines a personal comics catalog with a detailed reading diary:
+- **Apresentação de Boas-Vindas (Onboarding Apple-Style):**
+  - Fluxo introdutório exclusivo de primeira inicialização com layout simétrico, logotipo com escalonamento por matriz de transformação (`withTransform`) e transição suave com física de mola.
+  - Apresenta os pilares do app: Acervo Pessoal, Sequências e Recomendações, Metas de Leitura e Busca Multi-API na Nuvem.
 
-- Save every edition you own or discover.
-- Track progress page by page.
-- Log ratings, rereads, tags and long-form reviews.
-- Set yearly and daily goals to keep your reading habit visible.
+- **Design e Materiais Ópticos Liquid Glass:**
+  - Superfícies translúcidas com refração de borda, meniscos de vidro, aberração cromática e desfoque óptico progressivo via shaders AGSL.
+  - Fundo atmosférico que extrai dinamicamente as cores dominantes da capa da HQ em leitura ativa para iluminar a interface.
+  - Paleta com temas dinâmicos (Azul Oceano, Vermelho Carmim, Verde Esmeralda, Roxo Imperial, Laranja Solar, Rosa Neon, Turquesa e Obsidian/Prata).
 
-Whether your shelf is full of superhero runs, indie graphic novels or long-running manga, Quadrinheiro keeps everything organized in one place.
+- **Gestão Completa de Acervo e Estante:**
+  - Status de leitura em tempo real: **Lendo**, **Lido** e **Quero Ler (Fila)**.
+  - Visualizações em Grade (2, 3 ou 4 colunas), Lista Compacta ou Sequências Cronológicas (#1, #2, #3...).
+  - Efeito de lombada 3D nos cards, exibição de notas e progresso percentual sobre as capas.
 
----
+- **Busca Multi-API em Tempo Real:**
+  - Motor integrado de busca que consulta simultaneamente Google Books, MangaUpdates e acervos internacionais.
+  - Localização automática de títulos, autores e tradução de sinopses para Português (PT-BR) com cache local persistente.
+  - Cadastro instantâneo na estante com um único toque ou via formulário manual completo.
 
-## Features
+- **Metas de Leitura e Diário Cronológico:**
+  - Anéis de atividade com anel externo (meta anual de obras) e anel interno (páginas diárias).
+  - Diário cronológico com histórico de leituras, datas de conclusão, contador de releituras, avaliação por estrelas, tags rápidas e resenhas detalhadas de até 5.000 caracteres.
 
-- **Library:**
-  - Save titles to your shelf as **Want to read**, **Reading** or **Read**.
-  - See recent additions, series sequences and status at a glance.
-
-- **Search:**
-  - Look up books across more than one catalog API.
-  - Import title, authors, publisher, ISBN, cover and synopsis with a single tap.
-
-- **Progress:**
-  - Record the current page against the total page count.
-  - Use native stepper controls to update progress quickly.
-
-- **Diary:**
-  - Keep the date you finished each book.
-  - Track how many times you reread it.
-  - Add a 0–5 star rating, up to 30 tags and a review of up to 5,000 characters.
-
-- **Favorites & Ratings:**
-  - Flag the titles you love.
-  - Browse based on rating and status.
-
-- **Goals:**
-  - Set a yearly reading goal and a daily pages goal.
-  - Choose whether progress surfaces on the home screen.
-
-- **Profile:**
-  - Configure display name, @handle, bio and favorite universe or publisher.
-  - Pick avatar and appearance presets.
-
-- **Accounts:**
-  - Sign in with Google.
-  - Each user's data is stored separately in Firestore.
+- **Autenticação Híbrida e Nuvem Offline-First:**
+  - Suporte a Login com Google (via Android Credential Manager + Firebase Auth), E-mail/Senha com hash SHA-256 e Modo Convidado 100% isolado e funcional offline.
+  - Sincronização em segundo plano via Cloud Firestore com detecção e resolução de dados pendentes (*dirty state*).
 
 ---
 
-## Design & Identity
+## Arquitetura e Engenharia de Performance
 
-Quadrinheiro is designed as a **neo-comic Liquid Glass** experience:
-
-- **Liquid Glass UI:**
-  - Dark, translucent surfaces with soft highlights and edge refraction.
-  - Cards and toolbars float over content, mimicking modern iOS aesthetics.
-
-- **Origami Q Logo (in-app icon):**
-  - Implemented as a VectorDrawable in [`ic_launcher_foreground.xml`](app/src/main/res/drawable/ic_launcher_foreground.xml).
-  - A folded comics page in origami form, built from irregular panels with gradient fills:
-    - Left panel: **carmine red → neon pink**.
-    - Top panel: **golden yellow → vibrant orange**.
-    - Lower tail panel: **royal blue → electric cyan**, extending beyond the square to form the stylized "Q" tail.
-  - Sarjetas (gutters) and faceted highlights suggest depth and motion, creating a dynamic negative-space **"Q"**.
-
-- **Reading Experience:**
-  - Responsive layouts for recent reads, sequences and diary.
-  - Subtle motion and glass effects tuned to keep the app smooth on real devices.
-
----
-
-## Tech Stack
-
-| Area | Tools |
+| Componente | Implementação |
 |---|---|
-| Language | Kotlin |
-| UI | Jetpack Compose, Material 3 |
-| Images | Coil |
-| Networking | OkHttp |
-| Async | Kotlin Coroutines |
-| Auth | Firebase Auth, Credential Manager, Google ID |
-| Database | Cloud Firestore |
-| AI | Gemini API (server-side) |
-| Build | Gradle (Kotlin DSL), KSP, Secrets Gradle Plugin |
-| Tests | JUnit, Robolectric, Espresso, Compose UI Test |
-
-The app targets **Android 7.0 (API 24)** and up, compiles against **API 36**, and uses **Java 11**.
+| **Linguagem & UI** | Kotlin 2.1+, Jetpack Compose, Material 3, Backdrop AGSL Shaders |
+| **Aceleração Gráfica** | Aceleração por hardware explícita (`android:hardwareAccelerated="true"`), `largeHeap` para texturas e captura em passagem única (`recordLayer`) |
+| **Carregamento de Imagens** | Coil com `HardwareBuffer` direto na VRAM da GPU, cache em disco e memória L1/L2 |
+| **Persistência Local** | `SafeStorage` com partição isolada por conta/convidado e exportação de backup autônomo (ZIP/HTML) |
+| **Backend & Cloud** | Firebase Authentication, Google Identity Credential Manager, Cloud Firestore |
+| **Pipeline de CI/CD** | GitHub Actions com emulador Android (API 34) e testes de regressão de toque e equivalência de pixels |
 
 ---
 
-## Data Model
-
-Firestore holds two kinds of documents, both under the signed-in user:
+## Estrutura do Repositório
 
 ```text
-/users/{userId}                    UserProfile
-/users/{userId}/comics/{comicId}   CloudComic
+├── app/
+│   ├── src/main/java/com/example/
+│   │   ├── MainActivity.kt                  # Ponto de entrada, inicialização de Coil e roteamento
+│   │   ├── data/                            # SafeStorage, AuthManager, CloudRepository e APIs
+│   │   ├── model/                           # Modelos imutáveis, AppSettings e estados de UI
+│   │   ├── ui/
+│   │   │   ├── components/                  # QuadrinheiroLogo, LiquidGlass, BookCover e botões
+│   │   │   ├── screens/                     # WelcomeIntroScreen, AuthScreen, MainTabs e Ajustes
+│   │   │   └── theme/                       # Temas Liquid Glass, paletas Apple e tipografia
+│   │   └── viewmodel/                       # QuadrinheiroViewModel e sincronização reativa
+│   └── src/androidTest/                     # Testes instrumentados de equivalência de pixels
+├── .github/
+│   ├── workflows/                           # Workflows automatizados de CI/CD e release de APK
+│   └── scripts/                             # Scripts de validação e patches auditáveis
+├── firestore.rules                          # Regras de segurança do Firestore
+└── README.md
 ```
-
-`UserProfile` stores the name, handle, bio, favorite universe, avatar preset, the two goals and the home-screen toggle.
-
-`CloudComic` stores the bibliographic data (title, authors, publisher, genre, format, year, ISBN, cover, synopsis), the reading state (status, current page, page count, rating, favorite, rereads, read date) and the user's own tags and review.
-
-The full schema is in [`firebase-blueprint.json`](firebase-blueprint.json), and the access rules are in [`firestore.rules`](firestore.rules).
 
 ---
 
-## Running It Locally
+## Execução Local
 
-You need Android Studio with SDK 36, JDK 11 or newer, and a Firebase project with Google sign-in and Firestore turned on.
+### Pré-requisitos
+- Android Studio Ladybug ou superior
+- Android SDK 36 e JDK 21 (Temurin)
+- Projeto Firebase configurado com Google Sign-In e Cloud Firestore
+
+### Instruções
 
 ```bash
+# Clone o repositório
 git clone https://github.com/felipemloiola/Quadrinheiro.git
 cd Quadrinheiro
-cp .env.example .env
-```
 
-1. Download `google-services.json` from your Firebase project and put it in `app/`.
-2. Open `.env` and set `GEMINI_API_KEY`.
-3. Deploy the security rules with `firebase deploy --only firestore:rules`.
-4. Build with `./gradlew assembleDebug`, or press Run in Android Studio.
+# Configure as credenciais do Firebase
+cp /caminho/para/seu/google-services.json app/google-services.json
 
-Run the unit tests with:
+# Execute a compilação do APK de depuração
+./gradlew assembleDebug
 
-```bash
-./gradlew test
-```
-
-Keep `.env`, keystores and passwords out of version control.
-
----
-
-## Repository Layout
-
-```text
-app/                      Android module: Kotlin code, resources, manifest
-gradle/                   Version catalog and wrapper
-.env.example              Template for local secrets
-firebase.json             Firebase configuration
-firebase-blueprint.json   Firestore entity schema
-firestore.rules           Firestore security rules
-metadata.json             App metadata
+# Execute os testes unitários
+./gradlew testDebugUnitTest
 ```
 
 ---
 
-## Contributions
+## Licença
 
-This is a personal project and it is not open to outside contributions. Pull requests and unsolicited code changes will not be merged. If you find a problem, you are welcome to open an issue.
-
----
-
-## License
-
-All rights reserved. The source is public for reference only, and no permission is granted to copy, modify or redistribute it without written consent from the author.
+Todos os direitos reservados. O código-fonte está disponível publicamente apenas para fins de referência e demonstração de portfólio. Não é permitida a reprodução, modificação ou redistribuição sem autorização prévia por escrito.
 
 ---
 
-## Author
+## Autor
 
 **Felipe Loiola** ([@felipemloiola](https://github.com/felipemloiola))
