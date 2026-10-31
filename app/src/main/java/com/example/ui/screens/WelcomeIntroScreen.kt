@@ -156,9 +156,9 @@ fun WelcomeIntroScreen(
     val buttonTextColor = if (theme.accent.luminance() > 0.179f) Color.Black else Color.White
 
     // Distâncias de viagem calculadas estritamente em pixels para execução via RenderThread (GPU)
-    val logoTravelPx = with(density) { 170.dp.toPx() }
-    val buttonTravelPx = with(density) { 218.dp.toPx() }
-    val splashTravelPx = with(density) { 170.dp.toPx() }
+    val logoTravelPx = with(density) { 152.dp.toPx() }
+    val buttonTravelPx = with(density) { 266.dp.toPx() }
+    val splashTravelPx = with(density) { 152.dp.toPx() }
 
     BoxWithConstraints(
         modifier = Modifier

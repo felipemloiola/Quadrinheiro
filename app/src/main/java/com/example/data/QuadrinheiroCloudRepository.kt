@@ -27,12 +27,14 @@ import com.google.firebase.auth.GoogleAuthProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ServerTimestamp
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -44,6 +46,13 @@ import org.json.JSONObject
 enum class OperationType {
     CREATE, UPDATE, DELETE, LIST, GET, WRITE
 }
+
+@Immutable
+data class PaginatedComics(
+    val items: List<ComicEntry> = emptyList(),
+    val lastSnapshot: DocumentSnapshot? = null,
+    val hasMore: Boolean = false
+)
 
 @Immutable
 data class CloudAuthUser(
@@ -604,11 +613,85 @@ class QuadrinheiroCloudRepository(
         }
     }
 
-    fun observeUserComics(userId: String): Flow<List<ComicEntry>> = callbackFlow {
+    /**
+     * Consulta inicial ultra-rápida diretamente do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede).
+     */
+    suspend fun fetchComicsFromCache(userId: String, limit: Long = 40L): List<ComicEntry> {
+        val path = "users/$userId/comics"
+        return try {
+            val snapshot = db.collection("users").document(userId)
+                .collection("comics")
+                .orderBy("updatedAt", Query.Direction.DESCENDING)
+                .limit(limit)
+                .get(Source.CACHE)
+                .await()
+            snapshot.toObjects(CloudComicDocument::class.java).map { it.toComicEntry() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Paginação de quadrinhos no Firestore: busca páginas de [pageSize] itens com cursor startAfter.
+     * Reduz drasticamente as leituras no Firestore e otimiza a performance em acervos volumosos.
+     */
+    suspend fun fetchComicsPage(
+        userId: String,
+        pageSize: Long = 20L,
+        startAfterDoc: DocumentSnapshot? = null,
+        preferCache: Boolean = false
+    ): Result<PaginatedComics> {
+        val path = "users/$userId/comics"
+        return try {
+            var query = db.collection("users").document(userId)
+                .collection("comics")
+                .orderBy("updatedAt", Query.Direction.DESCENDING)
+                .limit(pageSize)
+
+            if (startAfterDoc != null) {
+                query = query.startAfter(startAfterDoc)
+            }
+
+            val source = if (preferCache) Source.CACHE else Source.DEFAULT
+            val snapshot = try {
+                query.get(source).await()
+            } catch (e: Exception) {
+                if (preferCache) {
+                    query.get(Source.DEFAULT).await()
+                } else {
+                    throw e
+                }
+            }
+
+            val items = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(CloudComicDocument::class.java)?.toComicEntry()
+            }
+            val last = snapshot.documents.lastOrNull()
+            val hasMore = snapshot.size() >= pageSize.toInt()
+
+            Result.success(
+                PaginatedComics(
+                    items = items,
+                    lastSnapshot = last,
+                    hasMore = hasMore
+                )
+            )
+        } catch (e: Exception) {
+            runCatching { handleFirestoreError(e, OperationType.LIST, path, auth) }
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Observa em tempo real os quadrinhos mais recentes do usuário com limite controlado (padrão 35).
+     * Evita leitura irrestrita de coleções inteiras a cada mutação de documento.
+     */
+    fun observeUserComics(userId: String, limit: Long = 35L): Flow<List<ComicEntry>> = callbackFlow {
         val path = "users/$userId/comics"
         val registration = db.collection("users").document(userId)
             .collection("comics")
             .orderBy("updatedAt", Query.Direction.DESCENDING)
+            .limit(limit)
             .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
                 if (error != null) {
                     try {
@@ -626,7 +709,7 @@ class QuadrinheiroCloudRepository(
         awaitClose {
             registration.remove()
         }
-    }.conflate() // COLLECTION_SNAPSHOT_BACKGROUND_V15: retain the newest full collection snapshot.
+    }.conflate() // COLLECTION_SNAPSHOT_BACKGROUND_V15: retain the newest collection snapshot.
 
     suspend fun checkUsernameAvailability(
         rawHandle: String,

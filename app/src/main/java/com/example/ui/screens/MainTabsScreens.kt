@@ -565,7 +565,6 @@ private fun ComicGridCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .shadow(2.dp, RoundedCornerShape(cardCorner))
                 .clip(RoundedCornerShape(cardCorner))
         ) {
             BookCover(
@@ -597,9 +596,9 @@ private fun ComicGridCard(
                 }
             }
 
-            // COMIC_DERIVED_STATE_V17: remember expensive sequence inference per stable item key.
-            val issueNum = remember(comic.id, comic.issueNumber, comic.title) {
-                SeriesSequenceEngine.inferIssueNumber(comic)
+            // COMIC_DERIVED_STATE_V17: Fast-path issue number inference without redundant regex when already present
+            val issueNum = if (comic.issueNumber > 0) comic.issueNumber else remember(comic.id, comic.title) {
+                SeriesSequenceEngine.inferIssueNumber(comic.title)
             }
             if (issueNum > 0) {
                 Box(
@@ -701,7 +700,10 @@ fun ShelfLibraryTab(
     onChangeShelfSort: (String) -> Unit,
     onChangeShelfFilterQuery: (String) -> Unit,
     onGoToSearch: () -> Unit,
-    onSelectComic: (ComicEntry) -> Unit
+    onSelectComic: (ComicEntry) -> Unit,
+    hasMoreComics: Boolean = false,
+    isLoadingMoreComics: Boolean = false,
+    onLoadMoreComics: () -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -1017,7 +1019,7 @@ fun ShelfLibraryTab(
         } else if (shelfLayout == "grid") {
             items(
                 gridRows,
-                key = { row -> row.firstOrNull()?.id ?: row.hashCode() },
+                key = { row -> row.joinToString(separator = "_") { it.id } },
                 contentType = { "grid_row" }
             ) { rowItems ->
                 Row(
@@ -1324,6 +1326,41 @@ fun ShelfLibraryTab(
                     comic = comic,
                     onSelectComic = onSelectComic
                 )
+            }
+        }
+
+        if (hasMoreComics) {
+            item(key = "shelf-pagination-footer", contentType = "pagination_footer") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoadingMoreComics) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = s.accentColor,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(s.accentBg)
+                                .clickable { onLoadMoreComics() }
+                                .padding(horizontal = 18.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Carregar mais quadrinhos",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = s.accentText
+                            )
+                        }
+                    }
+                }
             }
         }
         } else {

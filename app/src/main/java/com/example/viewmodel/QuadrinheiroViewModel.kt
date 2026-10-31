@@ -16,6 +16,7 @@ import com.example.data.QuadrinheiroAuthManager
 import com.example.data.QuadrinheiroCloudRepository
 import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
+import com.google.firebase.firestore.DocumentSnapshot
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
 import com.example.model.AuthFeedbackBanner
@@ -195,6 +196,14 @@ class QuadrinheiroViewModel(
 
     private val _comics = MutableStateFlow(initial.comics)
     val comics: StateFlow<List<ComicEntry>> = _comics.asStateFlow()
+
+    private val _hasMoreCloudComics = MutableStateFlow(false)
+    val hasMoreCloudComics: StateFlow<Boolean> = _hasMoreCloudComics.asStateFlow()
+
+    private val _isLoadingMoreComics = MutableStateFlow(false)
+    val isLoadingMoreComics: StateFlow<Boolean> = _isLoadingMoreComics.asStateFlow()
+
+    private var lastComicsPageSnapshot: DocumentSnapshot? = null
 
     private val _profile = MutableStateFlow(initial.profile)
     val profile: StateFlow<ReaderProfile> = _profile.asStateFlow()
@@ -601,7 +610,27 @@ class QuadrinheiroViewModel(
         }
 
         cloudComicsJob = viewModelScope.launch(Dispatchers.IO) {
-            repo.observeUserComics(user.uid)
+            // 1. Carregamento imediato do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede)
+            val cachedComics = repo.fetchComicsFromCache(user.uid, limit = 40L)
+            if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
+                val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                    localComics = _comics.value,
+                    remoteComics = cachedComics
+                )
+                if (initialMerged != _comics.value) {
+                    _comics.value = initialMerged
+                }
+            }
+
+            // 2. Estabelece o cursor da primeira página para controle de paginação
+            val firstPage = repo.fetchComicsPage(user.uid, pageSize = 25L, startAfterDoc = null, preferCache = false).getOrNull()
+            if (firstPage != null) {
+                lastComicsPageSnapshot = firstPage.lastSnapshot
+                _hasMoreCloudComics.value = firstPage.hasMore
+            }
+
+            // 3. Listener em tempo real com limite para os 35 quadrinhos mais recentes (evita leituras excessivas)
+            repo.observeUserComics(user.uid, limit = 35L)
                 .catch { }
                 .collectLatest { remoteComics ->
                     if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
@@ -635,6 +664,45 @@ class QuadrinheiroViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    /**
+     * Carrega a próxima página de quadrinhos da nuvem utilizando paginação com cursor Firestore (startAfter).
+     * Reduz a quantidade de leituras no banco de dados e acelera a rolagem.
+     */
+    fun loadMoreCloudComics() {
+        val uid = activeCloudUid() ?: return
+        val repo = cloudRepo ?: return
+        if (isCurrentSessionGuest() || _isLoadingMoreComics.value || !_hasMoreCloudComics.value) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingMoreComics.value = true
+            try {
+                val result = repo.fetchComicsPage(
+                    userId = uid,
+                    pageSize = 20L,
+                    startAfterDoc = lastComicsPageSnapshot,
+                    preferCache = false
+                ).getOrNull()
+
+                if (result != null) {
+                    lastComicsPageSnapshot = result.lastSnapshot
+                    _hasMoreCloudComics.value = result.hasMore
+                    if (result.items.isNotEmpty()) {
+                        val (merged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                            localComics = _comics.value,
+                            remoteComics = result.items
+                        )
+                        if (merged != _comics.value) {
+                            _comics.value = merged
+                            storage.saveState(merged, _profile.value, _appSettings.value, uid)
+                        }
+                    }
+                }
+            } finally {
+                _isLoadingMoreComics.value = false
+            }
         }
     }
 

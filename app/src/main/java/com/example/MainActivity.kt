@@ -228,22 +228,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // HW_DISPLAY_MODE_V19: Maximize refresh rate (up to 120Hz) and lock window display mode
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            try {
-                val display = display
-                if (display != null) {
-                    val modes = display.supportedModes
-                    val maxMode = modes.maxByOrNull { it.refreshRate }
-                    if (maxMode != null && maxMode.refreshRate >= 90f) {
-                        window.attributes = window.attributes.apply {
-                            preferredDisplayModeId = maxMode.modeId
-                        }
-                    }
-                }
-            } catch (_: Throwable) {
-            }
-        }
+        // Thermal & display optimization: Let Android adaptively scale refresh rate (LTPO VRR)
+        // rather than forcing a 120Hz mode lock that overheats the battery and GPU.
 
         enableEdgeToEdge()
         setContent {
@@ -286,6 +272,8 @@ fun QuadrinheiroApp(
     val shelfLayout by viewModel.shelfLayout.collectAsState()
     val shelfSort by viewModel.shelfSort.collectAsState()
     val shelfFilterQuery by viewModel.shelfFilterQuery.collectAsState()
+    val hasMoreCloudComics by viewModel.hasMoreCloudComics.collectAsState()
+    val isLoadingMoreComics by viewModel.isLoadingMoreComics.collectAsState()
 
     val searchQuery by viewModel.searchQuery.collectAsState()
     val remoteResults by viewModel.remoteResults.collectAsState()
@@ -782,7 +770,10 @@ fun QuadrinheiroApp(
                                         onChangeShelfSort = viewModel::setShelfSort,
                                         onChangeShelfFilterQuery = viewModel::setShelfFilterQuery,
                                         onGoToSearch = { viewModel.switchMainTab("search") },
-                                        onSelectComic = { viewModel.selectComicForSheet(it) }
+                                        onSelectComic = { viewModel.selectComicForSheet(it) },
+                                        hasMoreComics = hasMoreCloudComics,
+                                        isLoadingMoreComics = isLoadingMoreComics,
+                                        onLoadMoreComics = viewModel::loadMoreCloudComics
                                     )
 
                                     "diary" -> DiaryChronologicalTab(
@@ -884,6 +875,7 @@ fun QuadrinheiroApp(
                         viewModel.switchMainTab(nextTab)
                     },
                     isTabBarCollapsed = isTabBarCollapsed,
+                    isScrolling = activeListState.isScrollInProgress,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .windowInsetsPadding(WindowInsets.navigationBars)
@@ -1151,6 +1143,7 @@ private fun IOS27BottomTabViewContainer(
     activeTab: String = "home",
     onSelectTab: (String) -> Unit = {},
     isTabBarCollapsed: Boolean = false,
+    isScrolling: Boolean = false,
     modifier: Modifier = Modifier,
     backdrop: Backdrop = rememberLayerBackdrop()
 ) {
@@ -1178,9 +1171,9 @@ private fun IOS27BottomTabViewContainer(
         Color(0xFF121212).copy(alpha = configuredGlassAlpha)
     }
     val configuredBlurRadius = if (settings.reduceTransparency) 20.dp else (8f * settings.glassBlurIntensity).coerceIn(2f, 28f).dp
-    val configuredRefractionMultiplier = if (!settings.reduceTransparency && settings.enableLensRefraction) settings.glassIntensity.coerceIn(0.2f, 2.5f) else 0f
-    val configuredChromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
-    val configuredDepthEffect = !settings.reduceTransparency && settings.edgeRefraction
+    val configuredRefractionMultiplier = if (!settings.reduceTransparency && settings.enableLensRefraction && !isScrolling) settings.glassIntensity.coerceIn(0.2f, 2.5f) else 0f
+    val configuredChromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration && !isScrolling
+    val configuredDepthEffect = !settings.reduceTransparency && settings.edgeRefraction && !isScrolling
 
     val baseHighlightAlpha = if (isLightTheme) 0.5f else 0.35f
     val effectiveGlassBlur = configuredBlurRadius.coerceIn(2f.dp, 24f.dp)

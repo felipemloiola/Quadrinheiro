@@ -838,6 +838,40 @@ fun Modifier.inputWellSurface(
         )
 }
 
+private val BookSpineGrooveBrush = Brush.horizontalGradient(
+    0.00f to Color.White.copy(alpha = 0.42f),
+    0.12f to Color.White.copy(alpha = 0.12f),
+    0.13f to Color.White.copy(alpha = 0.08f),
+    0.37f to Color.Black.copy(alpha = 0.18f),
+    0.38f to Color.Black.copy(alpha = 0.48f),
+    0.50f to Color.Black.copy(alpha = 0.28f),
+    0.51f to Color.White.copy(alpha = 0.34f),
+    0.70f to Color.White.copy(alpha = 0.05f),
+    1.00f to Color.Transparent
+)
+
+private val BookCoverFallbackBackgroundBrush = Brush.linearGradient(
+    colors = listOf(Color(0xFF262936), Color(0xFF15171F))
+)
+
+private val BookCoverFallbackSpineBrush = Brush.horizontalGradient(
+    colors = listOf(
+        Color.White.copy(alpha = 0.14f),
+        Color.Black.copy(alpha = 0.42f),
+        Color.White.copy(alpha = 0.10f)
+    )
+)
+
+private val BookCoverGlossBrush = Brush.linearGradient(
+    colors = listOf(
+        Color.White.copy(alpha = 0.10f),
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.20f)
+    ),
+    start = Offset(0f, 0f),
+    end = Offset(300f, 450f)
+)
+
 /**
  * 5. BookCover (Capa Editorial 2:3 com fallback tipográfico #1A1B20 e lombada 3D Apple Books).
  */
@@ -865,7 +899,7 @@ fun BookCover(
 
     Box(
         modifier = modifier
-            .shadow(10.dp, RoundedCornerShape(12.dp))
+            .shadow(3.dp, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF1A1B20))
             .border(0.5.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
@@ -875,25 +909,13 @@ fun BookCover(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF262936), Color(0xFF15171F))
-                        )
-                    )
+                    .background(BookCoverFallbackBackgroundBrush)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(12.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.14f),
-                                    Color.Black.copy(alpha = 0.42f),
-                                    Color.White.copy(alpha = 0.10f)
-                                )
-                            )
-                        )
+                        .background(BookCoverFallbackSpineBrush)
                 )
                 Column(
                     modifier = Modifier
@@ -953,7 +975,7 @@ fun BookCover(
                     .data(cleanSrc)
                     .size(240, 360)
                     .precision(coil.size.Precision.INEXACT)
-                    .crossfade(50)
+                    .crossfade(false)
                     .memoryCacheKey(cleanSrc)
                     .diskCacheKey(cleanSrc)
                     .memoryCachePolicy(CachePolicy.ENABLED)
@@ -973,62 +995,16 @@ fun BookCover(
             )
         }
 
-        // Authentic Apple Books 3D Hardcover Spine Hinge & Groove
+        // Authentic Apple Books 3D Hardcover Spine Hinge & Groove (single-pass GPU cached brush)
         if (spine3d) {
             Canvas(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(14.dp)
+                    .width(13.dp)
             ) {
-                val h = size.height
                 drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.42f),
-                            Color.White.copy(alpha = 0.12f)
-                        ),
-                        startX = 0f,
-                        endX = 1.6.dp.toPx()
-                    ),
-                    topLeft = Offset.Zero,
-                    size = Size(1.6.dp.toPx(), h)
-                )
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.08f),
-                            Color.Black.copy(alpha = 0.18f)
-                        ),
-                        startX = 1.6.dp.toPx(),
-                        endX = 5.2.dp.toPx()
-                    ),
-                    topLeft = Offset(1.6.dp.toPx(), 0f),
-                    size = Size(3.6.dp.toPx(), h)
-                )
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.48f),
-                            Color.Black.copy(alpha = 0.28f)
-                        ),
-                        startX = 5.2.dp.toPx(),
-                        endX = 7.0.dp.toPx()
-                    ),
-                    topLeft = Offset(5.2.dp.toPx(), 0f),
-                    size = Size(1.8.dp.toPx(), h)
-                )
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.34f),
-                            Color.White.copy(alpha = 0.05f),
-                            Color.Transparent
-                        ),
-                        startX = 7.0.dp.toPx(),
-                        endX = 13.dp.toPx()
-                    ),
-                    topLeft = Offset(7.0.dp.toPx(), 0f),
-                    size = Size(6.dp.toPx(), h)
+                    brush = BookSpineGrooveBrush,
+                    size = size
                 )
             }
         }
@@ -1036,17 +1012,7 @@ fun BookCover(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.10f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.20f)
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(300f, 450f)
-                    )
-                )
+                .background(BookCoverGlossBrush)
         )
 
         overlayContent()
