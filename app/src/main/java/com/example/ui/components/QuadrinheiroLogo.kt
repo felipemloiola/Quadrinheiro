@@ -23,14 +23,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.PlusJakartaSansFamily
-import com.example.ui.theme.SfProDisplayFontFamily
 
 /**
  * Primary = cores originais da marca (usar somente na tela de login).
@@ -39,9 +40,17 @@ import com.example.ui.theme.SfProDisplayFontFamily
 enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
 
 /**
+ * Família de fonte oficial extraída diretamente dos assets (SF Pro Display Bold)
+ * para renderizar a marca "Quadrinheiro" exatamente igual ao card de compartilhamento.
+ */
+val QuadrinheiroBrandFontFamily = FontFamily(
+    Font(R.font.sf_pro_display_bold, FontWeight.Bold)
+)
+
+/**
  * Tipografia oficial e padronizada da marca "Quadrinheiro",
  * COPIADA EXATAMENTE do estilo visual do Card de Compartilhamento Social Letterboxd
- * (SF Pro Display Black / Bold puro com tracking óptico ajustado).
+ * (SF Pro Display Bold com tracking de -0.02sp).
  */
 @Composable
 fun QuadrinheiroBrandText(
@@ -53,7 +62,7 @@ fun QuadrinheiroBrandText(
     Text(
         text = text,
         fontSize = fontSize,
-        fontFamily = SfProDisplayFontFamily,
+        fontFamily = QuadrinheiroBrandFontFamily,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.02).sp,
         color = color,
