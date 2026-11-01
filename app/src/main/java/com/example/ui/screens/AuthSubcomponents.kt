@@ -38,6 +38,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.sp
+import com.example.ui.components.QuadrinheiroBrandText
 import androidx.compose.ui.unit.dp
 import com.example.model.AuthFeedbackBanner
 import com.example.model.AuthFormState
@@ -76,7 +78,7 @@ fun AuthBrandHeader(isLinkingFromGuest: Boolean) {
     val theme = LocalIOS27Theme.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false, modifier = Modifier.size(76.dp))
-        Text("Quadrinheiro", style = MaterialTheme.typography.headlineSmall, color = theme.textPrimary)
+        QuadrinheiroBrandText(text = "Quadrinheiro", fontSize = 28.sp, color = theme.textPrimary)
         Text(
             if (isLinkingFromGuest) "Conecte sua conta" else "Seu universo de quadrinhos, organizado.",
             style = MaterialTheme.typography.bodySmall,

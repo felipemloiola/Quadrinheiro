@@ -29,11 +29,39 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.PlusJakartaSansFamily
 
+import androidx.compose.ui.unit.TextUnit
+import com.example.ui.theme.SfProDisplayFontFamily
+
 /**
  * Primary = cores originais da marca (usar somente na tela de login).
  * Badge/OnDark/OnLight = marca nas cores de destaque do tema atual.
  */
 enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
+
+/**
+ * Tipografia oficial e padronizada da marca "Quadrinheiro",
+ * idêntica ao estilo aprovado nos cards de compartilhamento social
+ * (SF Pro Display Black/ExtraBold com tracking óptico ajustado).
+ */
+@Composable
+fun QuadrinheiroBrandText(
+    text: String = "Quadrinheiro",
+    fontSize: TextUnit = 18.sp,
+    color: Color = LocalIOS27Theme.current.textPrimary,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        fontSize = fontSize,
+        fontFamily = SfProDisplayFontFamily,
+        fontWeight = FontWeight.Black,
+        letterSpacing = (-0.4).sp,
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+        modifier = modifier
+    )
+}
 
 @Composable
 // ADAPTIVE_LOGO_BADGE_V8: opt-in for Settings only.
@@ -116,7 +144,13 @@ fun QuadrinheiroLogo(
                     Icon(leadingIcon, contentDescription = null, tint = theme.textPrimary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                 }
-                if (titleVisible) Text("Quadrinheiro", fontFamily = PlusJakartaSansFamily, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = theme.textPrimary)
+                if (titleVisible) {
+                    QuadrinheiroBrandText(
+                        text = "Quadrinheiro",
+                        fontSize = 18.sp,
+                        color = theme.textPrimary
+                    )
+                }
             }
             if (!subtitle.isNullOrBlank()) Text(subtitle, fontFamily = PlusJakartaSansFamily, fontSize = 12.sp, color = theme.textSecondary)
         }

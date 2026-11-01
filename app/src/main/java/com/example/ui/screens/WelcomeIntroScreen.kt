@@ -297,9 +297,9 @@ fun WelcomeIntroScreen(
                         text = "Quadrinheiro",
                         fontSize = 34.sp,
                         lineHeight = 40.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Black,
                         fontFamily = SfProDisplayFontFamily,
-                        letterSpacing = 0.37.sp,
+                        letterSpacing = (-0.8).sp,
                         color = theme.textPrimary,
                         textAlign = TextAlign.Center
                     )

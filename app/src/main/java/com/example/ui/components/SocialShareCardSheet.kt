@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -117,13 +118,16 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import android.util.Base64
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
+import androidx.core.content.res.ResourcesCompat
 import coil.Coil
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.example.R
 import com.example.data.CuratedCatalog
 import com.example.model.AppSettings
 import com.example.model.AppleAvatarPreset
@@ -135,9 +139,11 @@ import com.example.ui.screens.computeReadingStatistics
 import com.example.ui.screens.rememberAppleFitnessPalette
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalAppleMaterials
+import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.PlusJakartaSansFamily
+import com.example.ui.theme.SfProDisplayFontFamily
 import com.example.ui.theme.SpaceGroteskTabularFamily
 import com.example.ui.theme.getIOS27ThemeColors
 import kotlinx.coroutines.Dispatchers
@@ -298,51 +304,37 @@ object SocialCardExporter {
         coverBitmap: Bitmap? = null,
         avatarBitmap: Bitmap? = null,
         capturedGraphicsBitmap: Bitmap? = null,
-        starColor: Color = Color(0xFFFFD60A)
+        starColor: Color = Color(0xFFFFD60A),
+        customBoldTypeface: Typeface? = null
     ): Bitmap {
         val targetW = aspectRatio.widthPx
         val targetH = aspectRatio.heightPx
 
         val output = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
         val canvas = AndroidCanvas(output)
+        val boldTypeface = customBoldTypeface ?: Typeface.create("sans-serif", Typeface.BOLD)
 
-        // 1. Fundo em Gradiente Vertical Estilo Letterboxd:
-        // Topo em tom ardósia/atmosférico derivado da capa -> Transição suave -> Preto profundo na metade inferior
-        val topAtmospheric = mixColors(Color(0xFF424E5D), auraColor, 0.34f)
-        val upperMidAtmospheric = mixColors(Color(0xFF232932), auraColor, 0.22f)
-        val lowerMidDark = Color(0xFF0D0F13)
-        val bottomPitchBlack = Color(0xFF050507)
+        // 1. Fundo em Gradiente Linear Vertical Puro Estilo Letterboxd:
+        // Topo em tom ardósia/atmosférico derivado da capa -> Transição linear suave -> Preto puro (#000000) na base
+        val topAtmospheric = mixColors(Color(0xFF4A5868), auraColor, 0.36f)
+        val midAtmospheric = mixColors(Color(0xFF252D36), auraColor, 0.20f)
+        val lowerDark = Color(0xFF0A0C0F)
+        val bottomPitchBlack = Color(0xFF000000)
 
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
                 0f, 0f, 0f, targetH.toFloat(),
                 intArrayOf(
                     topAtmospheric.toArgb(),
-                    upperMidAtmospheric.toArgb(),
-                    lowerMidDark.toArgb(),
+                    midAtmospheric.toArgb(),
+                    lowerDark.toArgb(),
                     bottomPitchBlack.toArgb()
                 ),
-                floatArrayOf(0f, 0.38f, 0.68f, 1f),
+                floatArrayOf(0f, 0.50f, 0.86f, 1f),
                 Shader.TileMode.CLAMP
             )
         }
         canvas.drawRect(0f, 0f, targetW.toFloat(), targetH.toFloat(), bgPaint)
-
-        // Brilho atmosférico suave atrás da capa (estilo Letterboxd Stories)
-        val topRadialPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = RadialGradient(
-                targetW * 0.5f,
-                targetH * 0.28f,
-                targetW * 0.72f,
-                intArrayOf(
-                    mixColors(Color(0xFF536273), auraColor, 0.38f).copy(alpha = 0.38f).toArgb(),
-                    android.graphics.Color.TRANSPARENT
-                ),
-                floatArrayOf(0f, 1f),
-                Shader.TileMode.CLAMP
-            )
-        }
-        canvas.drawRect(0f, 0f, targetW.toFloat(), targetH.toFloat(), topRadialPaint)
 
         when (cardType) {
             SocialShareCardType.COMPLETED_READING -> drawCompletedReadingCanvas(
@@ -355,7 +347,8 @@ object SocialCardExporter {
                 auraColor = auraColor,
                 coverBitmap = coverBitmap,
                 avatarBitmap = avatarBitmap,
-                starColor = starColor
+                starColor = starColor,
+                boldTypeface = boldTypeface
             )
 
             SocialShareCardType.EPIC_MOMENT -> drawEpicMomentCanvas(
@@ -371,7 +364,8 @@ object SocialCardExporter {
                 auraColor = auraColor,
                 coverBitmap = coverBitmap,
                 avatarBitmap = avatarBitmap,
-                starColor = starColor
+                starColor = starColor,
+                boldTypeface = boldTypeface
             )
 
             SocialShareCardType.GOAL_SUMMARY -> drawGoalSummaryCanvas(
@@ -386,7 +380,8 @@ object SocialCardExporter {
                 exerciseColor = secondaryRingColor,
                 standColor = thirdRingColor,
                 avatarBitmap = avatarBitmap,
-                starColor = starColor
+                starColor = starColor,
+                boldTypeface = boldTypeface
             )
         }
 
@@ -403,17 +398,18 @@ object SocialCardExporter {
         auraColor: Color,
         coverBitmap: Bitmap?,
         avatarBitmap: Bitmap?,
-        starColor: Color
+        starColor: Color,
+        boldTypeface: Typeface
     ) {
         val title = comic?.displayTitle?.ifBlank { "Batman: Ano Um" } ?: "Batman: Ano Um"
         val publisher = comic?.publisher?.ifBlank { "DC Comics" } ?: "DC Comics"
         val rating = comic?.rating?.takeIf { it > 0f } ?: 5.0f
 
-        // Pôster / Capa centralizada em grande destaque (proporção 2:3 idêntica ao Letterboxd)
-        val coverH = if (isStories) 960f else 540f
-        val coverW = coverH * (2f / 3f)
+        // Pôster / Capa centralizada em grande destaque com as medidas exatas do Letterboxd (708x1062 em 1080x1920)
+        val coverW = if (isStories) 708f else 392f
+        val coverH = coverW * 1.5f
         val coverLeft = (w - coverW) / 2f
-        val coverTop = if (isStories) 310f else 140f
+        val coverTop = if (isStories) 316f else 110f
         val coverRect = RectF(coverLeft, coverTop, coverLeft + coverW, coverTop + coverH)
 
         drawLetterboxdPosterCoverOnCanvas(
@@ -422,61 +418,69 @@ object SocialCardExporter {
             coverBitmap = coverBitmap,
             title = title,
             publisher = publisher,
-            auraColor = auraColor
+            auraColor = auraColor,
+            cornerRadius = if (isStories) 22f else 14f
         )
 
-        // Avatar circular sobreposto na borda superior central da capa (micro-avatar sem contorno, idêntico ao Letterboxd)
-        val avatarRadius = if (isStories) 26f else 20f
+        // Avatar circular sobreposto na borda superior central da capa:
+        // Diâmetro 121f (radius = 60.5f) com centro 28f acima da borda superior do pôster (~73% acima, ~27% sobreposto), SEM contorno
+        val avatarRadius = if (isStories) 60.5f else 38f
+        val avatarCenterY = coverRect.top - (if (isStories) 28f else 18f)
         drawOverlappingCircularAvatarOnCanvas(
             canvas = canvas,
             cx = w / 2f,
-            cy = coverRect.top,
+            cy = avatarCenterY,
             radius = avatarRadius,
             profile = profile,
             avatarBitmap = avatarBitmap,
-            accentColor = auraColor
+            accentColor = auraColor,
+            boldTypeface = boldTypeface
         )
 
-        // Título da Obra abaixo da capa (Branco Bold centralizado)
+        // Título da Obra abaixo da capa (SF Pro Display Heavy/ExtraBold centralizado, espaçamento idêntico ao Letterboxd)
         val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
-            textSize = if (isStories) 48f else 36f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            letterSpacing = -0.02f
+            textSize = if (isStories) 56f else 38f
+            typeface = boldTypeface
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = if (isStories) 1.1f else 0.75f
+            letterSpacing = -0.025f
         }
-        val titleMaxW = (w - 200).coerceAtLeast(300)
+        val titleMaxW = (w - 140).coerceAtLeast(300)
         val titleLayout = StaticLayout.Builder
             .obtain(title, 0, title.length, titlePaint, titleMaxW)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setMaxLines(2)
+            .setLineSpacing(0f, 0.94f)
             .setIncludePad(false)
             .build()
 
-        val titleTopY = coverRect.bottom + (if (isStories) 36f else 24f)
+        val titleTopY = coverRect.bottom + (if (isStories) 63f else 36f)
         canvas.save()
         canvas.translate((w - titleMaxW) / 2f, titleTopY)
         titleLayout.draw(canvas)
         canvas.restore()
 
-        // Linha de Estrelas na cor configurada pelo usuário no app (espaçamento compacto)
-        val starsCenterY = titleTopY + titleLayout.height + (if (isStories) 22f else 16f)
+        // Linha de Estrelas na cor configurada pelo usuário no app (espaçamento e tamanho exatos do Letterboxd)
+        val starsCenterY = titleTopY + titleLayout.height + (if (isStories) 62f else 36f)
         drawLetterboxdStarRowOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             cy = starsCenterY,
             rating = rating,
             starColor = starColor,
-            starRadius = if (isStories) 13f else 10f,
-            starSpacing = if (isStories) 32f else 25f
+            starRadius = if (isStories) 14.5f else 10.5f,
+            starSpacing = if (isStories) 32.25f else 24f
         )
 
-        // Assinatura: "──── ON ────" + Logo Quadrinheiro + "Quadrinheiro" (sem fundo quadrado)
-        val brandTopY = starsCenterY + (if (isStories) 30f else 22f)
+        // Assinatura: "────── ON ──────" + Logo Quadrinheiro + "Quadrinheiro" (alinhados exatamente à mesma largura)
+        val brandTopY = starsCenterY + (if (isStories) 76f else 46f)
         drawLetterboxdBrandLockupOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             topY = brandTopY,
-            isStories = isStories
+            isStories = isStories,
+            boldTypeface = boldTypeface
         )
     }
 
@@ -493,9 +497,9 @@ object SocialCardExporter {
         auraColor: Color,
         coverBitmap: Bitmap?,
         avatarBitmap: Bitmap?,
-        starColor: Color
+        starColor: Color,
+        boldTypeface: Typeface
     ) {
-        val cleanTag = momentTag.ifBlank { "⚡ Momento Épico" }
         val cleanPage = if (momentPage > 0) momentPage else (comic?.currentPage?.takeIf { it > 0 } ?: 84)
         val cleanQuote = momentNote.trim().ifBlank {
             comic?.moments?.firstOrNull()?.note?.ifBlank { null }
@@ -506,10 +510,10 @@ object SocialCardExporter {
         val publisher = comic?.publisher?.ifBlank { "DC / Vertigo" } ?: "DC / Vertigo"
         val rating = comic?.rating?.takeIf { it > 0f } ?: 5.0f
 
-        val coverH = if (isStories) 520f else 300f
+        val coverH = if (isStories) 690f else 340f
         val coverW = coverH * (2f / 3f)
         val coverLeft = (w - coverW) / 2f
-        val coverTop = if (isStories) 240f else 120f
+        val coverTop = if (isStories) 280f else 105f
         val coverRect = RectF(coverLeft, coverTop, coverLeft + coverW, coverTop + coverH)
 
         drawLetterboxdPosterCoverOnCanvas(
@@ -518,76 +522,83 @@ object SocialCardExporter {
             coverBitmap = coverBitmap,
             title = title,
             publisher = publisher,
-            auraColor = auraColor
+            auraColor = auraColor,
+            cornerRadius = if (isStories) 22f else 14f
         )
 
+        val avatarRadius = if (isStories) 54f else 34f
         drawOverlappingCircularAvatarOnCanvas(
             canvas = canvas,
             cx = w / 2f,
-            cy = coverRect.top,
-            radius = if (isStories) 38f else 28f,
+            cy = coverRect.top - (if (isStories) 25f else 16f),
+            radius = avatarRadius,
             profile = profile,
             avatarBitmap = avatarBitmap,
-            accentColor = auraColor
+            accentColor = auraColor,
+            boldTypeface = boldTypeface
         )
 
         // Citação em destaque abaixo da capa
         val quotePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
-            textSize = if (isStories) 40f else 28f
+            textSize = if (isStories) 40f else 26f
             typeface = Typeface.create(Typeface.SERIF, Typeface.ITALIC)
         }
         val formattedQuote = "“$cleanQuote”"
-        val maxQuoteW = (w - 200).coerceAtLeast(300)
+        val maxQuoteW = (w - 180).coerceAtLeast(300)
         val quoteLayout = StaticLayout.Builder
             .obtain(formattedQuote, 0, formattedQuote.length, quotePaint, maxQuoteW)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .setMaxLines(if (isStories) 5 else 3)
-            .setLineSpacing(6f, 1.12f)
+            .setMaxLines(if (isStories) 4 else 3)
+            .setLineSpacing(4f, 1.08f)
             .build()
 
-        val quoteTopY = coverRect.bottom + (if (isStories) 46f else 26f)
+        val quoteTopY = coverRect.bottom + (if (isStories) 54f else 28f)
         canvas.save()
         canvas.translate((w - maxQuoteW) / 2f, quoteTopY)
         quoteLayout.draw(canvas)
         canvas.restore()
 
-        val titleY = quoteTopY + quoteLayout.height + (if (isStories) 42f else 26f)
+        val titleY = quoteTopY + quoteLayout.height + (if (isStories) 54f else 32f)
         val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
-            textSize = if (isStories) 40f else 30f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            textSize = if (isStories) 48f else 32f
+            typeface = boldTypeface
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = if (isStories) 0.95f else 0.65f
+            letterSpacing = -0.025f
             textAlign = Paint.Align.CENTER
         }
-        val truncTitle = if (title.length > 32) title.take(31) + "…" else title
+        val truncTitle = if (title.length > 34) title.take(33) + "…" else title
         canvas.drawText(truncTitle, w / 2f, titleY, titlePaint)
 
         val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.argb(180, 220, 225, 235)
-            textSize = if (isStories) 25f else 20f
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textSize = if (isStories) 26f else 19f
+            typeface = boldTypeface
             textAlign = Paint.Align.CENTER
         }
-        val metaY = titleY + (if (isStories) 36f else 26f)
-        canvas.drawText("$cleanTag • Página $cleanPage", w / 2f, metaY, metaPaint)
+        val metaY = titleY + (if (isStories) 40f else 26f)
+        canvas.drawText("Pág. $cleanPage", w / 2f, metaY, metaPaint)
 
-        val starsY = metaY + (if (isStories) 38f else 26f)
+        val starsY = metaY + (if (isStories) 50f else 30f)
         drawLetterboxdStarRowOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             cy = starsY,
             rating = rating,
             starColor = starColor,
-            starRadius = if (isStories) 14f else 11f,
-            starSpacing = if (isStories) 34f else 27f
+            starRadius = if (isStories) 14.5f else 10.5f,
+            starSpacing = if (isStories) 32.25f else 24f
         )
 
-        val brandTopY = starsY + (if (isStories) 50f else 34f)
+        val brandTopY = starsY + (if (isStories) 72f else 42f)
         drawLetterboxdBrandLockupOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             topY = brandTopY,
-            isStories = isStories
+            isStories = isStories,
+            boldTypeface = boldTypeface
         )
     }
 
@@ -603,7 +614,8 @@ object SocialCardExporter {
         exerciseColor: Color,
         standColor: Color,
         avatarBitmap: Bitmap?,
-        starColor: Color
+        starColor: Color,
+        boldTypeface: Typeface
     ) {
         val stats = computeReadingStatistics(
             comics = comics,
@@ -622,9 +634,9 @@ object SocialCardExporter {
         val thirdProgress = (stats.activeMonthsCount.toFloat() / 12f).coerceIn(0f, 1f)
         val pct = (outerProgress * 100f).roundToInt().coerceIn(0, 999)
 
-        val ringDiameter = if (isStories) 520f else 330f
+        val ringDiameter = if (isStories) 560f else 340f
         val ringCx = w / 2f
-        val ringCy = if (isStories) 600f else 350f
+        val ringCy = if (isStories) 680f else 355f
         val strokeW = ringDiameter * 0.13f
         val gap = strokeW * 0.11f
 
@@ -658,27 +670,33 @@ object SocialCardExporter {
         drawOverlappingCircularAvatarOnCanvas(
             canvas = canvas,
             cx = w / 2f,
-            cy = ringCy - ringDiameter / 2f - (if (isStories) 36f else 24f),
-            radius = if (isStories) 40f else 30f,
+            cy = ringCy - ringDiameter / 2f - (if (isStories) 76f else 48f),
+            radius = if (isStories) 56f else 36f,
             profile = profile,
             avatarBitmap = avatarBitmap,
-            accentColor = moveColor
+            accentColor = moveColor,
+            boldTypeface = boldTypeface
         )
 
         val centerPctPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
-            textSize = if (isStories) 64f else 44f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            textSize = if (isStories) 68f else 44f
+            typeface = boldTypeface
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = if (isStories) 1.1f else 0.7f
             textAlign = Paint.Align.CENTER
         }
         val pctOffsetY = (centerPctPaint.descent() + centerPctPaint.ascent()) / 2f
         canvas.drawText("$pct%", ringCx, ringCy - pctOffsetY, centerPctPaint)
 
-        val metricsTopY = ringCy + ringDiameter / 2f + (if (isStories) 78f else 48f)
+        val metricsTopY = ringCy + ringDiameter / 2f + (if (isStories) 94f else 54f)
         val mainStatPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
-            textSize = if (isStories) 50f else 36f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            textSize = if (isStories) 54f else 36f
+            typeface = boldTypeface
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = if (isStories) 1.05f else 0.7f
+            letterSpacing = -0.025f
             textAlign = Paint.Align.CENTER
         }
         val pagesCount = if (isMonthly) stats.currentMonthPages else stats.totalPagesRead
@@ -686,8 +704,8 @@ object SocialCardExporter {
 
         val subStatPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.argb(195, 220, 225, 235)
-            textSize = if (isStories) 28f else 22f
-            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textSize = if (isStories) 30f else 22f
+            typeface = boldTypeface
             textAlign = Paint.Align.CENTER
         }
         val worksSubtitle = if (isMonthly) {
@@ -695,31 +713,32 @@ object SocialCardExporter {
         } else {
             "${stats.readComicsCount} de ${stats.yearlyGoal} quadrinhos no ano"
         }
-        val subY = metricsTopY + (if (isStories) 46f else 32f)
+        val subY = metricsTopY + (if (isStories) 50f else 32f)
         canvas.drawText(worksSubtitle, w / 2f, subY, subStatPaint)
 
-        val starsY = subY + (if (isStories) 40f else 28f)
+        val starsY = subY + (if (isStories) 56f else 34f)
         drawLetterboxdStarRowOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             cy = starsY,
             rating = 5.0f,
             starColor = starColor,
-            starRadius = if (isStories) 14f else 11f,
-            starSpacing = if (isStories) 34f else 27f
+            starRadius = if (isStories) 14.5f else 10.5f,
+            starSpacing = if (isStories) 32.25f else 24f
         )
 
-        val brandTopY = starsY + (if (isStories) 52f else 36f)
+        val brandTopY = starsY + (if (isStories) 76f else 44f)
         drawLetterboxdBrandLockupOnCanvas(
             canvas = canvas,
             cx = w / 2f,
             topY = brandTopY,
-            isStories = isStories
+            isStories = isStories,
+            boldTypeface = boldTypeface
         )
     }
 
     /**
-     * Desenha o pôster / capa no estilo Letterboxd (cantos arredondados sutis de 10f, sombra natural e borda fina).
+     * Desenha o pôster / capa no estilo Letterboxd (cantos arredondados de 22f em 1080p, sombra difusa natural e sem borda branca).
      */
     private fun drawLetterboxdPosterCoverOnCanvas(
         canvas: AndroidCanvas,
@@ -727,15 +746,14 @@ object SocialCardExporter {
         coverBitmap: Bitmap?,
         title: String,
         publisher: String,
-        auraColor: Color
+        auraColor: Color,
+        cornerRadius: Float = 22f
     ) {
-        val cornerRadius = 10f
-
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(135, 0, 0, 0)
-            maskFilter = BlurMaskFilter(24f, BlurMaskFilter.Blur.NORMAL)
+            color = android.graphics.Color.argb(125, 0, 0, 0)
+            maskFilter = BlurMaskFilter(32f, BlurMaskFilter.Blur.NORMAL)
         }
-        val shadowRect = RectF(rect.left + 2f, rect.top + 8f, rect.right - 2f, rect.bottom + 16f)
+        val shadowRect = RectF(rect.left - 4f, rect.top + 6f, rect.right + 4f, rect.bottom + 14f)
         canvas.drawRoundRect(shadowRect, cornerRadius, cornerRadius, shadowPaint)
 
         val clipPath = AndroidPath().apply {
@@ -781,14 +799,6 @@ object SocialCardExporter {
             canvas.drawText(title.take(18), rect.centerX(), rect.centerY(), tPaint)
         }
         canvas.restore()
-
-        // Borda sutil estilo pôster Letterboxd
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 1.5f
-            color = android.graphics.Color.argb(32, 255, 255, 255)
-        }
-        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, borderPaint)
     }
 
     /**
@@ -802,11 +812,12 @@ object SocialCardExporter {
         radius: Float,
         profile: ReaderProfile,
         avatarBitmap: Bitmap?,
-        accentColor: Color
+        accentColor: Color,
+        boldTypeface: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
     ) {
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(120, 0, 0, 0)
-            maskFilter = BlurMaskFilter(14f, BlurMaskFilter.Blur.NORMAL)
+            color = android.graphics.Color.argb(115, 0, 0, 0)
+            maskFilter = BlurMaskFilter(16f, BlurMaskFilter.Blur.NORMAL)
         }
         canvas.drawCircle(cx, cy + 3f, radius, shadowPaint)
 
@@ -841,15 +852,14 @@ object SocialCardExporter {
             val initial = (profile.name.trim().firstOrNull()?.uppercaseChar() ?: 'F').toString()
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = android.graphics.Color.WHITE
-                textSize = radius * 0.92f
-                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                textSize = radius * 0.90f
+                typeface = boldTypeface
                 textAlign = Paint.Align.CENTER
             }
             val textY = cy - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(initial, cx, textY, textPaint)
         }
         canvas.restore()
-        // SEM borda / ringPaint ao redor da foto
     }
 
     /**
@@ -881,7 +891,7 @@ object SocialCardExporter {
         for (i in 0 until count) {
             val starCx = startX + i * starSpacing
             val isHalfStar = hasHalf && i == count - 1 && i >= fullStars
-            val path = createFivePointStarPath(starCx, cy, starRadius, starRadius * 0.44f)
+            val path = createFivePointStarPath(starCx, cy, starRadius, starRadius * 0.42f)
             if (isHalfStar) {
                 canvas.save()
                 canvas.clipRect(starCx - starRadius, cy - starRadius, starCx, cy + starRadius)
@@ -926,7 +936,7 @@ object SocialCardExporter {
     ) {
         val glyphW = 60.7f
         val glyphH = 57.4f
-        val scale = (size / maxOf(glyphW, glyphH)) * 0.95f
+        val scale = (size / maxOf(glyphW, glyphH)) * 0.96f
         val offsetX = left - 25.0f * scale + (size - glyphW * scale) / 2f
         val offsetY = top - 26.3f * scale + (size - glyphH * scale) / 2f
 
@@ -1004,52 +1014,57 @@ object SocialCardExporter {
 
     /**
      * Desenha a assinatura inferior idêntica ao Letterboxd:
-     * Linha 1: ────── ON ──────
+     * Linha 1: ────── ON ────── (alinhada exatamente à largura total da assinatura abaixo)
      * Linha 2: [Logo Quadrinheiro sem fundo] Quadrinheiro
      */
     private fun drawLetterboxdBrandLockupOnCanvas(
         canvas: AndroidCanvas,
         cx: Float,
         topY: Float,
-        isStories: Boolean
+        isStories: Boolean,
+        boldTypeface: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
     ) {
+        // Primeiro mede a Linha 2 para que as linhas de "────── ON ──────" tenham exatamente a mesma largura total!
+        val brandTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = if (isStories) 44f else 30f
+            typeface = boldTypeface
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = if (isStories) 0.9f else 0.6f
+            textAlign = Paint.Align.LEFT
+            letterSpacing = -0.03f
+        }
+        val brandName = "Quadrinheiro"
+        val brandTextW = brandTextPaint.measureText(brandName)
+
+        val logoSize = if (isStories) 38f else 26f
+        val logoToTextGap = if (isStories) 12f else 8f
+        val totalLockupW = logoSize + logoToTextGap + brandTextW
+        val startX = cx - totalLockupW / 2f
+        val endX = cx + totalLockupW / 2f
+
+        // Linha 1: ────── ON ──────
         val onTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(135, 255, 255, 255)
-            textSize = if (isStories) 20f else 16f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            color = android.graphics.Color.argb(165, 255, 255, 255)
+            textSize = if (isStories) 24f else 17f
+            typeface = boldTypeface
             textAlign = Paint.Align.CENTER
-            letterSpacing = 0.14f
+            letterSpacing = 0.08f
         }
         val onTextY = topY - (onTextPaint.descent() + onTextPaint.ascent()) / 2f
         canvas.drawText("ON", cx, onTextY, onTextPaint)
 
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(55, 255, 255, 255)
-            strokeWidth = 2f
+            color = android.graphics.Color.argb(115, 255, 255, 255)
+            strokeWidth = if (isStories) 2.4f else 1.8f
             style = Paint.Style.STROKE
         }
-        val gapFromText = if (isStories) 28f else 20f
-        val lineW = if (isStories) 70f else 50f
-        canvas.drawLine(cx - gapFromText - lineW, topY, cx - gapFromText, topY, linePaint)
-        canvas.drawLine(cx + gapFromText, topY, cx + gapFromText + lineW, topY, linePaint)
+        val gapFromText = if (isStories) 30f else 22f
+        canvas.drawLine(startX, topY, cx - gapFromText, topY, linePaint)
+        canvas.drawLine(cx + gapFromText, topY, endX, topY, linePaint)
 
         // Linha 2: Logo da marca (apenas a logo sem fundo quadrado) + "Quadrinheiro"
-        val brandRowCy = topY + (if (isStories) 36f else 26f)
-        val brandTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textSize = if (isStories) 32f else 24f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            textAlign = Paint.Align.LEFT
-            letterSpacing = -0.02f
-        }
-        val brandName = "Quadrinheiro"
-        val brandTextW = brandTextPaint.measureText(brandName)
-
-        val logoSize = if (isStories) 32f else 24f
-        val logoToTextGap = if (isStories) 10f else 7f
-        val totalLockupW = logoSize + logoToTextGap + brandTextW
-        val startX = cx - totalLockupW / 2f
-
+        val brandRowCy = topY + (if (isStories) 50f else 34f)
         drawQuadrinheiroLogoMarkOnCanvas(
             canvas = canvas,
             left = startX,
@@ -1188,6 +1203,8 @@ fun SocialShareCardSheetModal(
     val scope = rememberCoroutineScope()
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
+    val appSettings = LocalAppSettings.current
+    val effectiveStarColor = if (appSettings.shareStarsMatchTheme) s.accentColor else Color(0xFFFFD60A)
     val fitnessPalette = rememberAppleFitnessPalette()
 
     // Se o request veio sem uma HQ específica (ex.: aberto a partir de Estatísticas), usa a última HQ lida ou em leitura
@@ -1325,6 +1342,10 @@ fun SocialShareCardSheetModal(
             cardGraphicsLayer.toImageBitmap().asAndroidBitmap()
         }.getOrNull()
 
+        val sfBoldTypeface = runCatching {
+            ResourcesCompat.getFont(context, R.font.sf_pro_display_bold)
+        }.getOrNull()
+
         return withContext(Dispatchers.Default) {
             SocialCardExporter.renderHighResolutionCardBitmap(
                 cardType = selectedCardType,
@@ -1342,7 +1363,8 @@ fun SocialShareCardSheetModal(
                 coverBitmap = loadedCoverBitmap,
                 avatarBitmap = loadedAvatarBitmap,
                 capturedGraphicsBitmap = capturedComposeBmp,
-                starColor = s.starColor
+                starColor = effectiveStarColor,
+                customBoldTypeface = sfBoldTypeface
             )
         }
     }
@@ -1508,7 +1530,7 @@ fun SocialShareCardSheetModal(
                         auraColor = auraColor,
                         secondaryRingColor = fitnessPalette.exerciseRingColor,
                         thirdRingColor = fitnessPalette.standRingColor,
-                        starColor = s.starColor
+                        starColor = effectiveStarColor
                     )
                 }
 
@@ -1775,60 +1797,44 @@ private fun SocialShareCardLiveArtwork(
     auraColor: Color,
     secondaryRingColor: Color,
     thirdRingColor: Color,
-    starColor: Color = LocalAppleMaterials.current.scheme.starColor
+    starColor: Color = if (LocalAppSettings.current.shareStarsMatchTheme) LocalAppleMaterials.current.scheme.accentColor else Color(0xFFFFD60A)
 ) {
     val isStories = aspectRatio == SocialShareAspectRatio.STORIES_9_16
 
     val topAtmospheric = remember(auraColor) {
-        SocialCardExporter.mixColors(Color(0xFF424E5D), auraColor, 0.34f)
+        SocialCardExporter.mixColors(Color(0xFF4A5868), auraColor, 0.36f)
     }
-    val upperMidAtmospheric = remember(auraColor) {
-        SocialCardExporter.mixColors(Color(0xFF232932), auraColor, 0.22f)
-    }
-    val radialHighlight = remember(auraColor) {
-        SocialCardExporter.mixColors(Color(0xFF536273), auraColor, 0.38f)
+    val midAtmospheric = remember(auraColor) {
+        SocialCardExporter.mixColors(Color(0xFF252D36), auraColor, 0.20f)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF050507)),
-        contentAlignment = Alignment.Center
+            .background(Color.Black),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // 1. Gradiente Vertical Full-Bleed estilo Letterboxd (Topo atmosférico -> Preto profundo na metade inferior)
+        // 1. Gradiente Linear Vertical Puro estilo Letterboxd (Topo atmosférico -> Preto puro #000000 na base)
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.verticalGradient(
                     colorStops = arrayOf(
                         0.00f to topAtmospheric,
-                        0.38f to upperMidAtmospheric,
-                        0.68f to Color(0xFF0D0F13),
-                        1.00f to Color(0xFF050507)
+                        0.50f to midAtmospheric,
+                        0.86f to Color(0xFF0A0C0F),
+                        1.00f to Color.Black
                     )
-                )
-            )
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        radialHighlight.copy(alpha = 0.36f),
-                        Color.Transparent
-                    ),
-                    center = Offset(size.width * 0.5f, size.height * 0.28f),
-                    radius = size.maxDimension * 0.65f
                 )
             )
         }
 
-        // 2. Conteúdo Centralizado estilo Letterboxd (sem moldura retangular interna)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    horizontal = if (isStories) 20.dp else 16.dp,
-                    vertical = if (isStories) 20.dp else 12.dp
-                ),
-            contentAlignment = Alignment.Center
+        // 2. Conteúdo escalado proporcionalmente à grade 1080x1920 / 1080x1080 do Letterboxd
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
+            val u = maxWidth / 1080f
+
             when (cardType) {
                 SocialShareCardType.COMPLETED_READING -> {
                     CompletedReadingCardContent(
@@ -1837,7 +1843,8 @@ private fun SocialShareCardLiveArtwork(
                         avatarBitmap = avatarBitmap,
                         isStories = isStories,
                         auraColor = auraColor,
-                        starColor = starColor
+                        starColor = starColor,
+                        u = u
                     )
                 }
 
@@ -1851,7 +1858,8 @@ private fun SocialShareCardLiveArtwork(
                         momentPage = momentPage,
                         isStories = isStories,
                         auraColor = auraColor,
-                        starColor = starColor
+                        starColor = starColor,
+                        u = u
                     )
                 }
 
@@ -1865,7 +1873,8 @@ private fun SocialShareCardLiveArtwork(
                         moveColor = auraColor,
                         exerciseColor = secondaryRingColor,
                         standColor = thirdRingColor,
-                        starColor = starColor
+                        starColor = starColor,
+                        u = u
                     )
                 }
             }
@@ -1874,7 +1883,7 @@ private fun SocialShareCardLiveArtwork(
 }
 
 /**
- * MODELO A: Card "Leitura Concluída" (Idêntico ao Letterboxd Stories / Feed)
+ * MODELO A: Card "Leitura Concluída" (100% idêntico ao Letterboxd Stories / Feed na escala `u = maxWidth / 1080f`)
  */
 @Composable
 private fun CompletedReadingCardContent(
@@ -1883,7 +1892,8 @@ private fun CompletedReadingCardContent(
     avatarBitmap: Bitmap?,
     isStories: Boolean,
     auraColor: Color,
-    starColor: Color
+    starColor: Color,
+    u: androidx.compose.ui.unit.Dp
 ) {
     val title = comic?.displayTitle?.ifBlank { "Batman: Ano Um" } ?: "Batman: Ano Um"
     val authors = comic?.authors?.ifBlank { "Frank Miller & David Mazzucchelli" } ?: "Frank Miller & David Mazzucchelli"
@@ -1891,32 +1901,37 @@ private fun CompletedReadingCardContent(
     val releaseYear = comic?.releaseYear?.takeIf { it > 0 } ?: 2026
     val rating = comic?.rating?.takeIf { it > 0f } ?: 5.0f
 
-    // Micro-avatar sobreposto autêntico ao Letterboxd (~20dp em Stories / 16dp no feed, sem contorno)
-    val avatarSize = if (isStories) 20.dp else 16.dp
+    // Medidas exatas do Letterboxd na grade 1080x1920:
+    // - Pôster: 708 x 1062, top = 316, cornerRadius = 22
+    // - Avatar: diâmetro = 121 (radius = 60.5), centro em coverTop - 28 (~73% acima da capa, ~27% sobreposto), sem contorno
+    val coverW = u * (if (isStories) 708f else 392f)
+    val coverH = coverW * 1.5f
+    val coverTop = u * (if (isStories) 316f else 110f)
+    val cornerRadius = u * (if (isStories) 22f else 14f)
+    val avatarDiameter = u * (if (isStories) 121f else 76f)
+    val avatarTopOffset = u * (if (isStories) (60.5f + 28f) else (38f + 18f))
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Espaço superior para acomodar a metade superior do avatar sobreposto
-        Spacer(modifier = Modifier.height(avatarSize / 2))
+        Spacer(modifier = Modifier.height(coverTop))
 
-        // Pôster 2:3 com cantos sutis de 4dp, sombra suave realista e micro-avatar centralizado no topo
+        // Pôster 2:3 com cantos arredondados de 22f, sombra difusa natural e foto de perfil sobreposta no topo
         Box(
             contentAlignment = Alignment.TopCenter
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(if (isStories) 0.64f else 0.56f)
-                    .aspectRatio(2f / 3f)
+                    .width(coverW)
+                    .height(coverH)
                     .shadow(
-                        elevation = 12.dp,
-                        shape = RoundedCornerShape(4.dp),
-                        spotColor = Color.Black.copy(alpha = 0.55f)
+                        elevation = u * 28f,
+                        shape = RoundedCornerShape(cornerRadius),
+                        ambientColor = Color.Black.copy(alpha = 0.65f),
+                        spotColor = Color.Black.copy(alpha = 0.65f)
                     )
-                    .clip(RoundedCornerShape(4.dp))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(cornerRadius))
             ) {
                 BookCover(
                     src = comic?.coverUrl.orEmpty(),
@@ -1929,54 +1944,62 @@ private fun CompletedReadingCardContent(
                 )
             }
 
-            // Avatar circular do usuário sobreposto na borda superior central da capa (sem borda/anel)
+            // Avatar circular do usuário sobreposto na borda superior central da capa (SEM borda/contorno)
             LetterboxdOverlappingAvatar(
                 profile = profile,
                 avatarBitmap = avatarBitmap,
                 accentColor = auraColor,
-                sizeDp = avatarSize,
+                sizeDp = avatarDiameter,
                 modifier = Modifier
-                    .offset(y = -(avatarSize / 2))
+                    .offset(y = -avatarTopOffset)
                     .zIndex(2f)
             )
         }
 
-        Spacer(modifier = Modifier.height(if (isStories) 10.dp else 7.dp))
+        // Espaço entre a base da capa e o título (74f cap-top em 1080p)
+        Spacer(modifier = Modifier.height(u * (if (isStories) 66f else 36f)))
 
-        // Título em branco bold marcante com espaçamento apertado estilo Apple/Letterboxd
+        // Título em branco ExtraBold/Black marcante com espaçamento de linha coeso
+        val titleSp = (u.value * (if (isStories) 56f else 38f)).sp
+        val titleLineHeightSp = (u.value * (if (isStories) 60f else 41f)).sp
         Text(
             text = title,
-            fontSize = if (isStories) 18.sp else 15.sp,
-            lineHeight = if (isStories) 21.sp else 18.sp,
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = (-0.5).sp,
+            fontSize = titleSp,
+            lineHeight = titleLineHeightSp,
+            fontFamily = SfProDisplayFontFamily,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.4).sp,
             color = Color.White,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 14.dp)
+            modifier = Modifier.width(u * 940f)
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 5.dp else 3.5.dp))
+        // Espaço entre o título e a fileira de estrelas (62f em 1080p)
+        Spacer(modifier = Modifier.height(u * (if (isStories) 58f else 34f)))
 
-        // Estrelas com a cor configurada pelo usuário (alinhadas logo abaixo do título)
+        // Estrelas com a cor configurada pelo usuário (diâmetro 29f e largura total 158f em 1080p)
         LetterboxdStarRow(
             rating = rating,
             starColor = starColor,
-            starSize = if (isStories) 13.dp else 11.dp,
-            starGap = if (isStories) 3.dp else 2.dp
+            starSize = u * (if (isStories) 29f else 21f),
+            starGap = u * (if (isStories) 3.25f else 3f)
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 7.dp else 4.dp))
+        // Espaço entre as estrelas e a linha "────── ON ──────" (62f em 1080p)
+        Spacer(modifier = Modifier.height(u * (if (isStories) 58f else 34f)))
 
-        // Assinatura "────── ON ──────" + Marca Quadrinheiro (sem caixa quadrada)
-        LetterboxdBrandLockup(isStories = isStories)
+        // Assinatura "────── ON ──────" + Marca Quadrinheiro (mesma largura total, sem fundo quadrado)
+        LetterboxdBrandLockup(
+            isStories = isStories,
+            u = u
+        )
     }
 }
 
 /**
- * MODELO B: Card "Momento" (Com estética Letterboxd)
+ * MODELO B: Card "Momento" (Com estética e proporções Letterboxd)
  */
 @Composable
 private fun EpicMomentCardContent(
@@ -1988,7 +2011,8 @@ private fun EpicMomentCardContent(
     momentPage: Int,
     isStories: Boolean,
     auraColor: Color,
-    starColor: Color
+    starColor: Color,
+    u: androidx.compose.ui.unit.Dp
 ) {
     val title = comic?.displayTitle?.ifBlank { "Watchmen: Edição Definitiva" } ?: "Watchmen: Edição Definitiva"
     val authors = comic?.authors?.ifBlank { "Alan Moore & Dave Gibbons" } ?: "Alan Moore & Dave Gibbons"
@@ -1996,24 +2020,32 @@ private fun EpicMomentCardContent(
     val releaseYear = comic?.releaseYear?.takeIf { it > 0 } ?: 2026
     val rating = comic?.rating?.takeIf { it > 0f } ?: 5.0f
 
-    val avatarSize = if (isStories) 20.dp else 16.dp
+    val coverH = u * (if (isStories) 690f else 340f)
+    val coverW = coverH * (2f / 3f)
+    val coverTop = u * (if (isStories) 280f else 105f)
+    val cornerRadius = u * (if (isStories) 22f else 14f)
+    val avatarDiameter = u * (if (isStories) 108f else 68f)
+    val avatarTopOffset = u * (if (isStories) (54f + 25f) else (34f + 16f))
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(avatarSize / 2))
+        Spacer(modifier = Modifier.height(coverTop))
 
-        // Capa compacta com avatar sobreposto na borda superior (sem borda)
+        // Capa com avatar sobreposto na borda superior (sem borda)
         Box(contentAlignment = Alignment.TopCenter) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(if (isStories) 0.42f else 0.36f)
-                    .aspectRatio(2f / 3f)
-                    .shadow(10.dp, RoundedCornerShape(4.dp), spotColor = Color.Black.copy(alpha = 0.55f))
-                    .clip(RoundedCornerShape(4.dp))
-                    .border(0.5.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                    .width(coverW)
+                    .height(coverH)
+                    .shadow(
+                        elevation = u * 24f,
+                        shape = RoundedCornerShape(cornerRadius),
+                        ambientColor = Color.Black.copy(alpha = 0.65f),
+                        spotColor = Color.Black.copy(alpha = 0.65f)
+                    )
+                    .clip(RoundedCornerShape(cornerRadius))
             ) {
                 BookCover(
                     src = comic?.coverUrl.orEmpty(),
@@ -2030,70 +2062,77 @@ private fun EpicMomentCardContent(
                 profile = profile,
                 avatarBitmap = avatarBitmap,
                 accentColor = auraColor,
-                sizeDp = avatarSize,
+                sizeDp = avatarDiameter,
                 modifier = Modifier
-                    .offset(y = -(avatarSize / 2))
+                    .offset(y = -avatarTopOffset)
                     .zIndex(2f)
             )
         }
 
-        Spacer(modifier = Modifier.height(if (isStories) 10.dp else 6.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 50f else 26f)))
 
         // Citação entre aspas elegantes
         Text(
             text = "“${momentNote.trim()}”",
-            fontSize = if (isStories) 13.sp else 11.sp,
-            lineHeight = if (isStories) 18.sp else 14.5.sp,
+            fontSize = (u.value * (if (isStories) 40f else 26f)).sp,
+            lineHeight = (u.value * (if (isStories) 50f else 34f)).sp,
             fontStyle = FontStyle.Italic,
             fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = 0.94f),
             textAlign = TextAlign.Center,
             maxLines = if (isStories) 4 else 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            modifier = Modifier.width(u * 900f)
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 8.dp else 5.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 42f else 24f)))
 
         Text(
             text = title,
-            fontSize = if (isStories) 15.sp else 12.5.sp,
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = (u.value * (if (isStories) 48f else 32f)).sp,
+            fontFamily = SfProDisplayFontFamily,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.4).sp,
             color = Color.White,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(u * 920f)
         )
+
+        Spacer(modifier = Modifier.height(u * 10f))
 
         Text(
             text = if (momentPage > 0) "Pág. $momentPage" else "Momento",
-            fontSize = if (isStories) 9.5.sp else 8.5.sp,
+            fontSize = (u.value * (if (isStories) 26f else 19f)).sp,
             fontFamily = SpaceGroteskTabularFamily,
-            fontWeight = FontWeight.Medium,
-            color = Color.White.copy(alpha = 0.64f),
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.68f),
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 5.dp else 3.5.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 38f else 24f)))
 
         LetterboxdStarRow(
             rating = rating,
             starColor = starColor,
-            starSize = if (isStories) 12.dp else 10.dp,
-            starGap = 2.dp
+            starSize = u * (if (isStories) 29f else 21f),
+            starGap = u * (if (isStories) 3.25f else 3f)
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 7.dp else 4.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 52f else 30f)))
 
-        LetterboxdBrandLockup(isStories = isStories)
+        LetterboxdBrandLockup(
+            isStories = isStories,
+            u = u
+        )
     }
 }
 
 /**
- * MODELO C: Card "Resumo da Meta Anual / Mensal" (Com estética Letterboxd)
+ * MODELO C: Card "Resumo da Meta Anual / Mensal" (Com estética e proporções Letterboxd)
  */
 @Composable
 private fun GoalSummaryCardContent(
@@ -2105,7 +2144,8 @@ private fun GoalSummaryCardContent(
     moveColor: Color,
     exerciseColor: Color,
     standColor: Color,
-    starColor: Color
+    starColor: Color,
+    u: androidx.compose.ui.unit.Dp
 ) {
     val stats = remember(comics, profile, moveColor, exerciseColor) {
         computeReadingStatistics(
@@ -2127,21 +2167,23 @@ private fun GoalSummaryCardContent(
     val pct = (outerProgress * 100f).roundToInt().coerceIn(0, 999)
     val pagesInPeriod = if (isMonthly) stats.currentMonthPages else stats.totalPagesRead
 
-    val avatarSize = if (isStories) 20.dp else 16.dp
+    val avatarDiameter = u * (if (isStories) 112f else 72f)
+    val ringDiameter = u * (if (isStories) 560f else 340f)
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(u * (if (isStories) 268f else 98f)))
+
         LetterboxdOverlappingAvatar(
             profile = profile,
             avatarBitmap = avatarBitmap,
             accentColor = moveColor,
-            sizeDp = avatarSize
+            sizeDp = avatarDiameter
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 8.dp else 5.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 38f else 22f)))
 
         // Anéis de Atividade em Alta Definição (Sem contorno preto)
         AppleActivityRingsGauge(
@@ -2149,52 +2191,57 @@ private fun GoalSummaryCardContent(
             innerProgress = innerProgress,
             thirdProgress = thirdProgress,
             centerLabel = "$pct%",
-            sizeDp = if (isStories) 136.dp else 94.dp,
+            sizeDp = ringDiameter,
             outerColor = moveColor,
             innerColor = exerciseColor,
             thirdColor = standColor,
             showCenterLabel = true
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 12.dp else 7.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 64f else 36f)))
 
         Text(
             text = "$pagesInPeriod páginas lidas",
-            fontSize = if (isStories) 17.sp else 14.sp,
-            fontFamily = PlusJakartaSansFamily,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = (u.value * (if (isStories) 54f else 36f)).sp,
+            fontFamily = SfProDisplayFontFamily,
+            fontWeight = FontWeight.Black,
+            letterSpacing = (-0.4).sp,
             color = Color.White,
             maxLines = 1,
             softWrap = false
         )
 
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 14f else 10f)))
 
         Text(
             text = if (isMonthly) {
                 "${stats.currentMonthComics} quadrinhos em ${stats.currentMonthName}"
             } else {
-                "${stats.readComicsCount} de ${stats.yearlyGoal} quadrinhos em 2026"
+                "${stats.readComicsCount} de ${stats.yearlyGoal} quadrinhos no ano"
             },
-            fontSize = if (isStories) 11.sp else 9.5.sp,
-            color = Color.White.copy(alpha = 0.72f),
+            fontSize = (u.value * (if (isStories) 30f else 22f)).sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.76f),
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 5.dp else 3.5.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 44f else 26f)))
 
         LetterboxdStarRow(
             rating = 5.0f,
             starColor = starColor,
-            starSize = if (isStories) 12.dp else 10.dp,
-            starGap = 2.dp
+            starSize = u * (if (isStories) 29f else 21f),
+            starGap = u * (if (isStories) 3.25f else 3f)
         )
 
-        Spacer(modifier = Modifier.height(if (isStories) 7.dp else 4.dp))
+        Spacer(modifier = Modifier.height(u * (if (isStories) 58f else 32f)))
 
-        LetterboxdBrandLockup(isStories = isStories)
+        LetterboxdBrandLockup(
+            isStories = isStories,
+            u = u
+        )
     }
 }
 
@@ -2223,7 +2270,7 @@ private fun LetterboxdOverlappingAvatar(
     Box(
         modifier = modifier
             .size(sizeDp)
-            .shadow(4.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.50f))
+            .shadow(4.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.48f))
             .clip(CircleShape)
             .background(
                 Brush.linearGradient(
@@ -2242,8 +2289,8 @@ private fun LetterboxdOverlappingAvatar(
         } else {
             Text(
                 text = initial,
-                fontSize = (sizeDp.value * 0.42f).sp,
-                fontFamily = PlusJakartaSansFamily,
+                fontSize = (sizeDp.value * 0.44f).sp,
+                fontFamily = SfProDisplayFontFamily,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
@@ -2276,7 +2323,7 @@ private fun LetterboxdStarRow(
                 val cx = size.width / 2f
                 val cy = size.height / 2f
                 val outerR = size.minDimension / 2f
-                val innerR = outerR * 0.44f
+                val innerR = outerR * 0.42f
                 val path = androidx.compose.ui.graphics.Path()
                 val startAngle = -Math.PI / 2.0
                 val step = Math.PI / 5.0
@@ -2304,62 +2351,71 @@ private fun LetterboxdStarRow(
 
 /**
  * Assinatura inferior idêntica ao Letterboxd:
- * - Linha 1: `────── ON ──────`
+ * - Linha 1: `────── ON ──────` (com a mesma largura total da Linha 2)
  * - Linha 2: Marca Quadrinheiro (sem fundo quadrado) + `Quadrinheiro`
  */
 @Composable
 private fun LetterboxdBrandLockup(
-    isStories: Boolean
+    isStories: Boolean,
+    u: androidx.compose.ui.unit.Dp
 ) {
+    val logoSize = u * (if (isStories) 38f else 26f)
+    val logoGap = u * (if (isStories) 12f else 8f)
+    val brandFontSize = (u.value * (if (isStories) 44f else 30f)).sp
+    val onFontSize = (u.value * (if (isStories) 24f else 17f)).sp
+    val lineStroke = u * (if (isStories) 2.4f else 1.8f)
+
     Column(
+        modifier = Modifier.width(IntrinsicSize.Max),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (isStories) 3.5.dp else 2.5.dp)
+        verticalArrangement = Arrangement.spacedBy(u * (if (isStories) 14f else 10f))
     ) {
-        // Linha 1: ────── ON ──────
+        // Linha 1: ────── ON ────── (estende-se exatamente da borda esquerda à borda direita da assinatura abaixo)
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(u * (if (isStories) 14f else 10f))
         ) {
             Box(
                 modifier = Modifier
-                    .width(if (isStories) 24.dp else 18.dp)
-                    .height(0.6.dp)
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .weight(1f)
+                    .height(lineStroke)
+                    .background(Color.White.copy(alpha = 0.45f))
             )
             Text(
                 text = "ON",
-                fontSize = if (isStories) 7.sp else 6.2.sp,
-                fontFamily = PlusJakartaSansFamily,
+                fontSize = onFontSize,
+                fontFamily = SfProDisplayFontFamily,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                color = Color.White.copy(alpha = 0.45f),
+                letterSpacing = (u.value * 2f).sp,
+                color = Color.White.copy(alpha = 0.65f),
                 maxLines = 1,
                 softWrap = false
             )
             Box(
                 modifier = Modifier
-                    .width(if (isStories) 24.dp else 18.dp)
-                    .height(0.6.dp)
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .weight(1f)
+                    .height(lineStroke)
+                    .background(Color.White.copy(alpha = 0.45f))
             )
         }
 
         // Linha 2: Logo da marca (sem caixa ou fundo quadrado) + Quadrinheiro
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(logoGap)
         ) {
             QuadrinheiroLogo(
                 variant = QuadrinheiroLogoVariant.Primary,
-                modifier = Modifier.size(if (isStories) 14.dp else 11.dp)
+                modifier = Modifier.size(logoSize)
             )
 
             Text(
                 text = "Quadrinheiro",
-                fontSize = if (isStories) 12.5.sp else 10.5.sp,
-                fontFamily = PlusJakartaSansFamily,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-0.3).sp,
+                fontSize = brandFontSize,
+                fontFamily = SfProDisplayFontFamily,
+                fontWeight = FontWeight.Black,
+                letterSpacing = (-0.4).sp,
                 color = Color.White,
                 maxLines = 1,
                 softWrap = false

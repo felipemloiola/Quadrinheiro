@@ -506,12 +506,10 @@ fun SettingsTabScreen(
                             .size(42.dp)
                             .clip(com.kyant.shapes.ContinuousRoundedRectangle(12.dp))
                     )
-                    Text(
+                    com.example.ui.components.QuadrinheiroBrandText(
                         text = "Quadrinheiro",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = themeColors.textPrimary,
-                        letterSpacing = (-0.3).sp
+                        fontSize = 17.sp,
+                        color = themeColors.textPrimary
                     )
                     Text(
                         text = "Catálogo, Diário Cronológico & Guia de Leitura",
@@ -1163,6 +1161,13 @@ fun SettingsTabScreen(
                                         subtitle = "Mostra as estrelas douradas e o status na visualização em grade",
                                         checked = appSettings.showRatingsOnGrid,
                                         onChange = { v -> viewModel.updateSettings { it.copy(showRatingsOnGrid = v) } }
+                                    )
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                    SettingsToggleItem(
+                                        title = "Estrelas no tom do app ao compartilhar",
+                                        subtitle = "Ao compartilhar, usa a cor de destaque do tema nas estrelas em vez do amarelo clássico",
+                                        checked = appSettings.shareStarsMatchTheme,
+                                        onChange = { v -> viewModel.updateSettings { it.copy(shareStarsMatchTheme = v) } }
                                     )
                                     HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                                     SettingsToggleItem(

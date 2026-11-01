@@ -1564,12 +1564,10 @@ fun AdaptiveSidebarDrawer(
                                 .size(28.dp)
                                 .clip(com.kyant.shapes.ContinuousRoundedRectangle(8.dp))
                         )
-                        Text(
+                        QuadrinheiroBrandText(
                             text = "Quadrinheiro",
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = s.textPrimary,
-                            letterSpacing = (-0.4).sp
+                            color = s.textPrimary
                         )
                     }
 

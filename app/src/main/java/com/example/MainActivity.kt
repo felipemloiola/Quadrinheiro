@@ -207,8 +207,8 @@ class MainActivity : ComponentActivity() {
                     }
                     .memoryCache {
                         MemoryCache.Builder(appCtx)
-                            .maxSizePercent(0.30)
-                            .strongReferencesEnabled(true)
+                            .maxSizePercent(0.18)
+                            .strongReferencesEnabled(false)
                             .build()
                     }
                     .diskCache {
@@ -270,6 +270,33 @@ class MainActivity : ComponentActivity() {
             pendingWidgetIntentState = action to comicId
             intent.removeExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_ACTION)
             intent.removeExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_COMIC_ID)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
+        try {
+            Coil.imageLoader(this).memoryCache?.clear()
+        } catch (_: Throwable) {}
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            try {
+                Coil.imageLoader(this).memoryCache?.clear()
+            } catch (_: Throwable) {}
         }
     }
 }
@@ -658,7 +685,7 @@ fun QuadrinheiroApp(
         CompositionLocalProvider(
             LocalLiquidGlassBackdrop provides backgroundBackdrop,
             LocalLiquidGlassScrollState provides activeListState,
-            com.example.ui.components.LocalLiquidGlassExtremeFling provides isExtremeFling,
+            com.example.ui.components.LocalLiquidGlassExtremeFling provides (isExtremeFling || activeListState.isScrollInProgress),
             com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState
         ) {
             Box(
@@ -670,7 +697,11 @@ fun QuadrinheiroApp(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .layerBackdrop(mainContentBackdrop, reuseRecordedContent = true)
+                        .layerBackdrop(
+                            backdrop = mainContentBackdrop,
+                            reuseRecordedContent = true,
+                            freezeSnapshot = isExtremeFling
+                        )
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
                     // Usa a PRÓPRIA IMAGEM DA CAPA da HQ em leitura com desfoque atmosférico e efeitos (igual ao iOS / Apple Books)

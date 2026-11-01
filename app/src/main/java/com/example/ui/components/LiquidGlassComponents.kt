@@ -975,7 +975,7 @@ fun BookCover(
                     }
                 }
             }
-            if (cleanSrc.isNotEmpty() && !hasFailed) {
+            if (cleanSrc.isNotEmpty() && !hasFailed && !isImageLoaded) {
                 CoverShimmerPlaceholder(modifier = Modifier.fillMaxSize())
             }
         }
@@ -3186,8 +3186,13 @@ fun SettingsSquircleIcon(
     val themeColors = LocalIOS27Theme.current
     val isDark = LocalIsDarkTheme.current
     val shape = RoundedCornerShape(10.dp)
-    val bgColor = themeColors.accent.copy(alpha = if (isDark) 0.18f else 0.14f)
-    val borderColor = themeColors.accent.copy(alpha = 0.30f)
+    // O quadradinho segue a base neutra do tema do app (modo escuro/claro), enquanto apenas o ícone segue a cor de destaque (accent)
+    val bgColor = if (isDark) {
+        if (themeColors.isAllBlack) Color(0xFF1E1E22) else themeColors.bgTertiary.copy(alpha = 0.72f)
+    } else {
+        if (themeColors.isAllWhite) Color(0xFFE8E8EE) else themeColors.bgTertiary.copy(alpha = 0.85f)
+    }
+    val borderColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
 
     Box(
         modifier = Modifier

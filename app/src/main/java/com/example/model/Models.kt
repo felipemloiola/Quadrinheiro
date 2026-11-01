@@ -635,6 +635,7 @@ data class AppSettings(
     val allowRereads: Boolean = true,
     val autoFillReadDate: Boolean = true,
     val showPagesInDiary: Boolean = true,
+    val shareStarsMatchTheme: Boolean = true,
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
