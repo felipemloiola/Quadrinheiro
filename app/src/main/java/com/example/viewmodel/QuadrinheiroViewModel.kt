@@ -16,6 +16,9 @@ import com.example.data.QuadrinheiroAuthManager
 import com.example.data.QuadrinheiroCloudRepository
 import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
+import com.example.widget.QuadrinheiroWidgetIntents
+import com.example.widget.QuadrinheiroWidgetStateBus
+import com.example.widget.QuadrinheiroWidgetsSync
 import com.google.firebase.firestore.DocumentSnapshot
 import com.example.model.ApiDiagnosticsReport
 import com.example.model.AppSettings
@@ -31,6 +34,8 @@ import com.example.model.UserProfile
 import com.example.model.UsernameAvailabilityStatus
 import com.example.model.UsernameValidator
 import com.example.model.UsernameVerificationState
+import com.example.ui.components.SocialShareCardType
+import com.example.ui.components.SocialShareRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -191,6 +196,10 @@ class QuadrinheiroViewModel(
     private val _settingsParentPage = MutableStateFlow<String?>(savedStateHandle.get<String>("settingsParentPage"))
     val settingsParentPage: StateFlow<String?> = _settingsParentPage.asStateFlow()
 
+    // Sub-rota dedicada do Painel de Estatísticas em tela cheia ("reading_stats")
+    private val _isStatisticsOpen = MutableStateFlow(savedStateHandle.get<Boolean>("isStatisticsOpen") ?: false)
+    val isStatisticsOpen: StateFlow<Boolean> = _isStatisticsOpen.asStateFlow()
+
     // Scroll memory map: routeKey -> Pair(firstVisibleItemIndex, firstVisibleItemScrollOffset)
     val scrollMemory = mutableMapOf<String, Pair<Int, Int>>()
 
@@ -283,6 +292,10 @@ class QuadrinheiroViewModel(
     private val _infoModalComic = MutableStateFlow<ComicEntry?>(null)
     val infoModalComic: StateFlow<ComicEntry?> = _infoModalComic.asStateFlow()
 
+    // Modal de Exportação e Compartilhamento Social (Cards Estilo Apple)
+    private val _socialShareRequest = MutableStateFlow<SocialShareRequest?>(null)
+    val socialShareRequest: StateFlow<SocialShareRequest?> = _socialShareRequest.asStateFlow()
+
     private val _showManualModal = MutableStateFlow(false)
     val showManualModal: StateFlow<Boolean> = _showManualModal.asStateFlow()
 
@@ -349,6 +362,7 @@ class QuadrinheiroViewModel(
                 .collectLatest { target ->
                     val ownerId = activeOwnerUid()
                     storage.saveState(_comics.value, _profile.value, _appSettings.value, ownerId)
+                    QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
                     val uid = activeCloudUid()
                     val repo = cloudRepo
                     if (uid != null && repo != null) {
@@ -361,6 +375,17 @@ class QuadrinheiroViewModel(
                         QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                     }
                 }
+        }
+
+        // Sincroniza o estado em memória quando o usuário altera páginas diretamente pelo Widget na tela inicial
+        viewModelScope.launch(Dispatchers.IO) {
+            QuadrinheiroWidgetStateBus.externalUpdates.collectLatest {
+                val refreshed = storage.loadState()
+                withContext(Dispatchers.Main) {
+                    _comics.value = refreshed.comics
+                    _profile.value = refreshed.profile
+                }
+            }
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -819,6 +844,8 @@ class QuadrinheiroViewModel(
         _settingsParentPage.value = null
         savedStateHandle["settingsSubPage"] = null
         savedStateHandle["settingsParentPage"] = null
+        _isStatisticsOpen.value = false
+        savedStateHandle["isStatisticsOpen"] = false
         _isSidebarOpen.value = false
     }
 
@@ -1220,6 +1247,7 @@ class QuadrinheiroViewModel(
         persistJob = viewModelScope.launch(Dispatchers.IO) {
             delay(80)
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
+            QuadrinheiroWidgetsSync.updateAllWidgets(appContext)
         }
     }
 
@@ -1230,19 +1258,68 @@ class QuadrinheiroViewModel(
         val settingsSnapshot = _appSettings.value
         viewModelScope.launch(Dispatchers.IO) {
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
+            QuadrinheiroWidgetsSync.updateAllWidgets(appContext)
+        }
+    }
+
+    /**
+     * Roteia cliques originados nos 3 Widgets do Jetpack Glance diretamente para a tela ou modal correspondente.
+     */
+    fun handleWidgetDeepLink(action: String?, comicId: String?) {
+        if (action.isNullOrBlank()) return
+        when (action) {
+            QuadrinheiroWidgetIntents.ACTION_OPEN_STATISTICS -> {
+                openReadingStatistics()
+            }
+            QuadrinheiroWidgetIntents.ACTION_OPEN_READING_COMIC -> {
+                closeReadingStatistics()
+                switchMainTab("home")
+                val target = _comics.value.firstOrNull { !comicId.isNullOrBlank() && it.id == comicId }
+                    ?: _comics.value.firstOrNull { it.status == ReadingStatus.READING }
+                if (target != null) {
+                    _activeReadingComicId.value = target.id
+                    savedStateHandle["activeReadingComicId"] = target.id
+                    selectComicForSheet(target)
+                }
+            }
+            QuadrinheiroWidgetIntents.ACTION_OPEN_COMIC_SYNOPSIS -> {
+                closeReadingStatistics()
+                val target = _comics.value.firstOrNull { !comicId.isNullOrBlank() && it.id == comicId }
+                if (target != null) {
+                    selectComicForSheet(target)
+                    openInfoSynopsisModal(target)
+                } else {
+                    switchMainTab("shelf")
+                }
+            }
         }
     }
 
     fun getCurrentRouteKey(
         tab: String = _activeTab.value,
         sub: String? = _settingsSubPage.value,
-        section: String = _shelfSection.value
+        section: String = _shelfSection.value,
+        statsOpen: Boolean = _isStatisticsOpen.value
     ): String {
+        if (statsOpen || tab == "statistics" || sub == "stats") {
+            return "reading_stats"
+        }
         return when (tab) {
             "settings" -> "settings:${sub ?: "root"}"
             "shelf" -> "tab:shelf:$section"
             else -> "tab:$tab"
         }
+    }
+
+    fun openReadingStatistics() {
+        scrollMemory["reading_stats"] = 0 to 0
+        _isStatisticsOpen.value = true
+        savedStateHandle["isStatisticsOpen"] = true
+    }
+
+    fun closeReadingStatistics() {
+        _isStatisticsOpen.value = false
+        savedStateHandle["isStatisticsOpen"] = false
     }
 
     fun requestScrollToTop() {
@@ -1254,9 +1331,19 @@ class QuadrinheiroViewModel(
     }
 
     fun switchMainTab(nextTab: String) {
+        if (nextTab == "statistics" || nextTab == "reading_stats") {
+            openReadingStatistics()
+            return
+        }
+        val wasStatsOpen = _isStatisticsOpen.value
+        if (wasStatsOpen) {
+            _isStatisticsOpen.value = false
+            savedStateHandle["isStatisticsOpen"] = false
+        }
+
         if (nextTab == "diary") {
             if (_activeTab.value == "shelf" && _shelfSection.value == "diary") {
-                requestScrollToTop()
+                if (!wasStatsOpen) requestScrollToTop()
                 return
             }
             scrollMemory["tab:shelf:diary"] = 0 to 0
@@ -1275,7 +1362,7 @@ class QuadrinheiroViewModel(
                 _settingsParentPage.value = null
                 savedStateHandle["settingsSubPage"] = null
                 savedStateHandle["settingsParentPage"] = null
-            } else {
+            } else if (!wasStatsOpen) {
                 requestScrollToTop()
             }
             return
@@ -1287,14 +1374,14 @@ class QuadrinheiroViewModel(
                 savedStateHandle["shelfSection"] = "shelf"
                 _activeTab.value = "shelf"
                 savedStateHandle["activeTab"] = "shelf"
-            } else {
+            } else if (!wasStatsOpen) {
                 requestScrollToTop()
             }
             return
         }
 
         if (nextTab == _activeTab.value) {
-            requestScrollToTop()
+            if (!wasStatsOpen) requestScrollToTop()
             return
         }
 
@@ -1814,6 +1901,14 @@ class QuadrinheiroViewModel(
         }
     }
 
+    fun openSocialShareSheet(request: SocialShareRequest) {
+        _socialShareRequest.value = request
+    }
+
+    fun closeSocialShareSheet() {
+        _socialShareRequest.value = null
+    }
+
     fun updateManualForm(transform: (ManualComicForm) -> ManualComicForm) {
         _manualForm.value = transform(_manualForm.value)
     }
@@ -1986,19 +2081,35 @@ class QuadrinheiroViewModel(
         _showManualModal.value = false
         _isSheetExpanded.value = false
 
-        showNotice(
-            message = if (isWantToRead) "\"${entry.title}\" adicionada à sua Fila (Quero Ler)"
-            else "\"${entry.title}\" salva na Biblioteca",
-            actionLabel = "Ver Biblioteca",
-            onAction = {
-                if (isWantToRead) {
-                    _shelfStatus.value = "WANT_TO_READ"
-                    savedStateHandle["shelfStatus"] = "WANT_TO_READ"
+        if (isRead) {
+            showNotice(
+                message = "\"${entry.title}\" concluída! Que tal compartilhar seu card?",
+                actionLabel = "Compartilhar Card",
+                onAction = {
+                    openSocialShareSheet(
+                        SocialShareRequest(
+                            initialCardType = SocialShareCardType.COMPLETED_READING,
+                            comic = entry
+                        )
+                    )
+                    clearToast()
                 }
-                switchMainTab("shelf")
-                clearToast()
-            }
-        )
+            )
+        } else {
+            showNotice(
+                message = if (isWantToRead) "\"${entry.title}\" adicionada à sua Fila (Quero Ler)"
+                else "\"${entry.title}\" salva na Biblioteca",
+                actionLabel = "Ver Biblioteca",
+                onAction = {
+                    if (isWantToRead) {
+                        _shelfStatus.value = "WANT_TO_READ"
+                        savedStateHandle["shelfStatus"] = "WANT_TO_READ"
+                    }
+                    switchMainTab("shelf")
+                    clearToast()
+                }
+            )
+        }
     }
 
     fun deleteComic(id: String) {
@@ -2019,7 +2130,9 @@ class QuadrinheiroViewModel(
     fun quickUpdateReadingPage(comicItem: ComicEntry, nextPage: Int) {
         val total = comicItem.pageCount.coerceAtLeast(1)
         val clamped = nextPage.coerceIn(0, total)
+        val wasFinishedNow = clamped >= total && comicItem.status != ReadingStatus.READ
         val nextStatus = if (clamped >= total) ReadingStatus.READ else ReadingStatus.READING
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
         val nowMs = System.currentTimeMillis()
         var updatedComic: ComicEntry? = null
         _comics.value = _comics.value.map { c ->
@@ -2027,6 +2140,7 @@ class QuadrinheiroViewModel(
                 c.copy(
                     currentPage = clamped,
                     status = nextStatus,
+                    readDate = if (nextStatus == ReadingStatus.READ && c.readDate.isBlank()) today else c.readDate,
                     updatedAt = nowMs,
                     isDirty = true
                 ).also { updatedComic = it }
@@ -2037,6 +2151,21 @@ class QuadrinheiroViewModel(
         persistAll()
         updatedComic?.let { target ->
             _debouncedReadingPageUpdates.tryEmit(target)
+            if (wasFinishedNow) {
+                showNotice(
+                    message = "Parabéns! Você concluiu \"${target.title}\"!",
+                    actionLabel = "Compartilhar Card",
+                    onAction = {
+                        openSocialShareSheet(
+                            SocialShareRequest(
+                                initialCardType = SocialShareCardType.COMPLETED_READING,
+                                comic = target
+                            )
+                        )
+                        clearToast()
+                    }
+                )
+            }
         }
     }
 

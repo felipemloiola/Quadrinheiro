@@ -587,32 +587,6 @@ fun ComicSequenceCarouselCard(
                                 spine3d = spine3d,
                                 modifier = Modifier.fillMaxSize()
                             )
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(4.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color.Black.copy(alpha = 0.75f))
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = when {
-                                        recomItem.comic.genre.contains("Vertigo", ignoreCase = true) -> "Vertigo"
-                                        recomItem.comic.genre.contains("Mangá", ignoreCase = true) -> "Mangá"
-                                        recomItem.comic.genre.contains("Marvel", ignoreCase = true) -> "Marvel"
-                                        recomItem.comic.format.contains("Graphic", ignoreCase = true) -> "Graphic Novel"
-                                        recomItem.comic.releaseYear > 0 -> "${recomItem.comic.releaseYear}"
-                                        else -> "HQ"
-                                    },
-                                    fontSize = 8.5.sp,
-                                    fontFamily = SpaceGroteskTabularFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
                         }
 
                         Text(
@@ -1392,6 +1366,7 @@ internal fun CatalogTagsSection(
 /**
  * Seção de Momentos Marcantes e Notas Rápidas do Diário.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CatalogMomentsSection(
     moments: List<ComicMoment>,
@@ -1400,7 +1375,8 @@ internal fun CatalogMomentsSection(
     onChangeMomentPage: (String) -> Unit,
     onChangeMomentNote: (String) -> Unit,
     onAddMoment: () -> Unit,
-    onRemoveMoment: (String) -> Unit
+    onRemoveMoment: (String) -> Unit,
+    onShareMoment: (ComicMoment) -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -1429,7 +1405,7 @@ internal fun CatalogMomentsSection(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = "MOMENTOS MARCANTES",
+                    text = "MOMENTOS DA LEITURA",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
@@ -1470,15 +1446,13 @@ internal fun CatalogMomentsSection(
                                 color = s.accentColor.copy(alpha = 0.30f),
                                 shape = RoundedCornerShape(12.dp)
                             )
-                            .clickable { onRemoveMoment(moment.id) }
-                            .padding(horizontal = 11.dp, vertical = 7.dp),
+                            .padding(horizontal = 11.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             if (moment.page > 0) {
                                 Box(
@@ -1499,7 +1473,7 @@ internal fun CatalogMomentsSection(
                                 }
                             }
                             Text(
-                                text = moment.note,
+                                text = "“${moment.note}”",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = s.textPrimary,
@@ -1507,12 +1481,41 @@ internal fun CatalogMomentsSection(
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Remover momento",
-                            tint = s.textSecondary.copy(alpha = 0.85f),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(s.accentColor.copy(alpha = 0.16f))
+                                    .clickable { onShareMoment(moment) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = LucideIcons.ShareIos,
+                                    contentDescription = "Compartilhar Momento",
+                                    tint = s.accentColor,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(if (s.isLight) Color.Black.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.08f))
+                                    .clickable { onRemoveMoment(moment.id) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remover momento",
+                                    tint = s.textSecondary.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

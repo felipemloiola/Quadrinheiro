@@ -47,4 +47,12 @@
     <string name="auth_cd_hide_password">Ocultar senha</string>
     <string name="auth_cd_close_modal">Fechar janela de autenticação</string>
     <string name="auth_cd_brand_emblem">Emblema do Quadrinheiro</string>
+
+    <!-- Jetpack Glance Widgets -->
+    <string name="widget_reading_now_label">Quadrinheiro • Lendo Agora</string>
+    <string name="widget_reading_now_desc">Exibe a HQ em leitura com capa em alta resolução, progresso e botões (- e +) para atualizar páginas sem abrir o app.</string>
+    <string name="widget_activity_rings_label">Quadrinheiro • Anéis de Metas</string>
+    <string name="widget_activity_rings_desc">Exibe os anéis concêntricos de meta anual e ritmo diário de leitura com atalho direto para o painel de Estatísticas.</string>
+    <string name="widget_recent_shelf_label">Quadrinheiro • Recentes &amp; Fila</string>
+    <string name="widget_recent_shelf_desc">Exibe as últimas capas adicionadas à sua Estante ou Fila de Leitura com acesso direto aos detalhes da edição.</string>
 </resources>

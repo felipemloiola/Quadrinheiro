@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocalOffer
@@ -142,7 +143,8 @@ fun CatalogSheetModal(
     onSetExpanded: (Boolean) -> Unit = { _ -> onToggleExpand() },
     onSave: (ComicEntry) -> Unit,
     onDelete: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -174,6 +176,7 @@ fun CatalogSheetModal(
     var momentPageInput by remember(selectedComic.id) {
         mutableStateOf(if (selectedComic.currentPage > 0) selectedComic.currentPage.toString() else "")
     }
+    var selectedMomentTag by remember(selectedComic.id) { mutableStateOf("⚡ Momento Épico") }
 
     fun buildFinalComicForSave(): ComicEntry {
         var finalComic = draftComic
@@ -189,7 +192,7 @@ fun CatalogSheetModal(
             val newMoment = ComicMoment(
                 id = "moment_${System.currentTimeMillis()}_${(100..999).random()}",
                 page = pageNum,
-                tag = "",
+                tag = selectedMomentTag,
                 note = pendingNote,
                 date = finalComic.readDate.ifBlank { today },
                 isSpoiler = false
@@ -351,13 +354,13 @@ fun CatalogSheetModal(
                     )
                 }
 
-                // 2. Cabeçalho de Ações ("Cancelar", Título, "Salvar" / "Excluir") sem interceptação de gestos
+                // 2. Cabeçalho de Ações ("Cancelar", Título centralizado, Ações à direita sem quebra de texto)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(
-                            start = if (isSheetExpanded) 22.dp else 18.dp,
-                            end = if (isSheetExpanded) 22.dp else 18.dp,
+                            start = if (isSheetExpanded) 18.dp else 14.dp,
+                            end = if (isSheetExpanded) 18.dp else 14.dp,
                             top = 2.dp,
                             bottom = 8.dp
                         ),
@@ -369,48 +372,90 @@ fun CatalogSheetModal(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textSecondary,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier
                             .testTag("modal_cancel_button")
                             .clip(RoundedCornerShape(99.dp))
                             .clickable { onDismiss() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .padding(horizontal = 6.dp, vertical = 6.dp)
                     )
 
                     Text(
-                        text = if (isExistingInShelf) "Editar Quadrinho" else "Registrar Quadrinho",
+                        text = if (isExistingInShelf) "Editar Quadrinho" else "Registrar",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = s.textPrimary
+                        color = s.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp)
                     )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        if (isExistingInShelf) {
-                            Text(
-                                text = "Excluir",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFF43F5E),
-                                modifier = Modifier
-                                    .testTag("modal_delete_button")
-                                    .clip(RoundedCornerShape(99.dp))
-                                    .clickable { onDelete(draftComic.id) }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                        Box(
+                            modifier = Modifier
+                                .testTag("modal_share_card_button")
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(s.accentColor.copy(alpha = 0.14f))
+                                .clickable {
+                                    onShareComic(
+                                        buildFinalComicForSave(),
+                                        SocialShareCardType.COMPLETED_READING,
+                                        null
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.ShareIos,
+                                contentDescription = "Compartilhar Card",
+                                tint = s.accentColor,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
-                        Text(
-                            text = "Salvar",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = s.accentColor,
+                        if (isExistingInShelf) {
+                            Box(
+                                modifier = Modifier
+                                    .testTag("modal_delete_button")
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFF43F5E).copy(alpha = 0.14f))
+                                    .clickable { onDelete(draftComic.id) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "Excluir",
+                                    tint = Color(0xFFF43F5E),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        Box(
                             modifier = Modifier
                                 .testTag("modal_header_save_button")
                                 .clip(RoundedCornerShape(99.dp))
+                                .background(s.accentColor)
                                 .clickable { onSave(buildFinalComicForSave()) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                        )
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Salvar",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = s.accentText,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
 
@@ -548,6 +593,65 @@ fun CatalogSheetModal(
                                 isExpanded = isSheetExpanded,
                                 onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
                             )
+
+                            // Atalho direto para o Card Social "Leitura Concluída" (9:16 Stories / 1:1 Feed)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("modal_share_completed_reading_cta")
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(s.accentColor.copy(alpha = 0.14f))
+                                    .border(0.8.dp, s.accentColor.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        onShareComic(
+                                            buildFinalComicForSave(),
+                                            SocialShareCardType.COMPLETED_READING,
+                                            null
+                                        )
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(s.accentBg),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = LucideIcons.ShareIos,
+                                            contentDescription = null,
+                                            tint = s.accentText,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Compartilhar Card de Leitura Concluída",
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = s.textPrimary
+                                        )
+                                        Text(
+                                            text = "Gere um card estilo Apple para Stories (9:16) ou Feed (1:1)",
+                                            fontSize = 10.5.sp,
+                                            color = s.textSecondary
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = s.accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
 
@@ -590,6 +694,13 @@ fun CatalogSheetModal(
                             draftComic = draftComic.copy(
                                 moments = draftComic.moments.filter { it.id != momentId }
                             )
+                        },
+                        onShareMoment = { moment ->
+                            onShareComic(
+                                buildFinalComicForSave(),
+                                SocialShareCardType.EPIC_MOMENT,
+                                moment.id
+                            )
                         }
                     )
 
@@ -610,6 +721,36 @@ fun CatalogSheetModal(
                             fontWeight = FontWeight.Bold,
                             color = s.accentText
                         )
+                    }
+
+                    if (isExistingInShelf) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFF43F5E).copy(alpha = 0.12f))
+                                .clickable { onDelete(draftComic.id) }
+                                .padding(vertical = 13.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = Color(0xFFF43F5E),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Excluir Quadrinho da Estante",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF43F5E),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
@@ -635,7 +776,8 @@ fun ComicInfoSynopsisSheetModal(
     onSelectSequenceComic: (ComicEntry) -> Unit = {},
     onOpenCatalogWithStatus: (ComicEntry, ReadingStatus) -> Unit,
     onEditSavedComic: (ComicEntry) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -821,7 +963,28 @@ fun ComicInfoSynopsisSheetModal(
                         color = s.textPrimary
                     )
 
-                    Spacer(modifier = Modifier.width(48.dp))
+                    Box(
+                        modifier = Modifier
+                            .testTag("synopsis_share_card_button")
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(s.accentColor.copy(alpha = 0.14f))
+                            .clickable {
+                                onShareComic(
+                                    savedEntry ?: displayComic,
+                                    SocialShareCardType.COMPLETED_READING,
+                                    null
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.ShareIos,
+                            contentDescription = "Compartilhar Card",
+                            tint = s.accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
 
                 Column(
@@ -1071,8 +1234,30 @@ fun ComicInfoSynopsisSheetModal(
                                         text = m.note,
                                         fontSize = 11.5.sp,
                                         color = s.textPrimary,
-                                        lineHeight = 16.sp
+                                        lineHeight = 16.sp,
+                                        modifier = Modifier.weight(1f)
                                     )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(s.accentColor.copy(alpha = 0.16f))
+                                            .clickable {
+                                                onShareComic(
+                                                    savedEntry,
+                                                    SocialShareCardType.EPIC_MOMENT,
+                                                    m.id
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = LucideIcons.ShareIos,
+                                            contentDescription = "Compartilhar Momento",
+                                            tint = s.accentColor,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

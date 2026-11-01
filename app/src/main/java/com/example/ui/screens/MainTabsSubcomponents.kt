@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,6 +52,7 @@ import com.example.model.ReadingStatus
 import com.example.ui.components.AppleCapsuleButton
 import com.example.ui.components.AppleStepper
 import com.example.ui.components.BookCover
+import com.example.ui.components.LucideIcons
 import com.example.ui.components.StarRating
 import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.inputWellSurface
@@ -438,7 +441,8 @@ fun DiaryMonthGroupCard(
     entries: List<Pair<ComicEntry, String>>,
     appSettings: AppSettings,
     revealedSpoilers: MutableMap<String, Boolean>,
-    onSelectComic: (ComicEntry) -> Unit
+    onSelectComic: (ComicEntry) -> Unit,
+    onShareComicReview: (ComicEntry) -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -619,6 +623,33 @@ fun DiaryMonthGroupCard(
                                     )
                                 }
                             }
+                        }
+
+                        // Botão rápido de "Compartilhar Resenha" / Card Social (Cards Estilo Apple)
+                        Row(
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .testTag("diary_share_review_button_${entry.id}")
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(s.accentColor.copy(alpha = 0.14f))
+                                .border(0.6.dp, s.accentColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp))
+                                .clickable { onShareComicReview(entry) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.ShareIos,
+                                contentDescription = "Compartilhar Resenha",
+                                tint = s.accentColor,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "Compartilhar Resenha",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = s.accentColor
+                            )
                         }
                     }
                 }

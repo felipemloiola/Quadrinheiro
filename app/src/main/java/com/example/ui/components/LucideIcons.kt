@@ -225,6 +225,22 @@ object LucideIcons {
     val Grid3x2: ImageVector get() = StarHalf
     val Maximize2: ImageVector get() = FilterCircle
 
+    // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS)
+    val ShareIos: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "ShareIos",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).addPath(
+            pathData = PathParser().parsePathString(
+                "M12 2.586L7.707 6.879a1 1 0 0 0 1.414 1.414L11 6.414V15a1 1 0 1 0 2 0V6.414l1.879 1.879a1 1 0 0 0 1.414-1.414L12 2.586zM6 9a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3h-2a1 1 0 1 0 0 2h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h2a1 1 0 1 0 0-2H6z"
+            ).toNodes(),
+            fill = SolidColor(Color.White)
+        ).build()
+    }
+
     // --- Authentication & Account Vector Icons (24x24 viewport) ---
 
     val Mail: ImageVector by lazy {

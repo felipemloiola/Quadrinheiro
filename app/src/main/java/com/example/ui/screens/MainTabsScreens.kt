@@ -191,7 +191,8 @@ fun HomeReadingNowTab(
     onGoToShelf: () -> Unit,
     onSelectComic: (ComicEntry) -> Unit,
     onQuickUpdateReadingPage: (ComicEntry, Int) -> Unit,
-    onToggleBottomAccessory: (Boolean) -> Unit = {}
+    onToggleBottomAccessory: (Boolean) -> Unit = {},
+    onOpenStatistics: () -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -274,114 +275,189 @@ fun HomeReadingNowTab(
                 val isDark = LocalIsDarkTheme.current
                 val outerRingColor = themeColors.accent
                 val innerRingColor = when (themeColors.appTheme) {
-                    AppTheme.BLUE -> if (isDark) Color(0xFF30D5C8) else Color(0xFF00B4D8)   // Azul + Ciano/Turquesa
-                    AppTheme.RED -> if (isDark) Color(0xFFFF9F0A) else Color(0xFFF59E0B)    // Vermelho + Âmbar/Laranja
-                    AppTheme.GREEN -> if (isDark) Color(0xFF00C7BE) else Color(0xFF0D9488)  // Verde + Menta/Teal
-                    AppTheme.PURPLE -> if (isDark) Color(0xFFFF375F) else Color(0xFFEC4899) // Roxo + Magenta/Rosa
-                    AppTheme.ORANGE -> if (isDark) Color(0xFFFF453A) else Color(0xFFEF4444) // Laranja + Coral/Vermelho
-                    AppTheme.WHITE -> if (isDark) Color(0xFF8E8E93) else Color(0xFFA1A1AA)  // Branco/Grafite + Prata
-                    AppTheme.BLACK -> if (isDark) Color(0xFF636366) else Color(0xFF71717A)  // Titânio/Preto + Cinza Ardósia
-                    else -> themeColors.accentSecondary
+                    AppTheme.BLUE -> if (isDark) Color(0xFF30D5C8) else Color(0xFF00B4D8)   // Azul + Turquesa
+                    AppTheme.RED -> if (isDark) Color(0xFFFF9F0A) else Color(0xFFF59E0B)    // Vermelho + Âmbar
+                    AppTheme.GREEN -> if (isDark) Color(0xFF00C7BE) else Color(0xFF0D9488)  // Verde + Menta
+                    AppTheme.PURPLE -> if (isDark) Color(0xFFFF375F) else Color(0xFFEC4899) // Roxo + Magenta
+                    AppTheme.ORANGE -> if (isDark) Color(0xFFFF453A) else Color(0xFFEF4444) // Laranja + Coral
+                    AppTheme.WHITE -> if (isDark) Color(0xFFA1A1AA) else Color(0xFF71717A)  // Branco/Grafite + Prata
+                    AppTheme.BLACK -> if (isDark) Color(0xFF8E8E93) else Color(0xFF52525B)  // Titânio/Preto + Cinza Ardósia
+                }
+                val thirdRingColor = when (themeColors.appTheme) {
+                    AppTheme.BLUE -> if (isDark) Color(0xFF64D2FF) else Color(0xFF3B82F6)
+                    AppTheme.RED -> if (isDark) Color(0xFFFF6482) else Color(0xFFE11D48)
+                    AppTheme.GREEN -> if (isDark) Color(0xFF66E080) else Color(0xFF16A34A)
+                    AppTheme.PURPLE -> if (isDark) Color(0xFF9D7BFF) else Color(0xFF6366F1)
+                    AppTheme.ORANGE -> if (isDark) Color(0xFFFFD60A) else Color(0xFFD97706)
+                    AppTheme.WHITE -> if (isDark) Color(0xFF71717A) else Color(0xFFA1A1AA)
+                    AppTheme.BLACK -> if (isDark) Color(0xFF636366) else Color(0xFF71717A)
                 }
 
                 val outerRatio = (readComicsList.size.toFloat() / profile.yearlyGoal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
                 val targetPagesYear = (profile.dailyPagesGoal.coerceAtLeast(5) * 30).toFloat()
                 val innerRatio = (totalPagesRead.toFloat() / targetPagesYear).coerceIn(0f, 1f)
+                val activeReadsRatio = ((readComicsList.size + readingNowList.size).toFloat() / 12f).coerceIn(0.08f, 1f)
                 val pct = (outerRatio * 100f).roundToInt().coerceIn(0, 100)
 
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .contentMaterialSurface(RoundedCornerShape(26.dp))
+                        .clickable { onOpenStatistics() }
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f).padding(end = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "META DE 2026 • ${(profile.favoriteUniverse.ifBlank { "ACERVO" }).uppercase()}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = s.textSecondary
-                        )
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "${readComicsList.size}",
-                                fontSize = 24.sp,
-                                fontFamily = SpaceGroteskTabularFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = s.textPrimary
-                            )
-                            Text(
-                                text = "de ${profile.yearlyGoal} quadrinhos lidos",
-                                fontSize = 12.sp,
-                                color = s.textSecondary,
-                                modifier = Modifier.padding(bottom = 3.dp)
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(outerRingColor)
-                                )
-                                Text(
-                                    text = "Obras ($pct%)",
-                                    fontSize = 10.5.sp,
-                                    color = s.textSecondary
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(innerRingColor)
-                                )
-                                Text(
-                                    text = "$totalPagesRead págs",
-                                    fontSize = 10.5.sp,
-                                    color = s.textSecondary
-                                )
-                            }
-                        }
-                        Text(
-                            text = "Ajustar meta anual",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = themeColors.accent,
+                            color = s.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
-                                .padding(top = 2.dp)
-                                .clickable { onOpenProfileSettings() }
+                                .weight(1f)
+                                .padding(end = 10.dp)
                         )
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(themeColors.accent.copy(alpha = 0.14f))
+                                .clickable { onOpenStatistics() }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = "Estatísticas",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = themeColors.accent,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Ver Estatísticas",
+                                tint = themeColors.accent,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
                     }
 
-                    AppleActivityRingsGauge(
-                        outerProgress = outerRatio,
-                        innerProgress = innerRatio,
-                        centerLabel = "$pct%",
-                        sizeDp = 68.dp,
-                        outerColor = outerRingColor,
-                        innerColor = innerRingColor,
-                        modifier = Modifier.clickable { onOpenProfileSettings() }
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "${readComicsList.size}",
+                                    fontSize = 24.sp,
+                                    fontFamily = SpaceGroteskTabularFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    color = s.textPrimary
+                                )
+                                Text(
+                                    text = "de ${profile.yearlyGoal} quadrinhos lidos",
+                                    fontSize = 12.sp,
+                                    color = s.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(bottom = 3.dp)
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(outerRingColor)
+                                    )
+                                    Text(
+                                        text = "Obras ($pct%)",
+                                        fontSize = 10.5.sp,
+                                        color = s.textSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(innerRingColor)
+                                    )
+                                    Text(
+                                        text = "$totalPagesRead págs",
+                                        fontSize = 10.5.sp,
+                                        color = s.textSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Ver Detalhes ›",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = themeColors.accent,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.clickable { onOpenStatistics() }
+                                )
+                                Text(
+                                    text = "Ajustar meta",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = s.textSecondary,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.clickable { onOpenProfileSettings() }
+                                )
+                            }
+                        }
+
+                        AppleActivityRingsGauge(
+                            outerProgress = outerRatio,
+                            innerProgress = innerRatio,
+                            centerLabel = "$pct%",
+                            sizeDp = 72.dp,
+                            outerColor = outerRingColor,
+                            innerColor = innerRingColor,
+                            thirdProgress = activeReadsRatio,
+                            thirdColor = thirdRingColor,
+                            showCenterLabel = false,
+                            modifier = Modifier.clickable { onOpenStatistics() }
+                        )
+                    }
                 }
             }
         }
@@ -682,6 +758,7 @@ private fun ComicGridCard(
 @Composable
 fun ShelfLibraryTab(
     comics: List<ComicEntry>,
+    profile: ReaderProfile = ReaderProfile(),
     appSettings: AppSettings,
     shelfSection: String = "shelf",
     shelfStatus: String,
@@ -703,7 +780,10 @@ fun ShelfLibraryTab(
     onSelectComic: (ComicEntry) -> Unit,
     hasMoreComics: Boolean = false,
     isLoadingMoreComics: Boolean = false,
-    onLoadMoreComics: () -> Unit = {}
+    onLoadMoreComics: () -> Unit = {},
+    onOpenStatistics: () -> Unit = {},
+    onShareComicReview: (ComicEntry) -> Unit = {},
+    onShareGoalSummary: (String) -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -1364,6 +1444,16 @@ fun ShelfLibraryTab(
             }
         }
         } else {
+            // Mini-resumo Liquid Glass expansível logo acima da lista cronológica do Diário
+            item(key = "shelf-diary-monthly-summary-card", contentType = "diary_monthly_summary") {
+                DiaryExpandableLiquidGlassSummary(
+                    comics = comics,
+                    profile = profile,
+                    onOpenFullStatistics = onOpenStatistics,
+                    onShareGoalSummary = onShareGoalSummary
+                )
+            }
+
             // Diário items
             if (diaryGroups.isEmpty()) {
                 item(key = "shelf-diary-empty-state", contentType = "empty_state_card") {
@@ -1390,7 +1480,9 @@ fun ShelfLibraryTab(
                 }
             } else {
                 item(key = "shelf-diary-analytics-card", contentType = "diary_analytics_card") {
-                    DiaryAnalyticsSummaryCard(comics = comics)
+                    Box(modifier = Modifier.clickable { onOpenStatistics() }) {
+                        DiaryAnalyticsSummaryCard(comics = comics)
+                    }
                 }
 
                 diaryGroups.forEach { (monthLabel, entries) ->
@@ -1400,7 +1492,8 @@ fun ShelfLibraryTab(
                             entries = entries,
                             appSettings = appSettings,
                             revealedSpoilers = revealedSpoilers,
-                            onSelectComic = onSelectComic
+                            onSelectComic = onSelectComic,
+                            onShareComicReview = onShareComicReview
                         )
                     }
                 }
@@ -1417,11 +1510,15 @@ fun ShelfLibraryTab(
 @Composable
 fun DiaryChronologicalTab(
     comics: List<ComicEntry>,
+    profile: ReaderProfile = ReaderProfile(),
     appSettings: AppSettings,
     listState: LazyListState,
     onOpenSidebar: () -> Unit,
     onQuickRegister: () -> Unit,
-    onSelectComic: (ComicEntry) -> Unit
+    onSelectComic: (ComicEntry) -> Unit,
+    onOpenStatistics: () -> Unit = {},
+    onShareComicReview: (ComicEntry) -> Unit = {},
+    onShareGoalSummary: (String) -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -1485,6 +1582,15 @@ fun DiaryChronologicalTab(
             HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
         }
 
+        item(key = "diary-monthly-summary-card", contentType = "diary_monthly_summary") {
+            DiaryExpandableLiquidGlassSummary(
+                comics = comics,
+                profile = profile,
+                onOpenFullStatistics = onOpenStatistics,
+                onShareGoalSummary = onShareGoalSummary
+            )
+        }
+
         if (diaryGroups.isEmpty()) {
             item(key = "diary-empty-state", contentType = "empty_state_card") {
                 Column(
@@ -1511,7 +1617,9 @@ fun DiaryChronologicalTab(
         } else {
             // Apple HIG Charting Data & Rating Indicators Summary Card
             item(key = "diary-analytics-card", contentType = "diary_analytics_card") {
-                DiaryAnalyticsSummaryCard(comics = comics)
+                Box(modifier = Modifier.clickable { onOpenStatistics() }) {
+                    DiaryAnalyticsSummaryCard(comics = comics)
+                }
             }
 
             diaryGroups.forEach { (monthLabel, entries) ->
@@ -1521,7 +1629,8 @@ fun DiaryChronologicalTab(
                         entries = entries,
                         appSettings = appSettings,
                         revealedSpoilers = revealedSpoilers,
-                        onSelectComic = onSelectComic
+                        onSelectComic = onSelectComic,
+                        onShareComicReview = onShareComicReview
                     )
                 }
             }

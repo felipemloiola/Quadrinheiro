@@ -147,18 +147,53 @@ enum class AppTheme(
 
     companion object {
         fun fromId(id: String?): AppTheme {
-            return when (id?.uppercase()) {
-                "BLUE", "OCEAN_BLUE", "OCEANBLUE" -> BLUE
-                "WHITE" -> WHITE
-                "BLACK", "SAKURA_PINK" -> BLACK
-                "RED", "CRIMSON_RED" -> RED
-                "GREEN", "EMERALD_GREEN" -> GREEN
-                "PURPLE", "ROYAL_PURPLE" -> PURPLE
-                "ORANGE", "AMBER_GOLD" -> ORANGE
+            val clean = id?.trim()?.uppercase() ?: return BLUE
+            return when {
+                clean == "RED" || clean.contains("CARMINE") || clean.contains("CRIMSON") -> RED
+                clean == "GREEN" || clean.contains("EMERALD") || clean.contains("MINT") -> GREEN
+                clean == "PURPLE" || clean.contains("ROYAL") || clean.contains("VIOLET") -> PURPLE
+                clean == "ORANGE" || clean.contains("SUNSET") || clean.contains("AMBER") || clean.contains("SAND") || clean.contains("ESPRESSO") -> ORANGE
+                clean == "BLACK" || clean == "MONOCHROME" || clean.contains("MONO") || clean.contains("SAKURA") || clean.contains("ARCH") || clean.contains("OLED") -> BLACK
+                clean == "WHITE" || clean.contains("LIGHT") -> WHITE
+                clean == "BLUE" || clean.contains("OCEAN") || clean.contains("MIDNIGHT") || clean.contains("COBALT") || clean.contains("CYBER") || clean.contains("TEAL") || clean.contains("AERO") -> BLUE
                 else -> BLUE
             }
         }
     }
+}
+
+/**
+ * Paleta unificada dos 3 Anéis de Atividade (Estilo Apple Fitness):
+ * 1. Anel Externo (Move): Segue fielmente a cor principal de destaque do tema escolhido pelo usuário.
+ * 2. Anel Médio (Exercise): Cor secundária harmônica derivada do tema.
+ * 3. Anel Interno (Stand): Terceiro tom complementar tonal derivado do tema.
+ * Garante que os widgets da tela inicial usem exatamente as mesmas cores exibidas dentro do app.
+ */
+fun getAppleFitnessRingsColors(appTheme: AppTheme, isDark: Boolean = true): Triple<Color, Color, Color> {
+    val themeColors = getIOS27ThemeColors(appTheme, isDark)
+    val moveColor = themeColors.accent
+
+    val exerciseColor = when (appTheme) {
+        AppTheme.BLUE -> if (isDark) Color(0xFF30D5C8) else Color(0xFF00B4D8)   // Azul + Turquesa
+        AppTheme.RED -> if (isDark) Color(0xFFFF9F0A) else Color(0xFFF59E0B)    // Vermelho + Âmbar
+        AppTheme.GREEN -> if (isDark) Color(0xFF00C7BE) else Color(0xFF0D9488)  // Verde + Menta/Teal
+        AppTheme.PURPLE -> if (isDark) Color(0xFFFF375F) else Color(0xFFEC4899) // Roxo + Magenta
+        AppTheme.ORANGE -> if (isDark) Color(0xFFFF453A) else Color(0xFFEF4444) // Laranja + Coral
+        AppTheme.WHITE -> if (isDark) Color(0xFFA1A1AA) else Color(0xFF71717A)  // Branco/Grafite + Prata
+        AppTheme.BLACK -> if (isDark) Color(0xFF8E8E93) else Color(0xFF52525B)  // Titânio/Preto + Ardósia
+    }
+
+    val standColor = when (appTheme) {
+        AppTheme.BLUE -> if (isDark) Color(0xFF64D2FF) else Color(0xFF3B82F6)
+        AppTheme.RED -> if (isDark) Color(0xFFFF6482) else Color(0xFFE11D48)
+        AppTheme.GREEN -> if (isDark) Color(0xFF66E080) else Color(0xFF16A34A)
+        AppTheme.PURPLE -> if (isDark) Color(0xFF9D7BFF) else Color(0xFF6366F1)
+        AppTheme.ORANGE -> if (isDark) Color(0xFFFFD60A) else Color(0xFFD97706)
+        AppTheme.WHITE -> if (isDark) Color(0xFF71717A) else Color(0xFFA1A1AA)
+        AppTheme.BLACK -> if (isDark) Color(0xFF636366) else Color(0xFF71717A)
+    }
+
+    return Triple(moveColor, exerciseColor, standColor)
 }
 
 @Immutable

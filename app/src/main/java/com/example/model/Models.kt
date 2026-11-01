@@ -575,7 +575,10 @@ data class ComicEntry(
     val issueNumber: Int = 0,
     val updatedAt: Long = 0L,
     val isDirty: Boolean = false
-)
+) {
+    val displayTitle: String
+        get() = titlePtBr.ifBlank { title }
+}
 
 @Immutable
 data class ReaderProfile(

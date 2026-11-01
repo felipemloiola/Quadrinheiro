@@ -135,6 +135,7 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.WelcomeIntroScreen
 import com.example.ui.screens.DiaryChronologicalTab
 import com.example.ui.screens.HomeReadingNowTab
+import com.example.ui.screens.ReadingStatisticsScreen
 import com.example.ui.screens.SearchMultiApiTab
 import com.example.ui.screens.SettingsTabScreen
 import com.example.ui.screens.ShelfLibraryTab
@@ -182,12 +183,18 @@ import com.kyant.backdrop.shadow.Shadow
 import com.example.ui.components.rememberCurrentBackdrop
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.Velocity
+import com.example.widget.QuadrinheiroWidgetIntents
+import com.example.widget.QuadrinheiroWidgetsSync
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
+    private var pendingWidgetIntentState by mutableStateOf<Pair<String, String?>?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        extractWidgetIntent(intent)
 
         // Configure global Coil ImageLoader lazily off the UI startup path
         val appCtx = applicationContext
@@ -218,6 +225,13 @@ class MainActivity : ComponentActivity() {
             }
         )
 
+        // Pre-compile AGSL Liquid Glass shaders on an asynchronous background thread
+        // as soon as the app starts, avoiding shader compilation on the first UI frame (Choreographer).
+        com.kyant.backdrop.LiquidGlassShaderPrewarmer.prewarmAsync()
+
+        // Sincroniza os 3 Widgets Glance na tela inicial em background
+        QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appCtx)
+
         // Let the initial window SurfaceSyncGroup (wmsSync-VRI[MainActivity]#0 & VRI[MainActivity]#1)
         // complete its first frame immediately without blocking RenderThread on 30+ cold AGSL shader
         // compilations, then turn on full offscreen Liquid Glass effects on the very next frame.
@@ -235,16 +249,47 @@ class MainActivity : ComponentActivity() {
         setContent {
             // APP_BACKGROUND_FOCUS_V5: settings and inline sheets inherit background tap dismissal.
             Box(Modifier.fillMaxSize().dismissFocusOnBackgroundTap()) {
-                QuadrinheiroApp()
+                QuadrinheiroApp(
+                    pendingWidgetDeepLink = pendingWidgetIntentState,
+                    onConsumeWidgetDeepLink = { pendingWidgetIntentState = null }
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        extractWidgetIntent(intent)
+    }
+
+    private fun extractWidgetIntent(intent: android.content.Intent?) {
+        val action = intent?.getStringExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_ACTION)
+        if (!action.isNullOrBlank()) {
+            val comicId = intent.getStringExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_COMIC_ID)
+            pendingWidgetIntentState = action to comicId
+            intent.removeExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_ACTION)
+            intent.removeExtra(QuadrinheiroWidgetIntents.EXTRA_WIDGET_COMIC_ID)
         }
     }
 }
 
 @Composable
 fun QuadrinheiroApp(
-    viewModel: QuadrinheiroViewModel = viewModel()
+    viewModel: QuadrinheiroViewModel = viewModel(),
+    pendingWidgetDeepLink: Pair<String, String?>? = null,
+    onConsumeWidgetDeepLink: () -> Unit = {}
 ) {
+    LaunchedEffect(pendingWidgetDeepLink) {
+        if (pendingWidgetDeepLink != null) {
+            viewModel.handleWidgetDeepLink(
+                action = pendingWidgetDeepLink.first,
+                comicId = pendingWidgetDeepLink.second
+            )
+            onConsumeWidgetDeepLink()
+        }
+    }
+
     val authScreenUiState by viewModel.authScreenUiState.collectAsState()
     val authUiState = authScreenUiState.sessionState
     val showAuthModalFromSettings = authScreenUiState.showLinkModalFromSettings
@@ -254,6 +299,7 @@ fun QuadrinheiroApp(
     val isSidebarOpen by viewModel.isSidebarOpen.collectAsState()
     val settingsSubPage by viewModel.settingsSubPage.collectAsState()
     val settingsParentPage by viewModel.settingsParentPage.collectAsState()
+    val isStatisticsOpen by viewModel.isStatisticsOpen.collectAsState()
 
     val comics by viewModel.comics.collectAsState()
     val storedProfile by viewModel.profile.collectAsState()
@@ -285,6 +331,7 @@ fun QuadrinheiroApp(
 
     val selectedComic by viewModel.selectedComic.collectAsState()
     val infoModalComic by viewModel.infoModalComic.collectAsState()
+    val socialShareRequest by viewModel.socialShareRequest.collectAsState()
     val onlineSequencePool by viewModel.onlineSequencePool.collectAsState()
     val showManualModal by viewModel.showManualModal.collectAsState()
     val isSheetExpanded by viewModel.isSheetExpanded.collectAsState()
@@ -294,8 +341,8 @@ fun QuadrinheiroApp(
     val isEnteringApp by viewModel.isEnteringApp.collectAsState()
 
     // Persistent LazyListState per route key so scroll position is preserved across tabs, library sections & settings sub-menus
-    val currentRouteKey = remember(activeTab, settingsSubPage, shelfSection) {
-        viewModel.getCurrentRouteKey(activeTab, settingsSubPage, shelfSection)
+    val currentRouteKey = remember(activeTab, settingsSubPage, shelfSection, isStatisticsOpen) {
+        viewModel.getCurrentRouteKey(activeTab, settingsSubPage, shelfSection, isStatisticsOpen)
     }
 
     val activeListState = remember(currentRouteKey) {
@@ -327,6 +374,16 @@ fun QuadrinheiroApp(
     val context = LocalContext.current
 
     var isTabBarCollapsed by remember { mutableStateOf(false) }
+    var isExtremeFling by remember { mutableStateOf(false) }
+    LaunchedEffect(activeListState) {
+        androidx.compose.runtime.snapshotFlow {
+            activeListState.isScrollInProgress
+        }.collect { inProgress ->
+            if (!inProgress && isExtremeFling) {
+                isExtremeFling = false
+            }
+        }
+    }
     LaunchedEffect(appSettings.minimizeTabBarOnScroll) {
         if (!appSettings.minimizeTabBarOnScroll) {
             isTabBarCollapsed = false
@@ -335,6 +392,11 @@ fun QuadrinheiroApp(
     val tabBarScrollConnection = remember(appSettings.minimizeTabBarOnScroll) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.SideEffect && abs(available.y) > 18f) {
+                    if (!isExtremeFling) isExtremeFling = true
+                } else if (abs(available.y) > 36f) {
+                    if (!isExtremeFling) isExtremeFling = true
+                }
                 if (!appSettings.minimizeTabBarOnScroll) {
                     if (isTabBarCollapsed) isTabBarCollapsed = false
                     return Offset.Zero
@@ -345,6 +407,18 @@ fun QuadrinheiroApp(
                     isTabBarCollapsed = false
                 }
                 return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (abs(available.y) > 1350f) {
+                    isExtremeFling = true
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                isExtremeFling = false
+                return Velocity.Zero
             }
         }
     }
@@ -362,17 +436,21 @@ fun QuadrinheiroApp(
     }
 
     BackHandler(
-        enabled = selectedComic != null ||
+        enabled = socialShareRequest != null ||
+            selectedComic != null ||
             infoModalComic != null ||
             showManualModal ||
             isSidebarOpen ||
+            isStatisticsOpen ||
             (activeTab != "home" && !(activeTab == "settings" && settingsSubPage != null))
     ) {
         when {
+            socialShareRequest != null -> viewModel.closeSocialShareSheet()
             selectedComic != null -> viewModel.selectComicForSheet(null)
             infoModalComic != null -> viewModel.openInfoSynopsisModal(null)
             showManualModal -> viewModel.setShowManualModal(false)
             isSidebarOpen -> viewModel.setSidebarOpen(false)
+            isStatisticsOpen -> viewModel.closeReadingStatistics()
             activeTab == "shelf" && shelfSection != "shelf" -> viewModel.setShelfSection("shelf")
             else -> viewModel.switchMainTab("home")
         }
@@ -580,6 +658,7 @@ fun QuadrinheiroApp(
         CompositionLocalProvider(
             LocalLiquidGlassBackdrop provides backgroundBackdrop,
             LocalLiquidGlassScrollState provides activeListState,
+            com.example.ui.components.LocalLiquidGlassExtremeFling provides isExtremeFling,
             com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState
         ) {
             Box(
@@ -604,7 +683,11 @@ fun QuadrinheiroApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .layerBackdrop(backgroundBackdrop, reuseRecordedContent = true)
+                            .layerBackdrop(
+                                backdrop = backgroundBackdrop,
+                                reuseRecordedContent = true,
+                                freezeSnapshot = isExtremeFling
+                            )
                             .background(themeColors.bgPrimary)
                     ) {
                         // A. Gradiente escultural base do tema + luz ambiente suave
@@ -723,7 +806,37 @@ fun QuadrinheiroApp(
                                 .align(Alignment.TopCenter)
                         ) {
                             androidx.compose.runtime.key(currentRouteKey) {
-                                when (activeTab) {
+                                if (isStatisticsOpen) {
+                                    ReadingStatisticsScreen(
+                                        comics = comics,
+                                        profile = profile,
+                                        appSettings = appSettings,
+                                        listState = activeListState,
+                                        onBack = { viewModel.closeReadingStatistics() },
+                                        onOpenGoalSettings = {
+                                            viewModel.closeReadingStatistics()
+                                            viewModel.switchMainTab("settings")
+                                            viewModel.openSettingsCategory("profile")
+                                        },
+                                        onUpdateGoals = { newYearlyGoal, newDailyPagesGoal ->
+                                            viewModel.updateProfile {
+                                                it.copy(
+                                                    yearlyGoal = newYearlyGoal.coerceIn(1, 500),
+                                                    dailyPagesGoal = newDailyPagesGoal.coerceIn(5, 500)
+                                                )
+                                            }
+                                        },
+                                        onShareGoalSummary = { period ->
+                                            viewModel.openSocialShareSheet(
+                                                com.example.ui.components.SocialShareRequest(
+                                                    initialCardType = com.example.ui.components.SocialShareCardType.GOAL_SUMMARY,
+                                                    comic = currentlyReadingComic ?: comics.firstOrNull(),
+                                                    initialGoalPeriod = period
+                                                )
+                                            )
+                                        }
+                                    )
+                                } else when (activeTab) {
                                     "home" -> HomeReadingNowTab(
                                         comics = comics,
                                         profile = profile,
@@ -743,11 +856,17 @@ fun QuadrinheiroApp(
                                         onQuickUpdateReadingPage = viewModel::quickUpdateReadingPage,
                                         onToggleBottomAccessory = { enabled ->
                                             viewModel.updateSettings { it.copy(showBottomAccessory = enabled) }
+                                        },
+                                        onOpenStatistics = {
+                                            viewModel.scrollMemory[currentRouteKey] =
+                                                activeListState.firstVisibleItemIndex to activeListState.firstVisibleItemScrollOffset
+                                            viewModel.openReadingStatistics()
                                         }
                                     )
 
                                     "shelf" -> ShelfLibraryTab(
                                         comics = comics,
+                                        profile = profile,
                                         appSettings = appSettings,
                                         shelfSection = shelfSection,
                                         shelfStatus = shelfStatus,
@@ -773,16 +892,61 @@ fun QuadrinheiroApp(
                                         onSelectComic = { viewModel.selectComicForSheet(it) },
                                         hasMoreComics = hasMoreCloudComics,
                                         isLoadingMoreComics = isLoadingMoreComics,
-                                        onLoadMoreComics = viewModel::loadMoreCloudComics
+                                        onLoadMoreComics = viewModel::loadMoreCloudComics,
+                                        onOpenStatistics = {
+                                            viewModel.scrollMemory[currentRouteKey] =
+                                                activeListState.firstVisibleItemIndex to activeListState.firstVisibleItemScrollOffset
+                                            viewModel.openReadingStatistics()
+                                        },
+                                        onShareComicReview = { entry ->
+                                            viewModel.openSocialShareSheet(
+                                                com.example.ui.components.SocialShareRequest(
+                                                    initialCardType = com.example.ui.components.SocialShareCardType.COMPLETED_READING,
+                                                    comic = entry
+                                                )
+                                            )
+                                        },
+                                        onShareGoalSummary = { period ->
+                                            viewModel.openSocialShareSheet(
+                                                com.example.ui.components.SocialShareRequest(
+                                                    initialCardType = com.example.ui.components.SocialShareCardType.GOAL_SUMMARY,
+                                                    comic = currentlyReadingComic ?: comics.firstOrNull(),
+                                                    initialGoalPeriod = period
+                                                )
+                                            )
+                                        }
                                     )
 
                                     "diary" -> DiaryChronologicalTab(
                                         comics = comics,
+                                        profile = profile,
                                         appSettings = appSettings,
                                         listState = activeListState,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },
-                                        onSelectComic = { viewModel.selectComicForSheet(it) }
+                                        onSelectComic = { viewModel.selectComicForSheet(it) },
+                                        onOpenStatistics = {
+                                            viewModel.scrollMemory[currentRouteKey] =
+                                                activeListState.firstVisibleItemIndex to activeListState.firstVisibleItemScrollOffset
+                                            viewModel.openReadingStatistics()
+                                        },
+                                        onShareComicReview = { entry ->
+                                            viewModel.openSocialShareSheet(
+                                                com.example.ui.components.SocialShareRequest(
+                                                    initialCardType = com.example.ui.components.SocialShareCardType.COMPLETED_READING,
+                                                    comic = entry
+                                                )
+                                            )
+                                        },
+                                        onShareGoalSummary = { period ->
+                                            viewModel.openSocialShareSheet(
+                                                com.example.ui.components.SocialShareRequest(
+                                                    initialCardType = com.example.ui.components.SocialShareCardType.GOAL_SUMMARY,
+                                                    comic = currentlyReadingComic ?: comics.firstOrNull(),
+                                                    initialGoalPeriod = period
+                                                )
+                                            )
+                                        }
                                     )
 
                                     "settings" -> SettingsTabScreen(
@@ -831,7 +995,7 @@ fun QuadrinheiroApp(
                 CompositionLocalProvider(
                     LocalLiquidGlassBackdrop provides mainContentBackdrop
                 ) {
-                    if (activeTab != "settings" && appSettings.showFloatingMenu) {
+                    if (activeTab != "settings" && !isStatisticsOpen && appSettings.showFloatingMenu) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -862,7 +1026,7 @@ fun QuadrinheiroApp(
 
                     // Mini Menu Flutuante de Leitura ("Continuar Lendo") + Tab Bar
                     IOS27BottomTabViewContainer(
-                    showBottomAccessory = appSettings.showBottomAccessory,
+                    showBottomAccessory = appSettings.showBottomAccessory && !isStatisticsOpen,
                     featuredReadingItem = featuredReadingItem,
                     readingNowCount = readingNowList.size,
                     activeReadingIndex = activeReadingIndex,
@@ -875,7 +1039,7 @@ fun QuadrinheiroApp(
                         viewModel.switchMainTab(nextTab)
                     },
                     isTabBarCollapsed = isTabBarCollapsed,
-                    isScrolling = activeListState.isScrollInProgress,
+                    isScrolling = isExtremeFling,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .windowInsetsPadding(WindowInsets.navigationBars)
@@ -1013,7 +1177,16 @@ fun QuadrinheiroApp(
                         onEditSavedComic = { saved ->
                             viewModel.selectComicForSheet(saved)
                         },
-                        onDismiss = { viewModel.openInfoSynopsisModal(null) }
+                        onDismiss = { viewModel.openInfoSynopsisModal(null) },
+                        onShareComic = { shareComic, cardType, momentId ->
+                            viewModel.openSocialShareSheet(
+                                com.example.ui.components.SocialShareRequest(
+                                    initialCardType = cardType,
+                                    comic = shareComic,
+                                    initialMomentId = momentId
+                                )
+                            )
+                        }
                     )
                 }
 
@@ -1045,7 +1218,28 @@ fun QuadrinheiroApp(
                         onSetExpanded = { expanded -> viewModel.setSheetExpanded(expanded) },
                         onSave = viewModel::saveComic,
                         onDelete = viewModel::deleteComic,
-                        onDismiss = { viewModel.selectComicForSheet(null) }
+                        onDismiss = { viewModel.selectComicForSheet(null) },
+                        onShareComic = { shareComic, cardType, momentId ->
+                            viewModel.openSocialShareSheet(
+                                com.example.ui.components.SocialShareRequest(
+                                    initialCardType = cardType,
+                                    comic = shareComic,
+                                    initialMomentId = momentId
+                                )
+                            )
+                        }
+                    )
+                }
+
+                // Modal de Exportação e Compartilhamento Social (Cards Estilo Apple: Stories 9:16 e Feed 1:1)
+                socialShareRequest?.let { currentShareReq ->
+                    com.example.ui.components.SocialShareCardSheetModal(
+                        request = currentShareReq,
+                        allComics = comics,
+                        profile = profile,
+                        appSettings = appSettings,
+                        onShowToast = { msg -> viewModel.showNotice(msg) },
+                        onDismiss = { viewModel.closeSocialShareSheet() }
                     )
                 }
 

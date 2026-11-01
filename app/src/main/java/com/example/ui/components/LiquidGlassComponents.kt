@@ -48,6 +48,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
@@ -223,6 +224,13 @@ val LocalLiquidGlassScrollState = compositionLocalOf<LazyListState?> { null }
 val LocalLiquidGlassScrollTick = compositionLocalOf { 0 }
 
 /**
+ * Indica se a lista ativa está em inércia extrema de rolagem rápida (fling).
+ * Quando ativo, congela o snapshot raster das camadas decorativas de fundo e desativa
+ * temporariamente a refração em tempo real para manter 120 FPS cravados.
+ */
+val LocalLiquidGlassExtremeFling = compositionLocalOf { false }
+
+/**
  * Guarda de escopo para impedir qualquer chamada aninhada a `GraphicsLayer.record` no mesmo frame,
  * prevenindo crashes nativos de RenderNode no HWUI do Android.
  */
@@ -312,9 +320,10 @@ fun Modifier.liquidGlass(
     val backdrop = rememberCurrentBackdrop()
     val mat = LocalAppleMaterials.current
     val settings = com.example.ui.theme.LocalAppSettings.current
+    val isExtremeFling = LocalLiquidGlassExtremeFling.current
     val isLight = mat.scheme.isLight
-    val edgeRefraction = mat.edgeRefraction && !settings.reduceTransparency && settings.enableLensRefraction
-    val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
+    val edgeRefraction = mat.edgeRefraction && !settings.reduceTransparency && settings.enableLensRefraction && !isExtremeFling
+    val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration && !isExtremeFling
     val refractionMult = settings.glassIntensity.coerceIn(0.45f, 2.5f)
     val baseAlpha = surfaceAlpha ?: if (settings.reduceTransparency) {
         if (isLight) 0.78f else 0.80f
@@ -966,6 +975,9 @@ fun BookCover(
                     }
                 }
             }
+            if (cleanSrc.isNotEmpty() && !hasFailed) {
+                CoverShimmerPlaceholder(modifier = Modifier.fillMaxSize())
+            }
         }
 
         if (cleanSrc.isNotEmpty() && !hasFailed) {
@@ -985,13 +997,20 @@ fun BookCover(
                     .allowRgb565(true)
                     .build()
             }
+            val coverAlpha by animateFloatAsState(
+                targetValue = if (isImageLoaded) 1f else 0f,
+                animationSpec = tween(durationMillis = 280, easing = EaseOut),
+                label = "bookCoverSoftFadeIn"
+            )
             AsyncImage(
                 model = imageRequest,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
                 onSuccess = { isImageLoaded = true },
                 onError = { hasFailed = true },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = coverAlpha }
             )
         }
 
@@ -1016,6 +1035,66 @@ fun BookCover(
         )
 
         overlayContent()
+    }
+}
+
+/**
+ * Shimmer translúcido com gradiente derivado da paleta do tema ativo e saturação suave,
+ * exibido enquanto as capas de alta resolução são baixadas pela rede.
+ */
+@Composable
+private fun CoverShimmerPlaceholder(
+    modifier: Modifier = Modifier
+) {
+    val themeColors = com.example.ui.theme.LocalIOS27Theme.current
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "coverShimmerTransition")
+    val shimmerProgress by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 2f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = androidx.compose.animation.core.LinearEasing
+            ),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
+        ),
+        label = "coverShimmerSweep"
+    )
+
+    // Cores derivadas do tema com saturação suavizada (blend translúcido com branco editorial)
+    val softPrimaryTint = remember(themeColors.accent) {
+        androidx.compose.ui.graphics.lerp(themeColors.accent, Color.White, 0.42f).copy(alpha = 0.16f)
+    }
+    val softSecondaryTint = remember(themeColors.accentSecondary) {
+        androidx.compose.ui.graphics.lerp(themeColors.accentSecondary, Color.White, 0.50f).copy(alpha = 0.24f)
+    }
+    val ambientBaseTint = remember(themeColors.accent) {
+        themeColors.accent.copy(alpha = 0.05f)
+    }
+
+    Canvas(modifier = modifier) {
+        val w = size.width.coerceAtLeast(1f)
+        val h = size.height.coerceAtLeast(1f)
+        val bandWidth = w * 0.85f
+        val startX = shimmerProgress * w
+
+        // Camada base translúcida com saturação suave do tema
+        drawRect(color = ambientBaseTint)
+
+        // Feixe diagonal translúcido derivado da paleta do tema
+        drawRect(
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    softPrimaryTint,
+                    softSecondaryTint,
+                    softPrimaryTint,
+                    Color.Transparent
+                ),
+                start = Offset(startX - bandWidth, h * 0.15f),
+                end = Offset(startX + bandWidth, h * 0.85f)
+            )
+        )
     }
 }
 
@@ -3491,6 +3570,7 @@ fun SculpturalWaveBackdrop(
 
 /**
  * Apple HIG Activity Rings & Circular Gauge (`activity-rings` + `gauges`).
+ * Suporta 2 ou 3 anéis concêntricos no estilo Apple Fitness (Movimento →, Exercício ↠, Constância ↑).
  */
 @Composable
 fun AppleActivityRingsGauge(
@@ -3500,18 +3580,27 @@ fun AppleActivityRingsGauge(
     sizeDp: Dp = 68.dp,
     modifier: Modifier = Modifier,
     outerColor: Color = LocalIOS27Theme.current.accent,
-    innerColor: Color = LocalIOS27Theme.current.accentSecondary
+    innerColor: Color = LocalIOS27Theme.current.accentSecondary,
+    thirdProgress: Float? = null,
+    thirdColor: Color = LocalIOS27Theme.current.accentSecondary,
+    showCenterLabel: Boolean = true
 ) {
-    val themeColors = LocalIOS27Theme.current
+    val s = LocalAppleMaterials.current.scheme
+    val isDark = LocalIsDarkTheme.current
     val animOuter by animateFloatAsState(
-        targetValue = outerProgress.coerceIn(0.03f, 1f),
+        targetValue = outerProgress.coerceIn(0f, 1.5f),
         animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
         label = "outerRing"
     )
     val animInner by animateFloatAsState(
-        targetValue = innerProgress.coerceIn(0.03f, 1f),
+        targetValue = innerProgress.coerceIn(0f, 1.5f),
         animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
         label = "innerRing"
+    )
+    val animThird by animateFloatAsState(
+        targetValue = (thirdProgress ?: 0f).coerceIn(0f, 1.5f),
+        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
+        label = "thirdRing"
     )
 
     Box(
@@ -3519,66 +3608,68 @@ fun AppleActivityRingsGauge(
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeOuter = 6.5.dp.toPx()
-            val strokeInner = 6.5.dp.toPx()
-            val gap = 3.dp.toPx()
+            val hasThree = thirdProgress != null
+            val minDim = this.size.minDimension
+            val strokeWidth = when {
+                hasThree -> (minDim * 0.135f).coerceIn(3.dp.toPx(), 20.dp.toPx())
+                else -> (minDim * 0.15f).coerceIn(4.dp.toPx(), 18.dp.toPx())
+            }
+            val gap = (strokeWidth * 0.11f).coerceAtLeast(1.2.dp.toPx())
+            val trackAlpha = if (isDark) 0.22f else 0.16f
 
-            val outerInset = strokeOuter / 2f + 1.dp.toPx()
-            val outerDiameter = (this.size.minDimension - outerInset * 2f).coerceAtLeast(4f)
+            fun drawFitnessRing(
+                ringIndex: Int,
+                progress: Float,
+                baseColor: Color
+            ) {
+                val inset = strokeWidth / 2f + 1.dp.toPx() + ringIndex * (strokeWidth + gap)
+                val diameter = (minDim - inset * 2f).coerceAtLeast(4f)
+                val topLeft = Offset(inset, inset)
+                val arcSize = Size(diameter, diameter)
 
-            val innerInset = outerInset + strokeOuter + gap
-            val innerDiameter = (this.size.minDimension - innerInset * 2f).coerceAtLeast(4f)
+                // Trilho translúcido colorido na cor do respectivo anel (1, 2 ou 3), sem contorno preto
+                drawArc(
+                    color = baseColor.copy(alpha = trackAlpha),
+                    startAngle = 0f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                )
 
-            drawArc(
-                color = outerColor.copy(alpha = 0.18f),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = Offset(outerInset, outerInset),
-                size = Size(outerDiameter, outerDiameter),
-                style = Stroke(width = strokeOuter, cap = StrokeCap.Round)
-            )
-            drawArc(
-                brush = Brush.sweepGradient(
-                    colors = listOf(outerColor, outerColor.copy(alpha = 0.85f), outerColor)
-                ),
-                startAngle = -90f,
-                sweepAngle = 360f * animOuter,
-                useCenter = false,
-                topLeft = Offset(outerInset, outerInset),
-                size = Size(outerDiameter, outerDiameter),
-                style = Stroke(width = strokeOuter, cap = StrokeCap.Round)
-            )
+                // Arco de progresso uniforme da mesma cor do anel (sem bolinha de outra cor na ponta)
+                val clamped = progress.coerceIn(0f, 1f)
+                if (clamped > 0.005f) {
+                    val effectiveSweep = (clamped * 360f).coerceAtLeast(6f)
+                    drawArc(
+                        color = baseColor,
+                        startAngle = -90f,
+                        sweepAngle = effectiveSweep,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                }
+            }
 
-            drawArc(
-                color = innerColor.copy(alpha = 0.18f),
-                startAngle = 0f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = Offset(innerInset, innerInset),
-                size = Size(innerDiameter, innerDiameter),
-                style = Stroke(width = strokeInner, cap = StrokeCap.Round)
-            )
-            drawArc(
-                brush = Brush.sweepGradient(
-                    colors = listOf(innerColor, innerColor.copy(alpha = 0.85f), innerColor)
-                ),
-                startAngle = -90f,
-                sweepAngle = 360f * animInner,
-                useCenter = false,
-                topLeft = Offset(innerInset, innerInset),
-                size = Size(innerDiameter, innerDiameter),
-                style = Stroke(width = strokeInner, cap = StrokeCap.Round)
-            )
+            drawFitnessRing(0, animOuter, outerColor)
+            drawFitnessRing(1, animInner, innerColor)
+            if (hasThree) {
+                drawFitnessRing(2, animThird, thirdColor)
+            }
         }
 
-        Text(
-            text = centerLabel,
-            fontSize = 11.5.sp,
-            fontFamily = SpaceGroteskTabularFamily,
-            fontWeight = FontWeight.Bold,
-            color = themeColors.textPrimary
-        )
+        if (showCenterLabel && centerLabel.isNotBlank()) {
+            Text(
+                text = centerLabel,
+                fontSize = if (thirdProgress != null) 11.sp else 11.5.sp,
+                fontFamily = SpaceGroteskTabularFamily,
+                fontWeight = FontWeight.Bold,
+                color = s.textPrimary
+            )
+        }
     }
 }
 
