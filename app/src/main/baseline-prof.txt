@@ -3,56 +3,57 @@
 # Liquid Glass AGSL shader pipelines, and LazyColumn shelf rendering.
 
 # 1. Core Application & Cold Start Boot Path
-HSPLcom/example/MainActivity;->**(**)**
-PLcom/example/MainActivity;
+HSPLcom/example/MainActivity;-><init>()V
+HSPLcom/example/MainActivity;->onCreate(Landroid/os/Bundle;)V
+Lcom/example/MainActivity;
 HSPLcom/example/MainActivityKt;->**(**)**
-PLcom/example/MainActivityKt;
+Lcom/example/MainActivityKt;
 HSPLcom/example/viewmodel/QuadrinheiroViewModel;->**(**)**
-PLcom/example/viewmodel/QuadrinheiroViewModel;
+Lcom/example/viewmodel/QuadrinheiroViewModel;
 HSPLcom/example/data/SafeStorage;->**(**)**
-PLcom/example/data/SafeStorage;
+Lcom/example/data/SafeStorage;
 HSPLcom/example/data/QuadrinheiroAuthManager;->**(**)**
-PLcom/example/data/QuadrinheiroAuthManager;
+Lcom/example/data/QuadrinheiroAuthManager;
 HSPLcom/example/data/QuadrinheiroCloudRepository;->**(**)**
-PLcom/example/data/QuadrinheiroCloudRepository;
+Lcom/example/data/QuadrinheiroCloudRepository;
 HSPLcom/example/data/CatalogMatchIndex;->**(**)**
-PLcom/example/data/CatalogMatchIndex;
+Lcom/example/data/CatalogMatchIndex;
 HSPLcom/example/data/CuratedCatalog;->**(**)**
-PLcom/example/data/CuratedCatalog;
+Lcom/example/data/CuratedCatalog;
 
 # 2. WelcomeIntroScreen & Auth Flow Transitions
 HSPLcom/example/ui/screens/WelcomeIntroScreenKt;->**(**)**
-PLcom/example/ui/screens/WelcomeIntroScreenKt;
+Lcom/example/ui/screens/WelcomeIntroScreenKt;
 HSPLcom/example/ui/screens/AuthScreenKt;->**(**)**
-PLcom/example/ui/screens/AuthScreenKt;
+Lcom/example/ui/screens/AuthScreenKt;
 HSPLcom/example/ui/screens/AuthSubcomponentsKt;->**(**)**
-PLcom/example/ui/screens/AuthSubcomponentsKt;
+Lcom/example/ui/screens/AuthSubcomponentsKt;
 HSPLcom/example/ui/components/QuadrinheiroLogoKt;->**(**)**
-PLcom/example/ui/components/QuadrinheiroLogoKt;
+Lcom/example/ui/components/QuadrinheiroLogoKt;
 
 # 3. Liquid Glass Engine, Shaders & Backdrop Rendering Pipeline
 HSPLcom/example/ui/components/LiquidGlassComponentsKt;->**(**)**
-PLcom/example/ui/components/LiquidGlassComponentsKt;
+Lcom/example/ui/components/LiquidGlassComponentsKt;
 HSPLcom/example/ui/components/LiquidGlassEngineKt;->**(**)**
-PLcom/example/ui/components/LiquidGlassEngineKt;
+Lcom/example/ui/components/LiquidGlassEngineKt;
 HSPLcom/example/ui/components/SdfShader;->**(**)**
-PLcom/example/ui/components/SdfShader;
+Lcom/example/ui/components/SdfShader;
 HSPLcom/example/ui/components/AmbientImageProcessor;->**(**)**
-PLcom/example/ui/components/AmbientImageProcessor;
+Lcom/example/ui/components/AmbientImageProcessor;
 HSPLcom/kyant/backdrop/DrawBackdropModifierKt;->**(**)**
-PLcom/kyant/backdrop/DrawBackdropModifierKt;
+Lcom/kyant/backdrop/DrawBackdropModifierKt;
 HSPLcom/kyant/backdrop/DrawBackdropNode;->**(**)**
-PLcom/kyant/backdrop/DrawBackdropNode;
+Lcom/kyant/backdrop/DrawBackdropNode;
 HSPLcom/kyant/backdrop/BackdropEffectScopeImpl;->**(**)**
-PLcom/kyant/backdrop/BackdropEffectScopeImpl;
+Lcom/kyant/backdrop/BackdropEffectScopeImpl;
 HSPLcom/kyant/backdrop/RuntimeShaderCacheImpl;->**(**)**
-PLcom/kyant/backdrop/RuntimeShaderCacheImpl;
+Lcom/kyant/backdrop/RuntimeShaderCacheImpl;
 HSPLcom/kyant/backdrop/LiquidGlassShaderPrewarmer;->**(**)**
-PLcom/kyant/backdrop/LiquidGlassShaderPrewarmer;
+Lcom/kyant/backdrop/LiquidGlassShaderPrewarmer;
 HSPLcom/kyant/backdrop/backdrops/LayerBackdropModifierKt;->**(**)**
-PLcom/kyant/backdrop/backdrops/LayerBackdropModifierKt;
+Lcom/kyant/backdrop/backdrops/LayerBackdropModifierKt;
 HSPLcom/kyant/backdrop/backdrops/LayerBackdropNode;->**(**)**
-PLcom/kyant/backdrop/backdrops/LayerBackdropNode;
+Lcom/kyant/backdrop/backdrops/LayerBackdropNode;
 HSPLcom/kyant/backdrop/effects/BlurKt;->**(**)**
 HSPLcom/kyant/backdrop/effects/ColorFilterKt;->**(**)**
 HSPLcom/kyant/backdrop/effects/LensKt;->**(**)**
@@ -63,16 +64,16 @@ HSPLcom/kyant/backdrop/catalog/components/LiquidBottomTabKt;->**(**)**
 
 # 4. Main Tabs, Library Lists & Theme Models
 HSPLcom/example/ui/screens/MainTabsScreensKt;->**(**)**
-PLcom/example/ui/screens/MainTabsScreensKt;
+Lcom/example/ui/screens/MainTabsScreensKt;
 HSPLcom/example/ui/screens/MainTabsSubcomponentsKt;->**(**)**
-PLcom/example/ui/screens/MainTabsSubcomponentsKt;
+Lcom/example/ui/screens/MainTabsSubcomponentsKt;
 HSPLcom/example/ui/screens/SettingsScreenKt;->**(**)**
-PLcom/example/ui/screens/SettingsScreenKt;
+Lcom/example/ui/screens/SettingsScreenKt;
 HSPLcom/example/ui/theme/ThemeKt;->**(**)**
-PLcom/example/ui/theme/ThemeKt;
+Lcom/example/ui/theme/ThemeKt;
 HSPLcom/example/model/ComicEntry;->**(**)**
-PLcom/example/model/ComicEntry;
+Lcom/example/model/ComicEntry;
 HSPLcom/example/model/AppSettings;->**(**)**
-PLcom/example/model/AppSettings;
+Lcom/example/model/AppSettings;
 HSPLcom/example/model/ReaderProfile;->**(**)**
-PLcom/example/model/ReaderProfile;
+Lcom/example/model/ReaderProfile;
