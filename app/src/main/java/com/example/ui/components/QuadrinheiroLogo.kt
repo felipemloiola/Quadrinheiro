@@ -23,14 +23,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.PlusJakartaSansFamily
-
-import androidx.compose.ui.unit.TextUnit
-import com.example.ui.theme.SfProDisplayFontFamily
 
 /**
  * Primary = cores originais da marca (usar somente na tela de login).
@@ -40,8 +39,8 @@ enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
 
 /**
  * Tipografia oficial e padronizada da marca "Quadrinheiro",
- * idêntica ao estilo aprovado nos cards de compartilhamento social
- * (SF Pro Display Black/ExtraBold com tracking óptico ajustado).
+ * COPIADA EXATAMENTE do renderizador Canvas do Card de Compartilhamento Social
+ * (Typeface.create("sans-serif", Typeface.BOLD) com letterSpacing = -0.02f / -0.02em).
  */
 @Composable
 fun QuadrinheiroBrandText(
@@ -53,9 +52,9 @@ fun QuadrinheiroBrandText(
     Text(
         text = text,
         fontSize = fontSize,
-        fontFamily = SfProDisplayFontFamily,
-        fontWeight = FontWeight.Black,
-        letterSpacing = (-0.4).sp,
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.02).sp,
         color = color,
         maxLines = 1,
         softWrap = false,
@@ -86,7 +85,7 @@ private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier, adapt
         ) else listOf(
             Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.65f))),
             Brush.linearGradient(listOf(accent.copy(alpha = 0.75f), accent)),
-            Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.8f)))
+            Brush.linearGradient(listOf(accent.copy(alpha = 0.8f)))
         )
     }
     val sized = if (modifier == Modifier) Modifier.size(64.dp) else modifier
