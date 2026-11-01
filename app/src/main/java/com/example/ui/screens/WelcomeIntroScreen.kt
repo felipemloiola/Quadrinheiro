@@ -293,15 +293,11 @@ fun WelcomeIntroScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
+                    com.example.ui.components.QuadrinheiroBrandText(
                         text = "Quadrinheiro",
                         fontSize = 34.sp,
-                        lineHeight = 40.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = SfProDisplayFontFamily,
-                        letterSpacing = (-0.8).sp,
                         color = theme.textPrimary,
-                        textAlign = TextAlign.Center
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                     Text(
                         text = "Sua biblioteca definitiva de quadrinhos",
