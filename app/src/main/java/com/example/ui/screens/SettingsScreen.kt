@@ -504,7 +504,7 @@ fun SettingsTabScreen(
                         adaptiveBadgeBackground = true,
                         modifier = Modifier
                             .size(42.dp)
-                            .clip(com.kyant.shapes.ContinuousRoundedRectangle(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
                     )
                     com.example.ui.components.QuadrinheiroBrandText(
                         text = "Quadrinheiro",
