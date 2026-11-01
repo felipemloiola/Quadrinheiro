@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.PlusJakartaSansFamily
+import com.example.ui.theme.SfProDisplayFontFamily
 
 /**
  * Primary = cores originais da marca (usar somente na tela de login).
@@ -39,8 +40,8 @@ enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
 
 /**
  * Tipografia oficial e padronizada da marca "Quadrinheiro",
- * COPIADA EXATAMENTE do renderizador Canvas do Card de Compartilhamento Social
- * (Typeface.create("sans-serif", Typeface.BOLD) com letterSpacing = -0.02f / -0.02em).
+ * COPIADA EXATAMENTE do estilo visual do Card de Compartilhamento Social Letterboxd
+ * (SF Pro Display Black / Bold puro com tracking óptico ajustado).
  */
 @Composable
 fun QuadrinheiroBrandText(
@@ -52,7 +53,7 @@ fun QuadrinheiroBrandText(
     Text(
         text = text,
         fontSize = fontSize,
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = SfProDisplayFontFamily,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.02).sp,
         color = color,
@@ -92,8 +93,12 @@ private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier, adapt
     val framed = if (variant == QuadrinheiroLogoVariant.Badge) {
         sized.background(
             if (adaptiveBackground && theme.isDark) {
-                androidx.compose.ui.graphics.lerp(theme.bgPrimary, theme.textPrimary, 0.08f)
-            } else theme.bgPrimary,
+                Color(0xFF000000)
+            } else if (theme.isDark) {
+                Color(0xFF000000)
+            } else {
+                theme.bgPrimary
+            },
             RoundedCornerShape(12.dp)
         )
     } else sized
