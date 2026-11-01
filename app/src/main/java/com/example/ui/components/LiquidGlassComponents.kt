@@ -366,7 +366,7 @@ fun Modifier.liquidGlass(
             val blurPx = if (settings.reduceTransparency) {
                 24f.dp.toPx()
             } else {
-                ((radiusX * 0.20f) * settings.glassBlurIntensity).coerceIn(2f, 18f).dp.toPx()
+                ((radiusX * 0.16f) * settings.glassBlurIntensity).coerceIn(2f, 14f).dp.toPx()
             }
             if (blurPx >= 1f && !blurPx.isNaN()) {
                 blur(blurPx)

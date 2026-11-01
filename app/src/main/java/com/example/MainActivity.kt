@@ -229,8 +229,8 @@ class MainActivity : ComponentActivity() {
         // as soon as the app starts, avoiding shader compilation on the first UI frame (Choreographer).
         com.kyant.backdrop.LiquidGlassShaderPrewarmer.prewarmAsync()
 
-        // Sincroniza os 3 Widgets Glance na tela inicial em background
-        QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appCtx)
+        // COOL_DOWN_STARTUP_V20: Defer widget updates until after UI frame initialization
+        // Prevents thermal throttling, IO spikes, and frame drops on app boot.
 
         // Let the initial window SurfaceSyncGroup (wmsSync-VRI[MainActivity]#0 & VRI[MainActivity]#1)
         // complete its first frame immediately without blocking RenderThread on 30+ cold AGSL shader

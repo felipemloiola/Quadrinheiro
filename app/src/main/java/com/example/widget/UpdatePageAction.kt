@@ -168,10 +168,13 @@ object QuadrinheiroWidgetsSync {
         }
     }
 
+    private var debounceJob: kotlinx.coroutines.Job? = null
+
     fun refreshAllWidgetsAsync(context: Context) {
         val appCtx = context.applicationContext
-        bumpInMemoryRevision()
-        widgetScope.launch {
+        debounceJob?.cancel()
+        debounceJob = widgetScope.launch {
+            kotlinx.coroutines.delay(1200L)
             updateAllWidgets(appCtx)
         }
     }
