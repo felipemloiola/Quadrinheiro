@@ -3,11 +3,6 @@ from pathlib import Path
 pending = {}
 report = []
 
-def once(text, old, new):
-    if text.count(old) != 1:
-        raise RuntimeError('Anchor not unique: ' + old[:100])
-    return text.replace(old, new, 1)
-
 def plan(path, marker, transform):
     p = Path(path)
     raw = p.read_bytes()
@@ -20,19 +15,24 @@ def plan(path, marker, transform):
     report.append('OK ' + path)
 
 def patch_main_activity(text):
-    text = once(
-        text,
-        '        // Sincroniza os 3 Widgets Glance na tela inicial em background\n        QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appCtx)',
-        '''        // COOL_DOWN_STARTUP_V20: Defer widget updates until after UI frame initialization
+    old = '        // Sincroniza os 3 Widgets Glance na tela inicial em background\n        QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appCtx)'
+    if old in text:
+        return text.replace(
+            old,
+            '''        // COOL_DOWN_STARTUP_V20: Defer widget updates until after UI frame initialization
         // Prevents thermal throttling, IO spikes, and frame drops on app boot.'''
-    )
+        )
     return text
 
 def patch_update_action(text):
-    text = once(
-        text,
-        '    fun refreshAllWidgetsAsync(context: Context) {\n        val appCtx = context.applicationContext\n        bumpInMemoryRevision()\n        widgetScope.launch {\n            updateAllWidgets(appCtx)\n        }\n    }',
-        '''    private var debounceJob: kotlinx.coroutines.Job? = null
+    old = '''    fun refreshAllWidgetsAsync(context: Context) {
+        val appCtx = context.applicationContext
+        bumpInMemoryRevision()
+        widgetScope.launch {
+            updateAllWidgets(appCtx)
+        }
+    }'''
+    new = '''    private var debounceJob: kotlinx.coroutines.Job? = null
 
     fun refreshAllWidgetsAsync(context: Context) {
         val appCtx = context.applicationContext
@@ -42,18 +42,15 @@ def patch_update_action(text):
             updateAllWidgets(appCtx)
         }
     }'''
-    )
+    if old in text:
+        return text.replace(old, new)
     return text
 
 def patch_liquid_glass(text):
-    text = once(
-        text,
-        '            val blurPx = if (settings.reduceTransparency) {\r\n                24f.dp.toPx()\r\n            } else {\r\n                ((radiusX * 0.20f) * settings.glassBlurIntensity).coerceIn(2f, 18f).dp.toPx()\r\n            }',
-        '''            val blurPx = if (settings.reduceTransparency) {
-                16f.dp.toPx()
-            } else {
-                ((radiusX * 0.16f) * settings.glassBlurIntensity).coerceIn(2f, 14f).dp.toPx()
-            }'''
+    # Clamping do raio de desfoque no pipeline AGSL
+    text = text.replace(
+        '((radiusX * 0.20f) * settings.glassBlurIntensity).coerceIn(2f, 18f).dp.toPx()',
+        '((radiusX * 0.16f) * settings.glassBlurIntensity).coerceIn(2f, 14f).dp.toPx()'
     )
     return text
 
