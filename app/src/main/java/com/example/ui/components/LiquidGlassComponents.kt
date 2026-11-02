@@ -22,7 +22,7 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.catalog.utils.DampedDragAnimation
+import com.kyant.backdrop.catalog.legacy.DampedDragAnimation
 import com.kyant.backdrop.catalog.utils.InteractiveHighlight
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.animation.core.EaseOut
@@ -1311,6 +1311,7 @@ fun AppleSlider(
     val actualAccent = if (accentColor != Color(0xFF0088FF)) accentColor else activeTrackColor
     val callback = { v: Float ->
         val clamped = v.coerceIn(safeRange)
+        onValueChange(clamped)
         onChange(clamped)
     }
     val effectiveBackdrop = backdrop ?: LocalLiquidGlassBackdrop.current ?: rememberLayerBackdrop()
@@ -1498,7 +1499,6 @@ fun LiquidGlassSegmentedControl(
     modifier: Modifier = Modifier,
     tabIcons: List<ImageVector?>? = null
 ) {
-    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val isLightTheme = !LocalIsDarkTheme.current
     val themeColors = LocalIOS27Theme.current
     val accentColor = themeColors.accent
@@ -1518,7 +1518,6 @@ fun LiquidGlassSegmentedControl(
             (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
         }
 
-        val currentTabWidth by rememberUpdatedState(tabWidth)
         val offsetAnimation = remember { Animatable(0f) }
         val panelOffset by remember(density) {
             derivedStateOf {
@@ -1531,45 +1530,38 @@ fun LiquidGlassSegmentedControl(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
-        val currentSelectedIndex by rememberUpdatedState(selectedIndex)
-        val currentOnTabSelected by rememberUpdatedState(onTabSelected)
+        var didDrag by remember { mutableStateOf(false) }
 
-        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         val dampedDragAnimation = remember(animationScope, tabsCount) {
             DampedDragAnimation(
-                reduceMotion = reduceMotion,
                 animationScope = animationScope,
                 initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
                 pressedScale = 56f / 40f,
-                onDragStarted = { position ->
-                    val touched = ((position.x - with(density) { 4.dp.toPx() }) / currentTabWidth - 0.5f)
-                    val index = (if (isLtr) touched else tabsCount - 1f - touched).roundToInt().coerceIn(0, tabsCount - 1)
-                    updateValue(index.toFloat())
-                },
-                onDragCancelled = {
-                    animateToValue(currentSelectedIndex.toFloat(), 0f)
-                    animationScope.launch { offsetAnimation.animateTo(0f, motion.spring(1f, 300f, 0.5f)) }
-                },
+                onDragStarted = {},
                 onDragStopped = {
                     // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
                     val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
-                    if (currentSelectedIndex != targetIndex) {
-                        currentOnTabSelected(targetIndex)
+                    didDrag = false
+                    if (selectedIndex != targetIndex) {
+                        onTabSelected(targetIndex)
                     }
                     animateToValue(targetIndex.toFloat())
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
-                            motion.spring(1f, 300f, 0.5f)
+                            spring(1f, 300f, 0.5f)
                         )
                     }
                 },
                 onDrag = { _, dragAmount ->
+                    if (!didDrag) {
+                        didDrag = dragAmount.x != 0f
+                    }
                     updateValue(
-                        (targetValue + dragAmount.x / currentTabWidth * if (isLtr) 1f else -1f)
+                        (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
                     animationScope.launch {
@@ -1587,7 +1579,8 @@ fun LiquidGlassSegmentedControl(
         }
 
         val interactiveHighlight = remember(animationScope) {
-            InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = animationScope,
+            com.kyant.backdrop.catalog.legacy.InteractiveHighlight(
+                animationScope = animationScope,
                 position = { size, _ ->
                     Offset(
                         if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset
@@ -1724,7 +1717,8 @@ fun LiquidGlassSegmentedControl(
                         if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
                         else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
                 }
-                .testTag("segmented_lens")
+                .then(interactiveHighlight.gestureModifier)
+                .then(dampedDragAnimation.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { ContinuousCapsule },
@@ -1750,11 +1744,10 @@ fun LiquidGlassSegmentedControl(
                         )
                     },
                     layerBlock = {
-                        scaleX = dampedDragAnimation.scaleX
-                        scaleY = dampedDragAnimation.scaleY
-                        val velocity = dampedDragAnimation.velocity / 10f
-                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
-                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        val progress = dampedDragAnimation.pressProgress
+                        val scale = lerp(1f, 1f + 12f.dp.toPx() / size.height, progress)
+                        scaleX = scale
+                        scaleY = scale
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
@@ -1769,8 +1762,6 @@ fun LiquidGlassSegmentedControl(
                 .height(40.dp)
                 .fillMaxWidth(1f / tabsCount)
         )
-        Box(Modifier.matchParentSize().then(interactiveHighlight.gestureModifier).then(dampedDragAnimation.modifier))
-
     }
 }
 

@@ -1,37 +1,22 @@
 # Interações e validação de fluidez
 
-Os controles compartilham `AppMotion`, que preserva o amortecimento solicitado
-por cada interação, inclusive o rebote. Com **Reduzir movimento**, as
-transições automáticas são estáticas, os indicadores continuam informando estado
-e os arrastes continuam acompanhando o dedo. O sistema Android ainda controla a
-escala global das animações.
+Os seletores Estante/Diário, sliders e tab bar foram restaurados do commit
+`32f1408f46d69d98026d516a1c575f2b11fd6ac5`, anterior à primeira revisão.
+Isso inclui os wrappers AppleSlider/AppleSegmentedPicker e o contêiner original
+da navegação. Esses controles usam cópias dos auxiliares originais no pacote
+`catalog.legacy`; suas molas, geometria e gestos seguem a versão antiga.
 
-Nos controles líquidos, a posição visual acompanha o alvo com a mola do Kyant
-(amortecimento 1, rigidez 1000). Os deltas do dedo acumulam no alvo lógico para
-evitar perda de deslocamento por causa do atraso visual da mola. X e Y têm molas
-independentes (0,6/250 e 0,7/250); o realce e a deformação por velocidade usam
-0,5/300. Toggle e slider expandem até 1,5× durante a pressão. A retração espera a
-posição chegar perto do alvo e pode ser interrompida por outro toque.
-Cancelar restaura o estado anterior;
-confirmar executa o callback uma única vez. Sliders e estrelas aguardam a intenção
-horizontal antes de bloquear a rolagem vertical. Alvos interativos têm pelo menos
-48 dp de altura; switches, sliders e avaliações expõem ações de acessibilidade.
+Os demais controles conservam as correções posteriores, incluindo AppMotion,
+movimento reduzido, repetição do stepper e acessibilidade do switch.
+`RestoredControlsTest` verifica a seleção dos segmentos, o ajuste do slider
+e a mudança de aba. A comparação com o commit original valida a restauração
+dos componentes e funções solicitados.
 
 ## Referências e adaptações
 
-Parâmetros e efeitos seguem o [AndroidLiquidGlass/Backdrop do Kyant](https://github.com/Kyant0/AndroidLiquidGlass/tree/65ab177e90e5c1d8c62e70cf7755841982da65f6),
-especialmente `DampedDragAnimation`, `InteractiveHighlight`, `LiquidButton`,
-`LiquidToggle`, `LiquidSlider` e `LiquidBottomTabs`. A integração mantém as
-preferências do Quadrinheiro, cancelamento sem confirmação, semântica de
-acessibilidade e áreas de toque Android. O botão cápsula reutiliza `LiquidButton`.
-As transições específicas de menus e busca recuperam suas molas expressivas.
-
-A tab bar mantém a geometria 64/56 dp e as lentes 24/24 e 10/14 do Kyant,
-inclusive durante rolagem. A superfície de gesto cobre a barra inteira: a lente
-antecipa a opção no toque inicial, acompanha o arraste e só confirma ao soltar.
-Cancelar restaura a opção anterior. O seletor Estante/Diário usa a mesma regra.
-`NavigationTouchTest` verifica a posição da lente antes do touch-up e impede
-recomposição do conteúdo das abas a cada frame da mola.
+A origem dos controles líquidos é o
+[AndroidLiquidGlass/Backdrop do Kyant](https://github.com/Kyant0/AndroidLiquidGlass).
+Consulte `THIRD_PARTY_NOTICES.md` para origem e licença.
 
 Campos de uma linha têm altura mínima de 48 dp, sem somar padding vertical ao
 botão de limpar. O stepper desenha uma superfície de 32 dp dentro de uma área
@@ -62,7 +47,7 @@ gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArgumen
 ```
 
 Os testes instrumentados verificam confirmação única via acessibilidade,
-cancelamento do switch, restauração do slider, rolagem sobre estrelas e repetição
+cancelamento do switch, rolagem sobre estrelas e repetição
 do stepper sem incremento adicional ao soltar. `LiquidSpringTest` verifica
 expansão independente em X/Y, acúmulo dos alvos durante arraste, interrupção da
 retração e ausência de deformação residual por velocidade. `GoogleConfigurationTest`

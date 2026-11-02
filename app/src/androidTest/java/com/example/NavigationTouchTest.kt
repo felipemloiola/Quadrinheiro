@@ -34,58 +34,7 @@ import java.io.File
 class NavigationTouchTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun bottomLensPreviewsOnDownTracksWhileHeldAndCommitsOnce() {
-        val selected = mutableStateOf(0)
-        var commits = 0
-        var compositions = 0
-        compose.setContent {
-            QuadrinheiroTheme(settings = com.example.model.AppSettings(colorScheme = "dark")) {
-                LiquidBottomTabs({ selected.value }, { selected.value = it; commits++ }, emptyBackdrop(), 3,
-                    Modifier.width(300.dp).testTag("bar")) {
-                    repeat(3) { index ->
-                        LiquidBottomTab({ selected.value = index }) { Text("Tab $index") }
-                    }
-                    SideEffect { compositions++ }
-                }
-            }
-        }
-        compose.mainClock.autoAdvance = false
-        val bar = compose.onNodeWithTag("bar")
-        val lens = compose.onNodeWithTag("bottom_tab_lens", useUnmergedTree = true)
-        val initialX = lens.fetchSemanticsNode().boundsInRoot.left
-        val initialCompositions = compositions
-        bar.performTouchInput { down(Offset(width * 0.83f, centerY)) }
-        compose.mainClock.advanceTimeBy(400)
-        assertTrue("Lens must move before touch-up: initial=$initialX, current=${lens.fetchSemanticsNode().boundsInRoot.left}", lens.fetchSemanticsNode().boundsInRoot.left > initialX + 30f)
-        compose.runOnIdle { assertEquals(0, commits); assertEquals(initialCompositions, compositions) }
-        bar.performTouchInput { moveTo(Offset(width * 0.50f, centerY), delayMillis = 120) }
-        compose.mainClock.advanceTimeBy(400)
-        bar.performTouchInput { up() }
-        compose.mainClock.advanceTimeBy(800)
-        compose.runOnIdle { assertEquals(1, selected.value); assertEquals(1, commits) }
-    }
 
-    @Test fun segmentedLensMovesBeforeReleaseAndCancellationRestoresSelection() {
-        val selected = mutableStateOf(0)
-        var commits = 0
-        compose.setContent {
-            QuadrinheiroTheme(settings = com.example.model.AppSettings(colorScheme = "dark")) {
-                LiquidGlassSegmentedControl(listOf("Estante", "Diário"), selected.value,
-                    { selected.value = it; commits++ }, emptyBackdrop(), Modifier.width(280.dp).testTag("picker"))
-            }
-        }
-        compose.mainClock.autoAdvance = false
-        val picker = compose.onNodeWithTag("picker")
-        val lens = compose.onNodeWithTag("segmented_lens", useUnmergedTree = true)
-        val initialX = lens.fetchSemanticsNode().boundsInRoot.left
-        picker.performTouchInput { down(Offset(width * 0.75f, centerY)) }
-        compose.mainClock.advanceTimeBy(400)
-        assertTrue(lens.fetchSemanticsNode().boundsInRoot.left > initialX + 30f)
-        picker.performTouchInput { cancel() }
-        compose.mainClock.advanceTimeBy(1000)
-        compose.runOnIdle { assertEquals(0, selected.value); assertEquals(0, commits) }
-        assertEquals(initialX, lens.fetchSemanticsNode().boundsInRoot.left, 2f)
-    }
 
     @Test fun clearingTextDoesNotChangeTheFieldHeight() {
         val text = mutableStateOf("Felipe")

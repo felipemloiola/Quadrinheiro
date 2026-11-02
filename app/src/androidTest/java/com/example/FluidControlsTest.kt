@@ -54,19 +54,6 @@ class FluidControlsTest {
         compose.runOnIdle { assertEquals(0, commits) }
     }
 
-    @Test fun sliderProvidesProgressActionAndCancelsBackToStart() {
-        val progress = mutableStateOf(0.5f)
-        compose.setContent {
-            QuadrinheiroTheme(settings = AppSettings(reduceMotion = true)) {
-                LiquidSlider({ progress.value }, { progress.value = it }, 0f..1f, 0.001f, emptyBackdrop())
-            }
-        }
-        val slider = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
-        slider.assertHeightIsAtLeast(48.dp).performSemanticsAction(SemanticsActions.SetProgress) { it(0.7f) }
-        compose.runOnIdle { assertEquals(0.7f, progress.value, 0.001f) }
-        slider.performTouchInput { down(center); moveTo(center + Offset(60f, 0f)); cancel() }
-        compose.runOnIdle { assertEquals(0.7f, progress.value, 0.001f) }
-    }
 
     @Test fun verticalGestureOverRatingDoesNotChangeIt() {
         var commits = 0
@@ -81,17 +68,6 @@ class FluidControlsTest {
         compose.runOnIdle { assertEquals(0, commits) }
     }
 
-    @Test fun sliderWrapperCallsTheDefaultCallbackOnce() {
-        var commits = 0
-        compose.setContent {
-            QuadrinheiroTheme(settings = AppSettings(reduceMotion = true)) {
-                AppleSlider(value = 50f, onValueChange = { commits++ })
-            }
-        }
-        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress))
-            .performSemanticsAction(SemanticsActions.SetProgress) { it(75f) }
-        compose.runOnIdle { assertEquals(1, commits) }
-    }
 
     @Test fun heldStepperRepeatsWithoutAnExtraReleaseIncrement() {
         val count = mutableStateOf(0)

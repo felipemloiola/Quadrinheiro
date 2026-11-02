@@ -1,5 +1,16 @@
 package com.example.updates
 
+import android.app.Activity
+import android.app.DownloadManager
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.unit.dp
+import java.io.File
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -15,6 +26,7 @@ import com.example.BuildConfig
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -24,13 +36,13 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 private const val REPOSITORY = "felipemloiola/Quadrinheiro"
-private const val CERTIFICATE = "ec5ec8852a218db2171959717d72771abac8535f848506da66cb7180874a761f"
+private const val CERTIFICATE = UPDATE_CERTIFICATE
 private const val DOWNLOAD_PREFIX = "https://github.com/felipemloiola/Quadrinheiro/releases/download/"
 private object UpdateSignals {
     val requests = MutableStateFlow(0L)
     var busy by mutableStateOf(false)
+    var downloading by mutableStateOf(false)
 }
-private data class AvailableUpdate(val code: Long, val name: String, val url: String)
 private object ReleaseClient {
     private val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
@@ -66,7 +78,7 @@ private object ReleaseClient {
         val tag = release.getString("tag_name")
         check(apkUrl == DOWNLOAD_PREFIX + tag + "/quadrinheiro.apk")
         check(metadata.getString("sha256").matches(Regex("[a-f0-9]{64}")))
-        AvailableUpdate(code, metadata.getString("versionName").take(64), apkUrl)
+        AvailableUpdate(code, metadata.getString("versionName").take(64), apkUrl, metadata.getString("sha256"))
     }
 }
 
@@ -76,9 +88,71 @@ fun AppUpdatePrompt() {
     val theme = LocalIOS27Theme.current
     val request by UpdateSignals.requests.collectAsState()
     var available by remember { mutableStateOf<AvailableUpdate?>(null) }
+    var transfer by remember { mutableStateOf(InAppUpdateDownload.load(context)) }
+    var showTransfer by remember { mutableStateOf(true) }
+    var progress by remember { mutableStateOf<DownloadProgress?>(null) }
+    var readyFile by remember { mutableStateOf<File?>(null) }
+    var transferError by remember { mutableStateOf<String?>(null) }
+    var automaticInstallationAttempted by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val installer = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            transfer?.let { InAppUpdateDownload.cancel(context, it) }
+            transfer = null
+        }
+    }
+    val launchInstaller: (File) -> Unit = { file ->
+        try { installer.launch(InAppUpdateDownload.installIntent(context, file)) }
+        catch (_: Exception) { transferError = "Não foi possível abrir a instalação do Android. Tente novamente." }
+    }
+    val installationPermission = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (InAppUpdateDownload.canInstall(context)) readyFile?.let(launchInstaller)
+        else transferError = "Autorize o Quadrinheiro a instalar atualizações para continuar."
+    }
+    val install: () -> Unit = {
+        val file = readyFile
+        if (file != null) {
+            automaticInstallationAttempted = true
+            transferError = null
+            if (InAppUpdateDownload.canInstall(context)) launchInstaller(file)
+            else try {
+                installationPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName)))
+            } catch (_: Exception) { transferError = "Não foi possível abrir a permissão de instalação do Android." }
+        }
+    }
+    LaunchedEffect(transfer?.id) {
+        val active = transfer ?: return@LaunchedEffect
+        readyFile = null
+        progress = null
+        transferError = null
+        automaticInstallationAttempted = false
+        if (active.update.code <= BuildConfig.VERSION_CODE.toLong()) {
+            InAppUpdateDownload.cancel(context, active)
+            transfer = null
+            return@LaunchedEffect
+        }
+        UpdateSignals.downloading = true
+        try {
+            while (true) {
+                val current = InAppUpdateDownload.progress(context, active)
+                progress = current
+                if (current.status == DownloadManager.STATUS_SUCCESSFUL) break
+                delay(500)
+            }
+            readyFile = InAppUpdateDownload.prepare(context, active)
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (error: Exception) { transferError = error.message ?: "Não foi possível baixar a atualização. Tente novamente." }
+        finally { UpdateSignals.downloading = false }
+    }
+    val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    LaunchedEffect(readyFile, showTransfer, lifecycleState) {
+        if (readyFile != null && showTransfer && !automaticInstallationAttempted &&
+            lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) install()
+    }
     val prefs = remember(context) { context.getSharedPreferences("app_updates", 0) }
     LaunchedEffect(request) {
         val manual = request > 0L
+        if (transfer != null) { if (manual) showTransfer = true; return@LaunchedEffect }
         if (BuildConfig.DEBUG) {
             if (manual) Toast.makeText(context, "Atualizações disponíveis no APK de release.", Toast.LENGTH_LONG).show()
             return@LaunchedEffect
@@ -111,29 +185,80 @@ fun AppUpdatePrompt() {
             onDismissRequest = postpone,
             containerColor = theme.bgPrimary,
             title = { Text("Atualização disponível", color = theme.textPrimary) },
-            text = { Text("Quadrinheiro ${update.name}\n\nO APK será baixado pelo navegador. Depois, abra o arquivo e confirme a instalação no Android. Seus dados não precisam ser apagados.", color = theme.textSecondary) },
+            text = { Text("Quadrinheiro ${update.name}\n\nA atualização será baixada aqui no aplicativo. Ao terminar, confirme a instalação na tela do Android. Seus dados serão mantidos.", color = theme.textSecondary) },
             confirmButton = {
                 TextButton(onClick = {
-                    try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(update.url)))
-                        available = null
-                    } catch (_: Exception) {
-                        Toast.makeText(context, "Não foi possível abrir o navegador.", Toast.LENGTH_LONG).show()
+                    scope.launch {
+                        UpdateSignals.downloading = true
+                        try {
+                            transfer = InAppUpdateDownload.start(context, update)
+                            showTransfer = true
+                            available = null
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "Não foi possível iniciar o download. Verifique sua conexão e o espaço disponível.", Toast.LENGTH_LONG).show()
+                        } finally { UpdateSignals.downloading = false }
                     }
-                }) { Text("Baixar atualização", color = theme.accent) }
+                }, enabled = !UpdateSignals.downloading) { Text("Atualizar", color = theme.accent) }
             },
             dismissButton = { TextButton(onClick = postpone) { Text("Depois", color = theme.textSecondary) } }
         )
     }
+    transfer?.takeIf { showTransfer }?.let { download ->
+        val ready = readyFile != null
+        val downloading = !ready && transferError == null
+        val total = progress?.total ?: -1L
+        val fraction = if (total > 0L) ((progress?.bytes ?: 0L).toFloat() / total).coerceIn(0f, 1f) else null
+        AlertDialog(
+            onDismissRequest = { if (!downloading) showTransfer = false },
+            containerColor = theme.bgPrimary,
+            title = { Text("Atualização ${download.update.name}", color = theme.textPrimary) },
+            text = {
+                Column {
+                    Text(when {
+                        transferError != null -> transferError!!
+                        ready -> "A atualização está pronta. Confirme a instalação no Android."
+                        progress?.status == DownloadManager.STATUS_SUCCESSFUL -> "Conferindo a atualização…"
+                        progress?.status == DownloadManager.STATUS_PAUSED -> "Download pausado. Aguardando conexão…"
+                        fraction != null -> "Baixando atualização: " + (fraction * 100).toInt() + "%"
+                        else -> "Baixando atualização…"
+                    }, color = theme.textSecondary)
+                    if (downloading) {
+                        Spacer(Modifier.height(12.dp))
+                        if (fraction != null) LinearProgressIndicator(progress = { fraction }, color = theme.accent)
+                        else LinearProgressIndicator(color = theme.accent)
+                    }
+                }
+            },
+            confirmButton = {
+                if (ready) TextButton(onClick = install) { Text("Instalar", color = theme.accent) }
+                else if (transferError != null) TextButton(onClick = {
+                    scope.launch {
+                        try { transfer = InAppUpdateDownload.start(context, download.update) }
+                        catch (_: Exception) { transferError = "Não foi possível reiniciar o download." }
+                    }
+                }) { Text("Tentar novamente", color = theme.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    if (ready) showTransfer = false
+                    else {
+                        InAppUpdateDownload.cancel(context, download)
+                        transfer = null
+                    }
+                }) { Text(if (ready) "Depois" else "Cancelar download", color = theme.textSecondary) }
+            }
+        )
+    }
+
 }
 
 @Composable
 fun CheckForUpdatesButton() {
     val theme = LocalIOS27Theme.current
     Text(
-        text = if (UpdateSignals.busy) "Verificando atualizações…" else "Versão ${BuildConfig.VERSION_NAME} · Verificar atualizações",
+        text = if (UpdateSignals.downloading) "Baixando atualização…" else if (UpdateSignals.busy) "Verificando atualizações…" else "Versão ${BuildConfig.VERSION_NAME} · Verificar atualizações",
         color = theme.textSecondary,
-        modifier = Modifier.clickable(enabled = !UpdateSignals.busy) {
+        modifier = Modifier.clickable(enabled = !UpdateSignals.busy && !UpdateSignals.downloading) {
             UpdateSignals.requests.value = UpdateSignals.requests.value + 1
         }
     )

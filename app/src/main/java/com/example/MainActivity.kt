@@ -1370,9 +1370,15 @@ private fun IOS27BottomTabViewContainer(
     modifier: Modifier = Modifier,
     backdrop: Backdrop = rememberLayerBackdrop()
 ) {
-    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    // Keep the original Kyant 64/56 dp geometry stable while scrolling.
-    val collapsedFraction = 0f
+    val collapsedFraction by animateFloatAsState(
+        targetValue = if (isTabBarCollapsed) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.94f,
+            stiffness = 360f,
+            visibilityThreshold = 0.0005f
+        ),
+        label = "TabBarCollapseFraction"
+    )
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val isLightTheme = s.isLight
@@ -1412,13 +1418,13 @@ private fun IOS27BottomTabViewContainer(
         AnimatedVisibility(
             visible = showBottomAccessory && featuredReadingItem != null && !isTabBarCollapsed,
             modifier = Modifier.padding(bottom = 8.dp),
-            enter = fadeIn(motion.tween(220)) + slideInVertically(motion.tween(260)) { it / 2 } + expandVertically(motion.tween(240), expandFrom = Alignment.Top),
-            exit = fadeOut(motion.tween(160)) + slideOutVertically(motion.tween(220)) { it / 2 } + shrinkVertically(motion.tween(200), shrinkTowards = Alignment.Top)
+            enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 2 } + expandVertically(tween(240), expandFrom = Alignment.Top),
+            exit = fadeOut(tween(160)) + slideOutVertically(tween(220)) { it / 2 } + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
         ) {
             featuredReadingItem?.let { item ->
                 val progressFraction by animateFloatAsState(
                     targetValue = (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1)).coerceIn(0f, 1f),
-                    animationSpec = motion.spring(stiffness = 380f, dampingRatio = 0.85f),
+                    animationSpec = spring(stiffness = 380f, dampingRatio = 0.85f),
                     label = "miniPlayerProgress"
                 )
 
@@ -1596,16 +1602,22 @@ private fun IOS27BottomTabViewContainer(
                 },
                 backdrop = mainBackdrop,
                 tabsCount = 3,
+                collapsedFraction = { collapsedFraction },
                 isLightTheme = isLightTheme,
                 accentColor = effectiveAccentColor,
                 unselectedContentColor = tabContentColor,
                 containerColor = glassContainerColor,
+                blurRadius = configuredBlurRadius,
+                refractionMultiplier = configuredRefractionMultiplier,
+                chromaticAberrationEnabled = configuredChromaticAberration,
+                depthEffectEnabled = configuredDepthEffect,
+                vibrancyEnabled = !settings.reduceTransparency,
                 modifier = Modifier.weight(1f)
             ) {
                 val tabLayerColor = com.kyant.backdrop.catalog.components.LocalLiquidBottomTabColor.current ?: tabContentColor
 
                 // Tab 0: Lendo (transição 100% em sub-pixels na GPU sem AnimatedVisibility que travava o layout)
-                LiquidBottomTab(modifier = Modifier.testTag("nav_home"), onClick = { onSelectTab("home") }) {
+                LiquidBottomTab(onClick = { onSelectTab("home") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 0) LucideIcons.OpenBookFilled else LucideIcons.OpenBook,
                         contentDescription = "Lendo",
@@ -1641,7 +1653,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 1: Biblioteca
-                LiquidBottomTab(modifier = Modifier.testTag("nav_shelf"), onClick = { onSelectTab("shelf") }) {
+                LiquidBottomTab(onClick = { onSelectTab("shelf") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 1) LucideIcons.BooksVertical else LucideIcons.BookClosed,
                         contentDescription = "Biblioteca",
@@ -1677,7 +1689,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 2: Ajustes
-                LiquidBottomTab(modifier = Modifier.testTag("nav_settings"), onClick = { onSelectTab("settings") }) {
+                LiquidBottomTab(onClick = { onSelectTab("settings") }) {
                     Icon(
                         imageVector = LucideIcons.Settings,
                         contentDescription = "Ajustes",
@@ -1722,7 +1734,8 @@ private fun IOS27BottomTabViewContainer(
             val searchGlassProgressAnim = remember { Animatable(0f) }
 
             val searchInteractiveHighlight = remember(searchAnimationScope) {
-                com.kyant.backdrop.catalog.utils.InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = searchAnimationScope
+                com.kyant.backdrop.catalog.utils.InteractiveHighlight(
+                    animationScope = searchAnimationScope
                 )
             }
 
@@ -1731,12 +1744,12 @@ private fun IOS27BottomTabViewContainer(
             LaunchedEffect(isSearchSelected) {
                 if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
                     searchAnimationScope.launch {
-                        searchGlassProgressAnim.animateTo(1f, motion.tween(55))
-                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 350f))
+                        searchGlassProgressAnim.animateTo(1f, tween(55))
+                        searchGlassProgressAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 350f))
                     }
                     searchAnimationScope.launch {
-                        searchScaleAnim.animateTo(1.15f, motion.tween(55))
-                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 0.48f, stiffness = 380f))
+                        searchScaleAnim.animateTo(1.15f, tween(55))
+                        searchScaleAnim.animateTo(1f, spring(dampingRatio = 0.48f, stiffness = 380f))
                     }
                 }
                 handledByPointer = false
@@ -1746,7 +1759,7 @@ private fun IOS27BottomTabViewContainer(
             // No press-down (frames 24-25), o ícone escurece/reduz opacidade para 0.22f; no release (frame 26), volta a 1f já azul
             val searchIconAlpha by animateFloatAsState(
                 targetValue = if (isSearchPressed && !isSearchSelected) 0.22f else 1f,
-                animationSpec = motion.tween(durationMillis = if (isSearchPressed) 65 else 50),
+                animationSpec = tween(durationMillis = if (isSearchPressed) 65 else 50),
                 label = "SearchIconAlpha"
             )
 
@@ -1802,7 +1815,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                         },
                         layerBlock = {
-                            val sc = if (motion.reduced) 1f else searchScaleAnim.value
+                            val sc = searchScaleAnim.value
                             scaleX = sc
                             scaleY = sc
                         },
@@ -1826,13 +1839,13 @@ private fun IOS27BottomTabViewContainer(
                             searchAnimationScope.launch {
                                 searchGlassProgressAnim.animateTo(
                                     1f,
-                                    motion.spring(dampingRatio = 0.9f, stiffness = 700f)
+                                    spring(dampingRatio = 0.9f, stiffness = 700f)
                                 )
                             }
                             searchAnimationScope.launch {
                                 searchScaleAnim.animateTo(
                                     1.15f,
-                                    motion.spring(dampingRatio = 0.75f, stiffness = 550f)
+                                    spring(dampingRatio = 0.75f, stiffness = 550f)
                                 )
                             }
 
@@ -1853,33 +1866,33 @@ private fun IOS27BottomTabViewContainer(
                                 currentOnSelectTab("search")
                                 searchAnimationScope.launch {
                                     if (searchScaleAnim.value < 1.13f) {
-                                        searchScaleAnim.animateTo(1.15f, motion.tween(50))
+                                        searchScaleAnim.animateTo(1.15f, tween(50))
                                     }
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        motion.spring(dampingRatio = 0.48f, stiffness = 380f)
+                                        spring(dampingRatio = 0.48f, stiffness = 380f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     if (searchGlassProgressAnim.value < 0.85f) {
-                                        searchGlassProgressAnim.animateTo(1f, motion.tween(50))
+                                        searchGlassProgressAnim.animateTo(1f, tween(50))
                                     }
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        motion.spring(dampingRatio = 0.85f, stiffness = 340f)
+                                        spring(dampingRatio = 0.85f, stiffness = 340f)
                                     )
                                 }
                             } else {
                                 searchAnimationScope.launch {
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        motion.spring(dampingRatio = 0.65f, stiffness = 400f)
+                                        spring(dampingRatio = 0.65f, stiffness = 400f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        motion.spring(dampingRatio = 0.85f, stiffness = 400f)
+                                        spring(dampingRatio = 0.85f, stiffness = 400f)
                                     )
                                 }
                             }
@@ -1891,7 +1904,7 @@ private fun IOS27BottomTabViewContainer(
                     modifier = Modifier
                         .size(34.dp)
                         .graphicsLayer {
-                            val sc = if (motion.reduced) 1f else searchScaleAnim.value
+                            val sc = searchScaleAnim.value
                             scaleX = sc
                             scaleY = sc
                             alpha = searchIconAlpha
