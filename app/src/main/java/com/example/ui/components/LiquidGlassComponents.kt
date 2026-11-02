@@ -1506,6 +1506,8 @@ fun LiquidGlassSegmentedControl(
         if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
         else Color(0xFF121212).copy(0.4f)
     val contentColor = if (isLightTheme) Color.Black else Color.White
+    val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+    val currentOnTabSelected by rememberUpdatedState(onTabSelected)
     val tabsCount = tabs.size.coerceAtLeast(1)
     val tabsBackdrop = rememberLayerBackdrop()
 
@@ -1545,8 +1547,8 @@ fun LiquidGlassSegmentedControl(
                     // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
                     val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
                     didDrag = false
-                    if (selectedIndex != targetIndex) {
-                        onTabSelected(targetIndex)
+                    if (currentSelectedIndex != targetIndex) {
+                        currentOnTabSelected(targetIndex)
                     }
                     animateToValue(targetIndex.toFloat())
                     animationScope.launch {
@@ -1601,7 +1603,7 @@ fun LiquidGlassSegmentedControl(
                             indication = null,
                             role = androidx.compose.ui.semantics.Role.Tab,
                             onClick = {
-                                onTabSelected(index)
+                                currentOnTabSelected(index)
                                 animationScope.launch {
                                     dampedDragAnimation.animateToValue(index.toFloat())
                                 }
@@ -2367,8 +2369,7 @@ fun LiquidGlassMenuOverlayHost(
                         drawRect(glassSurfaceColor)
                     }
                 )
-                .then(interactiveHighlight.modifier)
-                .then(interactiveHighlight.gestureModifier)
+                                .then(interactiveHighlight.gestureModifier)
                 .pointerInput(req.id, req.items.size) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -2406,8 +2407,8 @@ fun LiquidGlassMenuOverlayHost(
                                     dragXAnim.snapTo(delta.x)
                                     dragYAnim.snapTo(delta.y)
                                 }
-                                val marginX = 56.dp.toPx()
-                                val marginY = 42.dp.toPx()
+                                val marginX = 0f
+                                val marginY = 0f
                                 val insideMenu = pos.x in -marginX..(size.width + marginX) &&
                                     pos.y in -marginY..(size.height + marginY)
                                 if (insideMenu) {
@@ -2424,12 +2425,7 @@ fun LiquidGlassMenuOverlayHost(
                                             hoverPillAlphaAnim.animateTo(1f, motion.tween(65))
                                         }
                                     }
-                                } else if (hoveredIndex != null) {
-                                    hoveredIndex = null
-                                    animationScope.launch {
-                                        hoverPillAlphaAnim.animateTo(0f, motion.tween(100))
-                                    }
-                                }
+                                } // Outside the menu, retain the last valid row until release.
                                 change.consume()
                             }
                         }

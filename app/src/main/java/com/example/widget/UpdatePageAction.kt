@@ -221,7 +221,7 @@ class UpdatePageAction : ActionCallback {
             if (comics.isEmpty()) return@withContext null
 
             val targetComic = (if (!comicId.isNullOrBlank()) comics.firstOrNull { it.id == comicId }
-                else comics.firstOrNull { it.status == ReadingStatus.READING } ?: comics.firstOrNull())
+                else com.example.model.activeReadingComic(comics, stored.profile.activeReadingComicId))
                 ?: return@withContext null
 
             val totalPages = targetComic.pageCount.coerceAtLeast(1)
@@ -351,7 +351,7 @@ object WidgetVisualRenderer {
     }
 
     private fun buildCoverCacheKey(comic: ComicEntry, widthPx: Int, heightPx: Int): String {
-        return "${comic.id}_${comic.coverUrl.hashCode()}_${widthPx}x${heightPx}"
+        return "${comic.id}_${resolvedCoverUrl(comic)}_${widthPx}x${heightPx}"
     }
 
     /**
@@ -369,128 +369,30 @@ object WidgetVisualRenderer {
             memoryCoverCache.get(cacheKey)?.let { if (!it.isRecycled) return@withContext it }
         }
 
-        val rawBitmap = fetchCachedOrNetworkBitmap(context, comic.coverUrl, widthPx, heightPx)
-        val rendered = if (rawBitmap != null) {
-            createRoundedCoverBitmap(rawBitmap, widthPx, heightPx, cornerRadiusPx = 22f)
-        } else {
-            renderFallbackCoverBitmap(comic, palette, widthPx, heightPx)
+        val rawBitmap = try {
+            val url = resolvedCoverUrl(comic)
+            if (url.isBlank()) null else {
+                val request = coil.request.ImageRequest.Builder(context.applicationContext)
+                    .data(url).size(widthPx, heightPx).allowHardware(false).build()
+                val result = coil.Coil.imageLoader(context).execute(request)
+                (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            }
+        } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { null }
+        if (rawBitmap == null) {
+            // A temporary network failure must never poison the successful-image cache.
+            return@withContext renderFallbackCoverBitmap(comic, palette, widthPx, heightPx)
         }
-
-        synchronized(memoryCoverCache) {
-            memoryCoverCache.put(cacheKey, rendered)
-        }
+        val rendered = createRoundedCoverBitmap(rawBitmap, widthPx, heightPx, cornerRadiusPx = 22f)
+        synchronized(memoryCoverCache) { memoryCoverCache.put(cacheKey, rendered) }
         rendered
     }
 
-    /**
-     * Versão síncrona ultra-rápida (lê do LruCache em memória ou do cache local em disco sem chamadas de rede)
-     * usada dentro de `provideContent` durante recomposições em tempo real dos botões (-) e (+).
-     */
-    fun getCachedOrRenderCoverBitmapSync(
-        context: Context,
-        comic: ComicEntry,
-        palette: WidgetThemePalette,
-        widthPx: Int = 204,
-        heightPx: Int = 300
-    ): Bitmap {
-        val cacheKey = buildCoverCacheKey(comic, widthPx, heightPx)
-        synchronized(memoryCoverCache) {
-            memoryCoverCache.get(cacheKey)?.let { if (!it.isRecycled) return it }
-        }
-
-        val diskBitmap = fetchDiskCachedBitmapOnly(context, comic.coverUrl, widthPx, heightPx)
-        val rendered = if (diskBitmap != null) {
-            createRoundedCoverBitmap(diskBitmap, widthPx, heightPx, cornerRadiusPx = 22f)
-        } else {
-            renderFallbackCoverBitmap(comic, palette, widthPx, heightPx)
-        }
-
-        synchronized(memoryCoverCache) {
-            memoryCoverCache.put(cacheKey, rendered)
-        }
-        return rendered
-    }
-
-    private fun fetchDiskCachedBitmapOnly(
-        context: Context,
-        coverUrl: String,
-        reqWidth: Int,
-        reqHeight: Int
-    ): Bitmap? {
-        val cleanUrl = coverUrl.trim()
-        if (cleanUrl.isEmpty() || !cleanUrl.startsWith("http")) return null
-        return try {
-            val cacheDir = File(context.cacheDir, "widget_covers_cache")
-            val hash = MessageDigest.getInstance("SHA-256")
-                .digest(cleanUrl.toByteArray())
-                .joinToString("") { "%02x".format(it) }
-                .take(32)
-            val cachedFile = File(cacheDir, "cover_$hash.jpg")
-            if (cachedFile.exists() && cachedFile.length() > 128L) {
-                decodeSampledBitmap(cachedFile.absolutePath, reqWidth, reqHeight)
-            } else {
-                null
-            }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun fetchCachedOrNetworkBitmap(
-        context: Context,
-        coverUrl: String,
-        reqWidth: Int,
-        reqHeight: Int
-    ): Bitmap? {
-        val cleanUrl = coverUrl.trim()
-        if (cleanUrl.isEmpty() || !cleanUrl.startsWith("http")) return null
-
-        return try {
-            val cacheDir = File(context.cacheDir, "widget_covers_cache").apply { mkdirs() }
-            val hash = MessageDigest.getInstance("SHA-256")
-                .digest(cleanUrl.toByteArray())
-                .joinToString("") { "%02x".format(it) }
-                .take(32)
-            val cachedFile = File(cacheDir, "cover_$hash.jpg")
-
-            if (cachedFile.exists() && cachedFile.length() > 128L) {
-                decodeSampledBitmap(cachedFile.absolutePath, reqWidth, reqHeight)?.let { return it }
-            }
-
-            MultiApiSearchEngine.initHttpCache(context.applicationContext)
-            val request = Request.Builder()
-                .url(cleanUrl)
-                .header("User-Agent", "Quadrinheiro-Android-Widget/1.0")
-                .build()
-
-            MultiApiSearchEngine.sharedHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val bytes = response.body?.bytes() ?: return null
-                if (bytes.isEmpty()) return null
-                FileOutputStream(cachedFile).use { it.write(bytes) }
-                decodeSampledBitmap(cachedFile.absolutePath, reqWidth, reqHeight)
-            }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, options)
-        var inSampleSize = 1
-        if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
-            val halfHeight = options.outHeight / 2
-            val halfWidth = options.outWidth / 2
-            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-                inSampleSize *= 2
-            }
-        }
-        val decodeOpts = BitmapFactory.Options().apply {
-            this.inSampleSize = inSampleSize
-            this.inPreferredConfig = Bitmap.Config.ARGB_8888
-        }
-        return BitmapFactory.decodeFile(path, decodeOpts)
+    internal fun resolvedCoverUrl(comic: ComicEntry): String {
+        val url = comic.coverUrl.trim().replace("http://", "https://")
+        return if (url.isBlank() || url.contains("covers.openlibrary.org")) {
+            com.example.data.CuratedCatalog.findCoverUrlByTitle(comic.title) ?: url
+        } else url
     }
 
     private fun createRoundedCoverBitmap(

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_bg_start">#FF000000</color>
-    <color name="ic_launcher_bg_mid">#FF000000</color>
-    <color name="ic_launcher_bg_end">#FF000000</color>
+    <color name="ic_launcher_bg_start">#FFF3F4F7</color>
+    <color name="ic_launcher_bg_mid">#FFF3F4F7</color>
+    <color name="ic_launcher_bg_end">#FFF3F4F7</color>
 </resources>

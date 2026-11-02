@@ -1,5 +1,6 @@
 package com.example.widget
 
+import androidx.glance.layout.Box
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
@@ -64,55 +65,59 @@ class ActivityRingsWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appCtx = context.applicationContext
         val storage = SafeStorage(appCtx)
-
         provideContent {
             val prefs = currentState<Preferences>()
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
+            // A new revision cancels old work and never exposes another account's snapshot.
+            androidx.compose.runtime.key(prefRevision, memRevision) {
+                val snapshot by androidx.compose.runtime.produceState<ActivityRingsSnapshot?>(null) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val stored = storage.loadWidgetState()
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
 
-            val snapshot = remember(prefRevision, memRevision) {
-                val stored = storage.loadWidgetState()
-                val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val stats = computeReadingStatistics(
+                            comics = stored.comics,
+                            profile = stored.profile,
+                            accentColor = palette.outerRingColor,
+                            secondaryColor = palette.innerRingColor
+                        )
 
-                val stats = computeReadingStatistics(
-                    comics = stored.comics,
-                    profile = stored.profile,
-                    accentColor = palette.outerRingColor,
-                    secondaryColor = palette.innerRingColor
-                )
+                        val outerRatio = (stats.readComicsCount.toFloat() / stats.yearlyGoal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+                        val innerRatio = (stats.dailyPagesPace.toFloat() / stats.dailyPagesGoal.coerceAtLeast(5).toFloat()).coerceIn(0f, 1f)
+                        val centerPct = (outerRatio * 100f).roundToInt().coerceIn(0, 999)
 
-                val outerRatio = (stats.readComicsCount.toFloat() / stats.yearlyGoal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
-                val innerRatio = (stats.dailyPagesPace.toFloat() / stats.dailyPagesGoal.coerceAtLeast(5).toFloat()).coerceIn(0f, 1f)
-                val centerPct = (outerRatio * 100f).roundToInt().coerceIn(0, 999)
+                        val ringsBitmap = WidgetVisualRenderer.renderActivityRingsBitmap(
+                            outerProgress = outerRatio,
+                            innerProgress = innerRatio,
+                            centerPercentage = centerPct,
+                            palette = palette,
+                            sizePx = 210
+                        )
 
-                val ringsBitmap = WidgetVisualRenderer.renderActivityRingsBitmap(
-                    outerProgress = outerRatio,
-                    innerProgress = innerRatio,
-                    centerPercentage = centerPct,
-                    palette = palette,
-                    sizePx = 210
-                )
-
-                ActivityRingsSnapshot(
-                    ringsBitmap = ringsBitmap,
-                    readComicsCount = stats.readComicsCount,
-                    yearlyGoal = stats.yearlyGoal,
-                    dailyPagesPace = stats.dailyPagesPace,
-                    dailyPagesGoal = stats.dailyPagesGoal,
-                    palette = palette
-                )
-            }
-
-            GlanceTheme {
-                ActivityRingsWidgetContent(
-                    context = appCtx,
-                    ringsBitmap = snapshot.ringsBitmap,
-                    readComicsCount = snapshot.readComicsCount,
-                    yearlyGoal = snapshot.yearlyGoal,
-                    dailyPagesPace = snapshot.dailyPagesPace,
-                    dailyPagesGoal = snapshot.dailyPagesGoal,
-                    palette = snapshot.palette
-                )
+                        ActivityRingsSnapshot(
+                            ringsBitmap = ringsBitmap,
+                            readComicsCount = stats.readComicsCount,
+                            yearlyGoal = stats.yearlyGoal,
+                            dailyPagesPace = stats.dailyPagesPace,
+                            dailyPagesGoal = stats.dailyPagesGoal,
+                            palette = palette
+                        )
+                    }
+                }
+                snapshot?.let { snapshot ->
+                    GlanceTheme {
+                        ActivityRingsWidgetContent(
+                            context = appCtx,
+                            ringsBitmap = snapshot.ringsBitmap,
+                            readComicsCount = snapshot.readComicsCount,
+                            yearlyGoal = snapshot.yearlyGoal,
+                            dailyPagesPace = snapshot.dailyPagesPace,
+                            dailyPagesGoal = snapshot.dailyPagesGoal,
+                            palette = snapshot.palette
+                        )
+                    }
+                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
             }
         }
     }
@@ -136,7 +141,7 @@ private fun ActivityRingsWidgetContent(
             .cornerRadius(24.dp)
             .background(ColorProvider(palette.bgCard))
             .clickable(actionStartActivity(openStatsIntent))
-            .padding(12.dp),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(

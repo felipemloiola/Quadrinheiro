@@ -2,6 +2,7 @@ package com.example
 
 import com.example.ui.components.dismissFocusOnBackgroundTap
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -100,9 +101,6 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.Coil
-import coil.ImageLoader
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
 import com.example.data.MultiApiSearchEngine
 import com.example.model.AuthActions
 import com.example.model.AuthUiState
@@ -196,35 +194,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         extractWidgetIntent(intent)
 
-        // Configure global Coil ImageLoader lazily off the UI startup path
-        val appCtx = applicationContext
-        Coil.setImageLoader(
-            coil.ImageLoaderFactory {
-                ImageLoader.Builder(appCtx)
-                    .okHttpClient {
-                        MultiApiSearchEngine.initHttpCache(appCtx)
-                        MultiApiSearchEngine.sharedHttpClient
-                    }
-                    .memoryCache {
-                        MemoryCache.Builder(appCtx)
-                            .maxSizePercent(0.18)
-                            .strongReferencesEnabled(false)
-                            .build()
-                    }
-                    .diskCache {
-                        DiskCache.Builder()
-                            .directory(appCtx.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                            .maxSizeBytes(250L * 1024L * 1024L)
-                            .build()
-                    }
-                    .crossfade(50)
-                    .allowHardware(true)
-                    .allowRgb565(true)
-                    .respectCacheHeaders(false)
-                    .build()
-            }
-        )
-
         // Pre-compile AGSL Liquid Glass shaders on an asynchronous background thread
         // as soon as the app starts, avoiding shader compilation on the first UI frame (Choreographer).
         com.kyant.backdrop.LiquidGlassShaderPrewarmer.prewarmAsync()
@@ -314,56 +283,56 @@ fun QuadrinheiroApp(
         }
     }
 
-    val authScreenUiState by viewModel.authScreenUiState.collectAsState()
+    val authScreenUiState by viewModel.authScreenUiState.collectAsStateWithLifecycle()
     val authUiState = authScreenUiState.sessionState
     val showAuthModalFromSettings = authScreenUiState.showLinkModalFromSettings
 
-    val activeTab by viewModel.activeTab.collectAsState()
-    val lastCapsuleIndex by viewModel.lastCapsuleIndex.collectAsState()
-    val isSidebarOpen by viewModel.isSidebarOpen.collectAsState()
-    val settingsSubPage by viewModel.settingsSubPage.collectAsState()
-    val settingsParentPage by viewModel.settingsParentPage.collectAsState()
-    val isStatisticsOpen by viewModel.isStatisticsOpen.collectAsState()
+    val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
+    val lastCapsuleIndex by viewModel.lastCapsuleIndex.collectAsStateWithLifecycle()
+    val isSidebarOpen by viewModel.isSidebarOpen.collectAsStateWithLifecycle()
+    val settingsSubPage by viewModel.settingsSubPage.collectAsStateWithLifecycle()
+    val settingsParentPage by viewModel.settingsParentPage.collectAsStateWithLifecycle()
+    val isStatisticsOpen by viewModel.isStatisticsOpen.collectAsStateWithLifecycle()
 
-    val comics by viewModel.comics.collectAsState()
-    val storedProfile by viewModel.profile.collectAsState()
+    val comics by viewModel.comics.collectAsStateWithLifecycle()
+    val storedProfile by viewModel.profile.collectAsStateWithLifecycle()
     // GUEST_PRESENTATION_V7: presentation only; never overwrite account data.
     val profile = if (authUiState == AuthUiState.Guest) storedProfile.copy(
         name = "Convidado", handle = "", bio = "", favoriteUniverse = "",
         avatarUrl = "", avatarPreset = "theme", showGoalOnHome = false
     ) else storedProfile
-    val appSettings by viewModel.appSettings.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val motion by rememberUpdatedState(com.example.ui.theme.AppMotion(appSettings.reduceMotion))
 
-    val shelfSection by viewModel.shelfSection.collectAsState()
-    val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
-    val searchFocusTrigger by viewModel.searchFocusTrigger.collectAsState()
-    val shelfStatus by viewModel.shelfStatus.collectAsState()
-    val shelfGenre by viewModel.shelfGenre.collectAsState()
-    val shelfLayout by viewModel.shelfLayout.collectAsState()
-    val shelfSort by viewModel.shelfSort.collectAsState()
-    val shelfFilterQuery by viewModel.shelfFilterQuery.collectAsState()
-    val hasMoreCloudComics by viewModel.hasMoreCloudComics.collectAsState()
-    val isLoadingMoreComics by viewModel.isLoadingMoreComics.collectAsState()
+    val shelfSection by viewModel.shelfSection.collectAsStateWithLifecycle()
+    val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsStateWithLifecycle()
+    val searchFocusTrigger by viewModel.searchFocusTrigger.collectAsStateWithLifecycle()
+    val shelfStatus by viewModel.shelfStatus.collectAsStateWithLifecycle()
+    val shelfGenre by viewModel.shelfGenre.collectAsStateWithLifecycle()
+    val shelfLayout by viewModel.shelfLayout.collectAsStateWithLifecycle()
+    val shelfSort by viewModel.shelfSort.collectAsStateWithLifecycle()
+    val shelfFilterQuery by viewModel.shelfFilterQuery.collectAsStateWithLifecycle()
+    val hasMoreCloudComics by viewModel.hasMoreCloudComics.collectAsStateWithLifecycle()
+    val isLoadingMoreComics by viewModel.isLoadingMoreComics.collectAsStateWithLifecycle()
 
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val remoteResults by viewModel.remoteResults.collectAsState()
-    val isSearchingApi by viewModel.isSearchingApi.collectAsState()
-    val searchSourceFilter by viewModel.searchSourceFilter.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val remoteResults by viewModel.remoteResults.collectAsStateWithLifecycle()
+    val isSearchingApi by viewModel.isSearchingApi.collectAsStateWithLifecycle()
+    val searchSourceFilter by viewModel.searchSourceFilter.collectAsStateWithLifecycle()
 
-    val apiDiagnostics by viewModel.apiDiagnostics.collectAsState()
-    val isTestingApis by viewModel.isTestingApis.collectAsState()
+    val apiDiagnostics by viewModel.apiDiagnostics.collectAsStateWithLifecycle()
+    val isTestingApis by viewModel.isTestingApis.collectAsStateWithLifecycle()
 
-    val selectedComic by viewModel.selectedComic.collectAsState()
-    val infoModalComic by viewModel.infoModalComic.collectAsState()
-    val socialShareRequest by viewModel.socialShareRequest.collectAsState()
-    val onlineSequencePool by viewModel.onlineSequencePool.collectAsState()
-    val showManualModal by viewModel.showManualModal.collectAsState()
-    val isSheetExpanded by viewModel.isSheetExpanded.collectAsState()
-    val manualForm by viewModel.manualForm.collectAsState()
-    val toast by viewModel.toast.collectAsState()
-    val isLoggingOut by viewModel.isLoggingOut.collectAsState()
-    val isEnteringApp by viewModel.isEnteringApp.collectAsState()
+    val selectedComic by viewModel.selectedComic.collectAsStateWithLifecycle()
+    val infoModalComic by viewModel.infoModalComic.collectAsStateWithLifecycle()
+    val socialShareRequest by viewModel.socialShareRequest.collectAsStateWithLifecycle()
+    val onlineSequencePool by viewModel.onlineSequencePool.collectAsStateWithLifecycle()
+    val showManualModal by viewModel.showManualModal.collectAsStateWithLifecycle()
+    val isSheetExpanded by viewModel.isSheetExpanded.collectAsStateWithLifecycle()
+    val manualForm by viewModel.manualForm.collectAsStateWithLifecycle()
+    val toast by viewModel.toast.collectAsStateWithLifecycle()
+    val isLoggingOut by viewModel.isLoggingOut.collectAsStateWithLifecycle()
+    val isEnteringApp by viewModel.isEnteringApp.collectAsStateWithLifecycle()
 
     // Persistent LazyListState per route key so scroll position is preserved across tabs, library sections & settings sub-menus
     val currentRouteKey = remember(activeTab, settingsSubPage, shelfSection, isStatisticsOpen) {
@@ -481,7 +450,7 @@ fun QuadrinheiroApp(
         }
     }
 
-    val activeReadingComicId by viewModel.activeReadingComicId.collectAsState()
+    val activeReadingComicId by viewModel.activeReadingComicId.collectAsStateWithLifecycle()
     val readingNowList = remember(comics) { comics.filter { it.status == ReadingStatus.READING } }
     val readComicsList = remember(comics) { comics.filter { it.status == ReadingStatus.READ } }
     val activeReadingIndex = remember(readingNowList, activeReadingComicId) {
@@ -507,7 +476,7 @@ fun QuadrinheiroApp(
             return@QuadrinheiroTheme
         }
         if (isEnteringApp && authUiState != AuthUiState.Unauthenticated) {
-            SessionTransitionScreen("Preparando sua coleção…")
+            com.example.ui.components.HomeLoadingSkeleton()
             return@QuadrinheiroTheme
         }
 
@@ -570,13 +539,7 @@ fun QuadrinheiroApp(
 
         // HQ com status "Lendo" ativa. Se não houver nenhuma HQ com status READING, currentlyReadingComic é null.
         val currentlyReadingComic = remember(readingNowList, activeReadingComicId) {
-            if (readingNowList.isEmpty()) null
-            else {
-                val idx = readingNowList.indexOfFirst {
-                    it.id == activeReadingComicId || (it.externalId.isNotBlank() && it.externalId == activeReadingComicId)
-                }
-                if (idx >= 0) readingNowList[idx] else readingNowList.first()
-            }
+            com.example.model.activeReadingComic(readingNowList, activeReadingComicId)
         }
 
         var isFirstFrameRendered by remember { mutableStateOf(false) }
@@ -834,7 +797,7 @@ fun QuadrinheiroApp(
                                 .widthIn(max = 600.dp)
                                 .align(Alignment.TopCenter)
                         ) {
-                            androidx.compose.runtime.key(currentRouteKey) {
+                            androidx.compose.runtime.key(activeTab, settingsSubPage, isStatisticsOpen) {
                                 if (isStatisticsOpen) {
                                     ReadingStatisticsScreen(
                                         comics = comics,

@@ -1,5 +1,7 @@
 package com.example.widget
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
@@ -62,62 +64,49 @@ class RecentShelfWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appCtx = context.applicationContext
         val storage = SafeStorage(appCtx)
-
-        // Pré-aquece as capas da estante/fila no cache em memória/disco
-        runCatching {
-            val initialStored = storage.loadWidgetState()
-            val initialPalette = WidgetVisualRenderer.resolveWidgetPalette(storage)
-            val queueComics = initialStored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
-            val featuredList = (if (queueComics.size >= 2) queueComics else initialStored.comics).take(4)
-            featuredList.forEach { comic ->
-                WidgetVisualRenderer.loadOrRenderCoverBitmap(
-                    context = appCtx,
-                    comic = comic,
-                    palette = initialPalette,
-                    widthPx = 144,
-                    heightPx = 210
-                )
-            }
-        }
-
         provideContent {
             val prefs = currentState<Preferences>()
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
+            // A new revision cancels old work and never exposes another account's snapshot.
+            androidx.compose.runtime.key(prefRevision, memRevision) {
+                val snapshot by androidx.compose.runtime.produceState<RecentShelfSnapshot?>(null) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val stored = storage.loadWidgetState()
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
 
-            val snapshot = remember(prefRevision, memRevision) {
-                val stored = storage.loadWidgetState()
-                val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val queueComics = stored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
+                        val featuredList = (if (queueComics.size >= 2) queueComics else stored.comics).take(4)
+                        val isQueueMode = queueComics.size >= 2
+                        val itemsWithBitmaps = kotlinx.coroutines.coroutineScope { featuredList.map { comic -> async {
+                            comic to WidgetVisualRenderer.loadOrRenderCoverBitmap(
+                                context = appCtx,
+                                comic = comic,
+                                palette = palette,
+                                widthPx = 144,
+                                heightPx = 210
+                            )
+                        } }.awaitAll() }
 
-                val queueComics = stored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
-                val featuredList = (if (queueComics.size >= 2) queueComics else stored.comics).take(4)
-                val isQueueMode = queueComics.size >= 2
-                val itemsWithBitmaps = featuredList.map { comic ->
-                    comic to WidgetVisualRenderer.getCachedOrRenderCoverBitmapSync(
-                        context = appCtx,
-                        comic = comic,
-                        palette = palette,
-                        widthPx = 144,
-                        heightPx = 210
-                    )
+                        RecentShelfSnapshot(
+                            items = itemsWithBitmaps,
+                            isQueueMode = isQueueMode,
+                            totalShelfCount = stored.comics.size,
+                            palette = palette
+                        )
+                    }
                 }
-
-                RecentShelfSnapshot(
-                    items = itemsWithBitmaps,
-                    isQueueMode = isQueueMode,
-                    totalShelfCount = stored.comics.size,
-                    palette = palette
-                )
-            }
-
-            GlanceTheme {
-                RecentShelfWidgetContent(
-                    context = appCtx,
-                    items = snapshot.items,
-                    isQueueMode = snapshot.isQueueMode,
-                    totalShelfCount = snapshot.totalShelfCount,
-                    palette = snapshot.palette
-                )
+                snapshot?.let { snapshot ->
+                    GlanceTheme {
+                        RecentShelfWidgetContent(
+                            context = appCtx,
+                            items = snapshot.items,
+                            isQueueMode = snapshot.isQueueMode,
+                            totalShelfCount = snapshot.totalShelfCount,
+                            palette = snapshot.palette
+                        )
+                    }
+                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
             }
         }
     }
@@ -136,7 +125,7 @@ private fun RecentShelfWidgetContent(
             .fillMaxSize()
             .cornerRadius(24.dp)
             .background(ColorProvider(palette.bgCard))
-            .padding(12.dp)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),

@@ -73,77 +73,60 @@ class ReadingNowWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appCtx = context.applicationContext
         val storage = SafeStorage(appCtx)
-
-        // Pré-aquece a capa em alta resolução (204x300 proporção 2:3) no cache de memória/disco
-        runCatching {
-            val initialStored = storage.loadWidgetState()
-            val initialPalette = WidgetVisualRenderer.resolveWidgetPalette(storage)
-            val initialComic = initialStored.comics.firstOrNull { it.status == ReadingStatus.READING }
-                ?: initialStored.comics.firstOrNull { it.status == ReadingStatus.WANT_TO_READ }
-                ?: initialStored.comics.firstOrNull()
-            if (initialComic != null) {
-                WidgetVisualRenderer.loadOrRenderCoverBitmap(
-                    context = appCtx,
-                    comic = initialComic,
-                    palette = initialPalette,
-                    widthPx = 204,
-                    heightPx = 300
-                )
-            }
-        }
-
         provideContent {
             val prefs = currentState<Preferences>()
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
-            val prefPage = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_PAGE] ?: -1
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
+            // A new revision cancels old work and never exposes another account's snapshot.
+            androidx.compose.runtime.key(prefRevision, memRevision) {
+                val snapshot by androidx.compose.runtime.produceState<ReadingNowSnapshot?>(null) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val sessionSnapshot = storage.loadWidgetSessionSnapshot()
+                        val stored = sessionSnapshot.state
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val currentComic = com.example.model.activeReadingComic(stored.comics, stored.profile.activeReadingComicId)
 
-            val snapshot = remember(prefRevision, prefPage, memRevision) {
-                val sessionSnapshot = storage.loadWidgetSessionSnapshot()
-                val stored = sessionSnapshot.state
-                val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
-                val currentComic: ComicEntry? = stored.comics.firstOrNull { it.status == ReadingStatus.READING }
-                    ?: stored.comics.firstOrNull { it.status == ReadingStatus.WANT_TO_READ }
-                    ?: stored.comics.firstOrNull()
+                        val coverBitmap = currentComic?.let {
+                            WidgetVisualRenderer.loadOrRenderCoverBitmap(
+                                context = appCtx,
+                                comic = it,
+                                palette = palette,
+                                widthPx = 204,
+                                heightPx = 300
+                            )
+                        }
 
-                val coverBitmap = currentComic?.let {
-                    WidgetVisualRenderer.getCachedOrRenderCoverBitmapSync(
-                        context = appCtx,
-                        comic = it,
-                        palette = palette,
-                        widthPx = 204,
-                        heightPx = 300
-                    )
+                        val totalPages = (currentComic?.pageCount ?: 1).coerceAtLeast(1)
+                        val curPage = (currentComic?.currentPage ?: 0).coerceIn(0, totalPages)
+                        val progressFraction = (curPage.toFloat() / totalPages.toFloat()).coerceIn(0f, 1f)
+                        val progressBarBitmap = WidgetVisualRenderer.renderProgressBarBitmap(
+                            progress = progressFraction,
+                            palette = palette,
+                            widthPx = 320,
+                            heightPx = 12
+                        )
+
+                        ReadingNowSnapshot(
+                            ownerUid = sessionSnapshot.ownerUid,
+                            comic = currentComic,
+                            coverBitmap = coverBitmap,
+                            progressBarBitmap = progressBarBitmap,
+                            palette = palette
+                        )
+                    }
                 }
-
-                val totalPages = (currentComic?.pageCount ?: 1).coerceAtLeast(1)
-                val curPage = (currentComic?.currentPage ?: 0).coerceIn(0, totalPages)
-                val progressFraction = (curPage.toFloat() / totalPages.toFloat()).coerceIn(0f, 1f)
-                val progressBarBitmap = WidgetVisualRenderer.renderProgressBarBitmap(
-                    progress = progressFraction,
-                    palette = palette,
-                    widthPx = 320,
-                    heightPx = 12
-                )
-
-                ReadingNowSnapshot(
-                    ownerUid = sessionSnapshot.ownerUid,
-                    comic = currentComic,
-                    coverBitmap = coverBitmap,
-                    progressBarBitmap = progressBarBitmap,
-                    palette = palette
-                )
-            }
-
-            GlanceTheme {
-                ReadingNowWidgetContent(
-                    ownerUid = snapshot.ownerUid,
-                    context = appCtx,
-                    comic = snapshot.comic,
-                    coverBitmap = snapshot.coverBitmap,
-                    progressBarBitmap = snapshot.progressBarBitmap,
-                    palette = snapshot.palette
-                )
+                snapshot?.let { snapshot ->
+                    GlanceTheme {
+                        ReadingNowWidgetContent(
+                            ownerUid = snapshot.ownerUid,
+                            context = appCtx,
+                            comic = snapshot.comic,
+                            coverBitmap = snapshot.coverBitmap,
+                            progressBarBitmap = snapshot.progressBarBitmap,
+                            palette = snapshot.palette
+                        )
+                    }
+                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
             }
         }
     }
@@ -215,7 +198,7 @@ private fun ReadingNowWidgetContent(
             .fillMaxSize()
             .cornerRadius(24.dp)
             .background(ColorProvider(palette.bgCard))
-            .padding(if (isCompact) 10.dp else 12.dp),
+            .padding(horizontal = if (isCompact) 14.dp else 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Capa em alta resolução com proporção real de HQ (2:3)

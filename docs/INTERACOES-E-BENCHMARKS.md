@@ -12,6 +12,12 @@ movimento reduzido, repetição do stepper e acessibilidade do switch.
 e a mudança de aba. A comparação com o commit original valida a restauração
 dos componentes e funções solicitados.
 
+A composição da Biblioteca mantém sua identidade ao alternar Estante/Diário,
+preservando a mola do seletor e a memória de rolagem de cada seção. Os callbacks
+dos seletores acompanham o estado mais recente. Os menus mantêm a última linha
+válida durante um arraste para fora e não aplicam um véu branco à superfície
+pressionada. `MenuTrackingTest` cobre a seleção ao soltar fora do menu.
+
 ## Referências e adaptações
 
 A origem dos controles líquidos é o
@@ -28,6 +34,26 @@ Ações do widget carregam o proprietário que originou seu conteúdo. Atualiza�
 comuns são agrupadas, enquanto transições de sessão têm atualização imediata.
 `WidgetSessionTest` cobre troca de proprietário, logout, ações antigas e revisões
 consecutivas no mesmo milissegundo.
+
+A leitura ativa do widget e da iluminação usa o mesmo resolvedor, incluindo IDs
+externos e a remoção/conclusão da seleção anterior. Os snapshots e bitmaps dos
+widgets são calculados em Dispatchers.IO; as quatro capas da estante carregam
+em paralelo usando o ImageLoader/Coil compartilhado do aplicativo. Uma revisão
+cancela trabalho anterior. Uma capa provisória não entra no cache de sucesso,
+permitindo recuperá-la na próxima atualização com conexão. `WidgetCoverTest`
+cobre falha, recuperação e reutilização da capa real. O layout recebe apenas
+mais espaço interno, preservando suas cores, fontes e formatos.
+
+O carregamento entre login e início exibe o skeleton da tela inicial. Sua
+pulsação é aplicada na camada gráfica e respeita Reduzir movimento. A coleta
+dos fluxos da tela principal acompanha o lifecycle, evitando recomposições
+durante o segundo plano. O ícone adaptativo usa a mesma logo com menos inset
+e fundo claro/escuro via recursos do sistema; `LauncherThemeTest` verifica as
+duas configurações. O launcher pode manter ícones em cache até atualizá-los.
+
+Estas mudanças removem trabalho da interface e recriações desnecessárias; não
+representam uma medição de FPS em aparelho físico. Use os benchmarks abaixo
+para comparar hardware e coleções representativas.
 
 O [LiquidGlassKMP do Philipp](https://github.com/philipplackner/LiquidGlassKMP/tree/eb40bdd6a49bcc3a6d79a44b672bddedecbedb7b)
 usa SwiftUI nativo no iOS (`NavigationStack`, `Menu`, `TabView`) e Material 3 no
