@@ -2285,19 +2285,19 @@ fun SettingsTabScreen(
             val backBtnScale by animateFloatAsState(
                 targetValue = if (isScrolling) 0.86f else 1f,
                 animationSpec = motion.spring(
-                    dampingRatio = 1f,
+                    dampingRatio = 0.82f,
                     stiffness = 320f
                 ),
                 label = "iosBackBtnScale"
             )
             val startPadDp by animateDpAsState(
                 targetValue = if (isAtTop) 10.dp else 10.dp,
-                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f),
+                animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f),
                 label = "iosBackBtnStartPad"
             )
             val endPadDp by animateDpAsState(
                 targetValue = if (isAtTop) 15.dp else 10.dp,
-                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f),
+                animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f),
                 label = "iosBackBtnEndPad"
             )
 
@@ -2358,13 +2358,13 @@ fun SettingsTabScreen(
                             animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
                         ) + expandHorizontally(
                             expandFrom = Alignment.Start,
-                            animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f)
+                            animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f)
                         ),
                         exit = fadeOut(
                             animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
                         ) + shrinkHorizontally(
                             shrinkTowards = Alignment.Start,
-                            animationSpec = motion.spring(dampingRatio = 1f, stiffness = 340f)
+                            animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 340f)
                         )
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

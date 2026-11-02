@@ -1,6 +1,7 @@
 package com.example
 
 import androidx.compose.animation.core.SnapSpec
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.ui.geometry.Offset
 import com.example.ui.components.projectSheetEndpoint
 import com.example.ui.components.sheetResistance
@@ -10,6 +11,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FluidMotionPolicyTest {
+    @Test fun normalMotionPreservesTheRequestedLiquidSpring() {
+        val spring = AppMotion().spring<Float>(0.5f, 300f) as SpringSpec
+        assertEquals(0.5f, spring.dampingRatio, 0f)
+        assertEquals(300f, spring.stiffness, 0f)
+    }
     @Test fun flickDirectionChangesTheProjectedDestination() {
         assertTrue(projectSheetEndpoint(30f, 1400f) > 95f)
         assertTrue(projectSheetEndpoint(30f, -1400f) < -55f)

@@ -1374,7 +1374,7 @@ private fun IOS27BottomTabViewContainer(
     val collapsedFraction by animateFloatAsState(
         targetValue = if (isTabBarCollapsed) 1f else 0f,
         animationSpec = motion.spring(
-            dampingRatio = 1f,
+            dampingRatio = 0.94f,
             stiffness = 360f,
             visibilityThreshold = 0.0005f
         ),
@@ -1425,7 +1425,7 @@ private fun IOS27BottomTabViewContainer(
             featuredReadingItem?.let { item ->
                 val progressFraction by animateFloatAsState(
                     targetValue = (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1)).coerceIn(0f, 1f),
-                    animationSpec = motion.spring(stiffness = 380f, dampingRatio = 1f),
+                    animationSpec = motion.spring(stiffness = 380f, dampingRatio = 0.85f),
                     label = "miniPlayerProgress"
                 )
 
@@ -1745,11 +1745,11 @@ private fun IOS27BottomTabViewContainer(
                 if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
                     searchAnimationScope.launch {
                         searchGlassProgressAnim.animateTo(1f, motion.tween(55))
-                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 350f))
+                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 350f))
                     }
                     searchAnimationScope.launch {
                         searchScaleAnim.animateTo(1.15f, motion.tween(55))
-                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 1f, stiffness = 380f))
+                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 0.48f, stiffness = 380f))
                     }
                 }
                 handledByPointer = false
@@ -1839,13 +1839,13 @@ private fun IOS27BottomTabViewContainer(
                             searchAnimationScope.launch {
                                 searchGlassProgressAnim.animateTo(
                                     1f,
-                                    motion.spring(dampingRatio = 1f, stiffness = 700f)
+                                    motion.spring(dampingRatio = 0.9f, stiffness = 700f)
                                 )
                             }
                             searchAnimationScope.launch {
                                 searchScaleAnim.animateTo(
                                     1.15f,
-                                    motion.spring(dampingRatio = 1f, stiffness = 550f)
+                                    motion.spring(dampingRatio = 0.75f, stiffness = 550f)
                                 )
                             }
 
@@ -1870,7 +1870,7 @@ private fun IOS27BottomTabViewContainer(
                                     }
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        motion.spring(dampingRatio = 1f, stiffness = 380f)
+                                        motion.spring(dampingRatio = 0.48f, stiffness = 380f)
                                     )
                                 }
                                 searchAnimationScope.launch {
@@ -1879,20 +1879,20 @@ private fun IOS27BottomTabViewContainer(
                                     }
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        motion.spring(dampingRatio = 1f, stiffness = 340f)
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 340f)
                                     )
                                 }
                             } else {
                                 searchAnimationScope.launch {
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        motion.spring(dampingRatio = 1f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 0.65f, stiffness = 400f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        motion.spring(dampingRatio = 1f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 400f)
                                     )
                                 }
                             }

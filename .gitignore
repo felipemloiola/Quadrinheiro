@@ -20,6 +20,7 @@ debug.keystore
 debug.keystore.base64
 *-debug.log
 .build-outputs/
+app/google-services.json
 *.apk
 *.aab
 *.zip

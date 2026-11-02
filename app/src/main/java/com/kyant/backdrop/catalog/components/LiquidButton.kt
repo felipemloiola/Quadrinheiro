@@ -54,14 +54,15 @@ fun LiquidButton(
 
     val interactiveHighlight = remember(animationScope) {
         InteractiveHighlight(
-            animationScope = animationScope
+            animationScope = animationScope,
+            reduceMotion = reduceMotion
         )
     }
 
     val effectiveBlurPx = if (settings.reduceTransparency) {
         28f.dp
     } else {
-        (4f * settings.glassBlurIntensity).coerceIn(1f, 30f).dp
+        (2f * settings.glassBlurIntensity).coerceIn(1f, 30f).dp
     }
 
     val defaultSurfaceColor = if (settings.reduceTransparency) {

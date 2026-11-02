@@ -1,16 +1,38 @@
 # Interações e validação de fluidez
 
-Os controles compartilham `AppMotion`: molas sem rebote para toques comuns e
-amortecimento de 0,8 para solturas com velocidade. Com **Reduzir movimento**, as
+Os controles compartilham `AppMotion`, que preserva o amortecimento solicitado
+por cada interação, inclusive o rebote. Com **Reduzir movimento**, as
 transições automáticas são estáticas, os indicadores continuam informando estado
 e os arrastes continuam acompanhando o dedo. O sistema Android ainda controla a
 escala global das animações.
 
-Durante um arraste, o valor visual é atualizado diretamente. A mola é usada ao
-soltar ou mudar o valor programaticamente. Cancelar restaura o estado anterior;
+Nos controles líquidos, a posição visual acompanha o alvo com a mola do Kyant
+(amortecimento 1, rigidez 1000). Os deltas do dedo acumulam no alvo lógico para
+evitar perda de deslocamento por causa do atraso visual da mola. X e Y têm molas
+independentes (0,6/250 e 0,7/250); o realce e a deformação por velocidade usam
+0,5/300. Toggle e slider expandem até 1,5× durante a pressão. A retração espera a
+posição chegar perto do alvo e pode ser interrompida por outro toque.
+Cancelar restaura o estado anterior;
 confirmar executa o callback uma única vez. Sliders e estrelas aguardam a intenção
 horizontal antes de bloquear a rolagem vertical. Alvos interativos têm pelo menos
 48 dp de altura; switches, sliders e avaliações expõem ações de acessibilidade.
+
+## Referências e adaptações
+
+Parâmetros e efeitos seguem o [AndroidLiquidGlass/Backdrop do Kyant](https://github.com/Kyant0/AndroidLiquidGlass/tree/65ab177e90e5c1d8c62e70cf7755841982da65f6),
+especialmente `DampedDragAnimation`, `InteractiveHighlight`, `LiquidButton`,
+`LiquidToggle`, `LiquidSlider` e `LiquidBottomTabs`. A integração mantém as
+preferências do Quadrinheiro, cancelamento sem confirmação, semântica de
+acessibilidade e áreas de toque Android. O botão cápsula reutiliza `LiquidButton`.
+As transições específicas de menus e busca recuperam suas molas expressivas.
+
+O [LiquidGlassKMP do Philipp](https://github.com/philipplackner/LiquidGlassKMP/tree/eb40bdd6a49bcc3a6d79a44b672bddedecbedb7b)
+usa SwiftUI nativo no iOS (`NavigationStack`, `Menu`, `TabView`) e Material 3 no
+Android. Ele serve de referência para organização e navegação, não contém uma
+implementação Android dos controles líquidos nativos do iOS. Não há promessa de
+equivalência exata ao renderizador ou à física privados da Apple.
+
+Consulte `THIRD_PARTY_NOTICES.md` para origem e licença do código adaptado.
 
 ## Testes de regressão
 
@@ -23,7 +45,11 @@ gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArgumen
 
 Os testes instrumentados verificam confirmação única via acessibilidade,
 cancelamento do switch, restauração do slider, rolagem sobre estrelas e repetição
-do stepper sem incremento adicional ao soltar. Os testes unitários verificam
+do stepper sem incremento adicional ao soltar. `LiquidSpringTest` verifica
+expansão independente em X/Y, acúmulo dos alvos durante arraste, interrupção da
+retração e ausência de deformação residual por velocidade. `GoogleConfigurationTest`
+confirma o projeto e o cliente Web nos recursos gerados pelo Google Services.
+Os testes unitários verificam
 projeção de velocidade, resistência nos limites, o centroide da pinça e movimento
 reduzido. Os testes de persistência que usam Firebase precisam dos emuladores
 Auth/Firestore, conforme o workflow de release existente.

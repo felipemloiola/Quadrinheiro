@@ -90,11 +90,11 @@ fun LiquidToggle(
             valueRange = 0f..1f,
             visibilityThreshold = 0.001f,
             initialScale = 1f,
-            pressedScale = 1.12f,
+            pressedScale = 1.5f,
             reduceMotion = reduceMotion,
             onDragStarted = { didDrag = false },
             onDragStopped = {
-                val next = if (didDrag) value >= 0.5f else !currentSelected()
+                val next = if (didDrag) targetValue >= 0.5f else !currentSelected()
                 currentOnSelect(next)
                 animateToValue(if (next) 1f else 0f)
                 didDrag = false
@@ -105,7 +105,7 @@ fun LiquidToggle(
             },
             onDrag = { _, amount ->
                 didDrag = true
-                updateValue(value + amount.x / dragWidth * if (isLtr) 1f else -1f)
+                updateValue(targetValue + amount.x / dragWidth * if (isLtr) 1f else -1f)
             }
         )
     }

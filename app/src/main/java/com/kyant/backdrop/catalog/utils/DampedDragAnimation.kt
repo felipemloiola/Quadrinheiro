@@ -1,10 +1,13 @@
 package com.kyant.backdrop.catalog.utils
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -12,10 +15,11 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/** Position follows the finger directly; only settling uses an interruptible spring. */
+/** Kyant Backdrop spring profiles, with Android gesture cancellation and reduced motion. */
 class DampedDragAnimation(
     private val animationScope: CoroutineScope,
     val initialValue: Float,
@@ -30,111 +34,128 @@ class DampedDragAnimation(
     val reduceMotion: () -> Boolean = { false }
 ) {
     private val valueAnimation = Animatable(initialValue, visibilityThreshold)
-    private val pressAnimation = Animatable(0f)
-    private var heldValue by mutableStateOf<Float?>(null)
+    private val velocityAnimation = Animatable(0f, 5f)
+    private val pressAnimation = Animatable(0f, 0.001f)
+    private val scaleXAnimation = Animatable(initialScale, 0.001f)
+    private val scaleYAnimation = Animatable(initialScale, 0.001f)
+    private var requestedValue by mutableFloatStateOf(initialValue)
     private var settleJob: Job? = null
     private var pressJob: Job? = null
+    private var releaseJob: Job? = null
+    private var velocityJob: Job? = null
     private val tracker = VelocityTracker()
     private var startTarget = initialValue
-    private var valuePerPixel = 0f
-    private var releaseVelocity = 0f
-    private var trackedPosition = Offset.Zero
+    private var pressed = false
 
-    val value: Float get() = heldValue ?: valueAnimation.value
-    val progress: Float get() {
-        val span = valueRange.endInclusive - valueRange.start
-        return if (span > 0f) ((value - valueRange.start) / span).coerceIn(0f, 1f) else 0f
-    }
-    val targetValue: Float get() = heldValue ?: valueAnimation.targetValue
+    val value: Float get() = valueAnimation.value
+    private val span: Float get() = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
+    val progress: Float get() = ((value - valueRange.start) / span).coerceIn(0f, 1f)
+    // Accumulate gesture deltas independently of the visual spring's lag.
+    val targetValue: Float get() = requestedValue
     val pressProgress: Float get() = if (reduceMotion()) 0f else pressAnimation.value
-    val scaleX: Float get() = if (reduceMotion()) initialScale else
-        initialScale + (pressedScale - initialScale) * pressProgress
-    val scaleY: Float get() = scaleX
-    val velocity: Float get() = if (heldValue != null) releaseVelocity else valueAnimation.velocity
+    val scaleX: Float get() = if (reduceMotion()) initialScale else scaleXAnimation.value
+    val scaleY: Float get() = if (reduceMotion()) initialScale else scaleYAnimation.value
+    val velocity: Float get() = if (reduceMotion()) 0f else velocityAnimation.value
 
     val modifier: Modifier = Modifier.pointerInput(this) {
         inspectDragGestures(
             onDragStart = { down ->
                 startTarget = targetValue
-                val current = value
-                settleJob?.cancel()
-                heldValue = current
-                tracker.resetTracking()
-                trackedPosition = Offset.Zero
-                tracker.addPosition(down.uptimeMillis, trackedPosition)
-                releaseVelocity = 0f
-                valuePerPixel = 0f
-                onDragStarted(down.position)
                 press()
+                onDragStarted(down.position)
             },
-            onDragEnd = { change ->
-                tracker.addPosition(change.uptimeMillis, trackedPosition)
-                releaseVelocity = tracker.calculateVelocity().x * valuePerPixel
-                onDragStopped()
-                release()
-            },
+            onDragEnd = { onDragStopped(); release() },
             onDragCancel = {
-                releaseVelocity = 0f
                 if (onDragCancelled != null) onDragCancelled.invoke(this@DampedDragAnimation)
                 else animateToValue(startTarget, 0f)
                 release()
             }
-        ) { change, amount ->
-            trackedPosition += amount
-            tracker.addPosition(change.uptimeMillis, trackedPosition)
-            val before = value
-            onDrag(size, amount)
-            if (abs(amount.x) > 0.01f) valuePerPixel = (value - before) / amount.x
-        }
+        ) { _, amount -> onDrag(size, amount) }
     }
 
     fun prepareSnap(value: Float) = snapToValue(value)
 
     fun press() {
+        releaseJob?.cancel()
+        if (!pressed) {
+            settleJob?.cancel()
+            requestedValue = value
+            tracker.resetTracking()
+            animateVelocity(0f)
+        }
+        pressed = true
+        animatePress(true)
+    }
+
+    private fun animatePress(expanded: Boolean) {
         pressJob?.cancel()
         pressJob = animationScope.launch {
-            if (reduceMotion()) pressAnimation.snapTo(1f)
-            else pressAnimation.animateTo(1f, spring(1f, 1000f))
+            val progress = if (expanded) 1f else 0f
+            val scale = if (expanded) pressedScale else initialScale
+            if (reduceMotion()) {
+                pressAnimation.snapTo(progress)
+                scaleXAnimation.snapTo(scale)
+                scaleYAnimation.snapTo(scale)
+            } else {
+                launch { pressAnimation.animateTo(progress, spring(1f, 1000f, 0.001f)) }
+                launch { scaleXAnimation.animateTo(scale, spring(0.6f, 250f, 0.001f)) }
+                launch { scaleYAnimation.animateTo(scale, spring(0.7f, 250f, 0.001f)) }
+            }
         }
     }
 
     fun release() {
-        pressJob?.cancel()
-        pressJob = animationScope.launch {
-            if (reduceMotion()) pressAnimation.snapTo(0f)
-            else pressAnimation.animateTo(0f, spring(1f, 1000f))
+        pressed = false
+        releaseJob?.cancel()
+        releaseJob = animationScope.launch {
+            if (!reduceMotion()) {
+                withFrameNanos { }
+                snapshotFlow { abs(value - targetValue) < maxOf(span * 0.025f, visibilityThreshold) }.first { it }
+            }
+            animatePress(false)
         }
     }
 
-    fun updateValue(value: Float) {
-        settleJob?.cancel()
-        heldValue = value.coerceIn(valueRange)
+    fun updateValue(value: Float) = moveTo(value, valueAnimation.velocity)
+
+    fun animateToValue(value: Float, initialVelocity: Float = valueAnimation.velocity) {
+        if (!pressed) {
+            releaseJob?.cancel()
+            animatePress(true)
+        }
+        moveTo(value, initialVelocity)
+        if (!pressed) release()
     }
 
-    fun animateToValue(value: Float, initialVelocity: Float = releaseVelocity) {
-        val current = this.value
-        val wasHeld = heldValue != null
-        val inheritedVelocity = if (wasHeld) initialVelocity else valueAnimation.velocity
+    private fun moveTo(value: Float, initialVelocity: Float) {
+        requestedValue = value.coerceIn(valueRange)
         settleJob?.cancel()
         settleJob = animationScope.launch {
-            if (wasHeld) valueAnimation.snapTo(current)
-            heldValue = null
-            if (reduceMotion()) valueAnimation.snapTo(value.coerceIn(valueRange))
+            if (reduceMotion()) valueAnimation.snapTo(requestedValue)
             else valueAnimation.animateTo(
-                value.coerceIn(valueRange),
-                spring(if (abs(inheritedVelocity) > 0.01f) 0.8f else 1f, 700f, visibilityThreshold),
-                initialVelocity = inheritedVelocity
-            )
+                requestedValue,
+                spring(1f, 1000f, visibilityThreshold),
+                initialVelocity = initialVelocity
+            ) {
+                tracker.addPosition(SystemClock.uptimeMillis(), Offset(this.value, 0f))
+                animateVelocity(tracker.calculateVelocity().x / span)
+            }
+            animateVelocity(0f)
+        }
+    }
+
+    private fun animateVelocity(value: Float) {
+        velocityJob?.cancel()
+        velocityJob = animationScope.launch {
+            if (reduceMotion()) velocityAnimation.snapTo(0f)
+            else velocityAnimation.animateTo(value, spring(0.5f, 300f, visibilityThreshold * 10f))
         }
     }
 
     fun snapToValue(value: Float) {
-        updateValue(value)
-        val next = this.value
-        settleJob = animationScope.launch {
-            valueAnimation.snapTo(next)
-            heldValue = null
-        }
+        requestedValue = value.coerceIn(valueRange)
+        settleJob?.cancel()
+        settleJob = animationScope.launch { valueAnimation.snapTo(requestedValue) }
     }
 
     fun snapToAndBounce(value: Float) = animateToValue(value, 0f)

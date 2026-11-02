@@ -21,7 +21,7 @@ data class AppMotion(val reduced: Boolean = false) {
         stiffness: Float = Spring.StiffnessMedium,
         visibilityThreshold: T? = null
     ): FiniteAnimationSpec<T> = if (reduced) snap() else composeSpring(
-        dampingRatio = dampingRatio.coerceAtLeast(0.8f),
+        dampingRatio = dampingRatio,
         stiffness = stiffness,
         visibilityThreshold = visibilityThreshold
     )

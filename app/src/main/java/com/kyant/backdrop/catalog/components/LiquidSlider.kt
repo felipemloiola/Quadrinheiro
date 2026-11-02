@@ -100,7 +100,7 @@ fun LiquidSlider(
 
     val thumbWidthDp = 40.dp
     val thumbHeightDp = 24.dp
-    val trackHeightDp = 10.dp
+    val trackHeightDp = 6.dp
     val trackHorizontalInsetDp = 10.dp
 
     var totalWidthPx by remember { mutableFloatStateOf(with(density) { 260.dp.toPx() }) }
@@ -137,7 +137,7 @@ fun LiquidSlider(
                 valueRange = valueRange,
                 visibilityThreshold = effectiveThreshold,
                 initialScale = 1f,
-                pressedScale = 1.45f,
+                pressedScale = 1.5f,
                 onDragStarted = {},
                 onDragStopped = {},
                 onDrag = { _, _ -> }
@@ -217,7 +217,7 @@ fun LiquidSlider(
                         SliderTouchLock.isAnySliderActive = true
                         val span = currentValueRange.endInclusive - currentValueRange.start
                         val delta = span * amount.x / currentUsableTrackWidth * if (currentIsLtr) 1f else -1f
-                        val next = (currentDampedAnim.value + delta).coerceIn(currentValueRange)
+                        val next = (currentDampedAnim.targetValue + delta).coerceIn(currentValueRange)
                         currentDampedAnim.updateValue(next)
                         currentOnValueChange(next)
                     }
@@ -303,7 +303,7 @@ fun LiquidSlider(
                     },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        blur(6f.dp.toPx() * (1f - progress))
+                        blur(8f.dp.toPx() * (1f - progress))
                         lens(
                             refractionHeight = 10f.dp.toPx() * progress,
                             refractionAmount = 14f.dp.toPx() * progress,

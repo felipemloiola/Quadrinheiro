@@ -1849,7 +1849,7 @@ fun LiquidGlassModeSwitcher(
 
     val slideProgress by animateFloatAsState(
         targetValue = selectedIdx.toFloat(),
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = 240f),
+        animationSpec = motion.spring(dampingRatio = 0.78f, stiffness = 240f),
         label = "switcherSlide"
     )
 
@@ -1897,7 +1897,7 @@ fun LiquidGlassModeSwitcher(
                 val active = isLightMode == lightVal
                 val iconScale by animateFloatAsState(
                     targetValue = if (active) 1.0f else 1.06f,
-                    animationSpec = motion.spring(dampingRatio = 1f, stiffness = 260f),
+                    animationSpec = motion.spring(dampingRatio = 0.78f, stiffness = 260f),
                     label = "switcherIconScale"
                 )
                 Box(
@@ -2059,7 +2059,7 @@ fun LiquidGlassMenuOverlayHost(
                 widthAnim.animateTo(
                     targetValue = 1f,
                     animationSpec = motion.spring(
-                        dampingRatio = 1f,
+                        dampingRatio = 0.58f,
                         stiffness = 860f,
                         visibilityThreshold = 0.002f
                     )
@@ -2069,7 +2069,7 @@ fun LiquidGlassMenuOverlayHost(
                 heightAnim.animateTo(
                     targetValue = 1f,
                     animationSpec = motion.spring(
-                        dampingRatio = 1f,
+                        dampingRatio = 0.62f,
                         stiffness = 700f,
                         visibilityThreshold = 0.002f
                     )
@@ -2078,14 +2078,14 @@ fun LiquidGlassMenuOverlayHost(
         } else if (displayedRequest != null) {
             hoveredIndex = null
             launch { hoverPillAlphaAnim.animateTo(0f, motion.tween(90)) }
-            launch { dragXAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 600f)) }
-            launch { dragYAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 600f)) }
+            launch { dragXAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 600f)) }
+            launch { dragYAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 600f)) }
             // Fechamento suave, rápido e sem rebote negativo para nunca piscar o botão de origem
             val wJob = launch {
                 widthAnim.animateTo(
                     targetValue = 0f,
                     animationSpec = motion.spring(
-                        dampingRatio = 1f,
+                        dampingRatio = 0.94f,
                         stiffness = 820f,
                         visibilityThreshold = 0.008f
                     )
@@ -2095,7 +2095,7 @@ fun LiquidGlassMenuOverlayHost(
                 heightAnim.animateTo(
                     targetValue = 0f,
                     animationSpec = motion.spring(
-                        dampingRatio = 1f,
+                        dampingRatio = 0.92f,
                         stiffness = 760f,
                         visibilityThreshold = 0.008f
                     )
@@ -2389,7 +2389,7 @@ fun LiquidGlassMenuOverlayHost(
                             } else {
                                 hoverPillIndexAnim.animateTo(
                                     initialIdx.toFloat(),
-                                    motion.spring(dampingRatio = 1f, stiffness = 560f)
+                                    motion.spring(dampingRatio = 0.65f, stiffness = 560f)
                                 )
                             }
                             hoverPillAlphaAnim.animateTo(1f, motion.tween(70))
@@ -2421,7 +2421,7 @@ fun LiquidGlassMenuOverlayHost(
                                         animationScope.launch {
                                             hoverPillIndexAnim.animateTo(
                                                 newIdx.toFloat(),
-                                                motion.spring(dampingRatio = 1f, stiffness = 520f)
+                                                motion.spring(dampingRatio = 0.62f, stiffness = 520f)
                                             )
                                             hoverPillAlphaAnim.animateTo(1f, motion.tween(65))
                                         }
@@ -2444,13 +2444,13 @@ fun LiquidGlassMenuOverlayHost(
                         animationScope.launch {
                             dragXAnim.animateTo(
                                 0f,
-                                motion.spring(dampingRatio = 1f, stiffness = 420f)
+                                motion.spring(dampingRatio = 0.45f, stiffness = 420f)
                             )
                         }
                         animationScope.launch {
                             dragYAnim.animateTo(
                                 0f,
-                                motion.spring(dampingRatio = 1f, stiffness = 380f)
+                                motion.spring(dampingRatio = 0.48f, stiffness = 380f)
                             )
                         }
 
@@ -2568,7 +2568,7 @@ fun LiquidGlassMenuOverlayHost(
                             val isHovered = hoveredIndex == index
                             val rowScale by animateFloatAsState(
                                 targetValue = if (isHovered) 1.02f else 1f,
-                                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 480f),
+                                animationSpec = motion.spring(dampingRatio = 0.65f, stiffness = 480f),
                                 label = "menuItemScale"
                             )
 
@@ -2683,7 +2683,7 @@ fun <T> AppleMenuPicker(
     val pickerPressed by pickerInteractions.collectIsPressedAsState()
     val pickerPressProgress by animateFloatAsState(
         targetValue = if (pickerPressed) 1f else 0f,
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = 420f),
+        animationSpec = motion.spring(dampingRatio = 0.62f, stiffness = 420f),
         label = "pickerGlassPress"
     )
     val animationScope = rememberCoroutineScope()
@@ -3608,17 +3608,17 @@ fun AppleActivityRingsGauge(
     val isDark = LocalIsDarkTheme.current
     val animOuter by animateFloatAsState(
         targetValue = outerProgress.coerceIn(0f, 1.5f),
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
         label = "outerRing"
     )
     val animInner by animateFloatAsState(
         targetValue = innerProgress.coerceIn(0f, 1.5f),
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
         label = "innerRing"
     )
     val animThird by animateFloatAsState(
         targetValue = (thirdProgress ?: 0f).coerceIn(0f, 1.5f),
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
         label = "thirdRing"
     )
 
@@ -3703,61 +3703,24 @@ fun AppleCapsuleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val interactiveHighlight = rememberInteractiveHighlight()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium),
-        label = "appleBtnScale"
-    )
-
-    Row(
-        modifier = modifier
-            .graphicsLayer {
-                val pressProg = interactiveHighlight.pressProgress
-                scaleX = scale * (1f + pressProg * 0.04f)
-                scaleY = scale * (1f + pressProg * 0.04f)
-                translationX = (interactiveHighlight.offset.x * 0.06f).coerceIn(-3f, 3f)
-                translationY = (interactiveHighlight.offset.y * 0.06f).coerceIn(-2f, 2f)
-            }
-            .height(32.dp)
-            .then(
-                if (prominent) {
-                    Modifier
-                        .shadow(4.dp, RoundedCornerShape(999.dp), spotColor = Color.Black.copy(alpha = 0.22f))
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(s.accentBg)
-                        .border(0.75.dp, Color.White.copy(alpha = 0.40f), RoundedCornerShape(999.dp))
-                } else {
-                    Modifier.inputWellSurface(RoundedCornerShape(999.dp))
-                }
-            )
-            .then(interactiveHighlight.gestureModifier)
-            .then(interactiveHighlight.modifier)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    val s = LocalAppleMaterials.current.scheme
+    com.kyant.backdrop.catalog.components.LiquidButton(
+        onClick = onClick,
+        backdrop = rememberCurrentBackdrop(),
+        modifier = modifier,
+        surfaceColor = if (prominent) s.accentBg else Color.Unspecified
     ) {
         if (leadingIcon != null) {
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
                 tint = if (prominent) s.accentText else s.textPrimary,
-                modifier = Modifier.size(13.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
         Text(
             text = label,
-            fontSize = 12.sp,
+            fontSize = 15.sp,
             fontWeight = if (prominent) FontWeight.Bold else FontWeight.SemiBold,
             color = if (prominent) s.accentText else s.textPrimary,
             maxLines = 1

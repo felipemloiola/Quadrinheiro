@@ -419,7 +419,7 @@ class InteractiveHighlight(
     val positionProvider: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
     val reduceMotion: () -> Boolean = { false }
 ) {
-    private val pressProgressAnimationSpec = spring(1f, 300f, 0.001f)
+    private val pressProgressAnimationSpec = spring(0.5f, 300f, 0.001f)
     private val pressProgressAnimatable = Animatable(0f, 0.001f)
 
     private var startPosition = Offset.Zero

@@ -231,7 +231,7 @@ fun CatalogSheetModal(
 
     val targetMaxHeight by animateDpAsState(
         targetValue = if (isSheetExpanded) 860.dp else 650.dp,
-        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = motion.spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
         label = "sheetMaxHeight"
     )
 
@@ -1410,13 +1410,13 @@ fun AdaptiveSidebarDrawer(
         launch {
             scaleXAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 360f)
+                animationSpec = motion.spring(dampingRatio = 0.50f, stiffness = 360f)
             )
         }
         launch {
             scaleYAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 290f)
+                animationSpec = motion.spring(dampingRatio = 0.56f, stiffness = 290f)
             )
         }
     }
