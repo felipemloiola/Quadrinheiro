@@ -398,6 +398,7 @@ fun rememberDampedDragAnimation(
     initialValue: Float,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f
 ): DampedDragAnimation {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val scope = rememberCoroutineScope()
     return remember(valueRange) {
         DampedDragAnimation(
@@ -415,9 +416,10 @@ fun rememberDampedDragAnimation(
 @Stable
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
-    val positionProvider: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
+    val positionProvider: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+    val reduceMotion: () -> Boolean = { false }
 ) {
-    private val pressProgressAnimationSpec = spring(0.5f, 300f, 0.001f)
+    private val pressProgressAnimationSpec = spring(1f, 300f, 0.001f)
     private val pressProgressAnimatable = Animatable(0f, 0.001f)
 
     private var startPosition = Offset.Zero
@@ -425,10 +427,10 @@ class InteractiveHighlight(
         private set
 
     val pressProgress: Float
-        get() = pressProgressAnimatable.value
+        get() = if (reduceMotion()) 0f else pressProgressAnimatable.value
 
     val offset: Offset
-        get() = touchPosition - startPosition
+        get() = if (reduceMotion()) Offset.Zero else touchPosition - startPosition
 
     val gestureModifier: Modifier = Modifier.pointerInput(animationScope) {
         awaitEachGesture {
@@ -491,9 +493,11 @@ fun rememberInteractiveHighlight(
     positionProvider: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
 ): InteractiveHighlight {
     val scope = rememberCoroutineScope()
+    val reduced = com.example.ui.theme.rememberReducedMotion()
     return remember {
         InteractiveHighlight(
             animationScope = scope,
+            reduceMotion = reduced,
             positionProvider = positionProvider
         )
     }

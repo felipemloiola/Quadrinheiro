@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -887,7 +889,7 @@ fun ShelfLibraryTab(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("shelf_list"),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,

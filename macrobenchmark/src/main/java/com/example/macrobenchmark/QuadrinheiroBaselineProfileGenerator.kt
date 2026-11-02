@@ -1,22 +1,19 @@
 package com.example.macrobenchmark
 
-/**
- * Gerador de Baseline Profiles (Macrobenchmark) do Quadrinheiro.
- * Exercita os fluxos críticos:
- * 1. Cold Start e transição da WelcomeIntroScreen -> AuthScreen -> Guest Mode
- * 2. Renderização das superfícies translúcidas Liquid Glass e shaders AGSL
- * 3. Rolagem em alta velocidade (Fling) na Biblioteca de Quadrinhos
- */
+import androidx.benchmark.macro.junit4.BaselineProfileRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
 class QuadrinheiroBaselineProfileGenerator {
-    companion object {
-        const val TARGET_PACKAGE = "com.aistudio.quadrinheiro.lqglas"
-        val CRITICAL_ROUTES = listOf(
-            "welcome_intro_root",
-            "welcome_start_button",
-            "welcome_primary_button",
-            "home",
-            "shelf",
-            "search"
-        )
+    @get:Rule val profile = BaselineProfileRule()
+
+    @Test fun generate() = profile.collect(packageName = TARGET_PACKAGE) {
+        pressHome()
+        startActivityAndWait()
+        device.enterGuestLibrary()
+        device.exerciseLibraryAndSettings()
     }
 }

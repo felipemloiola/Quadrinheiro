@@ -3,88 +3,57 @@ package com.kyant.backdrop.catalog.utils
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.util.fastFirstOrNull
+import kotlin.math.abs
 
+/** Highlights observe input; controls claim horizontal drags only after touch slop. */
 suspend fun PointerInputScope.inspectDragGestures(
-    onDragStart: (down: PointerInputChange) -> Unit = {},
-    onDragEnd: (change: PointerInputChange) -> Unit = {},
+    onDragStart: (PointerInputChange) -> Unit = {},
+    onDragEnd: (PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
-    onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit
+    observeOnly: Boolean = false,
+    onDrag: (PointerInputChange, Offset) -> Unit
 ) {
     awaitEachGesture {
-        val initialDown = awaitFirstDown(false, PointerEventPass.Initial)
-
-        val down = awaitFirstDown(false)
-        down.consume()
-        val drag = initialDown
-
+        val down = awaitFirstDown(false, PointerEventPass.Initial)
         onDragStart(down)
-        onDrag(drag, Offset.Zero)
-        val upEvent =
-            drag(
-                pointerId = drag.id,
-                onDrag = {
-                    val delta = it.positionChange()
-                    it.consume()
-                    onDrag(it, delta)
+        var claimed = false
+        var completed = false
+        var distance = Offset.Zero
+        try {
+            while (true) {
+                val event = awaitPointerEvent(if (observeOnly) PointerEventPass.Initial else PointerEventPass.Main)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!observeOnly && change.isConsumed) break
+                if (!change.pressed) {
+                    val p = change.position
+                    val padding = viewConfiguration.touchSlop
+                    val inside = p.x in -padding..(size.width + padding) &&
+                        p.y in -padding..(size.height + padding)
+                    if (observeOnly || claimed || inside) {
+                        if (!observeOnly) change.consume()
+                        onDragEnd(change)
+                        completed = true
+                    }
+                    break
                 }
-            )
-        if (upEvent == null) {
-            onDragCancel()
-        } else {
-            onDragEnd(upEvent)
-        }
-    }
-}
-
-private suspend inline fun AwaitPointerEventScope.drag(
-    pointerId: PointerId,
-    onDrag: (PointerInputChange) -> Unit
-): PointerInputChange? {
-    val isPointerUp = currentEvent.changes.fastFirstOrNull { it.id == pointerId }?.pressed != true
-    if (isPointerUp) {
-        return null
-    }
-    var pointer = pointerId
-    while (true) {
-        val change = awaitDragOrUp(pointer) ?: return null
-        if (change.isConsumed) {
-            return null
-        }
-        if (change.changedToUpIgnoreConsumed()) {
-            return change
-        }
-        onDrag(change)
-        pointer = change.id
-    }
-}
-
-private suspend inline fun AwaitPointerEventScope.awaitDragOrUp(
-    pointerId: PointerId
-): PointerInputChange? {
-    var pointer = pointerId
-    while (true) {
-        val event = awaitPointerEvent()
-        val dragEvent = event.changes.fastFirstOrNull { it.id == pointer } ?: return null
-        if (dragEvent.changedToUpIgnoreConsumed()) {
-            val otherDown = event.changes.fastFirstOrNull { it.pressed }
-            if (otherDown == null) {
-                return dragEvent
-            } else {
-                pointer = otherDown.id
+                val delta = change.positionChange()
+                distance += delta
+                if (observeOnly) onDrag(change, delta)
+                else {
+                    if (!claimed && abs(distance.y) > viewConfiguration.touchSlop && abs(distance.y) > abs(distance.x)) break
+                    if (!claimed && abs(distance.x) > viewConfiguration.touchSlop) {
+                        claimed = true
+                        onDrag(change, distance)
+                    } else if (claimed) onDrag(change, delta)
+                    if (claimed) change.consume()
+                }
             }
-        } else {
-            val hasDragged = dragEvent.previousPosition != dragEvent.position
-            if (hasDragged) {
-                return dragEvent
-            }
+        } finally {
+            if (!completed) onDragCancel()
         }
     }
 }

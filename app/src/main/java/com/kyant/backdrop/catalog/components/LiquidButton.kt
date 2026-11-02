@@ -48,6 +48,7 @@ fun LiquidButton(
 ) {
     val animationScope = rememberCoroutineScope()
     val themeDef = LocalIOS27Theme.current
+    val reduceMotion = com.example.ui.theme.rememberReducedMotion()
     val settings = LocalAppSettings.current
     val isLightTheme = !com.example.ui.theme.LocalIsDarkTheme.current
 
@@ -95,7 +96,7 @@ fun LiquidButton(
                         }
                     }
                 },
-                layerBlock = if (isInteractive) {
+                layerBlock = if (isInteractive && !reduceMotion()) {
                     {
                         if (size.isSpecified && size.width > 0f && size.height > 0f) {
                             val width = size.width

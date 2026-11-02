@@ -21,13 +21,14 @@ import kotlinx.coroutines.launch
 
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
-    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
+    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+    val reduceMotion: () -> Boolean = { false }
 ) {
 
     private val pressProgressAnimationSpec =
-        spring(0.5f, 300f, 0.001f)
+        spring(1f, 300f, 0.001f)
     private val positionAnimationSpec =
-        spring(0.5f, 300f, Offset.VisibilityThreshold)
+        spring(1f, 300f, Offset.VisibilityThreshold)
 
     private val pressProgressAnimation =
         Animatable(0f, 0.001f)
@@ -35,8 +36,8 @@ class InteractiveHighlight(
         Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
 
     private var startPosition = Offset.Zero
-    val pressProgress: Float get() = pressProgressAnimation.value
-    val offset: Offset get() = positionAnimation.value - startPosition
+    val pressProgress: Float get() = if (reduceMotion()) 0f else pressProgressAnimation.value
+    val offset: Offset get() = if (reduceMotion()) Offset.Zero else positionAnimation.value - startPosition
 
     private val shader =
         if (isRuntimeShaderSupported()) {
@@ -95,6 +96,7 @@ half4 main(float2 coord) {
     val gestureModifier: Modifier =
         Modifier.pointerInput(animationScope) {
             inspectDragGestures(
+                observeOnly = true,
                 onDragStart = { down ->
                     startPosition = down.position
                     animationScope.launch {

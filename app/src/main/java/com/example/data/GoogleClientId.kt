@@ -3,7 +3,6 @@ package com.example.data
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import com.example.R
 
 internal fun Context.findActivity(): Activity? {
     var current: Context? = this
@@ -17,10 +16,6 @@ internal fun Context.findActivity(): Activity? {
 /** Resolve a real configured OAuth client ID without a compile-time dependency on generated resources. */
 internal object GoogleClientId {
     fun optional(context: Context): String {
-        val direct = runCatching { context.getString(R.string.default_web_client_id).trim() }.getOrDefault("")
-        if (direct.isNotEmpty() && !direct.startsWith("YOUR_", ignoreCase = true)) {
-            return direct
-        }
         val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
         if (id == 0) return ""
         return runCatching { context.getString(id).trim() }.getOrDefault("")

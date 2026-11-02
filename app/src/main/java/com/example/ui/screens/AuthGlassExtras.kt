@@ -47,11 +47,12 @@ private fun AuthCircleAction(
     onClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 1.075f else 1f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 420f),
+        targetValue = if (pressed && !motion.reduced) 1.075f else 1f,
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = 420f),
         label = "authCirclePress"
     )
     Box(
@@ -90,9 +91,10 @@ internal fun AuthAlternativeActions(
 
 @Composable
 internal fun AuthGlassEntrance(content: @Composable () -> Unit) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val visible = remember { MutableTransitionState(false).apply { targetState = true } }
     AnimatedVisibility(
         visibleState = visible,
-        enter = fadeIn(tween(260)) + scaleIn(initialScale = 0.965f, animationSpec = spring(dampingRatio = 0.88f, stiffness = 300f))
+        enter = fadeIn(motion.tween(260)) + scaleIn(initialScale = 0.965f, animationSpec = motion.spring(dampingRatio = 1f, stiffness = 300f))
     ) { content() }
 }

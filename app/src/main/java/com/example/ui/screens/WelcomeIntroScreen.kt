@@ -80,6 +80,7 @@ private data class AppleFeatureRow(
 fun WelcomeIntroScreen(
     onContinue: () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val theme = LocalIOS27Theme.current
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -116,7 +117,7 @@ fun WelcomeIntroScreen(
     // Curva de mola contínua, crítica e ultra-fluida do iOS (sem saltos de limiar, sem overshoot brusco)
     val transitionProgress by animateFloatAsState(
         targetValue = if (isFeaturesView) 1f else 0f,
-        animationSpec = spring(
+        animationSpec = motion.spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = 300f
         ),

@@ -1,5 +1,12 @@
 package com.example.ui.components
 
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import com.kyant.backdrop.catalog.utils.inspectDragGestures
+
 import androidx.compose.foundation.layout.heightIn
 
 import com.kyant.backdrop.Backdrop
@@ -422,6 +429,7 @@ fun LiquidGlassChip(
     shape: Shape = Capsule(),
     content: @Composable BoxScope.() -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     Box(
         modifier = modifier.liquidGlass(shape = shape, elevation = 4.dp),
         content = content
@@ -431,7 +439,7 @@ fun LiquidGlassChip(
 /**
  * 2. COMPONENTE DA BARRA DE NAVEGAÇÃO INFERIOR INTERATIVA (`Interactive Glass Bottom Bar` do manual CMP Backdrop):
  * - Contêiner configurado com `.drawBackdrop` e a forma contínua `com.kyant.shapes.Capsule()`.
- * - Animação elástica ao toque ('Press to Scale') via `Animatable(0f)` controlada por `spring(0.5f, 300f, 0.001f)`.
+ * - Animação elástica ao toque ('Press to Scale') via `Animatable(0f)` controlada por `motion.spring(0.5f, 300f, 0.001f)`.
  * - Escala aplicada EXCLUSIVAMENTE dentro do `layerBlock` do `drawBackdrop` para impedir que o fundo mude de escala junto com o botão.
  * - Filtro de legibilidade: `onDrawSurface = { drawRect(Color.White.copy(alpha = 0.5f)) }`.
  */
@@ -441,6 +449,7 @@ fun Modifier.interactiveGlassBottomBarSurface(
     pressProgress: Float = 0f,
     maxScale: Float = 1.06f
 ): Modifier {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val isLight = mat.scheme.isLight
     val edgeRefraction = mat.edgeRefraction
@@ -486,7 +495,7 @@ fun Modifier.interactiveGlassBottomBarSurface(
  * 3. BOTÃO DA LUPA AZUL MATIZADO (`Tinted Liquid Button` do manual CMP Backdrop):
  * - Usa `BlendMode.Hue` combinado com o preenchimento translúcido de azul `Color(0xFF0088FF)` no `onDrawSurface`
  *   para fundir o matiz do vidro organicamente ao conteúdo das capas de quadrinhos que passarem atrás.
- * - Escala elástica ('Press to Scale') aplicada EXCLUSIVAMENTE no `layerBlock` via `Animatable(0f)` com `spring(0.5f, 300f, 0.001f)`.
+ * - Escala elástica ('Press to Scale') aplicada EXCLUSIVAMENTE no `layerBlock` via `Animatable(0f)` com `motion.spring(0.5f, 300f, 0.001f)`.
  */
 @Composable
 fun Modifier.tintedLiquidBlueButton(
@@ -895,6 +904,7 @@ fun BookCover(
     modifier: Modifier = Modifier,
     overlayContent: @Composable BoxScope.() -> Unit = {}
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val cleanSrc = remember(src, title) {
         val raw = src.trim().replace("http://", "https://")
         if (raw.isEmpty() || raw.contains("covers.openlibrary.org")) {
@@ -999,7 +1009,7 @@ fun BookCover(
             }
             val coverAlpha by animateFloatAsState(
                 targetValue = if (isImageLoaded) 1f else 0f,
-                animationSpec = tween(durationMillis = 280, easing = EaseOut),
+                animationSpec = motion.tween(durationMillis = 280, easing = EaseOut),
                 label = "bookCoverSoftFadeIn"
             )
             AsyncImage(
@@ -1046,20 +1056,21 @@ fun BookCover(
 private fun CoverShimmerPlaceholder(
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val themeColors = com.example.ui.theme.LocalIOS27Theme.current
     val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "coverShimmerTransition")
-    val shimmerProgress by transition.animateFloat(
+    val shimmerProgress = if (motion.reduced) 0f else transition.animateFloat(
         initialValue = -1f,
         targetValue = 2f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = tween(
+            animation = motion.tween(
                 durationMillis = 1350,
                 easing = androidx.compose.animation.core.LinearEasing
             ),
             repeatMode = androidx.compose.animation.core.RepeatMode.Restart
         ),
         label = "coverShimmerSweep"
-    )
+    ).value
 
     // Cores derivadas do tema com saturação suavizada (blend translúcido com branco editorial)
     val softPrimaryTint = remember(themeColors.accent) {
@@ -1200,7 +1211,6 @@ fun AppleToggle(
     com.kyant.backdrop.catalog.components.LiquidToggle(
         selected = { checked },
         onSelect = { v ->
-            onCheckedChange(v)
             onChange(v)
         },
         backdrop = backdrop,
@@ -1299,7 +1309,6 @@ fun AppleSlider(
     val actualAccent = if (accentColor != Color(0xFF0088FF)) accentColor else activeTrackColor
     val callback = { v: Float ->
         val clamped = v.coerceIn(safeRange)
-        onValueChange(clamped)
         onChange(clamped)
     }
     val effectiveBackdrop = backdrop ?: LocalLiquidGlassBackdrop.current ?: rememberLayerBackdrop()
@@ -1340,32 +1349,16 @@ fun AppleStepper(
     val decPressed by decInteraction.collectIsPressedAsState()
     val incPressed by incInteraction.collectIsPressedAsState()
 
+    val currentValue by rememberUpdatedState(value)
+    val currentOnChange by rememberUpdatedState(onChange)
+    var decRepeated by remember { mutableStateOf(false) }
+    var incRepeated by remember { mutableStateOf(false) }
     val canDec = value > min
     val canInc = value < max
 
-    LaunchedEffect(decPressed, value) {
-        if (decPressed && canDec) {
-            delay(360)
-            while (decPressed && value > min) {
-                onChange((value - step).coerceIn(min, max))
-                delay(100)
-            }
-        }
-    }
-
-    LaunchedEffect(incPressed, value) {
-        if (incPressed && canInc) {
-            delay(360)
-            while (incPressed && value < max) {
-                onChange((value + step).coerceIn(min, max))
-                delay(100)
-            }
-        }
-    }
-
     Row(
         modifier = modifier
-            .height(34.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(
                 if (mat.scheme.isLight) Color(120, 120, 128, 36)
@@ -1381,9 +1374,20 @@ fun AppleStepper(
     ) {
         Box(
             modifier = Modifier
-                .width(44.dp)
+                .width(48.dp)
+                .semantics { contentDescription = "Diminuir" }
                 .fillMaxHeight()
-                .scale(if (decPressed) 1.10f else 1f)
+                .repeatOnHold(
+                    onPress = { decRepeated = false },
+                    onRepeat = {
+                        if (currentValue > min) {
+                            decRepeated = true
+                            currentOnChange((currentValue - step).coerceIn(min, max))
+                            true
+                        } else false
+                    }
+                )
+                .scale(if (decPressed) 0.97f else 1f)
                 .clip(RoundedCornerShape(999.dp))
                 .then(
                     if (decPressed) {
@@ -1403,7 +1407,7 @@ fun AppleStepper(
                     indication = null,
                     enabled = canDec
                 ) {
-                    onChange((value - step).coerceIn(min, max))
+                    if (!decRepeated) currentOnChange((currentValue - step).coerceIn(min, max))
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -1428,9 +1432,20 @@ fun AppleStepper(
 
         Box(
             modifier = Modifier
-                .width(44.dp)
+                .width(48.dp)
+                .semantics { contentDescription = "Aumentar" }
                 .fillMaxHeight()
-                .scale(if (incPressed) 1.10f else 1f)
+                .repeatOnHold(
+                    onPress = { incRepeated = false },
+                    onRepeat = {
+                        if (currentValue < max) {
+                            incRepeated = true
+                            currentOnChange((currentValue + step).coerceIn(min, max))
+                            true
+                        } else false
+                    }
+                )
+                .scale(if (incPressed) 0.97f else 1f)
                 .clip(RoundedCornerShape(999.dp))
                 .then(
                     if (incPressed) {
@@ -1450,7 +1465,7 @@ fun AppleStepper(
                     indication = null,
                     enabled = canInc
                 ) {
-                    onChange((value + step).coerceIn(min, max))
+                    if (!incRepeated) currentOnChange((currentValue + step).coerceIn(min, max))
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -1482,6 +1497,7 @@ fun LiquidGlassSegmentedControl(
     modifier: Modifier = Modifier,
     tabIcons: List<ImageVector?>? = null
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val isLightTheme = !LocalIsDarkTheme.current
     val themeColors = LocalIOS27Theme.current
     val accentColor = themeColors.accent
@@ -1513,10 +1529,14 @@ fun LiquidGlassSegmentedControl(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
+        val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+        val currentOnTabSelected by rememberUpdatedState(onTabSelected)
         var didDrag by remember { mutableStateOf(false) }
 
+        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         val dampedDragAnimation = remember(animationScope, tabsCount) {
             DampedDragAnimation(
+                reduceMotion = reduceMotion,
                 animationScope = animationScope,
                 initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
                 valueRange = 0f..(tabsCount - 1).toFloat(),
@@ -1528,14 +1548,14 @@ fun LiquidGlassSegmentedControl(
                     // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
                     val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
                     didDrag = false
-                    if (selectedIndex != targetIndex) {
-                        onTabSelected(targetIndex)
+                    if (currentSelectedIndex != targetIndex) {
+                        currentOnTabSelected(targetIndex)
                     }
                     animateToValue(targetIndex.toFloat())
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
-                            spring(1f, 300f, 0.5f)
+                            motion.spring(1f, 300f, 0.5f)
                         )
                     }
                 },
@@ -1562,8 +1582,7 @@ fun LiquidGlassSegmentedControl(
         }
 
         val interactiveHighlight = remember(animationScope) {
-            InteractiveHighlight(
-                animationScope = animationScope,
+            InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = animationScope,
                 position = { size, _ ->
                     Offset(
                         if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset
@@ -1804,6 +1823,7 @@ fun LiquidGlassModeSwitcher(
     onSelectMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val selectedIdx = if (isLightMode) 0 else 1
     var previousIdx by remember { mutableIntStateOf(selectedIdx) }
@@ -1829,7 +1849,7 @@ fun LiquidGlassModeSwitcher(
 
     val slideProgress by animateFloatAsState(
         targetValue = selectedIdx.toFloat(),
-        animationSpec = spring(dampingRatio = 0.78f, stiffness = 240f),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = 240f),
         label = "switcherSlide"
     )
 
@@ -1877,7 +1897,7 @@ fun LiquidGlassModeSwitcher(
                 val active = isLightMode == lightVal
                 val iconScale by animateFloatAsState(
                     targetValue = if (active) 1.0f else 1.06f,
-                    animationSpec = spring(dampingRatio = 0.78f, stiffness = 260f),
+                    animationSpec = motion.spring(dampingRatio = 1f, stiffness = 260f),
                     label = "switcherIconScale"
                 )
                 Box(
@@ -2005,6 +2025,7 @@ fun LiquidGlassMenuOverlayHost(
     backdrop: Backdrop,
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val activeRequest = state.currentRequest
     var displayedRequest by remember { mutableStateOf<LiquidGlassMenuRequest?>(null) }
 
@@ -2037,9 +2058,8 @@ fun LiquidGlassMenuOverlayHost(
             launch {
                 widthAnim.animateTo(
                     targetValue = 1f,
-                    initialVelocity = 2.2f,
-                    animationSpec = spring(
-                        dampingRatio = 0.58f,
+                    animationSpec = motion.spring(
+                        dampingRatio = 1f,
                         stiffness = 860f,
                         visibilityThreshold = 0.002f
                     )
@@ -2048,9 +2068,8 @@ fun LiquidGlassMenuOverlayHost(
             launch {
                 heightAnim.animateTo(
                     targetValue = 1f,
-                    initialVelocity = 1.6f,
-                    animationSpec = spring(
-                        dampingRatio = 0.62f,
+                    animationSpec = motion.spring(
+                        dampingRatio = 1f,
                         stiffness = 700f,
                         visibilityThreshold = 0.002f
                     )
@@ -2058,15 +2077,15 @@ fun LiquidGlassMenuOverlayHost(
             }
         } else if (displayedRequest != null) {
             hoveredIndex = null
-            launch { hoverPillAlphaAnim.animateTo(0f, tween(90)) }
-            launch { dragXAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 600f)) }
-            launch { dragYAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 600f)) }
+            launch { hoverPillAlphaAnim.animateTo(0f, motion.tween(90)) }
+            launch { dragXAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 600f)) }
+            launch { dragYAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 600f)) }
             // Fechamento suave, rápido e sem rebote negativo para nunca piscar o botão de origem
             val wJob = launch {
                 widthAnim.animateTo(
                     targetValue = 0f,
-                    animationSpec = spring(
-                        dampingRatio = 0.94f,
+                    animationSpec = motion.spring(
+                        dampingRatio = 1f,
                         stiffness = 820f,
                         visibilityThreshold = 0.008f
                     )
@@ -2075,8 +2094,8 @@ fun LiquidGlassMenuOverlayHost(
             val hJob = launch {
                 heightAnim.animateTo(
                     targetValue = 0f,
-                    animationSpec = spring(
-                        dampingRatio = 0.92f,
+                    animationSpec = motion.spring(
+                        dampingRatio = 1f,
                         stiffness = 760f,
                         visibilityThreshold = 0.008f
                     )
@@ -2127,7 +2146,7 @@ fun LiquidGlassMenuOverlayHost(
     val estimatedHeightDp = rowHeightDp * req.items.size.coerceAtLeast(1) + verticalPadDp * 2
 
     val interactiveHighlight = remember(animationScope) {
-        InteractiveHighlight(animationScope = animationScope)
+        InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = animationScope)
     }
 
     // Receita óptica autêntica do vídeo (baixo desfoque para ver o fundo deformando na lente + alta refração)
@@ -2370,10 +2389,10 @@ fun LiquidGlassMenuOverlayHost(
                             } else {
                                 hoverPillIndexAnim.animateTo(
                                     initialIdx.toFloat(),
-                                    spring(dampingRatio = 0.65f, stiffness = 560f)
+                                    motion.spring(dampingRatio = 1f, stiffness = 560f)
                                 )
                             }
-                            hoverPillAlphaAnim.animateTo(1f, tween(70))
+                            hoverPillAlphaAnim.animateTo(1f, motion.tween(70))
                         }
 
                         var pointerUp = false
@@ -2402,15 +2421,15 @@ fun LiquidGlassMenuOverlayHost(
                                         animationScope.launch {
                                             hoverPillIndexAnim.animateTo(
                                                 newIdx.toFloat(),
-                                                spring(dampingRatio = 0.62f, stiffness = 520f)
+                                                motion.spring(dampingRatio = 1f, stiffness = 520f)
                                             )
-                                            hoverPillAlphaAnim.animateTo(1f, tween(65))
+                                            hoverPillAlphaAnim.animateTo(1f, motion.tween(65))
                                         }
                                     }
                                 } else if (hoveredIndex != null) {
                                     hoveredIndex = null
                                     animationScope.launch {
-                                        hoverPillAlphaAnim.animateTo(0f, tween(100))
+                                        hoverPillAlphaAnim.animateTo(0f, motion.tween(100))
                                     }
                                 }
                                 change.consume()
@@ -2420,18 +2439,18 @@ fun LiquidGlassMenuOverlayHost(
                         val selectedIdx = hoveredIndex
                         hoveredIndex = null
                         animationScope.launch {
-                            hoverPillAlphaAnim.animateTo(0f, tween(120))
+                            hoverPillAlphaAnim.animateTo(0f, motion.tween(120))
                         }
                         animationScope.launch {
                             dragXAnim.animateTo(
                                 0f,
-                                spring(dampingRatio = 0.45f, stiffness = 420f)
+                                motion.spring(dampingRatio = 1f, stiffness = 420f)
                             )
                         }
                         animationScope.launch {
                             dragYAnim.animateTo(
                                 0f,
-                                spring(dampingRatio = 0.48f, stiffness = 380f)
+                                motion.spring(dampingRatio = 1f, stiffness = 380f)
                             )
                         }
 
@@ -2549,7 +2568,7 @@ fun LiquidGlassMenuOverlayHost(
                             val isHovered = hoveredIndex == index
                             val rowScale by animateFloatAsState(
                                 targetValue = if (isHovered) 1.02f else 1f,
-                                animationSpec = spring(dampingRatio = 0.65f, stiffness = 480f),
+                                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 480f),
                                 label = "menuItemScale"
                             )
 
@@ -2642,6 +2661,7 @@ fun <T> AppleMenuPicker(
     onChange: (T) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val isLight = s.isLight
@@ -2663,12 +2683,12 @@ fun <T> AppleMenuPicker(
     val pickerPressed by pickerInteractions.collectIsPressedAsState()
     val pickerPressProgress by animateFloatAsState(
         targetValue = if (pickerPressed) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 420f),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = 420f),
         label = "pickerGlassPress"
     )
     val animationScope = rememberCoroutineScope()
     val triggerHighlight = remember(animationScope) {
-        InteractiveHighlight(animationScope = animationScope)
+        InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = animationScope)
     }
 
     // Progresso contínuo (0f..1f) da gota do menu para cross-morph suave sem nunca piscar ou sumir o botão
@@ -3047,12 +3067,8 @@ fun AppleTextField(
         if (value.isNotEmpty()) {
             Box(
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (mat.scheme.isLight) Color.Black.copy(alpha = 0.14f)
-                        else Color.White.copy(alpha = 0.18f)
-                    )
                     .clickable { onChange("") },
                 contentAlignment = Alignment.Center
             ) {
@@ -3116,38 +3132,35 @@ fun StarRating(
             .then(
                 if (!readOnly && onChange != null) {
                     Modifier
-                        .padding(vertical = 4.dp)
+                        .heightIn(min = 48.dp)
+                        .semantics {
+                            progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(rating, 0f..5f, if (allowHalf) 9 else 4)
+                            stateDescription = "$rating de 5 estrelas"
+                            setProgress { requested ->
+                                val next = if (allowHalf) (requested * 2f).roundToInt() / 2f else requested.roundToInt().toFloat()
+                                currentOnChange?.invoke(next.coerceIn(0f, 5f))
+                                true
+                            }
+                        }
                         .pointerInput(allowHalf) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                down.consume()
-                                val startRating = currentRating
-                                val initialVal = computeRatingFromX(down.position.x)
-                                var dragged = false
-                                var lastVal = initialVal
-                                currentOnChange?.invoke(initialVal)
-
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    val anyPressed = event.changes.any { it.pressed }
-                                    if (!anyPressed) break
-                                    val change = event.changes.firstOrNull { it.pressed }
-                                        ?: event.changes.firstOrNull()
-                                        ?: continue
-                                    change.consume()
-                                    if (abs(change.position.x - down.position.x) > 4f) {
-                                        dragged = true
-                                    }
-                                    val nextVal = computeRatingFromX(change.position.x)
-                                    if (nextVal != lastVal) {
-                                        lastVal = nextVal
-                                        currentOnChange?.invoke(nextVal)
-                                    }
-                                }
-
-                                if (!dragged && abs(initialVal - startRating) < 0.01f && startRating > 0f) {
-                                    currentOnChange?.invoke(0f)
-                                }
+                            var startRating = 0f
+                            var tapRating = 0f
+                            var dragged = false
+                            inspectDragGestures(
+                                onDragStart = { down ->
+                                    startRating = currentRating
+                                    tapRating = computeRatingFromX(down.position.x)
+                                    dragged = false
+                                },
+                                onDragEnd = {
+                                    if (!dragged) currentOnChange?.invoke(
+                                        if (abs(tapRating - startRating) < 0.01f) 0f else tapRating
+                                    )
+                                },
+                                onDragCancel = { if (dragged) currentOnChange?.invoke(startRating) }
+                            ) { change, _ ->
+                                dragged = true
+                                currentOnChange?.invoke(computeRatingFromX(change.position.x))
                             }
                         }
                 } else Modifier
@@ -3590,21 +3603,22 @@ fun AppleActivityRingsGauge(
     thirdColor: Color = LocalIOS27Theme.current.accentSecondary,
     showCenterLabel: Boolean = true
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val s = LocalAppleMaterials.current.scheme
     val isDark = LocalIsDarkTheme.current
     val animOuter by animateFloatAsState(
         targetValue = outerProgress.coerceIn(0f, 1.5f),
-        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
         label = "outerRing"
     )
     val animInner by animateFloatAsState(
         targetValue = innerProgress.coerceIn(0f, 1.5f),
-        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
         label = "innerRing"
     )
     val animThird by animateFloatAsState(
         targetValue = (thirdProgress ?: 0f).coerceIn(0f, 1.5f),
-        animationSpec = spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessLow),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessLow),
         label = "thirdRing"
     )
 
@@ -3689,6 +3703,7 @@ fun AppleCapsuleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val interactionSource = remember { MutableInteractionSource() }
@@ -3696,7 +3711,7 @@ fun AppleCapsuleButton(
     val interactiveHighlight = rememberInteractiveHighlight()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = Spring.StiffnessMedium),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium),
         label = "appleBtnScale"
     )
 

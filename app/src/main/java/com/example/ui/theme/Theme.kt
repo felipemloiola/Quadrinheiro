@@ -10,6 +10,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -416,6 +420,7 @@ private fun rgbWithAlpha(rgb: Triple<Int, Int, Int>, alpha: Float): Color {
     return Color(rgb.first, rgb.second, rgb.third, a)
 }
 
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun QuadrinheiroTheme(
     settings: AppSettings,
@@ -630,6 +635,7 @@ fun QuadrinheiroTheme(
     CompositionLocalProvider(
         LocalAppleMaterials provides computed,
         LocalAppSettings provides settings,
+        LocalAppMotion provides AppMotion(settings.reduceMotion),
         LocalIOS27Theme provides themeState,
         LocalIsDarkTheme provides isDark,
         LocalThemeColors provides themeColorsState,
@@ -648,7 +654,7 @@ fun QuadrinheiroTheme(
                     letterSpacing = 0.sp,
                     shadow = null
                 ),
-                content = content
+                content = { Box(Modifier.semantics { testTagsAsResourceId = true }) { content() } }
             )
         }
     }

@@ -1,5 +1,16 @@
 package com.kyant.backdrop.catalog.components
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -68,69 +79,65 @@ fun LiquidToggle(
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val dragWidth = with(density) { 20f.dp.toPx() }
     val animationScope = rememberCoroutineScope()
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val reduceMotion = com.example.ui.theme.rememberReducedMotion()
     var didDrag by remember { mutableStateOf(false) }
-    var fraction by remember { mutableStateOf(if (selected()) 1f else 0f) }
-    val dampedDragAnimation = remember(animationScope) {
+    val dampedDragAnimation = remember(animationScope, dragWidth, isLtr) {
         DampedDragAnimation(
             animationScope = animationScope,
-            initialValue = fraction,
+            initialValue = if (selected()) 1f else 0f,
             valueRange = 0f..1f,
             visibilityThreshold = 0.001f,
             initialScale = 1f,
-            pressedScale = 1.5f,
-            onDragStarted = {},
+            pressedScale = 1.12f,
+            reduceMotion = reduceMotion,
+            onDragStarted = { didDrag = false },
             onDragStopped = {
-                if (didDrag) {
-                    fraction = if (targetValue >= 0.5f) 1f else 0f
-                    onSelect(fraction == 1f)
-                    didDrag = false
-                } else {
-                    fraction = if (selected()) 0f else 1f
-                    onSelect(fraction == 1f)
-                }
+                val next = if (didDrag) value >= 0.5f else !currentSelected()
+                currentOnSelect(next)
+                animateToValue(if (next) 1f else 0f)
+                didDrag = false
             },
-            onDrag = { _, dragAmount ->
-                if (!didDrag) {
-                    didDrag = dragAmount.x != 0f
-                }
-                val delta = dragAmount.x / dragWidth
-                fraction =
-                    if (isLtr) (targetValue + delta).fastCoerceIn(0f, 1f)
-                    else (targetValue - delta).fastCoerceIn(0f, 1f)
+            onDragCancelled = {
+                didDrag = false
+                animateToValue(if (currentSelected()) 1f else 0f, 0f)
+            },
+            onDrag = { _, amount ->
+                didDrag = true
+                updateValue(value + amount.x / dragWidth * if (isLtr) 1f else -1f)
             }
         )
     }
-    LaunchedEffect(dampedDragAnimation) {
-        snapshotFlow { fraction }.collectLatest { fraction ->
-            dampedDragAnimation.updateValue(fraction)
-        }
-    }
-    LaunchedEffect(selected) {
-        snapshotFlow { selected() }.collectLatest { isSelected ->
-            val target = if (isSelected) 1f else 0f
-            if (target != fraction) {
-                fraction = target
-                dampedDragAnimation.animateToValue(target)
-            }
-        }
+    LaunchedEffect(selected()) {
+        val target = if (selected()) 1f else 0f
+        if (dampedDragAnimation.targetValue != target) dampedDragAnimation.animateToValue(target, 0f)
     }
 
     val trackBackdrop = rememberLayerBackdrop()
 
     Box(
-        modifier,
+        modifier
+            .size(64.dp, 48.dp)
+            .semantics(mergeDescendants = true) {
+                role = Role.Switch
+                toggleableState = ToggleableState(selected())
+                onClick { currentOnSelect(!currentSelected()); true }
+            }
+            .onKeyEvent {
+                if (it.type == KeyEventType.KeyUp && (it.key == Key.Enter || it.key == Key.Spacebar || it.key == Key.DirectionCenter)) {
+                    currentOnSelect(!currentSelected())
+                    true
+                } else false
+            }
+            .focusable()
+            .then(dampedDragAnimation.modifier),
         contentAlignment = Alignment.CenterStart
     ) {
         Canvas(
             Modifier
                 .layerBackdrop(trackBackdrop)
                 .clip(ContinuousCapsule)
-                .clickable(
-                    interactionSource = null,
-                    indication = null,
-                    role = Role.Switch,
-                    onClick = {}
-                )
                 .size(64f.dp, 28f.dp)
         ) {
             val trackColor = lerp(trackColor, accentColor, dampedDragAnimation.value)
@@ -162,10 +169,6 @@ fun LiquidToggle(
                         if (isLtr) lerp(padding, padding + dragWidth, fraction)
                         else lerp(-padding, -(padding + dragWidth), fraction)
                 }
-                .semantics {
-                    role = Role.Switch
-                }
-                .then(dampedDragAnimation.modifier)
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(
                         backdrop,
@@ -221,7 +224,7 @@ fun LiquidToggle(
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
                         val knobIdleColor = if (accentColor.luminance() > 0.65f) {
-                            lerp(Color.White, Color(0xFF18181B), fraction)
+                            lerp(Color.White, Color(0xFF18181B), dampedDragAnimation.value)
                         } else {
                             Color.White
                         }

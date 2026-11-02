@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.runtime.getValue
+
 import androidx.compose.animation.animateContentSize
 
 import androidx.compose.animation.core.tween
@@ -124,6 +126,7 @@ fun AuthCredentialsFieldsSection(
     onForgotPassword: () -> Unit,
     onSubmit: () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val theme = LocalIOS27Theme.current
     val focus = LocalFocusManager.current
     val registering = form.mode != AuthMode.LOGIN
@@ -131,7 +134,7 @@ fun AuthCredentialsFieldsSection(
     // AUTH_UNIFIED_HEIGHT_V5: a single size animation, not two competing field springs.
     Column(
         modifier = Modifier.fillMaxWidth().animateContentSize(
-            animationSpec = tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            animationSpec = motion.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {

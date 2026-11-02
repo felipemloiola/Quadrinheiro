@@ -26,13 +26,14 @@ fun IOSLoadingIndicator(
     color: Color = LocalIOS27Theme.current.textSecondary,
     strokeWidth: Dp = 2.dp
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val transition = rememberInfiniteTransition(label = "iosActivity")
-    val phase by transition.animateFloat(
+    val phase = if (motion.reduced) 0f else transition.animateFloat(
         initialValue = 0f,
         targetValue = 12f,
-        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(motion.tween(900, easing = LinearEasing)),
         label = "activityPhase"
-    )
+    ).value
     Canvas(modifier.size(24.dp).progressSemantics()) {
         val radius = size.minDimension / 2f
         repeat(12) { index ->

@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "Quadrinheiro"
 
 include(":app")
+include(":macrobenchmark")

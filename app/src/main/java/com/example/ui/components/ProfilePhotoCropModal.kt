@@ -1,5 +1,16 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -158,6 +169,10 @@ fun renderCroppedAvatarBase64(
     return "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 }
 
+internal fun zoomAroundCentroid(
+    offset: Offset, centroid: Offset, pan: Offset, oldZoom: Float, newZoom: Float
+): Offset = centroid + (offset - centroid) * (newZoom / oldZoom) + pan
+
 @Composable
 fun ProfilePhotoCropModal(
     bitmap: Bitmap,
@@ -166,6 +181,9 @@ fun ProfilePhotoCropModal(
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
+    val scope = rememberCoroutineScope()
+    var settleJob by remember { mutableStateOf<Job?>(null) }
     val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
 
     var userZoom by remember(bitmap) { mutableFloatStateOf(1f) }
@@ -272,12 +290,48 @@ fun ProfilePhotoCropModal(
                         .background(Color(0xFF14161D))
                         .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(28.dp))
                         .onSizeChanged { viewportSize = it }
-                        .pointerInput(bitmap, viewportSidePx) {
-                            detectTransformGestures { _, pan, gestureZoom, _ ->
-                                val nextZoom = (userZoom * gestureZoom).coerceIn(1f, 4f)
-                                val nextOffset = clampOffset(panOffset + pan, nextZoom)
-                                userZoom = nextZoom
-                                panOffset = nextOffset
+                        .pointerInput(bitmap, viewportSidePx, motion.reduced) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                settleJob?.cancel()
+                                var totalPan = Offset.Zero
+                                var totalZoom = 1f
+                                var claimed = false
+                                try {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        if (event.changes.none { it.pressed } || event.changes.any { it.isConsumed }) break
+                                        val zoom = event.calculateZoom()
+                                        val pan = event.calculatePan()
+                                        val centroid = event.calculateCentroid(useCurrent = false)
+                                        totalPan += pan
+                                        totalZoom *= zoom
+                                        if (!claimed) claimed = totalPan.getDistance() > viewConfiguration.touchSlop ||
+                                            kotlin.math.abs(1f - totalZoom) * viewportSidePx > viewConfiguration.touchSlop
+                                        if (claimed) {
+                                            val nextZoom = (userZoom * zoom).coerceIn(1f, 4f)
+                                            val center = Offset(viewportSidePx / 2f, viewportSidePx / 2f)
+                                            val candidate = zoomAroundCentroid(panOffset, centroid - center, pan, userZoom, nextZoom)
+                                            val clamped = clampOffset(candidate, nextZoom)
+                                            val excess = candidate - clamped
+                                            panOffset = clamped + Offset(
+                                                sheetResistance(-kotlin.math.abs(excess.x), viewportSidePx) * -kotlin.math.sign(excess.x),
+                                                sheetResistance(-kotlin.math.abs(excess.y), viewportSidePx) * -kotlin.math.sign(excess.y)
+                                            )
+                                            userZoom = nextZoom
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    }
+                                } finally {
+                                    val target = clampOffset(panOffset, userZoom)
+                                    settleJob = scope.launch {
+                                        val animation = Animatable(panOffset, Offset.VectorConverter)
+                                        if (motion.reduced) panOffset = target
+                                        else animation.animateTo(target, motion.spring(dampingRatio = 1f, stiffness = 500f)) {
+                                            panOffset = value
+                                        }
+                                    }
+                                }
                             }
                         }
                         .testTag("avatar_crop_viewport"),

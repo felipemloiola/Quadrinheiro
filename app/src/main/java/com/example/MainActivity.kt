@@ -333,6 +333,7 @@ fun QuadrinheiroApp(
         avatarUrl = "", avatarPreset = "theme", showGoalOnHome = false
     ) else storedProfile
     val appSettings by viewModel.appSettings.collectAsState()
+    val motion by rememberUpdatedState(com.example.ui.theme.AppMotion(appSettings.reduceMotion))
 
     val shelfSection by viewModel.shelfSection.collectAsState()
     val scrollToTopTrigger by viewModel.scrollToTopTrigger.collectAsState()
@@ -520,7 +521,7 @@ fun QuadrinheiroApp(
                 visibleState = remember {
                     androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
                 },
-                enter = fadeIn(tween(450))
+                enter = fadeIn(motion.tween(450))
             ) {
                 WelcomeIntroScreen(
                     onContinue = {
@@ -540,7 +541,7 @@ fun QuadrinheiroApp(
                 visibleState = remember {
                     androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
                 },
-                enter = fadeIn(tween(450))
+                enter = fadeIn(motion.tween(450))
             ) {
             AuthScreen(
                 uiState = authScreenUiState,
@@ -665,12 +666,12 @@ fun QuadrinheiroApp(
         }
         val animatedGlowColor by animateColorAsState(
             targetValue = backgroundGlowColor,
-            animationSpec = tween(550),
+            animationSpec = motion.tween(550),
             label = "coverColorGlow"
         )
         val animatedAccentColor by animateColorAsState(
             targetValue = themeColors.accent,
-            animationSpec = tween(550),
+            animationSpec = motion.tween(550),
             label = "accentColorGlow"
         )
 
@@ -1325,8 +1326,8 @@ fun QuadrinheiroApp(
                 // Modal de Autenticação (quando aberto a partir da tela de Ajustes no Modo Convidado para vincular conta)
                 AnimatedVisibility(
                     visible = showAuthModalFromSettings,
-                    enter = fadeIn(tween(260)),
-                    exit = fadeOut(tween(200)),
+                    enter = fadeIn(motion.tween(260)),
+                    exit = fadeOut(motion.tween(200)),
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(50f)
@@ -1369,10 +1370,11 @@ private fun IOS27BottomTabViewContainer(
     modifier: Modifier = Modifier,
     backdrop: Backdrop = rememberLayerBackdrop()
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val collapsedFraction by animateFloatAsState(
         targetValue = if (isTabBarCollapsed) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = 0.94f,
+        animationSpec = motion.spring(
+            dampingRatio = 1f,
             stiffness = 360f,
             visibilityThreshold = 0.0005f
         ),
@@ -1417,13 +1419,13 @@ private fun IOS27BottomTabViewContainer(
         AnimatedVisibility(
             visible = showBottomAccessory && featuredReadingItem != null && !isTabBarCollapsed,
             modifier = Modifier.padding(bottom = 8.dp),
-            enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 2 } + expandVertically(tween(240), expandFrom = Alignment.Top),
-            exit = fadeOut(tween(160)) + slideOutVertically(tween(220)) { it / 2 } + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
+            enter = fadeIn(motion.tween(220)) + slideInVertically(motion.tween(260)) { it / 2 } + expandVertically(motion.tween(240), expandFrom = Alignment.Top),
+            exit = fadeOut(motion.tween(160)) + slideOutVertically(motion.tween(220)) { it / 2 } + shrinkVertically(motion.tween(200), shrinkTowards = Alignment.Top)
         ) {
             featuredReadingItem?.let { item ->
                 val progressFraction by animateFloatAsState(
                     targetValue = (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1)).coerceIn(0f, 1f),
-                    animationSpec = spring(stiffness = 380f, dampingRatio = 0.85f),
+                    animationSpec = motion.spring(stiffness = 380f, dampingRatio = 1f),
                     label = "miniPlayerProgress"
                 )
 
@@ -1616,7 +1618,7 @@ private fun IOS27BottomTabViewContainer(
                 val tabLayerColor = com.kyant.backdrop.catalog.components.LocalLiquidBottomTabColor.current ?: tabContentColor
 
                 // Tab 0: Lendo (transição 100% em sub-pixels na GPU sem AnimatedVisibility que travava o layout)
-                LiquidBottomTab(onClick = { onSelectTab("home") }) {
+                LiquidBottomTab(modifier = Modifier.testTag("nav_home"), onClick = { onSelectTab("home") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 0) LucideIcons.OpenBookFilled else LucideIcons.OpenBook,
                         contentDescription = "Lendo",
@@ -1652,7 +1654,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 1: Biblioteca
-                LiquidBottomTab(onClick = { onSelectTab("shelf") }) {
+                LiquidBottomTab(modifier = Modifier.testTag("nav_shelf"), onClick = { onSelectTab("shelf") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 1) LucideIcons.BooksVertical else LucideIcons.BookClosed,
                         contentDescription = "Biblioteca",
@@ -1688,7 +1690,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 2: Ajustes
-                LiquidBottomTab(onClick = { onSelectTab("settings") }) {
+                LiquidBottomTab(modifier = Modifier.testTag("nav_settings"), onClick = { onSelectTab("settings") }) {
                     Icon(
                         imageVector = LucideIcons.Settings,
                         contentDescription = "Ajustes",
@@ -1733,8 +1735,7 @@ private fun IOS27BottomTabViewContainer(
             val searchGlassProgressAnim = remember { Animatable(0f) }
 
             val searchInteractiveHighlight = remember(searchAnimationScope) {
-                com.kyant.backdrop.catalog.utils.InteractiveHighlight(
-                    animationScope = searchAnimationScope
+                com.kyant.backdrop.catalog.utils.InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = searchAnimationScope
                 )
             }
 
@@ -1743,12 +1744,12 @@ private fun IOS27BottomTabViewContainer(
             LaunchedEffect(isSearchSelected) {
                 if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
                     searchAnimationScope.launch {
-                        searchGlassProgressAnim.animateTo(1f, tween(55))
-                        searchGlassProgressAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 350f))
+                        searchGlassProgressAnim.animateTo(1f, motion.tween(55))
+                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 1f, stiffness = 350f))
                     }
                     searchAnimationScope.launch {
-                        searchScaleAnim.animateTo(1.15f, tween(55))
-                        searchScaleAnim.animateTo(1f, spring(dampingRatio = 0.48f, stiffness = 380f))
+                        searchScaleAnim.animateTo(1.15f, motion.tween(55))
+                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 1f, stiffness = 380f))
                     }
                 }
                 handledByPointer = false
@@ -1758,7 +1759,7 @@ private fun IOS27BottomTabViewContainer(
             // No press-down (frames 24-25), o ícone escurece/reduz opacidade para 0.22f; no release (frame 26), volta a 1f já azul
             val searchIconAlpha by animateFloatAsState(
                 targetValue = if (isSearchPressed && !isSearchSelected) 0.22f else 1f,
-                animationSpec = tween(durationMillis = if (isSearchPressed) 65 else 50),
+                animationSpec = motion.tween(durationMillis = if (isSearchPressed) 65 else 50),
                 label = "SearchIconAlpha"
             )
 
@@ -1814,7 +1815,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                         },
                         layerBlock = {
-                            val sc = searchScaleAnim.value
+                            val sc = if (motion.reduced) 1f else searchScaleAnim.value
                             scaleX = sc
                             scaleY = sc
                         },
@@ -1838,13 +1839,13 @@ private fun IOS27BottomTabViewContainer(
                             searchAnimationScope.launch {
                                 searchGlassProgressAnim.animateTo(
                                     1f,
-                                    spring(dampingRatio = 0.9f, stiffness = 700f)
+                                    motion.spring(dampingRatio = 1f, stiffness = 700f)
                                 )
                             }
                             searchAnimationScope.launch {
                                 searchScaleAnim.animateTo(
                                     1.15f,
-                                    spring(dampingRatio = 0.75f, stiffness = 550f)
+                                    motion.spring(dampingRatio = 1f, stiffness = 550f)
                                 )
                             }
 
@@ -1865,33 +1866,33 @@ private fun IOS27BottomTabViewContainer(
                                 currentOnSelectTab("search")
                                 searchAnimationScope.launch {
                                     if (searchScaleAnim.value < 1.13f) {
-                                        searchScaleAnim.animateTo(1.15f, tween(50))
+                                        searchScaleAnim.animateTo(1.15f, motion.tween(50))
                                     }
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        spring(dampingRatio = 0.48f, stiffness = 380f)
+                                        motion.spring(dampingRatio = 1f, stiffness = 380f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     if (searchGlassProgressAnim.value < 0.85f) {
-                                        searchGlassProgressAnim.animateTo(1f, tween(50))
+                                        searchGlassProgressAnim.animateTo(1f, motion.tween(50))
                                     }
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.85f, stiffness = 340f)
+                                        motion.spring(dampingRatio = 1f, stiffness = 340f)
                                     )
                                 }
                             } else {
                                 searchAnimationScope.launch {
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        spring(dampingRatio = 0.65f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 1f, stiffness = 400f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.85f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 1f, stiffness = 400f)
                                     )
                                 }
                             }
@@ -1903,7 +1904,7 @@ private fun IOS27BottomTabViewContainer(
                     modifier = Modifier
                         .size(34.dp)
                         .graphicsLayer {
-                            val sc = searchScaleAnim.value
+                            val sc = if (motion.reduced) 1f else searchScaleAnim.value
                             scaleX = sc
                             scaleY = sc
                             alpha = searchIconAlpha
@@ -1939,6 +1940,7 @@ fun QuadrinheiroAppPreview() {
 
 @Composable
 private fun SessionTransitionScreen(message: String) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val themeColors = LocalIOS27Theme.current
     val visibleState = remember {
         androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
@@ -1949,7 +1951,7 @@ private fun SessionTransitionScreen(message: String) {
             .background(themeColors.bgPrimary),
         contentAlignment = Alignment.Center
     ) {
-        AnimatedVisibility(visibleState = visibleState, enter = fadeIn(tween(300))) {
+        AnimatedVisibility(visibleState = visibleState, enter = fadeIn(motion.tween(300))) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp)

@@ -149,6 +149,7 @@ fun SettingsTabScreen(
     onOpenSidebar: () -> Unit,
     onQuickRegister: () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val themeColors = LocalIOS27Theme.current
@@ -248,7 +249,7 @@ fun SettingsTabScreen(
         LazyColumn(
             state = listState,
             userScrollEnabled = !isSliderActive,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().testTag("settings_list"),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
@@ -2275,28 +2276,28 @@ fun SettingsTabScreen(
 
             val backBtnAlpha by animateFloatAsState(
                 targetValue = if (isScrolling) 0f else 1f,
-                animationSpec = spring(
-                    dampingRatio = 0.86f,
+                animationSpec = motion.spring(
+                    dampingRatio = 1f,
                     stiffness = if (isScrolling) 420f else 260f
                 ),
                 label = "iosBackBtnAlpha"
             )
             val backBtnScale by animateFloatAsState(
                 targetValue = if (isScrolling) 0.86f else 1f,
-                animationSpec = spring(
-                    dampingRatio = 0.82f,
+                animationSpec = motion.spring(
+                    dampingRatio = 1f,
                     stiffness = 320f
                 ),
                 label = "iosBackBtnScale"
             )
             val startPadDp by animateDpAsState(
                 targetValue = if (isAtTop) 10.dp else 10.dp,
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 320f),
+                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f),
                 label = "iosBackBtnStartPad"
             )
             val endPadDp by animateDpAsState(
                 targetValue = if (isAtTop) 15.dp else 10.dp,
-                animationSpec = spring(dampingRatio = 0.85f, stiffness = 320f),
+                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f),
                 label = "iosBackBtnEndPad"
             )
 
@@ -2354,16 +2355,16 @@ fun SettingsTabScreen(
                     AnimatedVisibility(
                         visible = isAtTop,
                         enter = fadeIn(
-                            animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                            animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
                         ) + expandHorizontally(
                             expandFrom = Alignment.Start,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 320f)
+                            animationSpec = motion.spring(dampingRatio = 1f, stiffness = 320f)
                         ),
                         exit = fadeOut(
-                            animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                            animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
                         ) + shrinkHorizontally(
                             shrinkTowards = Alignment.Start,
-                            animationSpec = spring(dampingRatio = 0.85f, stiffness = 340f)
+                            animationSpec = motion.spring(dampingRatio = 1f, stiffness = 340f)
                         )
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

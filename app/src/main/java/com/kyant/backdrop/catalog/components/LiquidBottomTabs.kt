@@ -78,6 +78,7 @@ fun LiquidBottomTabs(
     vibrancyEnabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val tabsBackdrop = rememberLayerBackdrop()
 
     val collapsed = collapsedFraction().fastCoerceIn(0f, 1f)
@@ -138,8 +139,10 @@ fun LiquidBottomTabs(
         val animationScope = rememberCoroutineScope()
         var didDrag by remember { mutableStateOf(false) }
         var totalDragDistance by remember { mutableStateOf(0f) }
+        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         val dampedDragAnimation = remember(animationScope) {
             DampedDragAnimation(
+                reduceMotion = reduceMotion,
                 animationScope = animationScope,
                 initialValue = lastValidTabIndex.toFloat(),
                 valueRange = 0f..(tabsCount - 1).toFloat(),
@@ -166,7 +169,7 @@ fun LiquidBottomTabs(
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
-                            spring(1f, 300f, 0.5f)
+                            motion.spring(1f, 300f, 0.5f)
                         )
                     }
                 },
@@ -189,7 +192,7 @@ fun LiquidBottomTabs(
 
         val indicatorAlpha by animateFloatAsState(
             targetValue = if (isIndicatorVisible) 1f else 0f,
-            animationSpec = tween(durationMillis = 180, easing = EaseOut),
+            animationSpec = motion.tween(durationMillis = 180, easing = EaseOut),
             label = "IndicatorAlpha"
         )
 
@@ -208,8 +211,7 @@ fun LiquidBottomTabs(
 
         // Importante: NÃO colocar tabWidth como chave do remember para não recriar InteractiveHighlight a cada frame ao encolher!
         val interactiveHighlight = remember(animationScope) {
-            InteractiveHighlight(
-                animationScope = animationScope,
+            InteractiveHighlight(reduceMotion = { motion.reduced }, animationScope = animationScope,
                 position = { size, _ ->
                     val tw = currentTabWidth
                     Offset(

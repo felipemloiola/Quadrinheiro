@@ -146,6 +146,7 @@ fun CatalogSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val localizedInitial = remember(selectedComic) {
@@ -203,8 +204,7 @@ fun CatalogSheetModal(
     }
     val sheetScrollState = rememberScrollState(0)
     val context = LocalContext.current
-    val dragScope = androidx.compose.runtime.rememberCoroutineScope()
-    val dragOffsetYAnim = remember { Animatable(0f) }
+    val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { onSetExpanded(true) })
 
     // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
     LaunchedEffect(draftComic.coverUrl) {
@@ -231,7 +231,7 @@ fun CatalogSheetModal(
 
     val targetMaxHeight by animateDpAsState(
         targetValue = if (isSheetExpanded) 860.dp else 650.dp,
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = motion.spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow),
         label = "sheetMaxHeight"
     )
 
@@ -239,13 +239,13 @@ fun CatalogSheetModal(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = if (s.isLight) 0.14f else 0.24f))
-            .clickable { onDismiss() },
+            .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
         Box(
             modifier = Modifier
                 .graphicsLayer {
-                    translationY = dragOffsetYAnim.value
+                    translationY = sheet.offset
                 }
                 .fillMaxWidth(if (isSheetExpanded) 1f else 0.96f)
                 .then(
@@ -270,7 +270,7 @@ fun CatalogSheetModal(
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
                     scrollOffsetProvider = { sheetScrollState.value.toFloat() },
-                    dragOffsetYProvider = { dragOffsetYAnim.value },
+                    dragOffsetYProvider = { sheet.offset },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
@@ -287,62 +287,8 @@ fun CatalogSheetModal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(28.dp)
-                        .pointerInput(isSheetExpanded) {
-                            var cumulativeDragY = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = {
-                                    cumulativeDragY = 0f
-                                },
-                                onVerticalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    cumulativeDragY += dragAmount
-                                    val targetY = if (cumulativeDragY > 0f) {
-                                        cumulativeDragY
-                                    } else {
-                                        (cumulativeDragY * 0.35f).coerceAtLeast(-40f)
-                                    }
-                                    dragScope.launch {
-                                        dragOffsetYAnim.snapTo(targetY)
-                                    }
-                                },
-                                onDragEnd = {
-                                    when {
-                                        cumulativeDragY < -55f -> {
-                                            dragScope.launch {
-                                                dragOffsetYAnim.animateTo(
-                                                    0f,
-                                                    spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium)
-                                                )
-                                            }
-                                            if (!isSheetExpanded) {
-                                                onSetExpanded(true)
-                                            }
-                                        }
-                                        cumulativeDragY > 95f -> {
-                                            dragScope.launch { dragOffsetYAnim.snapTo(0f) }
-                                            onDismiss()
-                                        }
-                                        else -> {
-                                            dragScope.launch {
-                                                dragOffsetYAnim.animateTo(
-                                                    0f,
-                                                    spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium)
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    dragScope.launch {
-                                        dragOffsetYAnim.animateTo(
-                                            0f,
-                                            spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium)
-                                        )
-                                    }
-                                }
-                            )
-                        },
+                        .height(48.dp)
+                        .then(sheet.dragModifier),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
@@ -377,7 +323,7 @@ fun CatalogSheetModal(
                         modifier = Modifier
                             .testTag("modal_cancel_button")
                             .clip(RoundedCornerShape(99.dp))
-                            .clickable { onDismiss() }
+                            .clickable { sheet.dismiss() }
                             .padding(horizontal = 6.dp, vertical = 6.dp)
                     )
 
@@ -779,12 +725,12 @@ fun ComicInfoSynopsisSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
-    val dragScope = androidx.compose.runtime.rememberCoroutineScope()
-    val dragOffsetYAnim = remember { Animatable(0f) }
+    val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { isExpanded = true })
     val infoScrollState = rememberScrollState(0)
 
     // Prefetching strategy: decodifica e armazena em cache de memória antecipadamente a capa
@@ -844,13 +790,13 @@ fun ComicInfoSynopsisSheetModal(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = if (s.isLight) 0.14f else 0.24f))
-            .clickable { onDismiss() },
+            .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
         Box(
             modifier = Modifier
                 .graphicsLayer {
-                    translationY = dragOffsetYAnim.value
+                    translationY = sheet.offset
                 }
                 .fillMaxWidth(if (isExpanded) 1f else 0.96f)
                 .then(
@@ -874,7 +820,7 @@ fun ComicInfoSynopsisSheetModal(
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = comic.coverUrl,
                     scrollOffsetProvider = { infoScrollState.value.toFloat() },
-                    dragOffsetYProvider = { dragOffsetYAnim.value },
+                    dragOffsetYProvider = { sheet.offset },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
@@ -888,43 +834,8 @@ fun ComicInfoSynopsisSheetModal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(28.dp)
-                        .pointerInput(isExpanded) {
-                            var cumulativeDragY = 0f
-                            detectVerticalDragGestures(
-                                onDragStart = { cumulativeDragY = 0f },
-                                onVerticalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    cumulativeDragY += dragAmount
-                                    val targetY = if (cumulativeDragY > 0f) cumulativeDragY else (cumulativeDragY * 0.35f).coerceAtLeast(-40f)
-                                    dragScope.launch { dragOffsetYAnim.snapTo(targetY) }
-                                },
-                                onDragEnd = {
-                                    when {
-                                        cumulativeDragY < -50f -> {
-                                            dragScope.launch {
-                                                dragOffsetYAnim.animateTo(0f, spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium))
-                                            }
-                                            isExpanded = true
-                                        }
-                                        cumulativeDragY > 90f -> {
-                                            dragScope.launch { dragOffsetYAnim.snapTo(0f) }
-                                            onDismiss()
-                                        }
-                                        else -> {
-                                            dragScope.launch {
-                                                dragOffsetYAnim.animateTo(0f, spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium))
-                                            }
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    dragScope.launch {
-                                        dragOffsetYAnim.animateTo(0f, spring(dampingRatio = 0.80f, stiffness = Spring.StiffnessMedium))
-                                    }
-                                }
-                            )
-                        },
+                        .height(48.dp)
+                        .then(sheet.dragModifier),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
@@ -952,7 +863,7 @@ fun ComicInfoSynopsisSheetModal(
                         modifier = Modifier
                             .testTag("synopsis_close_button")
                             .clip(RoundedCornerShape(99.dp))
-                            .clickable { onDismiss() }
+                            .clickable { sheet.dismiss() }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
 
@@ -1490,6 +1401,7 @@ fun AdaptiveSidebarDrawer(
     onOpenLiquidGlassSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val scaleXAnim = remember { Animatable(0.35f) }
@@ -1498,13 +1410,13 @@ fun AdaptiveSidebarDrawer(
         launch {
             scaleXAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.50f, stiffness = 360f)
+                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 360f)
             )
         }
         launch {
             scaleYAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = spring(dampingRatio = 0.56f, stiffness = 290f)
+                animationSpec = motion.spring(dampingRatio = 1f, stiffness = 290f)
             )
         }
     }

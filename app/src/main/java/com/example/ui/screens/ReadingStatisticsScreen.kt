@@ -533,6 +533,7 @@ fun DiaryExpandableLiquidGlassSummary(
     onShareGoalSummary: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val fitnessPalette = rememberAppleFitnessPalette()
@@ -657,8 +658,8 @@ fun DiaryExpandableLiquidGlassSummary(
 
         AnimatedVisibility(
             visible = isExpanded,
-            enter = expandVertically(tween(240)) + fadeIn(tween(220)),
-            exit = shrinkVertically(tween(200)) + fadeOut(tween(180))
+            enter = expandVertically(motion.tween(240)) + fadeIn(motion.tween(220)),
+            exit = shrinkVertically(motion.tween(200)) + fadeOut(motion.tween(180))
         ) {
             Column(
                 modifier = Modifier
@@ -839,6 +840,7 @@ fun ReadingStatisticsScreen(
     onUpdateGoals: (yearlyGoal: Int, dailyPagesGoal: Int) -> Unit = { _, _ -> },
     onShareGoalSummary: (String) -> Unit = {}
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     BackHandler(onBack = onBack)
 
     val mat = LocalAppleMaterials.current
@@ -873,7 +875,7 @@ fun ReadingStatisticsScreen(
     }
     val chartAnimProgress by animateFloatAsState(
         targetValue = if (animateCharts) 1f else 0f,
-        animationSpec = tween(durationMillis = 680, easing = EaseOutCubic),
+        animationSpec = motion.tween(durationMillis = 680, easing = EaseOutCubic),
         label = "statsChartProgress"
     )
 
@@ -1052,8 +1054,8 @@ fun ReadingStatisticsScreen(
                 // Editor Interativo de Metas no estilo Apple Fitness: (-) 24 (+) OBRAS/ANO e (-) 30 (+) PÁGINAS/DIA
                 AnimatedVisibility(
                     visible = showGoalAdjuster,
-                    enter = expandVertically(tween(260)) + fadeIn(tween(220)),
-                    exit = shrinkVertically(tween(220)) + fadeOut(tween(180))
+                    enter = expandVertically(motion.tween(260)) + fadeIn(motion.tween(220)),
+                    exit = shrinkVertically(motion.tween(220)) + fadeOut(motion.tween(180))
                 ) {
                     AppleFitnessGoalAdjusterCard(
                         yearlyGoal = stats.yearlyGoal,

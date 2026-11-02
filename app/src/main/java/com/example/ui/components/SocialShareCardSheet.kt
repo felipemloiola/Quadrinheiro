@@ -1201,6 +1201,7 @@ fun SocialShareCardSheetModal(
     onShowToast: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     BackHandler(onBack = onDismiss)
 
     val context = LocalContext.current
@@ -1360,7 +1361,7 @@ fun SocialShareCardSheetModal(
             sampledColor = sampledCoverColor,
             fallbackAccent = fitnessPalette.moveRingColor
         ),
-        animationSpec = tween(420),
+        animationSpec = motion.tween(420),
         label = "socialCardAuraColor"
     )
 
