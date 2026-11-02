@@ -71,7 +71,7 @@ class ActivityRingsWidget : GlanceAppWidget() {
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
 
             val snapshot = remember(prefRevision, memRevision) {
-                val stored = storage.loadState()
+                val stored = storage.loadWidgetState()
                 val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
 
                 val stats = computeReadingStatistics(

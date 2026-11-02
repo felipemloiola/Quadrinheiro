@@ -538,6 +538,22 @@ class SafeStorage(context: Context) {
         }
     }
 
+    data class WidgetSessionSnapshot(val ownerUid: String?, val state: StoredState)
+
+    /** Capture the owner with its data; logged-out widgets never read the legacy account cache. */
+    fun loadWidgetSessionSnapshot(): WidgetSessionSnapshot {
+        val session = loadAuthSession()
+        val ownerUid = session?.uid ?: if (isGuestMode()) "guest_local" else null
+        val state = when {
+            ownerUid == "guest_local" -> loadGuestState()
+            ownerUid != null -> loadAccountState(ownerUid) ?: StoredState(emptyList(), ReaderProfile(), AppSettings())
+            else -> StoredState(emptyList(), ReaderProfile(), AppSettings())
+        }
+        return WidgetSessionSnapshot(ownerUid, state)
+    }
+
+    fun loadWidgetState(): StoredState = loadWidgetSessionSnapshot().state
+
     fun loadState(): StoredState {
         val activeSession = loadAuthSession()
         if (isGuestMode() || activeSession?.isGuest == true) {

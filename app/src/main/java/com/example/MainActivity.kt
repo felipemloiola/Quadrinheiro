@@ -1371,15 +1371,8 @@ private fun IOS27BottomTabViewContainer(
     backdrop: Backdrop = rememberLayerBackdrop()
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val collapsedFraction by animateFloatAsState(
-        targetValue = if (isTabBarCollapsed) 1f else 0f,
-        animationSpec = motion.spring(
-            dampingRatio = 0.94f,
-            stiffness = 360f,
-            visibilityThreshold = 0.0005f
-        ),
-        label = "TabBarCollapseFraction"
-    )
+    // Keep the original Kyant 64/56 dp geometry stable while scrolling.
+    val collapsedFraction = 0f
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val isLightTheme = s.isLight
@@ -1603,16 +1596,10 @@ private fun IOS27BottomTabViewContainer(
                 },
                 backdrop = mainBackdrop,
                 tabsCount = 3,
-                collapsedFraction = { collapsedFraction },
                 isLightTheme = isLightTheme,
                 accentColor = effectiveAccentColor,
                 unselectedContentColor = tabContentColor,
                 containerColor = glassContainerColor,
-                blurRadius = configuredBlurRadius,
-                refractionMultiplier = configuredRefractionMultiplier,
-                chromaticAberrationEnabled = configuredChromaticAberration,
-                depthEffectEnabled = configuredDepthEffect,
-                vibrancyEnabled = !settings.reduceTransparency,
                 modifier = Modifier.weight(1f)
             ) {
                 val tabLayerColor = com.kyant.backdrop.catalog.components.LocalLiquidBottomTabColor.current ?: tabContentColor

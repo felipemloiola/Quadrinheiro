@@ -319,7 +319,8 @@ class QuadrinheiroViewModel(
     val onlineSequencePool: StateFlow<List<ComicEntry>> = _onlineSequencePool.asStateFlow()
 
     // Fluxo com debounce(800L) para evitar múltiplas escritas no Firestore/SafeStorage enquanto o usuário arrasta o LiquidSlider
-    private val _debouncedReadingPageUpdates = MutableSharedFlow<ComicEntry>(extraBufferCapacity = 32)
+    private data class ReadingPageUpdate(val ownerUid: String?, val comic: ComicEntry)
+    private val _debouncedReadingPageUpdates = MutableSharedFlow<ReadingPageUpdate>(extraBufferCapacity = 32)
 
     private var searchJob: Job? = null
     private var sequenceJob: Job? = null
@@ -359,8 +360,10 @@ class QuadrinheiroViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _debouncedReadingPageUpdates
                 .debounce(800L)
-                .collectLatest { target ->
-                    val ownerId = activeOwnerUid()
+                .collectLatest { update ->
+                    val ownerId = update.ownerUid
+                    if (ownerId != activeOwnerUid()) return@collectLatest
+                    val target = update.comic
                     storage.saveState(_comics.value, _profile.value, _appSettings.value, ownerId)
                     QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
                     val uid = activeCloudUid()
@@ -989,7 +992,7 @@ class QuadrinheiroViewModel(
         }
 
         resetUsernameVerification(cancelPendingJob = true)
-        persistAll(userProfile.uid)
+        persistAll(userProfile.uid, sessionChanged = true)
 
         if (userProfile.provider == "google") {
             val cloudAuthUser = CloudAuthUser(
@@ -1112,7 +1115,7 @@ class QuadrinheiroViewModel(
         savedStateHandle["activeReadingComicId"] = _activeReadingComicId.value
 
         resetUsernameVerification(cancelPendingJob = true)
-        persistAll("guest_local")
+        persistAll("guest_local", sessionChanged = true)
         resetToReadingHome()
         startSessionEntryTransition()
         showNotice("Modo Convidado ativo")
@@ -1161,6 +1164,7 @@ class QuadrinheiroViewModel(
 
         // Encerra a sessão imediatamente na interface para que o usuário nunca fique preso
         storage.clearAuthSession()
+        QuadrinheiroWidgetsSync.refreshSessionWidgetsAsync(appContext)
         _cloudUser.value = null
         _currentUserProfile.value = null
         startOrStopCloudListeners(null)
@@ -1278,7 +1282,7 @@ class QuadrinheiroViewModel(
         }
     }
 
-    private fun persistAll(ownerUid: String? = null) {
+    private fun persistAll(ownerUid: String? = null, sessionChanged: Boolean = false) {
         // PERSIST_SNAPSHOT_V13: bind the data snapshot to its owner before the debounce.
         val resolvedUid = ownerUid ?: activeOwnerUid()
         val comicsSnapshot = _comics.value
@@ -1286,9 +1290,10 @@ class QuadrinheiroViewModel(
         val settingsSnapshot = _appSettings.value
         persistJob?.cancel()
         persistJob = viewModelScope.launch(Dispatchers.IO) {
-            delay(80)
+            if (!sessionChanged) delay(80)
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
-            QuadrinheiroWidgetsSync.updateAllWidgets(appContext)
+            if (sessionChanged) QuadrinheiroWidgetsSync.refreshSessionWidgetsAsync(appContext)
+            else QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
         }
     }
 
@@ -1299,7 +1304,7 @@ class QuadrinheiroViewModel(
         val settingsSnapshot = _appSettings.value
         viewModelScope.launch(Dispatchers.IO) {
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
-            QuadrinheiroWidgetsSync.updateAllWidgets(appContext)
+            QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
         }
     }
 
@@ -2191,7 +2196,7 @@ class QuadrinheiroViewModel(
         }
         persistAll()
         updatedComic?.let { target ->
-            _debouncedReadingPageUpdates.tryEmit(target)
+            _debouncedReadingPageUpdates.tryEmit(ReadingPageUpdate(activeOwnerUid(), target))
             if (wasFinishedNow) {
                 showNotice(
                     message = "Parabéns! Você concluiu \"${target.title}\"!",

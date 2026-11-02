@@ -50,6 +50,7 @@ import com.example.model.ReadingStatus
 import kotlin.math.roundToInt
 
 private data class ReadingNowSnapshot(
+    val ownerUid: String?,
     val comic: ComicEntry?,
     val coverBitmap: Bitmap?,
     val progressBarBitmap: Bitmap,
@@ -75,7 +76,7 @@ class ReadingNowWidget : GlanceAppWidget() {
 
         // Pré-aquece a capa em alta resolução (204x300 proporção 2:3) no cache de memória/disco
         runCatching {
-            val initialStored = storage.loadState()
+            val initialStored = storage.loadWidgetState()
             val initialPalette = WidgetVisualRenderer.resolveWidgetPalette(storage)
             val initialComic = initialStored.comics.firstOrNull { it.status == ReadingStatus.READING }
                 ?: initialStored.comics.firstOrNull { it.status == ReadingStatus.WANT_TO_READ }
@@ -98,7 +99,8 @@ class ReadingNowWidget : GlanceAppWidget() {
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
 
             val snapshot = remember(prefRevision, prefPage, memRevision) {
-                val stored = storage.loadState()
+                val sessionSnapshot = storage.loadWidgetSessionSnapshot()
+                val stored = sessionSnapshot.state
                 val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
                 val currentComic: ComicEntry? = stored.comics.firstOrNull { it.status == ReadingStatus.READING }
                     ?: stored.comics.firstOrNull { it.status == ReadingStatus.WANT_TO_READ }
@@ -125,6 +127,7 @@ class ReadingNowWidget : GlanceAppWidget() {
                 )
 
                 ReadingNowSnapshot(
+                    ownerUid = sessionSnapshot.ownerUid,
                     comic = currentComic,
                     coverBitmap = coverBitmap,
                     progressBarBitmap = progressBarBitmap,
@@ -134,6 +137,7 @@ class ReadingNowWidget : GlanceAppWidget() {
 
             GlanceTheme {
                 ReadingNowWidgetContent(
+                    ownerUid = snapshot.ownerUid,
                     context = appCtx,
                     comic = snapshot.comic,
                     coverBitmap = snapshot.coverBitmap,
@@ -147,6 +151,7 @@ class ReadingNowWidget : GlanceAppWidget() {
 
 @Composable
 private fun ReadingNowWidgetContent(
+    ownerUid: String?,
     context: Context,
     comic: ComicEntry?,
     coverBitmap: Bitmap?,
@@ -312,6 +317,7 @@ private fun ReadingNowWidgetContent(
                             actionRunCallback<UpdatePageAction>(
                                 actionParametersOf(
                                     UpdatePageAction.PARAM_COMIC_ID to comic.id,
+                                    UpdatePageAction.PARAM_OWNER_UID to (ownerUid ?: "signed_out"),
                                     UpdatePageAction.PARAM_PAGE_DELTA to -1
                                 )
                             )
@@ -341,6 +347,7 @@ private fun ReadingNowWidgetContent(
                             actionRunCallback<UpdatePageAction>(
                                 actionParametersOf(
                                     UpdatePageAction.PARAM_COMIC_ID to comic.id,
+                                    UpdatePageAction.PARAM_OWNER_UID to (ownerUid ?: "signed_out"),
                                     UpdatePageAction.PARAM_PAGE_DELTA to 1
                                 )
                             )

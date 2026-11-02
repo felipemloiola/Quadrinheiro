@@ -26,6 +26,24 @@ preferências do Quadrinheiro, cancelamento sem confirmação, semântica de
 acessibilidade e áreas de toque Android. O botão cápsula reutiliza `LiquidButton`.
 As transições específicas de menus e busca recuperam suas molas expressivas.
 
+A tab bar mantém a geometria 64/56 dp e as lentes 24/24 e 10/14 do Kyant,
+inclusive durante rolagem. A superfície de gesto cobre a barra inteira: a lente
+antecipa a opção no toque inicial, acompanha o arraste e só confirma ao soltar.
+Cancelar restaura a opção anterior. O seletor Estante/Diário usa a mesma regra.
+`NavigationTouchTest` verifica a posição da lente antes do touch-up e impede
+recomposição do conteúdo das abas a cada frame da mola.
+
+Campos de uma linha têm altura mínima de 48 dp, sem somar padding vertical ao
+botão de limpar. O stepper desenha uma superfície de 32 dp dentro de uma área
+de toque de 48 dp, mantendo o pressionar e segurar.
+
+Widgets leem exclusivamente a sessão ativa. O logout invalida o conteúdo
+imediatamente, e a troca de conta invalida também a preferência de página.
+Ações do widget carregam o proprietário que originou seu conteúdo. Atualizações
+comuns são agrupadas, enquanto transições de sessão têm atualização imediata.
+`WidgetSessionTest` cobre troca de proprietário, logout, ações antigas e revisões
+consecutivas no mesmo milissegundo.
+
 O [LiquidGlassKMP do Philipp](https://github.com/philipplackner/LiquidGlassKMP/tree/eb40bdd6a49bcc3a6d79a44b672bddedecbedb7b)
 usa SwiftUI nativo no iOS (`NavigationStack`, `Menu`, `TabView`) e Material 3 no
 Android. Ele serve de referência para organização e navegação, não contém uma

@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
@@ -1358,18 +1360,17 @@ fun AppleStepper(
 
     Row(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (mat.scheme.isLight) Color(120, 120, 128, 36)
-                else Color(120, 120, 128, 61)
-            )
-            .border(
-                0.5.dp,
-                if (mat.scheme.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.14f),
-                RoundedCornerShape(999.dp)
-            )
-            .padding(2.dp),
+            .height(48.dp)
+            .drawBehind {
+                val inset = 4.dp.toPx()
+                val height = 32.dp.toPx()
+                drawRoundRect(
+                    color = if (mat.scheme.isLight) Color(120, 120, 128, 36) else Color(120, 120, 128, 61),
+                    topLeft = Offset(inset, (size.height - height) / 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width - inset * 2f, height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
+                )
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1413,7 +1414,7 @@ fun AppleStepper(
         ) {
             Text(
                 text = "−",
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = mat.scheme.textPrimary.copy(alpha = if (canDec) 1f else 0.3f)
             )
@@ -1471,7 +1472,7 @@ fun AppleStepper(
         ) {
             Text(
                 text = "+",
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = mat.scheme.textPrimary.copy(alpha = if (canInc) 1f else 0.3f)
             )
@@ -1517,6 +1518,7 @@ fun LiquidGlassSegmentedControl(
             (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
         }
 
+        val currentTabWidth by rememberUpdatedState(tabWidth)
         val offsetAnimation = remember { Animatable(0f) }
         val panelOffset by remember(density) {
             derivedStateOf {
@@ -1531,7 +1533,6 @@ fun LiquidGlassSegmentedControl(
         val animationScope = rememberCoroutineScope()
         val currentSelectedIndex by rememberUpdatedState(selectedIndex)
         val currentOnTabSelected by rememberUpdatedState(onTabSelected)
-        var didDrag by remember { mutableStateOf(false) }
 
         val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         val dampedDragAnimation = remember(animationScope, tabsCount) {
@@ -1543,11 +1544,18 @@ fun LiquidGlassSegmentedControl(
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
                 pressedScale = 56f / 40f,
-                onDragStarted = {},
+                onDragStarted = { position ->
+                    val touched = ((position.x - with(density) { 4.dp.toPx() }) / currentTabWidth - 0.5f)
+                    val index = (if (isLtr) touched else tabsCount - 1f - touched).roundToInt().coerceIn(0, tabsCount - 1)
+                    updateValue(index.toFloat())
+                },
+                onDragCancelled = {
+                    animateToValue(currentSelectedIndex.toFloat(), 0f)
+                    animationScope.launch { offsetAnimation.animateTo(0f, motion.spring(1f, 300f, 0.5f)) }
+                },
                 onDragStopped = {
                     // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
                     val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
-                    didDrag = false
                     if (currentSelectedIndex != targetIndex) {
                         currentOnTabSelected(targetIndex)
                     }
@@ -1560,11 +1568,8 @@ fun LiquidGlassSegmentedControl(
                     }
                 },
                 onDrag = { _, dragAmount ->
-                    if (!didDrag) {
-                        didDrag = dragAmount.x != 0f
-                    }
                     updateValue(
-                        (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
+                        (targetValue + dragAmount.x / currentTabWidth * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
                     animationScope.launch {
@@ -1719,8 +1724,7 @@ fun LiquidGlassSegmentedControl(
                         if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
                         else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
                 }
-                .then(interactiveHighlight.gestureModifier)
-                .then(dampedDragAnimation.modifier)
+                .testTag("segmented_lens")
                 .drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { ContinuousCapsule },
@@ -1746,10 +1750,11 @@ fun LiquidGlassSegmentedControl(
                         )
                     },
                     layerBlock = {
-                        val progress = dampedDragAnimation.pressProgress
-                        val scale = lerp(1f, 1f + 12f.dp.toPx() / size.height, progress)
-                        scaleX = scale
-                        scaleY = scale
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                        val velocity = dampedDragAnimation.velocity / 10f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
@@ -1764,6 +1769,8 @@ fun LiquidGlassSegmentedControl(
                 .height(40.dp)
                 .fillMaxWidth(1f / tabsCount)
         )
+        Box(Modifier.matchParentSize().then(interactiveHighlight.gestureModifier).then(dampedDragAnimation.modifier))
+
     }
 }
 
@@ -3011,7 +3018,7 @@ fun AppleTextField(
 ) {
     val mat = LocalAppleMaterials.current
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
 
     Row(
         modifier = modifier
@@ -3024,7 +3031,8 @@ fun AppleTextField(
                 if (focused) Modifier.border(2.dp, mat.scheme.accentColor, shape)
                 else Modifier
             )
-            .padding(horizontal = 14.dp, vertical = 11.dp),
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -3060,6 +3068,7 @@ fun AppleTextField(
                 cursorBrush = SolidColor(mat.scheme.accentColor),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(vertical = 10.dp)
                     .onFocusChanged { focused = it.isFocused }
             )
         }

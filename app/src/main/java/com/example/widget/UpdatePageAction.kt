@@ -110,13 +110,14 @@ object QuadrinheiroWidgetsSync {
 
     val widgetScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    @Synchronized
     fun bumpInMemoryRevision(): Long {
-        val now = System.currentTimeMillis()
+        val now = maxOf(System.currentTimeMillis(), _widgetRevisionFlow.value + 1L)
         _widgetRevisionFlow.value = now
         return now
     }
 
-    suspend fun updateAllWidgets(context: Context, latestPage: Int? = null) {
+    suspend fun updateAllWidgets(context: Context, latestPage: Int? = null, sessionChanged: Boolean = false) {
         val appCtx = context.applicationContext
         val rev = bumpInMemoryRevision()
         val manager = runCatching { GlanceAppWidgetManager(appCtx) }.getOrNull()
@@ -129,6 +130,7 @@ object QuadrinheiroWidgetsSync {
                     updateAppWidgetState(appCtx, PreferencesGlanceStateDefinition, gid) { prefs ->
                         prefs.toMutablePreferences().apply {
                             this[PREF_WIDGET_REVISION] = rev
+                            if (sessionChanged) remove(PREF_WIDGET_PAGE)
                             if (latestPage != null) {
                                 this[PREF_WIDGET_PAGE] = latestPage
                             }
@@ -170,6 +172,13 @@ object QuadrinheiroWidgetsSync {
 
     private var debounceJob: kotlinx.coroutines.Job? = null
 
+    fun refreshSessionWidgetsAsync(context: Context) {
+        debounceJob?.cancel()
+        // Clear visible data immediately; persist the invalidation for inactive Glance sessions too.
+        bumpInMemoryRevision()
+        widgetScope.launch { updateAllWidgets(context.applicationContext, sessionChanged = true) }
+    }
+
     fun refreshAllWidgetsAsync(context: Context) {
         val appCtx = context.applicationContext
         debounceJob?.cancel()
@@ -189,6 +198,7 @@ class UpdatePageAction : ActionCallback {
 
     companion object {
         val PARAM_COMIC_ID = ActionParameters.Key<String>("widget_comic_id")
+        val PARAM_OWNER_UID = ActionParameters.Key<String>("widget_owner_uid")
         val PARAM_PAGE_DELTA = ActionParameters.Key<Int>("widget_page_delta")
 
         /**
@@ -198,17 +208,20 @@ class UpdatePageAction : ActionCallback {
         suspend fun applyPageDelta(
             context: Context,
             comicId: String?,
-            delta: Int
+            delta: Int,
+            expectedOwnerUid: String? = null
         ): ComicEntry? = withContext(Dispatchers.IO) {
             val appCtx = context.applicationContext
             val storage = SafeStorage(appCtx)
-            val stored = storage.loadState()
+            val sessionSnapshot = storage.loadWidgetSessionSnapshot()
+            val ownerUid = sessionSnapshot.ownerUid ?: return@withContext null
+            if (expectedOwnerUid != null && expectedOwnerUid != ownerUid) return@withContext null
+            val stored = sessionSnapshot.state
             val comics = stored.comics
             if (comics.isEmpty()) return@withContext null
 
-            val targetComic = comics.firstOrNull { !comicId.isNullOrBlank() && it.id == comicId }
-                ?: comics.firstOrNull { it.status == ReadingStatus.READING }
-                ?: comics.firstOrNull()
+            val targetComic = (if (!comicId.isNullOrBlank()) comics.firstOrNull { it.id == comicId }
+                else comics.firstOrNull { it.status == ReadingStatus.READING } ?: comics.firstOrNull())
                 ?: return@withContext null
 
             val totalPages = targetComic.pageCount.coerceAtLeast(1)
@@ -234,10 +247,12 @@ class UpdatePageAction : ActionCallback {
                 }
             }
 
+            if (storage.loadAuthSession()?.uid != ownerUid) return@withContext null
             storage.saveState(
                 comics = updatedList,
                 profile = stored.profile,
-                settings = stored.settings
+                settings = stored.settings,
+                ownerUid = ownerUid
             )
 
             // Atualiza imediatamente a revisão em memória e notifica o ViewModel se o app estiver aberto
@@ -247,12 +262,12 @@ class UpdatePageAction : ActionCallback {
             // Sincroniza em segundo plano com o Firestore sem bloquear o refresh imediato do widget
             val entryToSync = updatedEntry
             val session = storage.loadAuthSession()
-            if (session != null && !session.isGuest && session.uid.isNotBlank() && entryToSync != null) {
+            if (session != null && session.uid == ownerUid && !session.isGuest && entryToSync != null) {
                 QuadrinheiroWidgetsSync.widgetScope.launch {
                     runCatching {
                         val repo = QuadrinheiroCloudRepository(appCtx)
-                        repo.saveComic(session.uid, entryToSync)
-                        storage.markComicsSynced(setOf(entryToSync.id), nowMs, session.uid)
+                        repo.saveComic(ownerUid, entryToSync)
+                        storage.markComicsSynced(setOf(entryToSync.id), nowMs, ownerUid)
                     }
                 }
             }
@@ -269,7 +284,9 @@ class UpdatePageAction : ActionCallback {
         val appCtx = context.applicationContext
         val comicId = parameters[PARAM_COMIC_ID]
         val delta = parameters[PARAM_PAGE_DELTA] ?: 1
-        val updated = applyPageDelta(appCtx, comicId, delta)
+        val widgetOwnerUid = parameters[PARAM_OWNER_UID]
+        // Old RemoteViews may survive an app update; refresh them before accepting edits.
+        val updated = if (widgetOwnerUid == null) null else applyPageDelta(appCtx, comicId, delta, widgetOwnerUid)
         val rev = QuadrinheiroWidgetsSync.bumpInMemoryRevision()
 
         // Atualiza imediatamente o GlanceId clicado para resposta instantânea na tela inicial
@@ -309,7 +326,7 @@ object WidgetVisualRenderer {
     private val memoryCoverCache = object : LruCache<String, Bitmap>(28) {}
 
     fun resolveWidgetPalette(storage: SafeStorage): WidgetThemePalette {
-        val state = storage.loadState()
+        val state = storage.loadWidgetState()
         return resolvePaletteForThemeId(state.settings.themeId)
     }
 

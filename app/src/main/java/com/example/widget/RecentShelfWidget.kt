@@ -65,7 +65,7 @@ class RecentShelfWidget : GlanceAppWidget() {
 
         // Pré-aquece as capas da estante/fila no cache em memória/disco
         runCatching {
-            val initialStored = storage.loadState()
+            val initialStored = storage.loadWidgetState()
             val initialPalette = WidgetVisualRenderer.resolveWidgetPalette(storage)
             val queueComics = initialStored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
             val featuredList = (if (queueComics.size >= 2) queueComics else initialStored.comics).take(4)
@@ -86,7 +86,7 @@ class RecentShelfWidget : GlanceAppWidget() {
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
 
             val snapshot = remember(prefRevision, memRevision) {
-                val stored = storage.loadState()
+                val stored = storage.loadWidgetState()
                 val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
 
                 val queueComics = stored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
