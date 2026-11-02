@@ -1530,7 +1530,7 @@ fun AdaptiveSidebarDrawer(
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
                 }
                 .liquidGlassNavSurface(
-                    shape = com.kyant.shapes.ContinuousRoundedRectangle(34.dp),
+                    shape = RoundedCornerShape(34.dp),
                     elevation = 22.dp
                 )
                 .clickable(
@@ -1562,7 +1562,7 @@ fun AdaptiveSidebarDrawer(
                         QuadrinheiroLogo(
                             modifier = Modifier
                                 .size(28.dp)
-                                .clip(com.kyant.shapes.ContinuousRoundedRectangle(8.dp))
+                                .clip(RoundedCornerShape(8.dp))
                         )
                         QuadrinheiroBrandText(
                             text = "Quadrinheiro",
@@ -1591,7 +1591,7 @@ fun AdaptiveSidebarDrawer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .inputWellSurface(com.kyant.shapes.ContinuousRoundedRectangle(16.dp))
+                        .inputWellSurface(RoundedCornerShape(16.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)

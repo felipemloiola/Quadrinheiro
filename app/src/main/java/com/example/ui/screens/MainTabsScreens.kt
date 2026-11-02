@@ -250,12 +250,22 @@ fun HomeReadingNowTab(
                         modifier = Modifier.clickable { onOpenProfileSettings() }
                     )
                     Column {
-                        Text(
-                            text = "Quadrinheiro • ${profile.name}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = s.textSecondary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            com.example.ui.components.QuadrinheiroBrandText(
+                                text = "Quadrinheiro",
+                                fontSize = 13.sp,
+                                color = s.textSecondary
+                            )
+                            Text(
+                                text = "• ${profile.name}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = s.textSecondary
+                            )
+                        }
                         Text(
                             text = "Lendo Agora",
                             fontSize = 30.sp,

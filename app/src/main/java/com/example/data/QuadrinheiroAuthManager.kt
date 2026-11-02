@@ -213,8 +213,10 @@ class QuadrinheiroAuthManager(
             IllegalStateException("Serviço Firebase Auth indisponível neste aparelho.")
         )
 
+        val hostContext = activityContext.findActivity() ?: activityContext
+
         return try {
-            val credentialManager = CredentialManager.create(activityContext)
+            val credentialManager = CredentialManager.create(hostContext)
             val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(resolvedClientId)
                 .build()
             val primaryRequest = GetCredentialRequest.Builder()
@@ -223,7 +225,7 @@ class QuadrinheiroAuthManager(
 
             val credentialResponse = try {
                 credentialManager.getCredential(
-                    context = activityContext,
+                    context = hostContext,
                     request = primaryRequest
                 )
             } catch (_: NoCredentialException) {
@@ -237,7 +239,7 @@ class QuadrinheiroAuthManager(
                     .addCredentialOption(googleIdOption)
                     .build()
                 credentialManager.getCredential(
-                    context = activityContext,
+                    context = hostContext,
                     request = fallbackRequest
                 )
             }
@@ -248,16 +250,16 @@ class QuadrinheiroAuthManager(
             ) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                 val firebaseCredential = GoogleAuthProvider.getCredential(googleIdTokenCredential.idToken, null)
-                val authResult = withContext(Dispatchers.IO) {
-                    firebaseAuth.signInWithCredential(firebaseCredential).await()
+                val profile = withContext(Dispatchers.IO) {
+                    val authResult = firebaseAuth.signInWithCredential(firebaseCredential).await()
+                    val fbUser = authResult.user
+                        ?: throw IllegalStateException("Não foi possível obter os dados da Conta Google.")
+                    val mapped = fbUser.toUserProfile()
+                    storage.setGuestMode(false)
+                    storage.setCompletedAuthOnboarding(true)
+                    storage.saveAuthSession(mapped)
+                    mapped
                 }
-                val fbUser = authResult.user
-                    ?: return Result.failure(IllegalStateException("Não foi possível obter os dados da Conta Google."))
-
-                val profile = fbUser.toUserProfile()
-                storage.setGuestMode(false)
-                storage.setCompletedAuthOnboarding(true)
-                storage.saveAuthSession(profile)
                 Result.success(profile)
             } else {
                 Result.failure(IllegalStateException("Credencial do Google incompatível com esta versão do sistema."))

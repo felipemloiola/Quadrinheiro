@@ -17,16 +17,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -44,13 +47,16 @@ enum class QuadrinheiroLogoVariant { Primary, OnDark, OnLight, Badge }
  * para renderizar a marca "Quadrinheiro" exatamente igual ao card de compartilhamento.
  */
 val QuadrinheiroBrandFontFamily = FontFamily(
-    Font(R.font.sf_pro_display_bold, FontWeight.Bold)
+    Font(R.font.sf_pro_display_bold, FontWeight.Bold),
+    Font(R.font.sf_pro_display_bold, FontWeight.ExtraBold),
+    Font(R.font.sf_pro_display_bold, FontWeight.Black)
 )
 
 /**
  * Tipografia oficial e padronizada da marca "Quadrinheiro",
- * COPIADA EXATAMENTE do estilo visual do Card de Compartilhamento Social Letterboxd
- * (SF Pro Display Bold com tracking de -0.02sp).
+ * COPIADA EXATAMENTE (1:1) do motor de renderização `drawLetterboxdBrandLockupOnCanvas`
+ * do Card de Compartilhamento Social (`R.font.sf_pro_display_bold`, `Paint.Style.FILL_AND_STROKE`,
+ * `strokeWidth = textSizePx * (0.9f / 44f)`, `letterSpacing = -0.03f`).
  */
 @Composable
 fun QuadrinheiroBrandText(
@@ -59,16 +65,46 @@ fun QuadrinheiroBrandText(
     color: Color = LocalIOS27Theme.current.textPrimary,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val textSizePx = with(density) { fontSize.toPx() }
+    val sfBoldTypeface = remember(context) {
+        runCatching {
+            androidx.core.content.res.ResourcesCompat.getFont(context, R.font.sf_pro_display_bold)
+        }.getOrNull() ?: android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+    }
+    val brandTextPaint = remember(sfBoldTypeface, textSizePx, color) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = android.graphics.Color.argb(
+                (color.alpha * 255f).toInt().coerceIn(0, 255),
+                (color.red * 255f).toInt().coerceIn(0, 255),
+                (color.green * 255f).toInt().coerceIn(0, 255),
+                (color.blue * 255f).toInt().coerceIn(0, 255)
+            )
+            this.textSize = textSizePx
+            this.typeface = sfBoldTypeface
+            this.style = android.graphics.Paint.Style.FILL_AND_STROKE
+            this.strokeWidth = textSizePx * (0.9f / 44f)
+            this.textAlign = android.graphics.Paint.Align.LEFT
+            this.letterSpacing = -0.03f
+        }
+    }
+
     Text(
         text = text,
         fontSize = fontSize,
         fontFamily = QuadrinheiroBrandFontFamily,
         fontWeight = FontWeight.Bold,
-        letterSpacing = (-0.02).sp,
-        color = color,
+        letterSpacing = TextUnit(-0.025f, TextUnitType.Em),
+        color = Color.Transparent,
         maxLines = 1,
         softWrap = false,
-        modifier = modifier
+        modifier = modifier.drawWithContent {
+            val measuredW = brandTextPaint.measureText(text)
+            val startX = (size.width - measuredW) / 2f
+            val baselineY = size.height / 2f - (brandTextPaint.descent() + brandTextPaint.ascent()) / 2f
+            drawContext.canvas.nativeCanvas.drawText(text, startX, baselineY, brandTextPaint)
+        }
     )
 }
 
@@ -95,7 +131,7 @@ private fun LogoMark(variant: QuadrinheiroLogoVariant, modifier: Modifier, adapt
         ) else listOf(
             Brush.linearGradient(listOf(accent, accent.copy(alpha = 0.65f))),
             Brush.linearGradient(listOf(accent.copy(alpha = 0.75f), accent)),
-            Brush.linearGradient(listOf(accent.copy(alpha = 0.8f)))
+            Brush.linearGradient(listOf(accent.copy(alpha = 0.90f), accent.copy(alpha = 0.55f)))
         )
     }
     val sized = if (modifier == Modifier) Modifier.size(64.dp) else modifier

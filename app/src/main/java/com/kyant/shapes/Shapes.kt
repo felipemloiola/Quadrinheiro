@@ -59,10 +59,11 @@ class Capsule(
 
 class RoundedRectangle(
     val cornerRadius: Dp,
-    override val style: RoundedCornerStyle = RoundedCornerStyle.Continuous
+    override val style: RoundedCornerStyle = RoundedCornerStyle.Circular
 ) : RoundedRectangularShape {
     override fun corners(size: Size, layoutDirection: LayoutDirection, density: Density): Corners {
-        val radiusPx = with(density) { cornerRadius.toPx() }
+        val maxR = if (size != Size.Unspecified && size.minDimension > 0f) size.minDimension * 0.5f else Float.MAX_VALUE
+        val radiusPx = with(density) { cornerRadius.toPx() }.coerceIn(0f, maxR)
         return Corners(radiusPx, radiusPx, radiusPx, radiusPx)
     }
 
@@ -71,7 +72,8 @@ class RoundedRectangle(
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
-        val radiusPx = with(density) { cornerRadius.toPx() }
+        val maxR = if (size != Size.Unspecified && size.minDimension > 0f) size.minDimension * 0.5f else 0f
+        val radiusPx = with(density) { cornerRadius.toPx() }.coerceIn(0f, maxR)
         val rect = if (size != Size.Unspecified) size.toRect() else androidx.compose.ui.geometry.Rect.Zero
         return Outline.Rounded(RoundRect(rect, CornerRadius(radiusPx, radiusPx)))
     }
@@ -87,6 +89,6 @@ class RoundedRectangle(
     override fun toString(): String = "RoundedRectangle(cornerRadius=$cornerRadius, style=$style)"
 }
 
-fun ContinuousRoundedRectangle(cornerRadius: Dp): RoundedRectangle = RoundedRectangle(cornerRadius, RoundedCornerStyle.Continuous)
-val ContinuousCapsule: Capsule = Capsule(RoundedCornerStyle.Continuous)
+fun ContinuousRoundedRectangle(cornerRadius: Dp): RoundedRectangle = RoundedRectangle(cornerRadius, RoundedCornerStyle.Circular)
+val ContinuousCapsule: Capsule = Capsule(RoundedCornerStyle.Circular)
 

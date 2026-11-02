@@ -561,134 +561,160 @@ class QuadrinheiroViewModel(
         if (user == null || isCurrentSessionGuest()) return
 
         cloudProfileJob = viewModelScope.launch(Dispatchers.IO) {
-            repo.observeUserProfile(user.uid)
-                .catch { }
-                .collectLatest { remoteProfile ->
-                    if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
-                    if (remoteProfile != null && remoteProfile.ownerId == user.uid) {
-                        val (resolvedProfile, shouldPushLocal) = QuadrinheiroCloudRepository.mergeLocalAndRemoteProfile(
-                            localProfile = _profile.value,
-                            remoteProfile = remoteProfile
-                        )
-                        val remoteSettings = remoteProfile.preferences?.toAppSettings()
-                        var changedAny = false
-                        if (resolvedProfile != _profile.value) {
-                            _profile.value = resolvedProfile
-                            changedAny = true
-                        }
-                        if (resolvedProfile.activeReadingComicId.isNotBlank() &&
-                            _activeReadingComicId.value != resolvedProfile.activeReadingComicId
-                        ) {
-                            _activeReadingComicId.value = resolvedProfile.activeReadingComicId
-                            savedStateHandle["activeReadingComicId"] = resolvedProfile.activeReadingComicId
-                            changedAny = true
-                        }
-                        if (!shouldPushLocal && remoteSettings != null && remoteSettings != _appSettings.value) {
-                            _appSettings.value = remoteSettings
-                            val nextLayout = remoteSettings.shelfLayout.ifBlank { "grid" }
-                            if (_shelfLayout.value != nextLayout) {
-                                _shelfLayout.value = nextLayout
-                                savedStateHandle["shelfLayout"] = nextLayout
-                            }
-                            if (_shelfSort.value != remoteSettings.defaultShelfSort) {
-                                _shelfSort.value = remoteSettings.defaultShelfSort
-                            }
-                            changedAny = true
-                        }
-                        val normKey = UsernameValidator.normalizeHandleKey(resolvedProfile.handle)
-                        if (UsernameValidator.isValidHandleKey(normKey)) {
-                            storage.reserveLocalHandle(normKey, user.uid)
-                            if (_usernameVerification.value.status == UsernameAvailabilityStatus.IDLE) {
-                                baselineHandleKey = normKey
-                                _usernameVerification.value = _usernameVerification.value.copy(
-                                    inputHandle = UsernameValidator.formatDisplayHandle(resolvedProfile.handle),
-                                    normalizedHandle = normKey
+            try {
+                repo.observeUserProfile(user.uid)
+                    .catch { }
+                    .collectLatest { remoteProfile ->
+                        try {
+                            if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
+                            if (remoteProfile != null && (remoteProfile.ownerId == user.uid || remoteProfile.ownerId.isBlank())) {
+                                val (resolvedProfile, shouldPushLocal) = QuadrinheiroCloudRepository.mergeLocalAndRemoteProfile(
+                                    localProfile = _profile.value,
+                                    remoteProfile = remoteProfile
                                 )
+                                val remoteSettings = remoteProfile.preferences?.toAppSettings()
+                                var changedAny = false
+                                if (resolvedProfile != _profile.value) {
+                                    _profile.value = resolvedProfile
+                                    changedAny = true
+                                }
+                                if (resolvedProfile.activeReadingComicId.isNotBlank() &&
+                                    _activeReadingComicId.value != resolvedProfile.activeReadingComicId
+                                ) {
+                                    _activeReadingComicId.value = resolvedProfile.activeReadingComicId
+                                    withContext(Dispatchers.Main.immediate) {
+                                        savedStateHandle["activeReadingComicId"] = resolvedProfile.activeReadingComicId
+                                    }
+                                    changedAny = true
+                                }
+                                if (!shouldPushLocal && remoteSettings != null && remoteSettings != _appSettings.value) {
+                                    _appSettings.value = remoteSettings
+                                    val nextLayout = remoteSettings.shelfLayout.ifBlank { "grid" }
+                                    if (_shelfLayout.value != nextLayout) {
+                                        _shelfLayout.value = nextLayout
+                                        withContext(Dispatchers.Main.immediate) {
+                                            savedStateHandle["shelfLayout"] = nextLayout
+                                        }
+                                    }
+                                    if (_shelfSort.value != remoteSettings.defaultShelfSort) {
+                                        _shelfSort.value = remoteSettings.defaultShelfSort
+                                    }
+                                    changedAny = true
+                                }
+                                val normKey = UsernameValidator.normalizeHandleKey(resolvedProfile.handle)
+                                if (UsernameValidator.isValidHandleKey(normKey)) {
+                                    storage.reserveLocalHandle(normKey, user.uid)
+                                    if (_usernameVerification.value.status == UsernameAvailabilityStatus.IDLE) {
+                                        baselineHandleKey = normKey
+                                        _usernameVerification.value = _usernameVerification.value.copy(
+                                            inputHandle = UsernameValidator.formatDisplayHandle(resolvedProfile.handle),
+                                            normalizedHandle = normKey
+                                        )
+                                    }
+                                }
+                                val curSession = _currentUserProfile.value
+                                if (curSession != null && !curSession.isGuest && curSession.uid == user.uid) {
+                                    val updatedSession = curSession.copy(
+                                        displayName = resolvedProfile.name.ifBlank { curSession.displayName },
+                                        photoUrl = resolvedProfile.avatarUrl.ifBlank { curSession.photoUrl.orEmpty() }.ifBlank { null }
+                                    )
+                                    if (updatedSession != curSession) {
+                                        _currentUserProfile.value = updatedSession
+                                        storage.saveAuthSession(updatedSession)
+                                    }
+                                }
+                                if (changedAny) {
+                                    persistAll(user.uid)
+                                }
+                                if (shouldPushLocal) {
+                                    runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
+                                        markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt)
+                                    }
+                                }
+                            } else {
+                                val localProf = _profile.value
+                                runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
+                                    markProfileCleanInMemoryAndStorage(localProf.updatedAt)
+                                }
                             }
-                        }
-                        val curSession = _currentUserProfile.value
-                        if (curSession != null && !curSession.isGuest && curSession.uid == user.uid) {
-                            val updatedSession = curSession.copy(
-                                displayName = resolvedProfile.name.ifBlank { curSession.displayName },
-                                photoUrl = resolvedProfile.avatarUrl.ifBlank { curSession.photoUrl.orEmpty() }.ifBlank { null }
-                            )
-                            if (updatedSession != curSession) {
-                                _currentUserProfile.value = updatedSession
-                                storage.saveAuthSession(updatedSession)
-                            }
-                        }
-                        if (changedAny) {
-                            persistAll(user.uid)
-                        }
-                        if (shouldPushLocal) {
-                            runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
-                                markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt)
-                            }
-                        }
-                    } else {
-                        val localProf = _profile.value
-                        runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
-                            markProfileCleanInMemoryAndStorage(localProf.updatedAt)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (_: Throwable) {
                         }
                     }
-                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
         }
 
         cloudComicsJob = viewModelScope.launch(Dispatchers.IO) {
-            // 1. Carregamento imediato do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede)
-            val cachedComics = repo.fetchComicsFromCache(user.uid, limit = 40L)
-            if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
-                val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
-                    localComics = _comics.value,
-                    remoteComics = cachedComics
-                )
-                if (initialMerged != _comics.value) {
-                    _comics.value = initialMerged
-                }
-            }
-
-            // 2. Estabelece o cursor da primeira página para controle de paginação
-            val firstPage = repo.fetchComicsPage(user.uid, pageSize = 25L, startAfterDoc = null, preferCache = false).getOrNull()
-            if (firstPage != null) {
-                lastComicsPageSnapshot = firstPage.lastSnapshot
-                _hasMoreCloudComics.value = firstPage.hasMore
-            }
-
-            // 3. Listener em tempo real com limite para os 35 quadrinhos mais recentes (evita leituras excessivas)
-            repo.observeUserComics(user.uid, limit = 35L)
-                .catch { }
-                .collectLatest { remoteComics ->
-                    if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
-                    if (remoteComics.isNotEmpty()) {
-                        PortugueseComicTranslator.seedPersistedTranslations(
-                            remoteComics,
-                            storage.loadTranslationCache()
-                        )
-                        val (mergedList, dirtyWinners) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
-                            localComics = _comics.value,
-                            remoteComics = remoteComics
-                        )
-                        if (mergedList != _comics.value) {
-                            _comics.value = mergedList
-                            persistAll(user.uid)
-                        }
-                        if (dirtyWinners.isNotEmpty()) {
-                            runCatching {
-                                repo.syncDirtyComicsBatch(user.uid, dirtyWinners)
-                            }.onSuccess { syncedIds ->
-                                markComicsCleanInMemoryAndStorage(syncedIds)
-                            }
-                        }
-                    } else if (_comics.value.isNotEmpty()) {
-                        val dirtyOnly = _comics.value.filter { it.isDirty }
-                        val batchToPush = dirtyOnly.ifEmpty { _comics.value }
-                        runCatching {
-                            repo.syncAllComicsBatch(user.uid, batchToPush)
-                        }.onSuccess { syncedIds ->
-                            markComicsCleanInMemoryAndStorage(syncedIds)
-                        }
+            try {
+                // 1. Carregamento imediato do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede)
+                val cachedComics = runCatching { repo.fetchComicsFromCache(user.uid, limit = 40L) }.getOrDefault(emptyList())
+                if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
+                    val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                        localComics = _comics.value,
+                        remoteComics = cachedComics
+                    )
+                    if (initialMerged != _comics.value) {
+                        _comics.value = initialMerged
                     }
                 }
+
+                // 2. Estabelece o cursor da primeira página para controle de paginação
+                val firstPage = runCatching {
+                    repo.fetchComicsPage(user.uid, pageSize = 25L, startAfterDoc = null, preferCache = false).getOrNull()
+                }.getOrNull()
+                if (firstPage != null) {
+                    lastComicsPageSnapshot = firstPage.lastSnapshot
+                    _hasMoreCloudComics.value = firstPage.hasMore
+                }
+
+                // 3. Listener em tempo real com limite para os 35 quadrinhos mais recentes (evita leituras excessivas)
+                repo.observeUserComics(user.uid, limit = 35L)
+                    .catch { }
+                    .collectLatest { remoteComics ->
+                        try {
+                            if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
+                            if (remoteComics.isNotEmpty()) {
+                                PortugueseComicTranslator.seedPersistedTranslations(
+                                    remoteComics,
+                                    storage.loadTranslationCache()
+                                )
+                                val (mergedList, dirtyWinners) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                                    localComics = _comics.value,
+                                    remoteComics = remoteComics
+                                )
+                                if (mergedList != _comics.value) {
+                                    _comics.value = mergedList
+                                    persistAll(user.uid)
+                                }
+                                if (dirtyWinners.isNotEmpty()) {
+                                    runCatching {
+                                        repo.syncDirtyComicsBatch(user.uid, dirtyWinners)
+                                    }.onSuccess { syncedIds ->
+                                        markComicsCleanInMemoryAndStorage(syncedIds)
+                                    }
+                                }
+                            } else if (_comics.value.isNotEmpty()) {
+                                val dirtyOnly = _comics.value.filter { it.isDirty }
+                                val batchToPush = dirtyOnly.ifEmpty { _comics.value }
+                                runCatching {
+                                    repo.syncAllComicsBatch(user.uid, batchToPush)
+                                }.onSuccess { syncedIds ->
+                                    markComicsCleanInMemoryAndStorage(syncedIds)
+                                }
+                            }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (_: Throwable) {
+                        }
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
         }
     }
 
@@ -887,15 +913,17 @@ class QuadrinheiroViewModel(
         cloudProfileSaveJob?.cancel()
         persistJob?.cancel()
 
-        // Se estava em modo convidado antes de entrar na conta, salva o estado do convidado na chave isolada dele
+        // Se estava em modo convidado antes de entrar na conta, salva o estado do convidado em background na chave isolada dele
         if (wasGuestBefore || isCurrentSessionGuest()) {
             val guestComicsSnap = _comics.value
             val guestProfileSnap = _profile.value
             val guestSettingsSnap = _appSettings.value
-            storage.saveState(guestComicsSnap, guestProfileSnap, guestSettingsSnap, "guest_local")
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { storage.saveState(guestComicsSnap, guestProfileSnap, guestSettingsSnap, "guest_local") }
+            }
         }
 
-        val savedAccount = storage.loadAccountState(userProfile.uid)
+        val savedAccount = runCatching { storage.loadAccountState(userProfile.uid) }.getOrNull()
 
         if (savedAccount != null) {
             val restoredProfile = savedAccount.profile.copy(
@@ -906,14 +934,14 @@ class QuadrinheiroViewModel(
             _appSettings.value = savedAccount.settings
             val restoredLayout = savedAccount.settings.shelfLayout.ifBlank { "grid" }
             _shelfLayout.value = restoredLayout
-            savedStateHandle["shelfLayout"] = restoredLayout
+            runCatching { savedStateHandle["shelfLayout"] = restoredLayout }
             _shelfSort.value = savedAccount.settings.defaultShelfSort
             _comics.value = savedAccount.comics
 
             val restoredActiveComicId = restoredProfile.activeReadingComicId.takeIf { it.isNotBlank() }
                 ?: _comics.value.firstOrNull { it.status == ReadingStatus.READING }?.id
             _activeReadingComicId.value = restoredActiveComicId
-            savedStateHandle["activeReadingComicId"] = restoredActiveComicId
+            runCatching { savedStateHandle["activeReadingComicId"] = restoredActiveComicId }
         } else {
             val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
                 .lowercase()
@@ -937,11 +965,11 @@ class QuadrinheiroViewModel(
             _profile.value = cleanAccountProfile
             _appSettings.value = cleanSettings
             _shelfLayout.value = cleanSettings.shelfLayout.ifBlank { "grid" }
-            savedStateHandle["shelfLayout"] = _shelfLayout.value
+            runCatching { savedStateHandle["shelfLayout"] = _shelfLayout.value }
             _shelfSort.value = cleanSettings.defaultShelfSort
             _comics.value = emptyList()
             _activeReadingComicId.value = null
-            savedStateHandle["activeReadingComicId"] = null
+            runCatching { savedStateHandle["activeReadingComicId"] = null }
         }
 
         val resolvedSessionProfile = userProfile.copy(
@@ -1019,19 +1047,32 @@ class QuadrinheiroViewModel(
             _isAuthLoading.value = true
             _isSyncingCloud.value = true
             _authFeedback.value = null
-            val result = authManager.signInWithGoogle(activityContext)
-            _isAuthLoading.value = false
-            _isSyncingCloud.value = false
-            result.onSuccess { userProfile ->
-                applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
-                showNotice("Conectado como ${userProfile.displayName}")
-            }.onFailure { err ->
-                if (err !is androidx.credentials.exceptions.GetCredentialCancellationException) {
-                    val msg = authManager.translateAuthErrorToPtBr(err)
-                    _authFeedback.value = msg to true
-                    if (_authUiState.value != AuthUiState.Unauthenticated && !_showAuthModalFromSettings.value) {
-                        showNotice(msg)
+            try {
+                val result = authManager.signInWithGoogle(activityContext)
+                _isAuthLoading.value = false
+                _isSyncingCloud.value = false
+                result.onSuccess { userProfile ->
+                    runCatching {
+                        applyAuthenticatedSessionAndMergeLocalData(userProfile, wasGuest)
                     }
+                    showNotice("Conectado como ${userProfile.displayName}")
+                }.onFailure { err ->
+                    if (err !is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                        val msg = authManager.translateAuthErrorToPtBr(err)
+                        _authFeedback.value = msg to true
+                        if (_authUiState.value != AuthUiState.Unauthenticated && !_showAuthModalFromSettings.value) {
+                            showNotice(msg)
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                _isAuthLoading.value = false
+                _isSyncingCloud.value = false
+                if (t !is kotlinx.coroutines.CancellationException &&
+                    t !is androidx.credentials.exceptions.GetCredentialCancellationException
+                ) {
+                    val msg = authManager.translateAuthErrorToPtBr(t)
+                    _authFeedback.value = msg to true
                 }
             }
         }

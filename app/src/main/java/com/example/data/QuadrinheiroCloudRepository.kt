@@ -31,6 +31,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ServerTimestamp
@@ -62,6 +63,7 @@ data class CloudAuthUser(
     val photoUrl: String?
 )
 
+@IgnoreExtraProperties
 @Immutable
 data class CloudUserPreferences(
     val themeId: String = "SYSTEM_MONO",
@@ -99,6 +101,7 @@ data class CloudUserPreferences(
     val allowRereads: Boolean = true,
     val autoFillReadDate: Boolean = true,
     val showPagesInDiary: Boolean = true,
+    val shareStarsMatchTheme: Boolean = true,
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
@@ -142,6 +145,7 @@ data class CloudUserPreferences(
         allowRereads = allowRereads,
         autoFillReadDate = autoFillReadDate,
         showPagesInDiary = showPagesInDiary,
+        shareStarsMatchTheme = shareStarsMatchTheme,
         quickReviewTags = quickReviewTags.map { it.take(80) }.take(40)
     )
 
@@ -182,11 +186,13 @@ data class CloudUserPreferences(
             allowRereads = s.allowRereads,
             autoFillReadDate = s.autoFillReadDate,
             showPagesInDiary = s.showPagesInDiary,
+            shareStarsMatchTheme = s.shareStarsMatchTheme,
             quickReviewTags = s.quickReviewTags.map { it.take(80) }.take(40)
         )
     }
 }
 
+@IgnoreExtraProperties
 @Immutable
 data class CloudUsernameReservation(
     val ownerId: String = "",
@@ -196,6 +202,7 @@ data class CloudUsernameReservation(
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
 
+@IgnoreExtraProperties
 @Immutable
 data class CloudUserProfile(
     @DocumentId val id: String = "",
@@ -278,6 +285,7 @@ data class CloudUserProfile(
     }
 }
 
+@IgnoreExtraProperties
 @Immutable
 data class CloudComicMoment(
     val id: String = "",
@@ -308,6 +316,7 @@ data class CloudComicMoment(
     }
 }
 
+@IgnoreExtraProperties
 @Stable
 @Immutable
 data class CloudComicDocument(
@@ -593,23 +602,111 @@ class QuadrinheiroCloudRepository(
         }
     }
 
+    private fun DocumentSnapshot.toCloudUserProfileSafe(): CloudUserProfile? {
+        if (!exists()) return null
+        runCatching { toObject(CloudUserProfile::class.java) }.getOrNull()?.let { return it }
+        return runCatching {
+            val rawUpdatedAt = get("updatedAt")
+            val tsMillis = getLong("updatedAtMillis") ?: when (rawUpdatedAt) {
+                is Timestamp -> rawUpdatedAt.toDate().time
+                is Number -> rawUpdatedAt.toLong()
+                else -> 0L
+            }
+            CloudUserProfile(
+                id = id,
+                ownerId = getString("ownerId").orEmpty().ifBlank { id },
+                name = getString("name").orEmpty().ifBlank { "Leitor" },
+                handle = getString("handle").orEmpty().ifBlank { "@leitor" },
+                normalizedHandle = getString("normalizedHandle").orEmpty(),
+                bio = getString("bio").orEmpty(),
+                favoriteUniverse = getString("favoriteUniverse").orEmpty().ifBlank { "DC / Vertigo" },
+                avatarUrl = getString("avatarUrl").orEmpty(),
+                avatarPreset = getString("avatarPreset").orEmpty().ifBlank { "indigo" },
+                yearlyGoal = (getLong("yearlyGoal") ?: 24L).toInt(),
+                dailyPagesGoal = (getLong("dailyPagesGoal") ?: 30L).toInt(),
+                showGoalOnHome = getBoolean("showGoalOnHome") ?: true,
+                activeReadingComicId = getString("activeReadingComicId").orEmpty(),
+                updatedAtMillis = tsMillis,
+                updatedAt = rawUpdatedAt as? Timestamp
+            )
+        }.getOrNull()
+    }
+
+    private fun DocumentSnapshot.toCloudComicDocumentSafe(): CloudComicDocument? {
+        if (!exists()) return null
+        runCatching { toObject(CloudComicDocument::class.java) }.getOrNull()?.let { return it }
+        return runCatching {
+            val rawUpdatedAt = get("updatedAt")
+            val tsMillis = getLong("updatedAtMillis") ?: when (rawUpdatedAt) {
+                is Timestamp -> rawUpdatedAt.toDate().time
+                is Number -> rawUpdatedAt.toLong()
+                else -> 0L
+            }
+            val rawTags = (get("tags") as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+            val rawMoments = (get("moments") as? List<*>)?.mapNotNull { item ->
+                val map = item as? Map<*, *> ?: return@mapNotNull null
+                CloudComicMoment(
+                    id = (map["id"] as? String).orEmpty(),
+                    page = (map["page"] as? Number)?.toInt() ?: 0,
+                    tag = (map["tag"] as? String).orEmpty(),
+                    note = (map["note"] as? String).orEmpty(),
+                    date = (map["date"] as? String).orEmpty(),
+                    isSpoiler = (map["isSpoiler"] as? Boolean) ?: false
+                )
+            }.orEmpty()
+            CloudComicDocument(
+                id = id,
+                ownerId = getString("ownerId").orEmpty(),
+                externalId = getString("externalId").orEmpty().ifBlank { id },
+                title = getString("title").orEmpty(),
+                titlePtBr = getString("titlePtBr").orEmpty(),
+                authors = getString("authors").orEmpty(),
+                publisher = getString("publisher").orEmpty(),
+                genre = getString("genre").orEmpty().ifBlank { "Graphic Novel" },
+                format = getString("format").orEmpty().ifBlank { "Encadernado (TPB)" },
+                releaseYear = (getLong("releaseYear") ?: 2026L).toInt(),
+                pageCount = (getLong("pageCount") ?: 160L).toInt(),
+                currentPage = (getLong("currentPage") ?: 0L).toInt(),
+                status = getString("status").orEmpty().ifBlank { "READ" },
+                rating = getDouble("rating") ?: (getLong("rating")?.toDouble() ?: 0.0),
+                favorite = getBoolean("favorite") ?: false,
+                rereadCount = (getLong("rereadCount") ?: 0L).toInt(),
+                tags = rawTags,
+                review = getString("review").orEmpty(),
+                readDate = getString("readDate").orEmpty(),
+                addedAt = getString("addedAt").orEmpty(),
+                isbn = getString("isbn").orEmpty(),
+                coverUrl = getString("coverUrl").orEmpty(),
+                synopsis = getString("synopsis").orEmpty(),
+                synopsisPtBr = getString("synopsisPtBr").orEmpty(),
+                sourceLabel = getString("sourceLabel").orEmpty().ifBlank { "Catálogo Base" },
+                moments = rawMoments,
+                seriesName = getString("seriesName").orEmpty(),
+                issueNumber = (getLong("issueNumber") ?: 0L).toInt(),
+                updatedAtMillis = tsMillis,
+                updatedAt = rawUpdatedAt as? Timestamp
+            )
+        }.getOrNull()
+    }
+
     fun observeUserProfile(userId: String): Flow<CloudUserProfile?> = callbackFlow {
         val path = "users/$userId"
         val registration = db.collection("users").document(userId)
             .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
-                if (error != null) {
-                    try {
-                        handleFirestoreError(error, OperationType.GET, path, auth)
-                    } catch (_: Exception) {
+                try {
+                    if (error != null) {
+                        runCatching { handleFirestoreError(error, OperationType.GET, path, auth) }
+                        close()
+                        return@addSnapshotListener
                     }
-                    close(error)
-                    return@addSnapshotListener
+                    val profile = snapshot?.toCloudUserProfileSafe()
+                    trySend(profile)
+                } catch (t: Throwable) {
+                    Log.e("QuadrinheiroCloudRepo", "Erro ao observar perfil na nuvem", t)
                 }
-                val profile = snapshot?.toObject(CloudUserProfile::class.java)
-                trySend(profile)
             }
         awaitClose {
-            registration.remove()
+            runCatching { registration.remove() }
         }
     }
 
@@ -617,7 +714,6 @@ class QuadrinheiroCloudRepository(
      * Consulta inicial ultra-rápida diretamente do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede).
      */
     suspend fun fetchComicsFromCache(userId: String, limit: Long = 40L): List<ComicEntry> {
-        val path = "users/$userId/comics"
         return try {
             val snapshot = db.collection("users").document(userId)
                 .collection("comics")
@@ -625,7 +721,7 @@ class QuadrinheiroCloudRepository(
                 .limit(limit)
                 .get(Source.CACHE)
                 .await()
-            snapshot.toObjects(CloudComicDocument::class.java).map { it.toComicEntry() }
+            snapshot.documents.mapNotNull { it.toCloudComicDocumentSafe()?.toComicEntry() }
         } catch (_: Exception) {
             emptyList()
         }
@@ -664,7 +760,7 @@ class QuadrinheiroCloudRepository(
             }
 
             val items = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(CloudComicDocument::class.java)?.toComicEntry()
+                doc.toCloudComicDocumentSafe()?.toComicEntry()
             }
             val last = snapshot.documents.lastOrNull()
             val hasMore = snapshot.size() >= pageSize.toInt()
@@ -693,21 +789,22 @@ class QuadrinheiroCloudRepository(
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .limit(limit)
             .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
-                if (error != null) {
-                    try {
-                        handleFirestoreError(error, OperationType.LIST, path, auth)
-                    } catch (_: Exception) {
+                try {
+                    if (error != null) {
+                        runCatching { handleFirestoreError(error, OperationType.LIST, path, auth) }
+                        close()
+                        return@addSnapshotListener
                     }
-                    close(error)
-                    return@addSnapshotListener
+                    val entries = snapshot?.documents
+                        ?.mapNotNull { it.toCloudComicDocumentSafe()?.toComicEntry() }
+                        .orEmpty()
+                    trySend(entries)
+                } catch (t: Throwable) {
+                    Log.e("QuadrinheiroCloudRepo", "Erro ao observar quadrinhos na nuvem", t)
                 }
-                val entries = snapshot?.toObjects(CloudComicDocument::class.java)
-                    ?.map { it.toComicEntry() }
-                    .orEmpty()
-                trySend(entries)
             }
         awaitClose {
-            registration.remove()
+            runCatching { registration.remove() }
         }
     }.conflate() // COLLECTION_SNAPSHOT_BACKGROUND_V15: retain the newest collection snapshot.
 
@@ -892,9 +989,9 @@ class QuadrinheiroCloudRepository(
         val path = "users/$userId"
         return try {
             val snap = db.collection("users").document(userId).get().await()
-            snap.toObject(CloudUserProfile::class.java)
+            snap.toCloudUserProfileSafe()
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.GET, path, auth)
+            runCatching { handleFirestoreError(e, OperationType.GET, path, auth) }
             null
         }
     }
@@ -922,9 +1019,9 @@ class QuadrinheiroCloudRepository(
                 .document(safeId)
                 .get()
                 .await()
-            snap.toObject(CloudComicDocument::class.java)?.toComicEntry()
+            snap.toCloudComicDocumentSafe()?.toComicEntry()
         } catch (e: Exception) {
-            handleFirestoreError(e, OperationType.GET, path, auth)
+            runCatching { handleFirestoreError(e, OperationType.GET, path, auth) }
             null
         }
     }

@@ -2450,7 +2450,7 @@ fun LiquidGlassMenuOverlayHost(
                         }
                     }
                 }
-                .clip(ContinuousRoundedRectangle(currentRadiusDp))
+                .clip(RoundedCornerShape(currentRadiusDp))
         ) {
             // 1. Conteúdo da pílula de origem ("Mais Recentes ⌄") dentro da gota durante o início da abertura e o fim do fechamento
             val triggerContentAlpha = ((0.36f - morphProgress) / 0.36f).coerceIn(0f, 1f)
@@ -2536,7 +2536,7 @@ fun LiquidGlassMenuOverlayHost(
                                 .graphicsLayer {
                                     alpha = hoverPillAlphaAnim.value
                                 }
-                                .clip(ContinuousRoundedRectangle(16.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(
                                     if (isLight) Color.Black.copy(alpha = 0.075f)
                                     else Color.White.copy(alpha = 0.13f)
@@ -2562,7 +2562,7 @@ fun LiquidGlassMenuOverlayHost(
                                         scaleX = rowScale
                                         scaleY = rowScale
                                     }
-                                    .clip(ContinuousRoundedRectangle(16.dp))
+                                    .clip(RoundedCornerShape(16.dp))
                                     .background(
                                         if (item.selected && hoverPillAlphaAnim.value < 0.2f) {
                                             activeAccent.copy(alpha = if (isLight) 0.09f else 0.15f)
@@ -2880,7 +2880,7 @@ fun <T> AppleMenuPicker(
 
         // Fallback seguro caso LocalLiquidGlassMenuHost não esteja presente em um Preview isolado
         if (open && menuHost == null) {
-            val popoverShape = remember { ContinuousRoundedRectangle(24.dp) }
+            val popoverShape = remember { RoundedCornerShape(24.dp) }
             val positionProvider = remember(density) {
                 object : PopupPositionProvider {
                     override fun calculatePosition(

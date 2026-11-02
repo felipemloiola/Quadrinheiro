@@ -1051,6 +1051,7 @@ class SafeStorage(context: Context) {
         put("allowRereads", s.allowRereads)
         put("autoFillReadDate", s.autoFillReadDate)
         put("showPagesInDiary", s.showPagesInDiary)
+        put("shareStarsMatchTheme", s.shareStarsMatchTheme)
         val tagsArr = JSONArray()
         s.quickReviewTags.forEach { tagsArr.put(it) }
         put("quickReviewTags", tagsArr)
@@ -1102,6 +1103,7 @@ class SafeStorage(context: Context) {
             allowRereads = obj.optBoolean("allowRereads", def.allowRereads),
             autoFillReadDate = obj.optBoolean("autoFillReadDate", def.autoFillReadDate),
             showPagesInDiary = obj.optBoolean("showPagesInDiary", def.showPagesInDiary),
+            shareStarsMatchTheme = obj.optBoolean("shareStarsMatchTheme", def.shareStarsMatchTheme),
             quickReviewTags = if (tagsArr != null) tagsList else def.quickReviewTags
         )
     }

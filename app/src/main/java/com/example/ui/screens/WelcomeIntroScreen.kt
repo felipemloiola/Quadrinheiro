@@ -213,16 +213,26 @@ fun WelcomeIntroScreen(
                         },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Bem-vindo ao\nQuadrinheiro",
-                        fontSize = 34.sp,
-                        lineHeight = 40.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = SfProDisplayFontFamily,
-                        letterSpacing = 0.37.sp,
-                        color = theme.textPrimary,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Bem-vindo ao",
+                            fontSize = 30.sp,
+                            lineHeight = 34.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = SfProDisplayFontFamily,
+                            letterSpacing = (-0.3).sp,
+                            color = theme.textPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                        com.example.ui.components.QuadrinheiroBrandText(
+                            text = "Quadrinheiro",
+                            fontSize = 34.sp,
+                            color = theme.textPrimary
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -239,7 +249,7 @@ fun WelcomeIntroScreen(
                                 Box(
                                     modifier = Modifier
                                         .size(46.dp)
-                                        .clip(ContinuousRoundedRectangle(13.dp))
+                                        .clip(RoundedCornerShape(13.dp))
                                         .background(
                                             feature.tintColor.copy(alpha = if (s.isLight) 0.12f else 0.18f)
                                         ),

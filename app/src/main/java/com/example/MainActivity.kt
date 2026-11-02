@@ -286,9 +286,6 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
-        try {
-            Coil.imageLoader(this).memoryCache?.clear()
-        } catch (_: Throwable) {}
     }
 
     override fun onTrimMemory(level: Int) {

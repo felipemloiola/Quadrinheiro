@@ -1065,14 +1065,18 @@ object SocialCardExporter {
 
         // Linha 2: Logo da marca (apenas a logo sem fundo quadrado) + "Quadrinheiro"
         val brandRowCy = topY + (if (isStories) 50f else 34f)
+        val brandTextY = brandRowCy - (brandTextPaint.descent() + brandTextPaint.ascent()) / 2f
+        val textBounds = android.graphics.Rect()
+        brandTextPaint.getTextBounds(brandName, 0, brandName.length, textBounds)
+        val textVisualCenterY = brandTextY + (textBounds.top + textBounds.bottom) / 2f + (if (isStories) 2.5f else 1.8f)
+
         drawQuadrinheiroLogoMarkOnCanvas(
             canvas = canvas,
             left = startX,
-            top = brandRowCy - logoSize / 2f,
+            top = textVisualCenterY - logoSize / 2f,
             size = logoSize
         )
 
-        val brandTextY = brandRowCy - (brandTextPaint.descent() + brandTextPaint.ascent()) / 2f
         canvas.drawText(brandName, startX + logoSize + logoToTextGap, brandTextY, brandTextPaint)
     }
 
@@ -1203,9 +1207,36 @@ fun SocialShareCardSheetModal(
     val scope = rememberCoroutineScope()
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
-    val appSettings = LocalAppSettings.current
-    val effectiveStarColor = if (appSettings.shareStarsMatchTheme) s.accentColor else Color(0xFFFFD60A)
+    val themeColors = com.example.ui.theme.LocalIOS27Theme.current
     val fitnessPalette = rememberAppleFitnessPalette()
+    val effectiveStarColor = remember(
+        appSettings.shareStarsMatchTheme,
+        appSettings.themeId,
+        themeColors.accent,
+        s.accentColor,
+        fitnessPalette.moveRingColor
+    ) {
+        if (!appSettings.shareStarsMatchTheme) {
+            Color(0xFFFFD60A)
+        } else {
+            val selectedAppTheme = com.example.ui.theme.AppTheme.fromId(appSettings.themeId)
+            when (selectedAppTheme) {
+                com.example.ui.theme.AppTheme.BLUE -> selectedAppTheme.swatchDark
+                com.example.ui.theme.AppTheme.RED -> selectedAppTheme.swatchDark
+                com.example.ui.theme.AppTheme.GREEN -> selectedAppTheme.swatchDark
+                com.example.ui.theme.AppTheme.PURPLE -> selectedAppTheme.swatchDark
+                com.example.ui.theme.AppTheme.ORANGE -> selectedAppTheme.swatchDark
+                com.example.ui.theme.AppTheme.WHITE -> Color(0xFFFFFFFF)
+                com.example.ui.theme.AppTheme.BLACK -> {
+                    if (appSettings.themeId == "SYSTEM_MONO") {
+                        if (themeColors.isDark) Color(0xFFFFFFFF) else Color(0xFFD4D4D8)
+                    } else {
+                        Color(0xFFD4D4D8)
+                    }
+                }
+            }
+        }
+    }
 
     // Se o request veio sem uma HQ específica (ex.: aberto a partir de Estatísticas), usa a última HQ lida ou em leitura
     val targetComic = remember(request.comic, allComics) {
@@ -2407,18 +2438,15 @@ private fun LetterboxdBrandLockup(
         ) {
             QuadrinheiroLogo(
                 variant = QuadrinheiroLogoVariant.Primary,
-                modifier = Modifier.size(logoSize)
+                modifier = Modifier
+                    .size(logoSize)
+                    .offset(y = u * (if (isStories) 2.5f else 1.8f))
             )
 
-            Text(
+            QuadrinheiroBrandText(
                 text = "Quadrinheiro",
                 fontSize = brandFontSize,
-                fontFamily = SfProDisplayFontFamily,
-                fontWeight = FontWeight.Black,
-                letterSpacing = (-0.4).sp,
-                color = Color.White,
-                maxLines = 1,
-                softWrap = false
+                color = Color.White
             )
         }
     }
