@@ -790,12 +790,12 @@ fun Modifier.contentMaterialSurface(
             brush = Brush.verticalGradient(
                 colors = if (isLight) {
                     listOf(
-                        Color.White.copy(alpha = 0.34f),
+                        Color.White.copy(alpha = 0.10f),
                         Color.White.copy(alpha = 0.08f)
                     )
                 } else {
                     listOf(
-                        Color.White.copy(alpha = 0.075f),
+                        Color.White.copy(alpha = 0.025f),
                         Color.White.copy(alpha = 0.02f)
                     )
                 }
@@ -807,13 +807,13 @@ fun Modifier.contentMaterialSurface(
             brush = Brush.linearGradient(
                 colors = if (isLight) {
                     listOf(
-                        Color.White.copy(alpha = 0.65f),
+                        Color.Black.copy(alpha = 0.08f),
                         Color.Black.copy(alpha = 0.06f),
                         Color.White.copy(alpha = 0.25f)
                     )
                 } else {
                     listOf(
-                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.08f),
                         Color.White.copy(alpha = 0.06f),
                         Color.White.copy(alpha = 0.03f)
                     )

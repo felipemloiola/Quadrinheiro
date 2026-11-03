@@ -53,3 +53,16 @@ Testes cobrem contraste dos temas claros/escuros e preferência de contraste, mu
 - [Android: controles de mídia](https://developer.android.com/media/implement/surfaces/mobile)
 - [Android: ProgressStyle](https://developer.android.com/reference/androidx/core/app/NotificationCompat.ProgressStyle)
 - [Android: tela de autorização de promoção](https://developer.android.com/reference/android/provider/Settings#ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+
+## Revisão de continuidade, diário e armazenamento
+
+- **Conteúdo e materiais:** cartões de conteúdo usam o material compartilhado com menos brilho e bordas discretas; os efeitos ópticos mais fortes ficam nos controles. Ajustes têm títulos de 16 sp e descrições de 13 sp com até duas linhas. Cores continuam semânticas e acompanham contraste/transparência.
+- **Boas-vindas:** resumo compacto em uma página, com apresentação adaptada à altura e ao tamanho da fonte. O botão não depende de rolagem.
+- **Diário:** resumo de leituras/avaliações e registros cronológicos; metas ficam na tela inicial. Removidos os blocos grandes de compartilhar resenha e meta. Registros sem data não recebem uma data inventada.
+- **Folhas e compartilhamento:** alvos de 44 dp alinhados, símbolo de compartilhar sem cápsula redundante, salvar com símbolo de confirmação e exclusão no conteúdo. A lista é recortada abaixo do cabeçalho. Compartilhamento expõe somente a composição vertical, sem formato nem dimensões no cabeçalho.
+- **Continuidade:** navegação hierárquica entra e sai por caminhos simétricos; troca de abas usa dissolução breve. Movimento reduzido elimina deslocamentos. A geometria dos segmentos e da tab bar permanece preservada. Menus usam refração e molas na camada gráfica, sem redimensionar os textos a cada quadro.
+- **Widgets:** cores de recursos com variantes claras/escuras acompanham o sistema; atualização assíncrona retém o último conteúdo da mesma conta e impede exibir o de outra conta. Primeiro carregamento tem estado explícito, e falhas temporárias de capa permitem nova tentativa.
+- **Armazenamento:** limites de 96 MiB para capas e 32 MiB para HTTP; traduções limitadas a 1.024 entradas/4 MiB. Limpeza restrita a APKs instalados/temporários vencidos e cartões exportados antigos (até oito/32 MiB/três dias). Biblioteca, perfis, registros e backups não são removidos. Não foi medido o armazenamento no aparelho do usuário; cache não é todo o dado ocupado pelo aplicativo.
+- **Catálogo:** encadernados de obras independentes conhecidas, como Batman: Ano Um, não herdam uma edição mensal fictícia; fascículos e volumes numerados continuam preservados.
+
+Referências desta revisão: [materiais](https://developer.apple.com/design/human-interface-guidelines/materials), [movimento](https://developer.apple.com/design/human-interface-guidelines/motion), [folhas](https://developer.apple.com/design/human-interface-guidelines/sheets), [barras de ferramentas](https://developer.apple.com/design/human-interface-guidelines/toolbars), [compartilhamento](https://developer.apple.com/design/human-interface-guidelines/collaboration-and-sharing), [Glance e recursos de aparência](https://developer.android.com/develop/ui/compose/glance/build-ui).

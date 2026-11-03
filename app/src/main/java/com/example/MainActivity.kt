@@ -794,13 +794,18 @@ fun QuadrinheiroApp(
                                 .widthIn(max = 600.dp)
                                 .align(Alignment.TopCenter)
                         ) {
-                            androidx.compose.runtime.key(activeTab, settingsSubPage, isStatisticsOpen) {
+                            com.example.ui.components.AppPageTransition(com.example.ui.components.AppPage(activeTab, settingsSubPage, settingsParentPage, isStatisticsOpen)) { page ->
+                                val routeListState = remember(page) { activeListState }
+                                val activeTab = page.tab
+                                val settingsSubPage = page.settings
+                                val settingsParentPage = page.parent
+                                val isStatisticsOpen = page.statistics
                                 if (isStatisticsOpen) {
                                     ReadingStatisticsScreen(
                                         comics = comics,
                                         profile = profile,
                                         appSettings = appSettings,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         onBack = { viewModel.closeReadingStatistics() },
                                         onOpenGoalSettings = {
                                             viewModel.closeReadingStatistics()
@@ -832,7 +837,7 @@ fun QuadrinheiroApp(
                                         comics = comics,
                                         profile = profile,
                                         appSettings = appSettings,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },
                                         onOpenProfileSettings = {
@@ -865,7 +870,7 @@ fun QuadrinheiroApp(
                                         shelfLayout = shelfLayout,
                                         shelfSort = shelfSort,
                                         shelfFilterQuery = shelfFilterQuery,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },
                                         onChangeShelfSection = { nextSection ->
@@ -912,7 +917,7 @@ fun QuadrinheiroApp(
                                         comics = comics,
                                         profile = profile,
                                         appSettings = appSettings,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },
                                         onSelectComic = { viewModel.selectComicForSheet(it) },
@@ -949,7 +954,7 @@ fun QuadrinheiroApp(
                                         settingsParentPage = settingsParentPage,
                                         apiDiagnostics = apiDiagnostics,
                                         isTestingApis = isTestingApis,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") }
                                     )
@@ -961,7 +966,7 @@ fun QuadrinheiroApp(
                                         remoteResults = remoteResults,
                                         isSearchingApi = isSearchingApi,
                                         searchSourceFilter = searchSourceFilter,
-                                        listState = activeListState,
+                                        listState = routeListState,
                                         searchFocusTrigger = searchFocusTrigger,
                                         onOpenSidebar = { viewModel.setSidebarOpen(true) },
                                         onQuickRegister = { viewModel.switchMainTab("search") },

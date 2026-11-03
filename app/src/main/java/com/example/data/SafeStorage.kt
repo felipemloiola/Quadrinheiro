@@ -346,6 +346,25 @@ class SafeStorage(context: Context) {
     }
 
     @Synchronized
+    internal fun trimTranslationCache() {
+        val raw = getItem(TRANSLATION_CACHE_KEY) ?: return
+        runCatching { setItem(TRANSLATION_CACHE_KEY, boundedTranslationCache(JSONObject(raw)).toString()) }
+    }
+
+    private fun boundedTranslationCache(source: JSONObject): JSONObject {
+        val result = JSONObject()
+        var bytes = 0
+        val retained = mutableListOf<Pair<String, JSONObject>>()
+        source.keys().asSequence().toList().takeLast(1024).asReversed().forEach { key ->
+            val value = source.optJSONObject(key) ?: return@forEach
+            val size = key.toByteArray(Charsets.UTF_8).size + value.toString().toByteArray(Charsets.UTF_8).size
+            if (bytes + size <= 4 * 1024 * 1024) { retained.add(key to value); bytes += size }
+        }
+        retained.asReversed().forEach { (key, value) -> result.put(key, value) }
+        return result
+    }
+
+    @Synchronized
     fun saveComicTranslation(translated: ComicEntry) {
         val tPt = translated.titlePtBr.ifBlank { translated.title }
         val sPt = translated.synopsisPtBr.ifBlank { translated.synopsis }
@@ -360,12 +379,14 @@ class SafeStorage(context: Context) {
                 put("synopsisPtBr", sPt)
             }
             if (translated.id.isNotBlank()) {
+                cacheRoot.remove(translated.id)
                 cacheRoot.put(translated.id, entryObj)
             }
             if (translated.externalId.isNotBlank()) {
+                cacheRoot.remove(translated.externalId)
                 cacheRoot.put(translated.externalId, entryObj)
             }
-            setItem(TRANSLATION_CACHE_KEY, cacheRoot.toString())
+            setItem(TRANSLATION_CACHE_KEY, boundedTranslationCache(cacheRoot).toString())
         } catch (_: Throwable) {
         }
 

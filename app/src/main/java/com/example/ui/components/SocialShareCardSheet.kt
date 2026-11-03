@@ -1099,6 +1099,7 @@ object SocialCardExporter {
         bitmap: Bitmap,
         fileNamePrefix: String = "quadrinheiro_card"
     ): File {
+        com.example.data.CacheMaintenance.pruneSharedCards(context)
         val sharedDir = File(context.cacheDir, SHARED_CARDS_SUBDIR)
         if (!sharedDir.exists()) {
             sharedDir.mkdirs()
@@ -1251,9 +1252,7 @@ fun SocialShareCardSheetModal(
     var selectedCardType by rememberSaveable(request.initialCardType) {
         mutableStateOf(request.initialCardType)
     }
-    var selectedAspectRatio by rememberSaveable {
-        mutableStateOf(SocialShareAspectRatio.STORIES_9_16)
-    }
+    val selectedAspectRatio = SocialShareAspectRatio.STORIES_9_16
     var goalPeriodMode by rememberSaveable(request.initialGoalPeriod) {
         mutableStateOf(request.initialGoalPeriod)
     }
@@ -1479,42 +1478,9 @@ fun SocialShareCardSheetModal(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = "${selectedAspectRatio.widthPx}×${selectedAspectRatio.heightPx} • Letterboxd",
-                        fontSize = 10.5.sp,
-                        fontFamily = SpaceGroteskTabularFamily,
-                        color = s.textSecondary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
                 }
 
-                // Alternador rápido Stories 9:16 vs Feed 1:1
-                Row(
-                    modifier = Modifier
-                        .testTag("social_share_aspect_toggle")
-                        .inputWellSurface(RoundedCornerShape(999.dp))
-                        .clickable {
-                            selectedAspectRatio = if (selectedAspectRatio == SocialShareAspectRatio.STORIES_9_16) {
-                                SocialShareAspectRatio.FEED_1_1
-                            } else {
-                                SocialShareAspectRatio.STORIES_9_16
-                            }
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = selectedAspectRatio.label,
-                        fontSize = 11.5.sp,
-                        fontFamily = SpaceGroteskTabularFamily,
-                        fontWeight = FontWeight.Bold,
-                        color = s.accentColor,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
+                Spacer(Modifier.width(60.dp))
             }
 
             // Seletor Segmentado Liquid Glass dos 3 Modelos de Card (Leitura Concluída | Momento | Metas)
@@ -1798,7 +1764,7 @@ fun SocialShareCardSheetModal(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isExporting) "Renderizando Card HD…" else "Compartilhar Card",
+                        text = if (isExporting) "Renderizando Card HD…" else "Compartilhar",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = s.accentText,

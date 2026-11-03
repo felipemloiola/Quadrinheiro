@@ -738,7 +738,7 @@ object PortugueseComicTranslator {
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
         val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
-        val issueNum = if (entry.issueNumber > 0) entry.issueNumber else SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle))
+        val issueNum = SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle, format = format, pageCount = pages))
         val ptSeries = if (entry.seriesName.isNotBlank()) {
             translateTitleToPtBr(entry.seriesName)
         } else {
@@ -797,7 +797,7 @@ object PortugueseComicTranslator {
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
         val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
-        val issueNum = if (entry.issueNumber > 0) entry.issueNumber else SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle))
+        val issueNum = SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle, format = format, pageCount = pages))
         val ptSeries = if (entry.seriesName.isNotBlank()) {
             translateTitleToPtBr(entry.seriesName)
         } else {

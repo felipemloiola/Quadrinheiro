@@ -815,7 +815,7 @@ object CuratedCatalog {
             seriesName = "Akira",
             issueNumber = 3
         )
-    )
+    ).map { comic -> if (SeriesSequenceEngine.isCollectedStandalone(comic)) comic.copy(issueNumber = 0) else comic }
 
     private fun byId(id: String): ComicEntry = curatedComicsCatalog.first { it.id == id }
 

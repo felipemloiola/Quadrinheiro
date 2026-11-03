@@ -233,7 +233,7 @@ fun HomeReadingNowComicCard(
             ) {
                 com.example.ui.components.HomeSkeletonText(
                     text = "${item.publisher.uppercase()} • $pct% CONCLUÍDO",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = s.textSecondary
                 )
@@ -242,12 +242,12 @@ fun HomeReadingNowComicCard(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = s.textPrimary,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 com.example.ui.components.HomeSkeletonText(
                     text = item.authors,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     color = s.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -271,7 +271,7 @@ fun HomeReadingNowComicCard(
                 ) {
                     com.example.ui.components.HomeSkeletonText(
                         text = "Pág. ${item.currentPage} de ${item.pageCount}",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontFamily = SpaceGroteskTabularFamily,
                         fontWeight = FontWeight.Medium,
                         color = s.textSecondary
@@ -297,146 +297,35 @@ fun HomeReadingNowComicCard(
  * Card de resumo estatístico e histograma de notas do Diário Cronológico.
  */
 @Composable
-fun DiaryAnalyticsSummaryCard(
-    comics: List<ComicEntry>
-) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-
-    val (ratedCount, avgRating, totalLoggedPages, readCount, starCounts) = remember(comics) {
-        var rated = 0
-        var ratingSum = 0f
-        var pages = 0
-        var read = 0
-        val countsByStar = IntArray(6)
-        for (c in comics) {
-            when (c.status) {
-                ReadingStatus.READ -> {
-                    read++
-                    pages += c.pageCount
-                    if (c.rating > 0f) {
-                        rated++
-                        ratingSum += c.rating
-                        val starIdx = c.rating.roundToInt().coerceIn(1, 5)
-                        countsByStar[starIdx]++
-                    }
-                }
-                ReadingStatus.READING -> {
-                    pages += c.currentPage
-                }
-                ReadingStatus.WANT_TO_READ -> Unit
+fun DiaryAnalyticsSummaryCard(comics: List<ComicEntry>) {
+    val s = LocalAppleMaterials.current.scheme
+    val summary = remember(comics) {
+        val read = comics.filter { it.status == ReadingStatus.READ }
+        val rated = read.filter { it.rating > 0f }
+        val pages = comics.sumOf {
+            when (it.status) {
+                ReadingStatus.READ -> it.pageCount.coerceAtLeast(0)
+                ReadingStatus.READING -> it.currentPage.coerceIn(0, it.pageCount.coerceAtLeast(0))
+                else -> 0
             }
         }
-        val avg = if (rated > 0) ratingSum / rated.toFloat() else 0f
-        DiaryAnalyticsStats(
-            ratedCount = rated,
-            avgRating = avg,
-            totalLoggedPages = pages,
-            readCount = read,
-            starCounts = countsByStar
+        listOf(
+            read.size.toString() to "Concluídas",
+            pages.toString() to "Páginas lidas",
+            (if (rated.isEmpty()) "—" else String.format(Locale.getDefault(), "%.1f", rated.map { it.rating }.average())) to "Nota média"
         )
     }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .contentMaterialSurface(RoundedCornerShape(24.dp))
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.width(86.dp)
-        ) {
-            Text(
-                text = String.format(Locale.US, "%.1f", avgRating),
-                fontSize = 28.sp,
-                fontFamily = SpaceGroteskTabularFamily,
-                fontWeight = FontWeight.Bold,
-                color = s.textPrimary
-            )
-            StarRating(
-                rating = avgRating,
-                readOnly = true,
-                size = "xs",
-                starColor = s.starColor
-            )
-            Text(
-                text = "$ratedCount avaliadas",
-                fontSize = 10.sp,
-                color = s.textTertiary
-            )
-        }
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            val totalRated = ratedCount.coerceAtLeast(1)
-            val barTrackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
-            for (star in 5 downTo 1) {
-                val countForStar = starCounts[star]
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "$star★",
-                        fontSize = 9.5.sp,
-                        fontFamily = SpaceGroteskTabularFamily,
-                        color = s.textSecondary,
-                        modifier = Modifier.width(18.dp)
-                    )
-                    DeferredLinearProgressBar(
-                        progressProvider = {
-                            val raw = (countForStar.toFloat() / totalRated.toFloat()).coerceIn(0f, 1f)
-                            raw.coerceAtLeast(if (countForStar > 0) 0.08f else 0f)
-                        },
-                        trackColor = barTrackColor,
-                        fillColor = s.starColor,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(5.dp)
-                    )
-                }
+    Row(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(24.dp)).padding(horizontal = 12.dp, vertical = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        summary.forEach { (value, label) ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(value, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, fontFamily = SpaceGroteskTabularFamily, color = s.textPrimary)
+                Text(label, fontSize = 12.sp, color = s.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
-        }
-
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = "PÁGINAS",
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = s.textTertiary
-            )
-            Text(
-                text = "$totalLoggedPages",
-                fontSize = 18.sp,
-                fontFamily = SpaceGroteskTabularFamily,
-                fontWeight = FontWeight.Bold,
-                color = s.accentColor
-            )
-            Text(
-                text = "$readCount concluídas",
-                fontSize = 10.sp,
-                color = s.textSecondary
-            )
         }
     }
 }
-
-private data class DiaryAnalyticsStats(
-    val ratedCount: Int,
-    val avgRating: Float,
-    val totalLoggedPages: Int,
-    val readCount: Int,
-    val starCounts: IntArray
-)
 
 /**
  * Grupo mensal de entradas do Diário Cronológico.
@@ -632,32 +521,7 @@ fun DiaryMonthGroupCard(
                             }
                         }
 
-                        // Botão rápido de "Compartilhar Resenha" / Card Social (Cards Estilo Apple)
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 6.dp)
-                                .testTag("diary_share_review_button_${entry.id}")
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(s.accentColor.copy(alpha = 0.14f))
-                                .border(0.6.dp, s.accentColor.copy(alpha = 0.32f), RoundedCornerShape(999.dp))
-                                .clickable { onShareComicReview(entry) }
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.ShareIos,
-                                contentDescription = "Compartilhar Resenha",
-                                tint = s.accentColor,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = "Compartilhar Resenha",
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = s.accentColor
-                            )
-                        }
+
                     }
                 }
             }

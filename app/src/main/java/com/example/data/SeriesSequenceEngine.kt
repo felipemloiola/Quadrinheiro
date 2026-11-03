@@ -199,8 +199,18 @@ object SeriesSequenceEngine {
     }
 
     fun inferIssueNumber(comic: ComicEntry): Int {
+        if (isCollectedStandalone(comic)) return 0
         if (comic.issueNumber > 0) return comic.issueNumber
         return inferIssueNumber(comic.title)
+    }
+
+    /** A collected work is not issue #1 merely because its catalog record has that value. */
+    fun isCollectedStandalone(comic: ComicEntry): Boolean {
+        val format = stripAccents(comic.format.lowercase())
+        val collected = listOf("encadernado", "tpb", "capa dura", "graphic novel", "volume unico", "omnibus", "luxo").any { format.contains(it) }
+        if (!collected || comic.pageCount < 64) return false
+        val title = normalizeKey(comic.title)
+        return isKnownStandaloneWork(comic.title) || title.contains("cavaleiro das trevas") || title.contains("dark knight returns")
     }
 
     fun inferFractionalSubIssue(rawTitle: String): Int {

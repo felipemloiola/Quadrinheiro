@@ -43,6 +43,7 @@ import com.example.ui.screens.computeReadingStatistics
 import kotlin.math.roundToInt
 
 private data class ActivityRingsSnapshot(
+    val ownerUid: String?,
     val ringsBitmap: Bitmap,
     val readComicsCount: Int,
     val yearlyGoal: Int,
@@ -70,11 +71,14 @@ class ActivityRingsWidget : GlanceAppWidget() {
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
             // A new revision cancels old work and never exposes another account's snapshot.
-            androidx.compose.runtime.key(prefRevision, memRevision) {
-                val snapshot by androidx.compose.runtime.produceState<ActivityRingsSnapshot?>(null) {
+            val owner = currentWidgetOwner(storage)
+            val night = isSystemNight(appCtx)
+            run {
+                val snapshot by androidx.compose.runtime.produceState<ActivityRingsSnapshot?>(null, prefRevision, memRevision, owner, night) {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val stored = storage.loadWidgetState()
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val sessionSnapshot = storage.loadWidgetSessionSnapshot()
+                        val stored = sessionSnapshot.state
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
 
                         val stats = computeReadingStatistics(
                             comics = stored.comics,
@@ -96,6 +100,7 @@ class ActivityRingsWidget : GlanceAppWidget() {
                         )
 
                         ActivityRingsSnapshot(
+                            ownerUid = sessionSnapshot.ownerUid,
                             ringsBitmap = ringsBitmap,
                             readComicsCount = stats.readComicsCount,
                             yearlyGoal = stats.yearlyGoal,
@@ -105,7 +110,7 @@ class ActivityRingsWidget : GlanceAppWidget() {
                         )
                     }
                 }
-                snapshot?.let { snapshot ->
+                snapshot?.takeIf { it.ownerUid == owner }?.let { snapshot ->
                     GlanceTheme {
                         ActivityRingsWidgetContent(
                             context = appCtx,
@@ -117,7 +122,7 @@ class ActivityRingsWidget : GlanceAppWidget() {
                             palette = snapshot.palette
                         )
                     }
-                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
+                } ?: WidgetLoadingContent()
             }
         }
     }
@@ -139,7 +144,7 @@ private fun ActivityRingsWidgetContent(
         modifier = GlanceModifier
             .fillMaxSize()
             .cornerRadius(24.dp)
-            .background(ColorProvider(palette.bgCard))
+            .background(com.example.R.color.widget_background)
             .clickable(actionStartActivity(openStatsIntent))
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -187,7 +192,7 @@ private fun ActivityRingsWidgetContent(
                 Text(
                     text = "lidos no ano",
                     style = TextStyle(
-                        color = ColorProvider(palette.textSecondary),
+                        color = ColorProvider(com.example.R.color.widget_text_secondary),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     ),
@@ -211,7 +216,7 @@ private fun ActivityRingsWidgetContent(
                 Text(
                     text = "págs/dia",
                     style = TextStyle(
-                        color = ColorProvider(palette.textSecondary),
+                        color = ColorProvider(com.example.R.color.widget_text_secondary),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     ),

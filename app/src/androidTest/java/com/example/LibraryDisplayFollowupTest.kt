@@ -64,15 +64,15 @@ class LibraryDisplayFollowupTest {
     @Test fun welcomeMeasuresOnlyVisibleStageAndContinueRemainsReachable() {
         var continued = false
         compose.setContent { QuadrinheiroTheme(settings) { WelcomeIntroScreen { continued = true } } }
-        compose.onNodeWithText("Sua Biblioteca de Quadrinhos").assertDoesNotExist()
+        compose.onNodeWithText("Sua biblioteca").assertDoesNotExist()
         val brand = compose.onNodeWithTag("welcome_brand").getUnclippedBoundsInRoot()
         val button = compose.onNodeWithTag("welcome_start_button").getUnclippedBoundsInRoot()
         assertTrue(button.top > brand.bottom)
         assertTrue("The first screen must not reserve the hidden feature page", button.top - brand.bottom < 100.dp)
         snapshot("followup-welcome.png")
         compose.onNodeWithTag("welcome_start_button").performClick()
-        compose.onNodeWithText("Sua Biblioteca de Quadrinhos").assertExists()
-        compose.onNodeWithTag("welcome_primary_button").performScrollTo().performClick()
+        compose.onNodeWithText("Sua biblioteca").assertExists()
+        compose.onNodeWithTag("welcome_primary_button").assertIsDisplayed().performClick()
         compose.runOnIdle { assertTrue(continued) }
     }
 
@@ -88,6 +88,9 @@ class LibraryDisplayFollowupTest {
                 }
             }
         }
+        compose.onNodeWithText("Feed 1:1").assertDoesNotExist()
+        compose.onNodeWithText("Stories 9:16").assertDoesNotExist()
+        compose.onNodeWithText("1080×1920 • Letterboxd").assertDoesNotExist()
         compose.onNodeWithText("Momento").assertIsDisplayed().performClick()
         compose.onNodeWithText("Metas").assertIsDisplayed().performClick()
         compose.onNodeWithText("Concluída").performClick()
@@ -112,7 +115,14 @@ class LibraryDisplayFollowupTest {
                     onSave = {}, onDelete = {}, onDismiss = {}, onShareComic = { _, _, _ -> shares++ })
             }
         }
+        val close = compose.onNodeWithTag("modal_cancel_button").getUnclippedBoundsInRoot()
+        val share = compose.onNodeWithTag("modal_share_card_button").getUnclippedBoundsInRoot()
+        val list = compose.onNodeWithTag("editor_list", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        assertEquals(close.top, share.top)
+        assertEquals(close.bottom, share.bottom)
+        assertTrue(list.top >= close.bottom)
         compose.onNodeWithTag("editor_list", useUnmergedTree = true).performScrollToIndex(3)
+        snapshot("followup-editor.png")
         compose.onNodeWithText("Compartilhar Card de Leitura Concluída").assertDoesNotExist()
         compose.onNodeWithTag("modal_share_card_button").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, shares) }

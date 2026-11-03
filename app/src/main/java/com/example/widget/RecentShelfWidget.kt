@@ -46,6 +46,7 @@ import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 
 private data class RecentShelfSnapshot(
+    val ownerUid: String?,
     val items: List<Pair<ComicEntry, Bitmap>>,
     val isQueueMode: Boolean,
     val totalShelfCount: Int,
@@ -69,11 +70,14 @@ class RecentShelfWidget : GlanceAppWidget() {
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
             // A new revision cancels old work and never exposes another account's snapshot.
-            androidx.compose.runtime.key(prefRevision, memRevision) {
-                val snapshot by androidx.compose.runtime.produceState<RecentShelfSnapshot?>(null) {
+            val owner = currentWidgetOwner(storage)
+            val night = isSystemNight(appCtx)
+            run {
+                val snapshot by androidx.compose.runtime.produceState<RecentShelfSnapshot?>(null, prefRevision, memRevision, owner, night) {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        val stored = storage.loadWidgetState()
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val sessionSnapshot = storage.loadWidgetSessionSnapshot()
+                        val stored = sessionSnapshot.state
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
 
                         val queueComics = stored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
                         val featuredList = (if (queueComics.size >= 2) queueComics else stored.comics).take(4)
@@ -89,6 +93,7 @@ class RecentShelfWidget : GlanceAppWidget() {
                         } }.awaitAll() }
 
                         RecentShelfSnapshot(
+                            ownerUid = sessionSnapshot.ownerUid,
                             items = itemsWithBitmaps,
                             isQueueMode = isQueueMode,
                             totalShelfCount = stored.comics.size,
@@ -96,7 +101,7 @@ class RecentShelfWidget : GlanceAppWidget() {
                         )
                     }
                 }
-                snapshot?.let { snapshot ->
+                snapshot?.takeIf { it.ownerUid == owner }?.let { snapshot ->
                     GlanceTheme {
                         RecentShelfWidgetContent(
                             context = appCtx,
@@ -106,7 +111,7 @@ class RecentShelfWidget : GlanceAppWidget() {
                             palette = snapshot.palette
                         )
                     }
-                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
+                } ?: WidgetLoadingContent()
             }
         }
     }
@@ -124,7 +129,7 @@ private fun RecentShelfWidgetContent(
         modifier = GlanceModifier
             .fillMaxSize()
             .cornerRadius(24.dp)
-            .background(ColorProvider(palette.bgCard))
+            .background(com.example.R.color.widget_background)
             .padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         Row(
@@ -144,7 +149,7 @@ private fun RecentShelfWidgetContent(
             Text(
                 text = "$totalShelfCount no acervo",
                 style = TextStyle(
-                    color = ColorProvider(palette.textSecondary),
+                    color = ColorProvider(com.example.R.color.widget_text_secondary),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 ),
@@ -165,7 +170,7 @@ private fun RecentShelfWidgetContent(
                 Text(
                     text = "Adicione quadrinhos à sua Estante ou Fila para vê-los aqui",
                     style = TextStyle(
-                        color = ColorProvider(palette.textSecondary),
+                        color = ColorProvider(com.example.R.color.widget_text_secondary),
                         fontSize = 11.sp
                     )
                 )
@@ -203,7 +208,7 @@ private fun RecentShelfWidgetContent(
                         Text(
                             text = comic.displayTitle,
                             style = TextStyle(
-                                color = ColorProvider(palette.textPrimary),
+                                color = ColorProvider(com.example.R.color.widget_text_primary),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             ),

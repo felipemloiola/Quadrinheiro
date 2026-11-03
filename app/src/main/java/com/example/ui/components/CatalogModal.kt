@@ -72,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -297,116 +298,19 @@ fun CatalogSheetModal(
                     )
                 }
 
-                // 2. Cabeçalho de Ações ("Cancelar", Título centralizado, Ações à direita sem quebra de texto)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            start = if (isSheetExpanded) 18.dp else 14.dp,
-                            end = if (isSheetExpanded) 18.dp else 14.dp,
-                            top = 2.dp,
-                            bottom = 8.dp
-                        ),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Cancelar",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = s.textSecondary,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier
-                            .testTag("modal_cancel_button")
-                            .clip(RoundedCornerShape(99.dp))
-                            .clickable { sheet.dismiss() }
-                            .padding(horizontal = 6.dp, vertical = 6.dp)
-                    )
-
-                    Text(
-                        text = if (isExistingInShelf) "Editar Quadrinho" else "Registrar",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = s.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp)
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .testTag("modal_share_card_button")
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(s.accentColor.copy(alpha = 0.14f))
-                                .clickable {
-                                    onShareComic(
-                                        buildFinalComicForSave(),
-                                        SocialShareCardType.COMPLETED_READING,
-                                        null
-                                    )
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.ShareIos,
-                                contentDescription = "Compartilhar Card",
-                                tint = s.accentColor,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                        if (isExistingInShelf) {
-                            Box(
-                                modifier = Modifier
-                                    .testTag("modal_delete_button")
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFF43F5E).copy(alpha = 0.14f))
-                                    .clickable { onDelete(draftComic.id) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteOutline,
-                                    contentDescription = "Excluir",
-                                    tint = Color(0xFFF43F5E),
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .testTag("modal_header_save_button")
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(s.accentColor)
-                                .clickable { onSave(buildFinalComicForSave()) }
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Salvar",
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = s.accentText,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
+                SheetToolbar(
+                    title = if (isExistingInShelf) "Editar Quadrinho" else "Registrar",
+                    closeTag = "modal_cancel_button", shareTag = "modal_share_card_button",
+                    onClose = { sheet.dismiss() },
+                    onShare = { onShareComic(buildFinalComicForSave(), SocialShareCardType.COMPLETED_READING, null) },
+                    onSave = { onSave(buildFinalComicForSave()) }
+                )
 
                 // Compose and measure only the editor sections near the viewport.
                 val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
                 LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth().testTag("editor_list"),
+                        .weight(1f).fillMaxWidth().clipToBounds().testTag("editor_list"),
                     state = sheetScrollState,
                     userScrollEnabled = !isSliderActive,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -804,62 +708,13 @@ fun ComicInfoSynopsisSheetModal(
                     )
                 }
 
-                // 2. Cabeçalho com botão Fechar diretamente clicável
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Fechar",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = s.textSecondary,
-                        modifier = Modifier
-                            .testTag("synopsis_close_button")
-                            .heightIn(min = 44.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .clickable { sheet.dismiss() }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    )
-
-                    Text(
-                        text = "Informações da HQ",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = s.textPrimary
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .testTag("synopsis_share_card_button")
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(s.accentColor.copy(alpha = 0.14f))
-                            .clickable {
-                                onShareComic(
-                                    savedEntry ?: displayComic,
-                                    SocialShareCardType.COMPLETED_READING,
-                                    null
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = LucideIcons.ShareIos,
-                            contentDescription = "Compartilhar Card",
-                            tint = s.accentColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+                SheetToolbar("Informações da HQ", "synopsis_close_button", "synopsis_share_card_button",
+                    onClose = { sheet.dismiss() }, onShare = { onShareComic(savedEntry ?: displayComic, SocialShareCardType.COMPLETED_READING, null) })
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(infoScrollState)
+                        .weight(1f).clipToBounds().verticalScroll(infoScrollState)
                         .padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {

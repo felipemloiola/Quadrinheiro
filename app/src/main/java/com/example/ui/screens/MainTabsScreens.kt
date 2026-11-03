@@ -820,12 +820,12 @@ fun ShelfLibraryTab(
                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
             )
             logged.forEach { item ->
-                val dateStr = item.readDate.ifBlank { item.addedAt.take(10).ifBlank { "2026-10-14" } }
+                val dateStr = item.readDate.ifBlank { item.addedAt.take(10) }
                 val parts = dateStr.split("-")
                 val y = parts.getOrNull(0) ?: "2026"
                 val mIdx = ((parts.getOrNull(1)?.toIntOrNull() ?: 10) - 1).coerceIn(0, 11)
-                val day = parts.getOrNull(2)?.take(2) ?: "01"
-                val label = "${monthNames[mIdx]} de $y"
+                val day = parts.getOrNull(2)?.take(2) ?: "—"
+                val label = if (dateStr.isBlank()) "Sem data" else "${monthNames[mIdx]} de $y"
                 map.getOrPut(label) { mutableListOf() }.add(item to day)
             }
             map.entries.toList()
@@ -1463,14 +1463,7 @@ fun ShelfLibraryTab(
         }
         } else {
             // Mini-resumo Liquid Glass expansível logo acima da lista cronológica do Diário
-            item(key = "shelf-diary-monthly-summary-card", contentType = "diary_monthly_summary") {
-                DiaryExpandableLiquidGlassSummary(
-                    comics = comics,
-                    profile = profile,
-                    onOpenFullStatistics = onOpenStatistics,
-                    onShareGoalSummary = onShareGoalSummary
-                )
-            }
+
 
             // Diário items
             if (diaryGroups.isEmpty()) {
@@ -1498,9 +1491,7 @@ fun ShelfLibraryTab(
                 }
             } else {
                 item(key = "shelf-diary-analytics-card", contentType = "diary_analytics_card") {
-                    Box(modifier = Modifier.clickable { onOpenStatistics() }) {
-                        DiaryAnalyticsSummaryCard(comics = comics)
-                    }
+                    DiaryAnalyticsSummaryCard(comics = comics)
                 }
 
                 diaryGroups.forEach { (monthLabel, entries) ->
@@ -1552,12 +1543,12 @@ fun DiaryChronologicalTab(
             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
         )
         logged.forEach { item ->
-            val dateStr = item.readDate.ifBlank { item.addedAt.take(10).ifBlank { "2026-10-14" } }
+            val dateStr = item.readDate.ifBlank { item.addedAt.take(10) }
             val parts = dateStr.split("-")
             val y = parts.getOrNull(0) ?: "2026"
             val mIdx = ((parts.getOrNull(1)?.toIntOrNull() ?: 10) - 1).coerceIn(0, 11)
-            val day = parts.getOrNull(2)?.take(2) ?: "01"
-            val label = "${monthNames[mIdx]} de $y"
+            val day = parts.getOrNull(2)?.take(2) ?: "—"
+            val label = if (dateStr.isBlank()) "Sem data" else "${monthNames[mIdx]} de $y"
             map.getOrPut(label) { mutableListOf() }.add(item to day)
         }
         map.entries.toList()
@@ -1600,14 +1591,7 @@ fun DiaryChronologicalTab(
             HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
         }
 
-        item(key = "diary-monthly-summary-card", contentType = "diary_monthly_summary") {
-            DiaryExpandableLiquidGlassSummary(
-                comics = comics,
-                profile = profile,
-                onOpenFullStatistics = onOpenStatistics,
-                onShareGoalSummary = onShareGoalSummary
-            )
-        }
+
 
         if (diaryGroups.isEmpty()) {
             item(key = "diary-empty-state", contentType = "empty_state_card") {
@@ -1635,9 +1619,7 @@ fun DiaryChronologicalTab(
         } else {
             // Apple HIG Charting Data & Rating Indicators Summary Card
             item(key = "diary-analytics-card", contentType = "diary_analytics_card") {
-                Box(modifier = Modifier.clickable { onOpenStatistics() }) {
-                    DiaryAnalyticsSummaryCard(comics = comics)
-                }
+                DiaryAnalyticsSummaryCard(comics = comics)
             }
 
             diaryGroups.forEach { (monthLabel, entries) ->

@@ -11,12 +11,13 @@ import com.example.data.MultiApiSearchEngine
 class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        com.example.data.CacheMaintenance.schedule(this)
         runCatching { LauncherAppearance.sync(this); LauncherAppearance.schedule(this) }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        runCatching { LauncherAppearance.sync(this) }
+        runCatching { LauncherAppearance.sync(this); com.example.widget.QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(this) }
     }
 
     override fun newImageLoader(): ImageLoader =
@@ -34,7 +35,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
                     .diskCache {
                         DiskCache.Builder()
                             .directory(this.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                            .maxSizeBytes(250L * 1024L * 1024L)
+                            .maxSizeBytes(96L * 1024L * 1024L)
                             .build()
                     }
                     .crossfade(50)

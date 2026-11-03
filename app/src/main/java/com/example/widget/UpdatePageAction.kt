@@ -329,22 +329,22 @@ object WidgetVisualRenderer {
 
     fun resolveWidgetPalette(storage: SafeStorage): WidgetThemePalette {
         val state = storage.loadWidgetState()
-        return resolvePaletteForThemeId(state.settings.themeId)
+        return resolvePaletteForThemeId(state.settings.themeId, true)
     }
 
-    fun resolvePaletteForThemeId(themeId: String): WidgetThemePalette {
+    fun resolvePaletteForThemeId(themeId: String, isDark: Boolean = true): WidgetThemePalette {
         // Widgets seguem fielmente a paleta de cores e anéis escolhida pelo usuário no app
-        val appTheme = AppTheme.fromId(themeId)
-        val themeColors = getIOS27ThemeColors(appTheme, isDark = true)
-        val (moveColor, exerciseColor, standColor) = com.example.ui.theme.getAppleFitnessRingsColors(appTheme, isDark = true)
+        val appTheme = if (themeId == "SYSTEM_MONO") { if (isDark) AppTheme.WHITE else AppTheme.BLACK } else AppTheme.fromId(themeId)
+        val themeColors = getIOS27ThemeColors(appTheme, isDark = isDark)
+        val (moveColor, exerciseColor, standColor) = com.example.ui.theme.getAppleFitnessRingsColors(appTheme, isDark = isDark)
         val lum = 0.2126f * moveColor.red + 0.7152f * moveColor.green + 0.0722f * moveColor.blue
         val onAccent = if (lum > 0.52f) Color(0xFF0A0A0E) else Color.White
 
         return WidgetThemePalette(
-            bgCard = if (appTheme == AppTheme.BLACK) Color(0xFF0B0B0E) else Color(0xFF14151B),
-            bgSurfaceElevated = if (appTheme == AppTheme.BLACK) Color(0xFF18181E) else Color(0xFF22242E),
-            textPrimary = Color(0xFFF5F5F7),
-            textSecondary = Color(0xFFA6A6B2),
+            bgCard = if (isDark) Color(0xFF14151B) else Color(0xFFF2F2F7),
+            bgSurfaceElevated = if (isDark) Color(0xFF22242E) else Color(0xFFE4E5EA),
+            textPrimary = if (isDark) Color(0xFFF5F5F7) else Color(0xFF101116),
+            textSecondary = if (isDark) Color(0xFFA6A6B2) else Color(0xFF50525C),
             outerRingColor = moveColor,
             innerRingColor = exerciseColor,
             thirdRingColor = standColor,
@@ -376,8 +376,8 @@ object WidgetVisualRenderer {
             if (url.isBlank()) null else {
                 val request = coil.request.ImageRequest.Builder(context.applicationContext)
                     .data(url).size(widthPx, heightPx).allowHardware(false).build()
-                val result = coil.Coil.imageLoader(context).execute(request)
-                (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                val result = kotlinx.coroutines.withTimeoutOrNull(4000L) { coil.Coil.imageLoader(context).execute(request) }
+                (result?.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
             }
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { null }

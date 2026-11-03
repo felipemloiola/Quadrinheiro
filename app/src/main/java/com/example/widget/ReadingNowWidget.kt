@@ -78,12 +78,14 @@ class ReadingNowWidget : GlanceAppWidget() {
             val prefRevision = prefs[QuadrinheiroWidgetsSync.PREF_WIDGET_REVISION] ?: 0L
             val memRevision by QuadrinheiroWidgetsSync.widgetRevisionFlow.collectAsState()
             // A new revision cancels old work and never exposes another account's snapshot.
-            androidx.compose.runtime.key(prefRevision, memRevision) {
-                val snapshot by androidx.compose.runtime.produceState<ReadingNowSnapshot?>(null) {
+            val owner = currentWidgetOwner(storage)
+            val night = isSystemNight(appCtx)
+            run {
+                val snapshot by androidx.compose.runtime.produceState<ReadingNowSnapshot?>(null, prefRevision, memRevision, owner, night) {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val sessionSnapshot = storage.loadWidgetSessionSnapshot()
                         val stored = sessionSnapshot.state
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId)
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
                         val currentComic = com.example.model.activeReadingComic(stored.comics, stored.profile.activeReadingComicId)
 
                         val coverBitmap = currentComic?.let {
@@ -115,7 +117,7 @@ class ReadingNowWidget : GlanceAppWidget() {
                         )
                     }
                 }
-                snapshot?.let { snapshot ->
+                snapshot?.takeIf { it.ownerUid == owner }?.let { snapshot ->
                     GlanceTheme {
                         ReadingNowWidgetContent(
                             ownerUid = snapshot.ownerUid,
@@ -126,7 +128,7 @@ class ReadingNowWidget : GlanceAppWidget() {
                             palette = snapshot.palette
                         )
                     }
-                } ?: Box(GlanceModifier.fillMaxSize().background(ColorProvider(androidx.compose.ui.graphics.Color(0xFF14151B)))) {}
+                } ?: WidgetLoadingContent()
             }
         }
     }
@@ -150,7 +152,7 @@ private fun ReadingNowWidgetContent(
             modifier = GlanceModifier
                 .fillMaxSize()
                 .cornerRadius(24.dp)
-                .background(ColorProvider(palette.bgCard))
+                .background(com.example.R.color.widget_background)
                 .clickable(actionStartActivity(openAppIntent))
                 .padding(14.dp),
             contentAlignment = Alignment.Center
@@ -168,7 +170,7 @@ private fun ReadingNowWidgetContent(
                 Text(
                     text = "Toque para iniciar uma leitura no Quadrinheiro",
                     style = TextStyle(
-                        color = ColorProvider(palette.textPrimary),
+                        color = ColorProvider(com.example.R.color.widget_text_primary),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     ),
@@ -197,7 +199,7 @@ private fun ReadingNowWidgetContent(
         modifier = GlanceModifier
             .fillMaxSize()
             .cornerRadius(24.dp)
-            .background(ColorProvider(palette.bgCard))
+            .background(com.example.R.color.widget_background)
             .padding(horizontal = if (isCompact) 14.dp else 16.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -239,7 +241,7 @@ private fun ReadingNowWidgetContent(
                 Text(
                     text = comic.displayTitle,
                     style = TextStyle(
-                        color = ColorProvider(palette.textPrimary),
+                        color = ColorProvider(com.example.R.color.widget_text_primary),
                         fontSize = if (isCompact) 13.sp else 14.5.sp,
                         fontWeight = FontWeight.Bold
                     ),
@@ -250,7 +252,7 @@ private fun ReadingNowWidgetContent(
                     Text(
                         text = comic.authors.ifBlank { comic.publisher.ifBlank { "Quadrinheiro" } },
                         style = TextStyle(
-                            color = ColorProvider(palette.textSecondary),
+                            color = ColorProvider(com.example.R.color.widget_text_secondary),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Normal
                         ),
@@ -265,7 +267,7 @@ private fun ReadingNowWidgetContent(
             Text(
                 text = "Pág. $curPage de $totalPages • $pct%",
                 style = TextStyle(
-                    color = ColorProvider(palette.textSecondary),
+                    color = ColorProvider(com.example.R.color.widget_text_secondary),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium
                 ),
@@ -295,7 +297,7 @@ private fun ReadingNowWidgetContent(
                     modifier = GlanceModifier
                         .size(width = if (isCompact) 38.dp else 44.dp, height = 30.dp)
                         .cornerRadius(15.dp)
-                        .background(ColorProvider(palette.bgSurfaceElevated))
+                        .background(com.example.R.color.widget_surface)
                         .clickable(
                             actionRunCallback<UpdatePageAction>(
                                 actionParametersOf(
@@ -310,7 +312,7 @@ private fun ReadingNowWidgetContent(
                     Text(
                         text = "−",
                         style = TextStyle(
-                            color = ColorProvider(palette.textPrimary),
+                            color = ColorProvider(com.example.R.color.widget_text_primary),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )

@@ -5,9 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CloudSync
@@ -36,33 +34,31 @@ fun WelcomeIntroScreen(onContinue: () -> Unit) {
     val theme = LocalIOS27Theme.current
     val s = LocalAppleMaterials.current.scheme
     var isFeaturesView by remember { mutableStateOf(false) }
-    val scroll = rememberScrollState()
     BackHandler(isFeaturesView) { isFeaturesView = false }
-    LaunchedEffect(isFeaturesView) { scroll.scrollTo(0) }
-    val logoSize by animateDpAsState(if (isFeaturesView) 60.dp else 96.dp, motion.spring(1f, 650f), label = "welcomeLogoSize")
+    val logoSize by animateDpAsState(if (isFeaturesView) 44.dp else 96.dp, motion.spring(1f, 650f), label = "welcomeLogoSize")
     val features = remember(s.isLight) {
         listOf(
             AppleFeatureRow(
-                title = "Sua Biblioteca de Quadrinhos",
-                subtitle = "Organize encadernados, graphic novels e mangás com sinopses completas, capas em alta definição e fichas técnicas detalhadas.",
+                title = "Sua biblioteca",
+                subtitle = "Capas, fichas e sua coleção em um só lugar.",
                 icon = LucideIcons.BookOpen,
                 tintColor = if (s.isLight) Color(0xFF007AFF) else Color(0xFF0A84FF) // iOS System Blue
             ),
             AppleFeatureRow(
-                title = "Sequências e Recomendações",
-                subtitle = "Acompanhe edições em ordem cronológica (#1, #2, #3...) e descubra obras semelhantes para graphic novels como Watchmen e Maus.",
+                title = "Descobertas e sequências",
+                subtitle = "Encontre sua próxima leitura e acompanhe séries.",
                 icon = LucideIcons.Layers,
                 tintColor = if (s.isLight) Color(0xFFFF9500) else Color(0xFFFF9F0A) // iOS System Orange
             ),
             AppleFeatureRow(
-                title = "Metas e Diário de Leitura",
-                subtitle = "Acompanhe seu ritmo de leitura com metas anuais, anéis de progresso diário e histórico de páginas lidas.",
+                title = "Histórico de leitura",
+                subtitle = "Registre páginas, notas e resenhas.",
                 icon = Icons.Default.BarChart,
                 tintColor = if (s.isLight) Color(0xFF34C759) else Color(0xFF30D158) // iOS System Green
             ),
             AppleFeatureRow(
-                title = "Busca Online e Nuvem",
-                subtitle = "Pesquise em múltiplos acervos online com tradução em português e mantenha seus dados salvos com o Google ou Modo Convidado.",
+                title = "Conta e sincronização",
+                subtitle = "Use sua conta Google ou o modo convidado.",
                 icon = Icons.Default.CloudSync,
                 tintColor = if (s.isLight) Color(0xFFAF52DE) else Color(0xFFBF5AF2) // iOS System Purple
             )
@@ -74,12 +70,13 @@ fun WelcomeIntroScreen(onContinue: () -> Unit) {
         androidx.compose.ui.graphics.lerp(theme.bgPrimary, theme.accent, 0.04f), theme.bgPrimary)))
         .windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 28.dp).testTag("welcome_intro_root"),
         contentAlignment = Alignment.Center) {
-        Column(Modifier.widthIn(max = 520.dp).fillMaxWidth().verticalScroll(scroll).heightIn(min = maxHeight)
-            .padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        val compactWelcome = maxHeight < 680.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f
+        Column(Modifier.widthIn(max = 520.dp).fillMaxWidth().heightIn(min = maxHeight)
+            .padding(vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center) {
             QuadrinheiroLogo(variant = QuadrinheiroLogoVariant.Primary, titleVisible = false,
                 modifier = Modifier.size(logoSize).testTag("welcome_hero_logo"))
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(if (isFeaturesView) 12.dp else 20.dp))
             AnimatedContent(targetState = isFeaturesView, transitionSpec = {
                 (fadeIn(motion.tween(180)) togetherWith fadeOut(motion.tween(100))).using(
                     SizeTransform(clip = false, sizeAnimationSpec = { _, _ -> motion.spring(1f, 650f) }))
@@ -94,17 +91,17 @@ fun WelcomeIntroScreen(onContinue: () -> Unit) {
                         Text("Sua biblioteca definitiva de quadrinhos", fontSize = 15.sp, lineHeight = 21.sp,
                             color = theme.textSecondary, textAlign = TextAlign.Center)
                     } else {
-                        Spacer(Modifier.height(24.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Spacer(Modifier.height(16.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(if (compactWelcome) 12.dp else 16.dp)) {
                             features.forEach { feature ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-                                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                                    Box(Modifier.size(if (compactWelcome) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp))
                                         .background(feature.tintColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                                         Icon(feature.icon, null, tint = feature.tintColor, modifier = Modifier.size(23.dp))
                                     }
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Text(feature.title, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
-                                        Text(feature.subtitle, fontSize = 14.sp, lineHeight = 20.sp, color = theme.textSecondary)
+                                        if (!compactWelcome) Text(feature.subtitle, fontSize = 14.sp, lineHeight = 20.sp, color = theme.textSecondary)
                                     }
                                 }
                             }

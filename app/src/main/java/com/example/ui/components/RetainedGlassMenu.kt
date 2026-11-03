@@ -60,8 +60,8 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         if (active != null) {
             retained = active
             state.morphingMenuId = active.id
-            launch { x.animateTo(1f, motion.spring(0.85f, 700f)) }
-            y.animateTo(1f, motion.spring(0.88f, 650f))
+            launch { x.animateTo(1f, motion.spring(0.72f, 520f)) }
+            y.animateTo(1f, motion.spring(0.76f, 480f))
         } else if (retained != null) {
             launch { x.animateTo(0f, motion.spring(1f, 850f)) }
             y.animateTo(0f, motion.spring(1f, 850f))
@@ -74,6 +74,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val density = LocalDensity.current
     val palette = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
+    val dark = LocalIsDarkTheme.current
     val rowHeight = if (density.fontScale > 1.2f) (44f * density.fontScale + 16f).dp else 48.dp
     BackHandler(active != null) { state.dismissMenu() }
     fun choose(index: Int) {
@@ -109,10 +110,10 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
             .drawBackdrop(backdrop, shape = { ContinuousRoundedRectangle(26.dp) },
                 shadow = { Shadow(radius = 18.dp, alpha = 0.20f) },
                 effects = {
-                    if (!settings.reduceTransparency) { vibrancy(); blur(12.dp.toPx()) }
-                    if (!settings.reduceTransparency && settings.enableLensRefraction) lens(12.dp.toPx(), 18.dp.toPx())
+                    if (!settings.reduceTransparency) { vibrancy(); blur((10f * settings.glassBlurIntensity).dp.toPx()) }
+                    if (!settings.reduceTransparency && settings.enableLensRefraction) lens((16f * settings.glassIntensity).dp.toPx(), (30f * settings.glassIntensity).dp.toPx(), depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
                 },
-                onDrawSurface = { drawRect(palette.bgSecondary.copy(alpha = if (settings.reduceTransparency) 1f else 0.94f)) })
+                onDrawSurface = { drawRect(palette.bgSecondary.copy(alpha = if (settings.reduceTransparency) 1f else if (dark) 0.58f else 0.66f)) })
             .clip(RoundedCornerShape(26.dp))
             .pointerInput(request.id) {
                 awaitEachGesture {

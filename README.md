@@ -1,119 +1,90 @@
 # Quadrinheiro
 
-<p align="left">
-  <img src="https://github.com/felipemloiola/Quadrinheiro/raw/main/branding/quadrinheiro-logo.svg" alt="Quadrinheiro Logo" width="120" />
-</p>
+<p align="center"><img src="branding/quadrinheiro-logo.svg" alt="Quadrinheiro" width="120" /></p>
 
-> The definitive ecosystem for organizing, cataloging, and tracking your collection of comics, graphic novels, and manga with a modern Liquid Glass design, cloud synchronization, and multi-source search intelligence.
+Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a história da sua coleção. Desenvolvido em Kotlin e Jetpack Compose, com materiais translúcidos, iluminação inspirada nas capas e controles com resposta por molas.
 
-**Quadrinheiro** is a native Android application built with Jetpack Compose. It features a translucent, tactile aesthetic inspired by modern iOS design, backed by GPU hardware acceleration, single-pass rendering pipelines, and custom AGSL shaders.
+[Baixar a versão mais recente](https://github.com/felipemloiola/Quadrinheiro/releases/latest) · [Reportar um problema](https://github.com/felipemloiola/Quadrinheiro/issues)
 
-![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
-![Firebase](https://img.shields.io/badge/Firebase-Auth%20%2B%20Firestore-FFCA28?logo=firebase&logoColor=black)
-![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red)
+## Recursos
 
----
+- **Biblioteca:** estante em grade ou lista, filtros de status, favoritos, tags, notas, resenhas e cadastro manual.
+- **Descoberta:** busca em catálogos externos, enriquecimento de metadados em português e organização de séries e edições.
+- **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
+- **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
+- **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o sistema. A leitura atual acompanha a HQ selecionada no aplicativo.
+- **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca e Exibição**.
+- **Compartilhamento:** cartões verticais de leitura concluída, momento e metas, com prévia, salvamento e compartilhamento pelo Android.
+- **Personalização e acessibilidade:** cores, aparência, tamanho do texto, contraste, transparência e movimento reduzido.
+- **Atualizações:** download dentro do aplicativo, verificação do pacote e abertura do instalador do Android.
 
-## App Highlights
+## Instalação e compatibilidade
 
-- **Apple-Style Welcome & Onboarding Experience:**
-  - Distinctive first-launch flow designed with strict vertical symmetry and spring physics transitions.
-  - Interactive hero brand mark with matrix transform scaling (`withTransform`) introducing the app's four foundational pillars: *Personal Library*, *Sequences & Recommendations*, *Reading Goals & Diary*, and *Online Multi-API Cloud Search*.
+Requer **Android 7.0 ou superior**. Baixe o APK na página de releases. O Android pode pedir autorização para instalar aplicativos desta origem. Nas próximas versões, o próprio Quadrinheiro conduz o download e solicita a confirmação de instalação do sistema.
 
-- **Liquid Glass & Optical Material Design:**
-  - Translucent surfaces with edge refraction, glass menisci, subtle chromatic aberration, and progressive backdrop blurring powered by AGSL shaders.
-  - Atmospheric ambient background lighting that extracts vibrant dominant colors directly from the active comic's cover in real time.
-  - Dynamic palette switching with eight curated themes (Ocean Blue, Carmine Red, Emerald Green, Imperial Purple, Sunset Orange, Neon Pink, Cyber Teal, and Obsidian/Silver).
+A apresentação de notificações na tela bloqueada e na Now Bar depende da versão do Android, da One UI, das permissões e das preferências de privacidade do aparelho. A leitura utiliza uma notificação de progresso; não simula reprodução de áudio nem uma sessão do Spotify.
 
-- **Comprehensive Library & Shelf Management:**
-  - Real-time reading status: **Reading**, **Read**, and **Want to Read (Queue)**.
-  - Flexible browsing modes: Responsive Grid (2, 3, or 4 columns), Compact List, or Chronological Series Sequences (#1, #2, #3...).
-  - Interactive 3D spine effects, star ratings, and non-blocking deferred reading progress bars over cover art.
+Os efeitos gráficos usam caminhos compatíveis com a versão do sistema. A interface é inspirada nas diretrizes de design da Apple, implementada com APIs Android; não é uma implementação oficial da Apple.
 
-- **Real-Time Multi-API Search & Auto-Localization:**
-  - Unified search engine querying Google Books, MangaUpdates, and international catalog APIs simultaneously.
-  - Automatic metadata enrichment with Portuguese (PT-BR) title and synopsis translations backed by persistent local caching.
-  - One-tap shelf additions with cover pre-fetching or detailed manual entries.
+## Desenvolvimento
 
-- **Reading Goals & Chronological Diary:**
-  - Apple Health-inspired activity rings displaying annual book completion targets and daily page goals.
-  - Chronological reading diary recording finish dates, reread counts, star ratings (with half-star support), quick review tags, and in-depth reviews of up to 5,000 characters.
-
-- **Hybrid Offline-First Authentication & Cloud Sync:**
-  - Seamless Sign-In with Google (via Android Credential Manager + Firebase Auth), salted SHA-256 local email accounts, and a 100% isolated, full-featured Guest Mode.
-  - Background synchronization via Cloud Firestore with conflict resolution, dirty-state tracking, and standalone backup export (ZIP/HTML).
-
----
-
-## Architecture & Performance Engineering
-
-| Layer / Concern | Technical Stack & Implementation |
+| Área | Tecnologia |
 |---|---|
-| **Language & UI** | Kotlin 2.1+, Jetpack Compose, Material 3, Backdrop AGSL Shaders |
-| **Graphics & Acceleration** | Explicit hardware acceleration (`android:hardwareAccelerated="true"`), `largeHeap="true"` for high-res cover buffers, single-pass `recordLayer` capture |
-| **Image Pipeline** | Coil with direct GPU VRAM `HardwareBuffer` allocations, L1 memory caching, and disk caching |
-| **Local Storage** | Multi-partition `SafeStorage` with isolated state per account/guest and self-contained HTML/ZIP backup generation |
-| **Cloud & Identity** | Firebase Authentication, Google Identity Credential Manager, Cloud Firestore |
-| **CI/CD Quality Gate** | GitHub Actions with Android API 34 emulators, touch delivery regression tests, and pixel-equivalence validations |
+| Interface | Kotlin 2.2.10, Jetpack Compose e Material 3 |
+| Materiais e movimento | Backdrop/Liquid Glass, shaders e molas do Compose |
+| Imagens | Coil, caches de memória e disco limitados |
+| Dados | SafeStorage por conta, Firebase Auth e Cloud Firestore |
+| Widgets | Jetpack Glance |
+| Build | AGP 9.1.1, Gradle 9.3.1 e JDK 21 no CI |
+| Verificação | JUnit, Robolectric, testes instrumentados e emuladores Firebase |
 
----
+### Preparar o ambiente
 
-## Repository Structure
+1. Instale Android Studio, JDK 21, Android SDK **36.1** e Gradle **9.3.1**. O repositório atualmente utiliza a instalação do Gradle; não inclui o executável `gradlew`.
+2. Clone o repositório e abra a pasta no Android Studio.
+3. Configure seu projeto Firebase e coloque o arquivo Android em `app/google-services.json`, ignorado pelo Git. Para login Google, habilite o provedor, configure o cliente OAuth Web e cadastre os certificados de assinatura do build.
+4. Execute na raiz:
+
+```sh
+gradle :app:assembleDebug
+```
+
+O APK fica em `app/build/outputs/apk/debug/`. A configuração Firebase e as chaves de assinatura da publicação são fornecidas por secrets no GitHub Actions.
+
+### Verificar alterações
+
+```sh
+gradle :app:testDebugUnitTest
+gradle :app:connectedDebugAndroidTest
+```
+
+Os testes que exercitam autenticação e regras exigem os emuladores Firebase. Consulte o [workflow de publicação](.github/workflows/release-apk.yml) para comandos, portas e variáveis usados no CI. Os testes de interface exigem um dispositivo ou emulador Android; o CI utiliza API 34. Testes em emulador não substituem a validação de funções específicas da Samsung em aparelho real.
+
+### Organização
 
 ```text
-├── app/
-│   ├── src/main/java/com/example/
-│   │   ├── MainActivity.kt                  # Entry point, Coil initialization, and top-level navigation
-│   │   ├── data/                            # SafeStorage, AuthManager, CloudRepository, and Search Engine
-│   │   ├── model/                           # Immutable models, AppSettings, and UI state wrappers
-│   │   ├── ui/
-│   │   │   ├── components/                  # QuadrinheiroLogo, LiquidGlass, BookCover, and UI controls
-│   │   │   ├── screens/                     # WelcomeIntroScreen, AuthScreen, MainTabs, and Settings
-│   │   │   └── theme/                       # Liquid Glass themes, Apple color palettes, and typography
-│   │   └── viewmodel/                       # QuadrinheiroViewModel and reactive state orchestration
-│   └── src/androidTest/                     # Pixel equivalence and touch regression instrumentation tests
-├── .github/
-│   ├── workflows/                           # CI/CD pipelines and automated APK release workflows
-│   └── scripts/                             # Verified optimization scripts and audit trails
-├── firestore.rules                          # Cloud Firestore security rules
-└── README.md
+app/src/main/java/com/example/
+├── data/          # Persistência, catálogos, tradução, sincronização e caches
+├── model/         # Modelos e preferências
+├── reading/       # Sessão de leitura e notificações
+├── ui/components/ # Controles, materiais, folhas e compartilhamento
+├── ui/screens/    # Telas e fluxos
+├── ui/theme/      # Cores, tipografia e política de movimento
+├── updates/       # Download e verificação de atualizações
+├── viewmodel/     # Estado da aplicação
+└── widget/        # Widgets e ações
 ```
 
----
+Os caches de capas e HTTP têm limites separados. Arquivos temporários de atualização e cartões antigos são limpos automaticamente; coleção, registros e backups do usuário não fazem parte dessa limpeza.
 
-## Local Development & Setup
+## Documentação e referências
 
-### Prerequisites
-- Android Studio Ladybug (or newer)
-- Android SDK 36 & JDK 21 (Temurin recommended)
-- A Firebase project configured with Google Sign-In and Cloud Firestore enabled
+- [Revisão de interface e acompanhamento da leitura](docs/REVISAO-HIG-NOW-BAR.md)
+- [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
+- [AndroidLiquidGlass / Backdrop](https://github.com/Kyant0/AndroidLiquidGlass)
+- [LiquidGlassKMP](https://github.com/philipplackner/LiquidGlassKMP)
+- [Avisos de terceiros](licenses/)
 
-### Building the Project
+## Autoria e uso
 
-```bash
-# Clone the repository
-git clone https://github.com/felipemloiola/Quadrinheiro.git
-cd Quadrinheiro
-
-# Place your Firebase configuration file
-cp /path/to/your/google-services.json app/google-services.json
-
-# Build the Debug APK
-./gradlew assembleDebug
-
-# Run unit tests
-./gradlew testDebugUnitTest
-```
-
----
-
-## License
-
-All rights reserved. This source code is made publicly visible for portfolio demonstration and technical reference only. No permission is granted to reproduce, modify, or distribute any part of this software without prior written consent from the author.
-
----
-
-## Author
-
-**Felipe Loiola** ([@felipemloiola](https://github.com/felipemloiola))
+Criado por [Felipe Loiola](https://github.com/felipemloiola). Todos os direitos reservados, conforme os termos anteriormente publicados neste repositório. A disponibilidade pública do código não concede licença de redistribuição. Dependências e materiais de terceiros mantêm seus próprios termos.

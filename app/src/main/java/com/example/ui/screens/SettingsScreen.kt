@@ -2430,16 +2430,16 @@ private fun SettingsMenuRow(
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = themeColors.textPrimary
                 )
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
-                        fontSize = 11.5.sp,
-                        color = themeColors.textTertiary,
-                        maxLines = 1,
+                        fontSize = 13.sp,
+                        color = themeColors.textSecondary,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
