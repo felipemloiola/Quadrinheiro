@@ -438,7 +438,7 @@ fun QuadrinheiroTheme(
             if (isDark) AppTheme.WHITE else AppTheme.BLACK
         } else AppTheme.fromId(settings.themeId)
     }
-    val themeState = remember(appTheme, isDark) { getIOS27ThemeColors(appTheme, isDark) }
+    val themeState = remember(appTheme, isDark, settings.increaseContrast) { readableTheme(getIOS27ThemeColors(appTheme, isDark), settings.increaseContrast) }
     val themeDef = remember(settings.themeId) { if (settings.themeId == "SYSTEM_MONO") IOS27ThemeDef.MONOCHROME else IOS27ThemeDef.fromId(settings.themeId) }
     val rawScheme = remember(themeDef, isDark, themeState) {
         val baseScheme = if (isDark) themeDef.dark else themeDef.light
@@ -449,7 +449,8 @@ fun QuadrinheiroTheme(
             textSecondary = themeState.textSecondary,
             textTertiary = themeState.textTertiary,
             accentColor = themeState.accent,
-            accentBg = themeState.accent
+            accentBg = themeState.accent,
+            accentText = readableForeground(baseScheme.accentText, themeState.accent)
         )
     }
     val reduceMotion = settings.reduceMotion
@@ -502,9 +503,9 @@ fun QuadrinheiroTheme(
     }
 
     val contentAlpha = when {
-        reduceTransp -> 0.90f
-        scheme.isLight -> 0.60f + levelRatio * 0.18f
-        else -> 0.36f + levelRatio * 0.16f
+        reduceTransp -> 1f
+        scheme.isLight -> 0.94f
+        else -> 0.92f
     }
 
     val inputAlpha = if (scheme.isLight) {

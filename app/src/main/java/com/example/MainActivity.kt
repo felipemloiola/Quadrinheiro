@@ -249,6 +249,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        runCatching { LauncherAppearance.sync(this) }
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
     }
 
@@ -826,6 +827,7 @@ fun QuadrinheiroApp(
                                     )
                                 } else when (activeTab) {
                                     "home" -> HomeReadingNowTab(
+                                        onSelectActiveReadingComic = viewModel::selectActiveReadingComic,
                                         isLoading = isEnteringApp,
                                         comics = comics,
                                         profile = profile,

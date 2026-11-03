@@ -195,7 +195,8 @@ fun HomeReadingNowTab(
     onQuickUpdateReadingPage: (ComicEntry, Int) -> Unit,
     onToggleBottomAccessory: (Boolean) -> Unit = {},
     onOpenStatistics: () -> Unit = {},
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    onSelectActiveReadingComic: (String) -> Unit = {}
 ) {
     if (isLoading) {
         com.example.ui.components.HomeLoadingSkeleton(comics, profile, appSettings)
@@ -550,6 +551,7 @@ fun HomeReadingNowTab(
             // Seção: Continuar Lendo com Stepper Nativo e Leitura Diferida de Estado
             if (readingNowList.isNotEmpty()) {
                 item(key = "home-reading-now-header", contentType = "section_header") {
+                    com.example.reading.ReadingNowBarControl(com.example.model.activeReadingComic(comics, profile.activeReadingComicId) ?: readingNowList.first(), onSelectActiveReadingComic)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

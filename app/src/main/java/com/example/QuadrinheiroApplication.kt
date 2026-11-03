@@ -9,6 +9,16 @@ import com.example.data.MultiApiSearchEngine
 
 /** One lazy loader/cache for activities and widgets, including a cold widget process. */
 class QuadrinheiroApplication : Application(), ImageLoaderFactory {
+    override fun onCreate() {
+        super.onCreate()
+        runCatching { LauncherAppearance.sync(this); LauncherAppearance.schedule(this) }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        runCatching { LauncherAppearance.sync(this) }
+    }
+
     override fun newImageLoader(): ImageLoader =
                 ImageLoader.Builder(this)
                     .okHttpClient {

@@ -181,13 +181,13 @@ fun AppUpdatePrompt() {
             prefs.edit().putLong("snoozed_code", update.code).putLong("snoozed_at", System.currentTimeMillis()).apply()
             available = null
         }
-        AlertDialog(
+        AppUpdateDialog(
             onDismissRequest = postpone,
             containerColor = theme.bgPrimary,
             title = { Text("Atualização disponível", color = theme.textPrimary) },
             text = { Text("Quadrinheiro ${update.name}\n\nA atualização será baixada aqui no aplicativo. Ao terminar, confirme a instalação na tela do Android. Seus dados serão mantidos.", color = theme.textSecondary) },
             confirmButton = {
-                TextButton(onClick = {
+                UpdateDialogAction(onClick = {
                     scope.launch {
                         UpdateSignals.downloading = true
                         try {
@@ -198,9 +198,9 @@ fun AppUpdatePrompt() {
                             Toast.makeText(context, "Não foi possível iniciar o download. Verifique sua conexão e o espaço disponível.", Toast.LENGTH_LONG).show()
                         } finally { UpdateSignals.downloading = false }
                     }
-                }, enabled = !UpdateSignals.downloading) { Text("Atualizar", color = theme.accent) }
+                }, enabled = !UpdateSignals.downloading) { Text("Atualizar") }
             },
-            dismissButton = { TextButton(onClick = postpone) { Text("Depois", color = theme.textSecondary) } }
+            dismissButton = { UpdateDialogAction(onClick = postpone) { Text("Depois", color = theme.textSecondary) } }
         )
     }
     transfer?.takeIf { showTransfer }?.let { download ->
@@ -208,7 +208,7 @@ fun AppUpdatePrompt() {
         val downloading = !ready && transferError == null
         val total = progress?.total ?: -1L
         val fraction = if (total > 0L) ((progress?.bytes ?: 0L).toFloat() / total).coerceIn(0f, 1f) else null
-        AlertDialog(
+        AppUpdateDialog(
             onDismissRequest = { if (!downloading) showTransfer = false },
             containerColor = theme.bgPrimary,
             title = { Text("Atualização ${download.update.name}", color = theme.textPrimary) },
@@ -230,16 +230,16 @@ fun AppUpdatePrompt() {
                 }
             },
             confirmButton = {
-                if (ready) TextButton(onClick = install) { Text("Instalar", color = theme.accent) }
-                else if (transferError != null) TextButton(onClick = {
+                if (ready) UpdateDialogAction(onClick = install) { Text("Instalar") }
+                else if (transferError != null) UpdateDialogAction(onClick = {
                     scope.launch {
                         try { transfer = InAppUpdateDownload.start(context, download.update) }
                         catch (_: Exception) { transferError = "Não foi possível reiniciar o download." }
                     }
-                }) { Text("Tentar novamente", color = theme.accent) }
+                }) { Text("Tentar novamente") }
             },
             dismissButton = {
-                TextButton(onClick = {
+                UpdateDialogAction(onClick = {
                     if (ready) showTransfer = false
                     else {
                         InAppUpdateDownload.cancel(context, download)

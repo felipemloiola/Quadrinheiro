@@ -330,6 +330,8 @@ fun LiquidGlassSheetRefractiveLayer(
                 )
         )
 
+        Box(Modifier.fillMaxSize().background(com.example.ui.theme.LocalIOS27Theme.current.bgSecondary.copy(alpha = 0.92f)))
+
         if (coverUrl.isNotBlank()) {
             val cleanCover = remember(coverUrl) {
                 coverUrl.trim().replace("http://", "https://")
@@ -358,7 +360,7 @@ fun LiquidGlassSheetRefractiveLayer(
                         scaleY = 1.18f
                         translationY = (-scrollY * 0.04f + dragY * 0.08f).coerceIn(-28f, 28f)
                     }
-                    .alpha(if (s.isLight) 0.14f else 0.20f)
+                    .alpha(if (s.isLight) 0.05f else 0.07f)
             ) {
                 AsyncImage(
                     model = blurredRequest,

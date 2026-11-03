@@ -284,7 +284,7 @@ fun CatalogSheetModal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(24.dp)
                         .then(sheet.dragModifier),
                     contentAlignment = Alignment.Center
                 ) {
@@ -848,7 +848,7 @@ fun ComicInfoSynopsisSheetModal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(24.dp)
                         .then(sheet.dragModifier),
                     contentAlignment = Alignment.Center
                 ) {
@@ -876,6 +876,7 @@ fun ComicInfoSynopsisSheetModal(
                         color = s.textSecondary,
                         modifier = Modifier
                             .testTag("synopsis_close_button")
+                            .heightIn(min = 44.dp)
                             .clip(RoundedCornerShape(99.dp))
                             .clickable { sheet.dismiss() }
                             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -891,7 +892,7 @@ fun ComicInfoSynopsisSheetModal(
                     Box(
                         modifier = Modifier
                             .testTag("synopsis_share_card_button")
-                            .size(32.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(s.accentColor.copy(alpha = 0.14f))
                             .clickable {

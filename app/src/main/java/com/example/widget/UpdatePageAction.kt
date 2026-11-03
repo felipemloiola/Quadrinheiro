@@ -119,6 +119,7 @@ object QuadrinheiroWidgetsSync {
 
     suspend fun updateAllWidgets(context: Context, latestPage: Int? = null, sessionChanged: Boolean = false) {
         val appCtx = context.applicationContext
+        com.example.reading.ReadingLiveActivity.refreshAsync(appCtx)
         val rev = bumpInMemoryRevision()
         val manager = runCatching { GlanceAppWidgetManager(appCtx) }.getOrNull()
 
@@ -173,6 +174,7 @@ object QuadrinheiroWidgetsSync {
     private var debounceJob: kotlinx.coroutines.Job? = null
 
     fun refreshSessionWidgetsAsync(context: Context) {
+        com.example.reading.ReadingLiveActivity.stop(context)
         debounceJob?.cancel()
         // Clear visible data immediately; persist the invalidation for inactive Glance sessions too.
         bumpInMemoryRevision()

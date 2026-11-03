@@ -757,7 +757,7 @@ fun SearchResultComicCard(
                 ) {
                     Text(
                         text = displayItem.format.ifBlank { displayItem.publisher },
-                        fontSize = 9.5.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textPrimary,
                         maxLines = 1,
@@ -774,7 +774,7 @@ fun SearchResultComicCard(
                     ) {
                         Text(
                             text = "Sequência • Ed. #$issueNum",
-                            fontSize = 9.5.sp,
+                            fontSize = 11.sp,
                             fontFamily = SpaceGroteskTabularFamily,
                             fontWeight = FontWeight.Bold,
                             color = s.accentColor,
@@ -789,7 +789,7 @@ fun SearchResultComicCard(
                 ) {
                     Text(
                         text = displayItem.genre,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         color = s.textTertiary,
                         maxLines = 1,
                         softWrap = false,
@@ -800,15 +800,15 @@ fun SearchResultComicCard(
 
             Text(
                 text = displayItem.title,
-                fontSize = 14.5.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = s.textPrimary,
-                lineHeight = 19.sp
+                lineHeight = 22.sp
             )
 
             Text(
                 text = displayItem.authors,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = s.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -826,8 +826,8 @@ fun SearchResultComicCard(
             if (previewSynopsis.isNotBlank()) {
                 Text(
                     text = previewSynopsis,
-                    fontSize = 11.5.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
                     color = s.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -836,7 +836,7 @@ fun SearchResultComicCard(
 
             Text(
                 text = "Toque para ver sinopse e informações ›",
-                fontSize = 10.5.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = s.accentColor
             )
@@ -859,16 +859,16 @@ fun SearchResultComicCard(
                     )
                     Text(
                         text = "Editar na Biblioteca (${savedEntry.status.shortLabel})",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textPrimary
                     )
                 }
             } else {
-                Row(
+                FlowRow(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     AppleCapsuleButton(
                         label = "+ Lido",
