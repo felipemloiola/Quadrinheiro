@@ -66,6 +66,16 @@ class ProfileDiscoveryRegressionTest {
         assertEquals(0, comic.issueNumber)
         assertEquals("Graphic Novel", comic.format)
     }
+    @Test fun editingFromFullCatalogPageKeepsPrivateReviewAndReadingProgress() {
+        val owned = ComicEntry("local-id", "cv-123", "Minha edição", authors = "Autora", publisher = "Editora", status = ReadingStatus.WANT_TO_READ,
+            rating = 4.5f, review = "Minha resenha", currentPage = 40, tags = listOf("Favorito"))
+        val catalog = owned.copy(id = "cv-123", rating = 0f, review = "", currentPage = 0, tags = emptyList(), coverUrl = "https://example.com/variant.jpg")
+        val editable = catalogEntryForEditing(catalog, listOf(owned))!!
+        assertEquals(owned.id, editable.id); assertEquals(owned.status, editable.status)
+        assertEquals(owned.rating, editable.rating); assertEquals(owned.review, editable.review)
+        assertEquals(owned.currentPage, editable.currentPage); assertEquals(owned.tags, editable.tags)
+        assertEquals(catalog.coverUrl, editable.coverUrl)
+    }
     @Test fun paginatedCatalogDeduplicatesAcrossProvidersAndBoundsVisibleWindow() {
         val window = CatalogWindow()
         val first = ComicEntry("a", "", "Batman: Ano Um", authors = "Frank Miller", publisher = "DC", isbn = "9781234567890")

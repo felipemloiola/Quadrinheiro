@@ -669,8 +669,12 @@ fun ComicInfoSynopsisSheetModal(
     }
 
     var fullPage by remember(comic.id) { mutableStateOf(false) }
-    if (fullPage) com.example.ui.screens.ComicDetailDialog(displayComic, readerProfile, allUserComics,
-        onClose = { fullPage = false }, onRegister = { next -> fullPage = false; onOpenCatalogWithStatus(next, savedEntry?.status ?: com.example.model.ReadingStatus.WANT_TO_READ) },
+    if (fullPage) com.example.ui.screens.ComicDetailDialog(savedEntry?.copy(coverUrl = displayComic.coverUrl) ?: displayComic, readerProfile, allUserComics,
+        onClose = { fullPage = false }, onRegister = { next ->
+            fullPage = false
+            val editable = com.example.model.catalogEntryForEditing(next, allUserComics)
+            if (editable != null) onEditSavedComic(editable) else onOpenCatalogWithStatus(next, com.example.model.ReadingStatus.READ)
+        },
         onCover = { url -> displayComic = displayComic.copy(coverUrl = url); savedEntry?.let { onCoverSelected(it, url) } }, onLogin = onLogin,
         onShare = { onShareComic(savedEntry ?: displayComic, SocialShareCardType.COMPLETED_READING, null) })
 

@@ -106,7 +106,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
         }
         if (composing) {
             var selected by remember { mutableStateOf<ComicEntry?>(comic) }
-            var body by remember { mutableStateOf("") }
+            var body by remember { mutableStateOf(comic?.review.orEmpty()) }
             var publishing by remember { mutableStateOf(false) }
             var failure by remember { mutableStateOf(false) }
             ModalBottomSheet(onDismissRequest = { composing = false }, containerColor = t.bgSecondary) {
@@ -124,7 +124,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             TextButton(onClick = { selected = null }) { Text(selected!!.displayTitle, color = t.accent) }
                             if (selected!!.rating > 0) Text("★ ${selected!!.rating}", color = t.accent)
-                            OutlinedTextField(body, { body = it.take(5000) }, modifier = Modifier.fillMaxWidth(), minLines = 4, label = { Text("Resenha") })
+                            AppleTextEditor(body, { body = it.take(5000) }, "Resenha")
                             if (failure) Text("Não foi possível publicar. Tente novamente.", color = t.textSecondary)
                             TextButton(enabled = !publishing && (body.isNotBlank() || selected!!.rating > 0), onClick = {
                                 publishing = true; failure = false

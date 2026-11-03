@@ -101,16 +101,25 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             }
         }
         item { SectionHeading("Informações") }
-        item { OutlinedTextField(name, { name = it.take(80) }, label = { Text("Nome") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(bio, { bio = it.take(400) }, label = { Text("Biografia") }, minLines = 3, maxLines = 5, modifier = Modifier.fillMaxWidth()) }
         item {
-            Column(Modifier.contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Nome", color = theme.textSecondary, fontSize = 13.sp)
+                AppleTextField(name, { name = it.take(80) }, "Nome de exibição", useContentMaterial = true)
+            }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Biografia", color = theme.textSecondary, fontSize = 13.sp)
+                AppleTextEditor(bio, { bio = it.take(400) }, "Conte um pouco sobre você")
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Editora ou universo favorito", color = theme.textPrimary, fontSize = 15.sp)
                 AppleMenuPicker(value = universe, onChange = { universe = it }, options = listOf("DC / Vertigo", "Marvel", "Image", "Dark Horse", "Mangás", "Quadrinhos nacionais", "Independentes").map { SegmentOption(it, it) })
                 Text("Também ajuda nas suas recomendações.", color = theme.textSecondary, fontSize = 12.sp)
             }
         }
-        item { Text("Os quatro destaques e personagens podem ser alterados tocando em suas imagens no Perfil.", color = theme.textSecondary, fontSize = 13.sp) }
     }
     pendingAvatar?.let { bitmap -> ProfilePhotoCropModal(bitmap, onDismiss = { pendingAvatar = null }, onConfirmCrop = { avatar = it; pendingAvatar = null }) }
 }

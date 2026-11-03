@@ -178,7 +178,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                     Text(if (characters) "Personagem favorito" else "HQ favorita", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
                     TextButton(onClick = close) { Text("Fechar", color = theme.accent) }
                 }
-                OutlinedTextField(query, { query = it.take(100) }, label = { Text("Buscar") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AppleTextField(query, { query = it.take(100) }, "Buscar", leadingIcon = Icons.Default.Search)
                 fun select(value: String?, portrait: String? = null) {
                     val old = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
                     val next = old.toMutableList()

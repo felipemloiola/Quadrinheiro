@@ -101,4 +101,22 @@ class ReaderNavigationTest {
         compose.onNodeWithTag("settings_back_button").performClick()
         compose.onNodeWithTag("synopsis_close_button").assertExists()
     }
+    @Test fun fullPageRegistrationOpensEditorForNewAndWantedComics() {
+        val newComic = ComicEntry("cv-1142807", "cv-1142807", "Batman", authors = "Autor", publisher = "DC", sourceLabel = "Comic Vine")
+        val wanted = newComic.copy(id = "owned-wanted", title = "HQ na fila", status = ReadingStatus.WANT_TO_READ)
+        listOf(newComic, wanted).forEachIndexed { index, comic ->
+            compose.runOnIdle {
+                if (index == 1) vm.saveComic(comic)
+                vm.openInfoSynopsisModal(comic)
+            }
+            compose.onNodeWithText("Ver página da HQ").performClick()
+            compose.onNodeWithText("Registrar leitura").performClick()
+            compose.onNodeWithTag("modal_cancel_button").assertExists()
+            compose.runOnIdle {
+                assertNotNull(vm.selectedComic.value)
+                assertEquals(if (index == 1) ReadingStatus.WANT_TO_READ else ReadingStatus.READ, vm.selectedComic.value!!.status)
+                vm.selectComicForSheet(null); vm.openInfoSynopsisModal(null)
+            }
+        }
+    }
 }
