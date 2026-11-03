@@ -14,11 +14,20 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
+import org.junit.Before
+import org.junit.After
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AppearanceStorageTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
+    @Before fun installMainDispatcher() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
+    @After fun restoreMainDispatcher() { Dispatchers.resetMain() }
 
     @Test fun glassLevelChangesRealMaterialParametersInBothStyles() {
         for (style in listOf("regular", "frosted")) {
