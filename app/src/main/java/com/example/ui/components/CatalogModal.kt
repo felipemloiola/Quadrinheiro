@@ -149,10 +149,7 @@ fun CatalogSheetModal(
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
-    val localizedInitial = remember(selectedComic) {
-        com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = false)
-    }
-    var draftComic by remember(selectedComic.id) { mutableStateOf(localizedInitial) }
+    var draftComic by remember(selectedComic.id) { mutableStateOf(selectedComic) }
     LaunchedEffect(selectedComic.id, selectedComic.synopsisPtBr) {
         if (selectedComic.synopsisPtBr.isNotBlank() && draftComic.synopsisPtBr != selectedComic.synopsisPtBr) {
             draftComic = draftComic.copy(
@@ -202,7 +199,7 @@ fun CatalogSheetModal(
         }
         return finalComic
     }
-    val sheetScrollState = rememberScrollState(0)
+    val sheetScrollState = rememberLazyListState()
     val context = LocalContext.current
     val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { onSetExpanded(true) })
 
@@ -269,7 +266,7 @@ fun CatalogSheetModal(
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
-                    scrollOffsetProvider = { sheetScrollState.value.toFloat() },
+                    scrollOffsetProvider = { sheetScrollState.firstVisibleItemScrollOffset.toFloat() },
                     dragOffsetYProvider = { sheet.offset },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
@@ -405,16 +402,14 @@ fun CatalogSheetModal(
                     }
                 }
 
-                // Conteúdo rolável do modal com Column + verticalScroll contínuo (mantém todas as seções medidas sem saltos/teleporte ao rolar para cima)
+                // Compose and measure only the editor sections near the viewport.
                 val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
-                Column(
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(
-                            state = sheetScrollState,
-                            enabled = !isSliderActive
-                        )
-                        .padding(
+                        .fillMaxWidth().testTag("editor_list"),
+                    state = sheetScrollState,
+                    userScrollEnabled = !isSliderActive,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             start = if (isSheetExpanded) 22.dp else 18.dp,
                             end = if (isSheetExpanded) 22.dp else 18.dp,
                             top = 4.dp,
@@ -422,13 +417,14 @@ fun CatalogSheetModal(
                         ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Item 1: Resumo da Obra (Capa + Título + Autor)
+                    item(key = "editor-section-0") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+// Item 1: Resumo da Obra (Capa + Título + Autor)
                     CatalogWorkSummaryHeader(
                         draftComic = draftComic,
                         onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
                     )
-
-                    // Item 1.5: Sequência da Série (#1, #2, #3...)
+// Item 1.5: Sequência da Série (#1, #2, #3...)
                     ComicSequenceCarouselCard(
                         currentComic = draftComic,
                         allUserComics = allUserComics,
@@ -441,8 +437,11 @@ fun CatalogSheetModal(
                             onSelectSequenceComic(nextTemplate)
                         }
                     )
-
-                    // Item 2: Seletor de Status ultra rápido (Lido / Lendo / Na Fila)
+                        }
+                    }
+                    item(key = "editor-section-2") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+// Item 2: Seletor de Status ultra rápido (Lido / Lendo / Na Fila)
                     CatalogStatusSegmentedBar(
                         value = draftComic.status,
                         onChange = { nextStatus ->
@@ -460,8 +459,11 @@ fun CatalogSheetModal(
                             )
                         }
                     )
-
-                    if (draftComic.status == ReadingStatus.WANT_TO_READ) {
+                        }
+                    }
+                    item(key = "editor-section-3") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -600,8 +602,11 @@ fun CatalogSheetModal(
                             }
                         }
                     }
-
-                    // Item 7: Seção Própria e Exclusiva de Tags
+                        }
+                    }
+                    item(key = "editor-section-4") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+// Item 7: Seção Própria e Exclusiva de Tags
                     CatalogTagsSection(
                         tags = draftComic.tags,
                         quickReviewTags = appSettings.quickReviewTags,
@@ -609,8 +614,11 @@ fun CatalogSheetModal(
                         onChangeComicTagInput = { comicTagInput = it },
                         onUpdateTags = { nextTags -> draftComic = draftComic.copy(tags = nextTags) }
                     )
-
-                    // Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
+                        }
+                    }
+                    item(key = "editor-section-5") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+// Item 7.5: Seção de Momentos Marcantes e Notas Rápidas
                     val addCurrentMoment = {
                         val cleanNote = momentNoteInput.trim()
                         if (cleanNote.isNotEmpty()) {
@@ -649,8 +657,11 @@ fun CatalogSheetModal(
                             )
                         }
                     )
-
-                    // Item 8: Botão Salvar Registro
+                        }
+                    }
+                    item(key = "editor-section-6") {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+// Item 8: Botão Salvar Registro
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -698,6 +709,9 @@ fun CatalogSheetModal(
                             )
                         }
                     }
+                        }
+                    }
+
                 }
             }
         }

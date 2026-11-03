@@ -31,7 +31,8 @@ class DampedDragAnimation(
     val onDragStopped: DampedDragAnimation.() -> Unit,
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
     val onDragCancelled: (DampedDragAnimation.() -> Unit)? = null,
-    val reduceMotion: () -> Boolean = { false }
+    val reduceMotion: () -> Boolean = { false },
+    val horizontalSlop: Float? = null
 ) {
     private val valueAnimation = Animatable(initialValue, visibilityThreshold)
     private val velocityAnimation = Animatable(0f, 5f)
@@ -59,6 +60,7 @@ class DampedDragAnimation(
 
     val modifier: Modifier = Modifier.pointerInput(this) {
         inspectDragGestures(
+            horizontalSlop = horizontalSlop,
             onDragStart = { down ->
                 startTarget = targetValue
                 press()

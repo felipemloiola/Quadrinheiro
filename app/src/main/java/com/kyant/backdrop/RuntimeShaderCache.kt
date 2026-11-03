@@ -25,88 +25,49 @@ sealed interface RuntimeShaderCache {
  * evitando a compilação síncrona no primeiro callback do Choreographer (First Frame UI).
  */
 object LiquidGlassShaderPrewarmer {
+    private val ready = AtomicBoolean(false)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val pools = ConcurrentHashMap<String, java.util.concurrent.ConcurrentLinkedQueue<android.graphics.RuntimeShader>>()
+    private val refilling = ConcurrentHashMap<String, AtomicBoolean>()
+    private val sources get() = listOf(
+        RoundedRectRefractionShaderString, RoundedRectRefractionWithDispersionShaderString,
+        DefaultHighlightShaderString, AmbientHighlightShaderString, InteractiveHighlightSource,
+        SdfShader.AGSL_SDF_LIQUID_GLASS_SOURCE
+    )
+    val isReady: Boolean get() = ready.get()
 
-    private val isPrewarmed = AtomicBoolean(false)
-    private val prewarmScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val compiledTemplates = ConcurrentHashMap<String, String>()
-
-    val isReady: Boolean
-        get() = isPrewarmed.get()
-
-    /**
-     * Inicia a pré-compilação assíncrona dos shaders AGSL fora da Main Thread.
-     */
     fun prewarmAsync(onComplete: (() -> Unit)? = null) {
-        if (isPrewarmed.get()) {
-            onComplete?.invoke()
-            return
-        }
-        prewarmScope.launch {
-            prewarmSynchronously()
-            onComplete?.invoke()
-        }
+        if (ready.get()) { onComplete?.invoke(); return }
+        scope.launch { prewarmSynchronously(); onComplete?.invoke() }
     }
 
-    /**
-     * Compila e valida todos os shaders AGSL críticos do Liquid Glass (Refraction, Dispersion,
-     * Highlights e SDF Meniscus) aquecendo o compilador SkSL/AGSL da GPU/CPU.
-     */
+    @Synchronized
     fun prewarmSynchronously() {
-        if (isPrewarmed.compareAndSet(false, true)) {
-            val shaderSources = mapOf(
-                "Refraction" to RoundedRectRefractionShaderString,
-                "RefractionWithDispersion" to RoundedRectRefractionWithDispersionShaderString,
-                "Default" to DefaultHighlightShaderString,
-                "Ambient" to AmbientHighlightShaderString,
-                "SdfLiquidGlass" to SdfShader.AGSL_SDF_LIQUID_GLASS_SOURCE
-            )
-            shaderSources.forEach { (key, source) ->
-                compiledTemplates[key] = source
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    runCatching {
-                        val shader = android.graphics.RuntimeShader(source)
-                        when (key) {
-                            "Refraction", "RefractionWithDispersion" -> {
-                                shader.setFloatUniform("size", 200f, 64f)
-                                shader.setFloatUniform("offset", 0f, 0f)
-                                shader.setFloatUniform("cornerRadii", floatArrayOf(32f, 32f, 32f, 32f))
-                                shader.setFloatUniform("refractionHeight", 24f)
-                                shader.setFloatUniform("refractionAmount", -32f)
-                                shader.setFloatUniform("depthEffect", 1f)
-                                if (key == "RefractionWithDispersion") {
-                                    shader.setFloatUniform("chromaticAberration", 1f)
-                                }
-                            }
-                            "Default" -> {
-                                shader.setFloatUniform("size", 200f, 64f)
-                                shader.setFloatUniform("cornerRadii", floatArrayOf(32f, 32f, 32f, 32f))
-                                shader.setFloatUniform("angle", 0.7853982f)
-                                shader.setFloatUniform("falloff", 1f)
-                            }
-                            "Ambient" -> {
-                                shader.setFloatUniform("size", 200f, 64f)
-                                shader.setFloatUniform("cornerRadii", floatArrayOf(32f, 32f, 32f, 32f))
-                                shader.setFloatUniform("angle", 0.7853982f)
-                                shader.setFloatUniform("falloff", 1f)
-                            }
-                            "SdfLiquidGlass" -> {
-                                SdfShader.createSdfLiquidGlassRenderEffect(
-                                    radiusX = 16f,
-                                    radiusY = 16f,
-                                    width = 200f,
-                                    height = 64f,
-                                    cornerRadiusPx = 32f,
-                                    enableEdgeRefraction = true
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+        if (ready.get()) return
+        if (Build.VERSION.SDK_INT >= 33) sources.forEach { fill(it) }
+        ready.set(true)
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun fill(source: String) {
+        val queue = pools.getOrPut(source) { java.util.concurrent.ConcurrentLinkedQueue() }
+        repeat((8 - queue.size).coerceAtLeast(0)) {
+            runCatching { android.graphics.RuntimeShader(source) }.getOrNull()?.let(queue::offer)
         }
     }
 
-    fun getPrewarmedCount(): Int = compiledTemplates.size
+    /** Each draw node owns a distinct mutable shader; uniforms are never shared. */
+    @androidx.annotation.RequiresApi(33)
+    internal fun obtain(source: String): android.graphics.RuntimeShader {
+        val shader = pools[source]?.poll() ?: android.graphics.RuntimeShader(source)
+        val filling = refilling.getOrPut(source) { AtomicBoolean(false) }
+        if (filling.compareAndSet(false, true)) scope.launch {
+            try { fill(source) } finally { filling.set(false) }
+        }
+        return shader
+    }
+
+    fun getPrewarmedCount(): Int = pools.size
 }
 
 internal class RuntimeShaderCacheImpl : RuntimeShaderCache {

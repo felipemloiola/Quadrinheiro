@@ -906,6 +906,8 @@ fun BookCover(
     modifier: Modifier = Modifier,
     overlayContent: @Composable BoxScope.() -> Unit = {}
 ) {
+    if (LocalHomeSkeleton.current != null) { HomeSkeletonBlock(modifier); return }
+
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val cleanSrc = remember(src, title) {
         val raw = src.trim().replace("http://", "https://")
@@ -1120,6 +1122,8 @@ fun UserAvatar(
     sizeDp: Int = 40,
     modifier: Modifier = Modifier
 ) {
+    if (LocalHomeSkeleton.current != null) { HomeSkeletonBlock(modifier.size(sizeDp.dp).clip(CircleShape)); return }
+
     val themeColors = LocalIOS27Theme.current
     val initial = (profile.name.trim().firstOrNull()?.uppercaseChar() ?: 'F').toString()
 
@@ -2040,7 +2044,7 @@ fun LiquidGlassMenuOverlayHost(
     val hoverPillIndexAnim = remember { Animatable(0f) }
     val hoverPillAlphaAnim = remember { Animatable(0f) }
 
-    LaunchedEffect(activeRequest) {
+    LaunchedEffect(activeRequest?.id) {
         if (activeRequest != null) {
             val isNewMenu = displayedRequest?.id != activeRequest.id
             displayedRequest = activeRequest
@@ -2707,7 +2711,8 @@ fun <T> AppleMenuPicker(
 
     LaunchedEffect(open, anchorBounds, menuItems, currentOpt.label, menuHost) {
         if (menuHost != null) {
-            if (open && anchorBounds.width > 0 && anchorBounds.height > 0) {
+            if (open && anchorBounds.width > 0 && anchorBounds.height > 0 &&
+                (menuHost.currentRequest?.id != menuId || menuHost.currentRequest?.items !== menuItems)) {
                 menuHost.showMenu(
                     LiquidGlassMenuRequest(
                         id = menuId,
@@ -3599,6 +3604,8 @@ fun AppleActivityRingsGauge(
     thirdColor: Color = LocalIOS27Theme.current.accentSecondary,
     showCenterLabel: Boolean = true
 ) {
+    if (LocalHomeSkeleton.current != null) { HomeSkeletonBlock(modifier.size(sizeDp).clip(CircleShape)); return }
+
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val s = LocalAppleMaterials.current.scheme
     val isDark = LocalIsDarkTheme.current

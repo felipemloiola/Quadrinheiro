@@ -475,10 +475,6 @@ fun QuadrinheiroApp(
             SessionTransitionScreen("Saindo da conta…")
             return@QuadrinheiroTheme
         }
-        if (isEnteringApp && authUiState != AuthUiState.Unauthenticated) {
-            com.example.ui.components.HomeLoadingSkeleton()
-            return@QuadrinheiroTheme
-        }
 
         // WELCOME_ONBOARDING_FLOW_V18: Welcome Intro Screen exclusively on fresh install
         val contextApp = androidx.compose.ui.platform.LocalContext.current
@@ -830,6 +826,7 @@ fun QuadrinheiroApp(
                                     )
                                 } else when (activeTab) {
                                     "home" -> HomeReadingNowTab(
+                                        isLoading = isEnteringApp,
                                         comics = comics,
                                         profile = profile,
                                         appSettings = appSettings,

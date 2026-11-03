@@ -192,7 +192,7 @@ object SdfShader {
                 val maxBound = max(1f, min(width, height) * 0.5f)
                 val cr = if (cornerRadiusPx > 1f) cornerRadiusPx.coerceIn(1f, maxBound) else maxBound
                 val safeH = refractionHeightPx.coerceIn(1f, maxBound)
-                val shader = RuntimeShader(AGSL_SDF_LIQUID_GLASS_SOURCE).apply {
+                val shader = com.kyant.backdrop.LiquidGlassShaderPrewarmer.obtain(AGSL_SDF_LIQUID_GLASS_SOURCE).apply {
                     setFloatUniform("size", width, height)
                     setFloatUniform("cornerRadii", cr, cr, cr, cr)
                     setFloatUniform("refractionHeight", safeH)

@@ -92,6 +92,7 @@ fun LiquidToggle(
             initialScale = 1f,
             pressedScale = 1.5f,
             reduceMotion = reduceMotion,
+            horizontalSlop = with(density) { 2.dp.toPx() },
             onDragStarted = { didDrag = false },
             onDragStopped = {
                 val next = if (didDrag) targetValue >= 0.5f else !currentSelected()
@@ -228,7 +229,7 @@ fun LiquidToggle(
                         } else {
                             Color.White
                         }
-                        drawRect(knobIdleColor.copy(alpha = 1f - progress))
+                        drawRect(knobIdleColor.copy(alpha = lerp(1f, 0.16f, progress)))
                     }
                 )
                 .size(40f.dp, 24f.dp)

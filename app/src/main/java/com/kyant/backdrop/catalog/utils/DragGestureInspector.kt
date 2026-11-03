@@ -15,6 +15,7 @@ suspend fun PointerInputScope.inspectDragGestures(
     onDragEnd: (PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
     observeOnly: Boolean = false,
+    horizontalSlop: Float? = null,
     onDrag: (PointerInputChange, Offset) -> Unit
 ) {
     awaitEachGesture {
@@ -45,7 +46,7 @@ suspend fun PointerInputScope.inspectDragGestures(
                 if (observeOnly) onDrag(change, delta)
                 else {
                     if (!claimed && abs(distance.y) > viewConfiguration.touchSlop && abs(distance.y) > abs(distance.x)) break
-                    if (!claimed && abs(distance.x) > viewConfiguration.touchSlop) {
+                    if (!claimed && abs(distance.x) > (horizontalSlop ?: viewConfiguration.touchSlop) && abs(distance.x) > abs(distance.y)) {
                         claimed = true
                         onDrag(change, distance)
                     } else if (claimed) onDrag(change, delta)

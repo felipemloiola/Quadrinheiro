@@ -44,8 +44,12 @@ permitindo recuperá-la na próxima atualização com conexão. `WidgetCoverTest
 cobre falha, recuperação e reutilização da capa real. O layout recebe apenas
 mais espaço interno, preservando suas cores, fontes e formatos.
 
-O carregamento entre login e início exibe o skeleton da tela inicial. Sua
-pulsação é aplicada na camada gráfica e respeita Reduzir movimento. A coleta
+O carregamento entre login e início reutiliza HomeReadingNowTab. Os mesmos
+componentes medem cabeçalho, metas, leitura e capas; apenas o desenho de seu
+conteúdo é substituído por placeholders. A barra inferior permanece no mesmo
+lugar. A pulsação ocorre no desenho e respeita Reduzir movimento.
+OpeningAndLoadingTest compara os limites do cabeçalho e das metas antes/depois
+e registra screenshots para conferência visual. A coleta
 dos fluxos da tela principal acompanha o lifecycle, evitando recomposições
 durante o segundo plano. O ícone adaptativo usa a mesma logo com menos inset
 e fundo claro/escuro via recursos do sistema; `LauncherThemeTest` verifica as
@@ -120,3 +124,22 @@ os mesmos dados, dispositivo, taxa de atualização e estado térmico antes/depo
 
 O workflow de release mantém os testes de Firebase e a verificação do certificado
 permanente antes de publicar o APK e o manifesto de atualização.
+
+## Abertura de menus e edição
+
+O editor usa LazyColumn com chaves estáveis e rascunho mantido acima dos itens.
+As seções fora do viewport não são compostas/medidas ao abrir, e campos/notas
+continuam no rascunho ao rolar. A localização duplicada durante composição foi
+removida; a preparação existente no ViewModel continua preservada.
+
+O pré-aquecimento mantém instâncias reais de RuntimeShader em filas por fonte,
+incluindo o shader de refração do editor. Cada nó retira uma instância exclusiva,
+com reposição em Dispatchers.Default; uniforms mutáveis não são compartilhados.
+Isso retira a construção dos shaders preparados do primeiro clique. O custo
+final de renderização da GPU depende do dispositivo e não é uma promessa de FPS.
+Os menus não reiniciam suas molas ao atualizar o mesmo request/âncora.
+
+O toggle reconhece intenção horizontal a partir de 2 dp, preserva a rolagem
+vertical e mantém a superfície da lente visível durante a pressão.
+OpeningAndLoadingTest verifica movimento visual antes do touch-up, confirmação
+única, shaders independentes e salvamento após rolar o editor.

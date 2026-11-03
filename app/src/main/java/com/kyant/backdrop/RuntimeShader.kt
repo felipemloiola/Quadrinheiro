@@ -25,7 +25,7 @@ interface RuntimeShader {
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 fun RuntimeShader(@Language("AGSL") shaderString: String): RuntimeShader {
-    val shader = android.graphics.RuntimeShader(shaderString)
+    val shader = LiquidGlassShaderPrewarmer.obtain(shaderString)
     return AndroidRuntimeShader(shader)
 }
 

@@ -194,8 +194,13 @@ fun HomeReadingNowTab(
     onSelectComic: (ComicEntry) -> Unit,
     onQuickUpdateReadingPage: (ComicEntry, Int) -> Unit,
     onToggleBottomAccessory: (Boolean) -> Unit = {},
-    onOpenStatistics: () -> Unit = {}
+    onOpenStatistics: () -> Unit = {},
+    isLoading: Boolean = false
 ) {
+    if (isLoading) {
+        com.example.ui.components.HomeLoadingSkeleton(comics, profile, appSettings)
+        return
+    }
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val themeColors = LocalIOS27Theme.current
@@ -238,7 +243,7 @@ fun HomeReadingNowTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 14.dp),
+                        .padding(bottom = 14.dp).testTag("home_header"),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
@@ -261,14 +266,14 @@ fun HomeReadingNowTab(
                                 fontSize = 13.sp,
                                 color = s.textSecondary
                             )
-                            Text(
+                            com.example.ui.components.HomeSkeletonText(
                                 text = "• ${profile.name}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = s.textSecondary
                             )
                         }
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "Lendo Agora",
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
@@ -314,7 +319,7 @@ fun HomeReadingNowTab(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .contentMaterialSurface(RoundedCornerShape(26.dp))
+                        .contentMaterialSurface(RoundedCornerShape(26.dp)).testTag("home_goals")
                         .clickable { onOpenStatistics() }
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -324,7 +329,7 @@ fun HomeReadingNowTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "META DE 2026 • ${(profile.favoriteUniverse.ifBlank { "ACERVO" }).uppercase()}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -344,7 +349,7 @@ fun HomeReadingNowTab(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Text(
+                            com.example.ui.components.HomeSkeletonText(
                                 text = "Estatísticas",
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -376,14 +381,14 @@ fun HomeReadingNowTab(
                                 verticalAlignment = Alignment.Bottom,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
+                                com.example.ui.components.HomeSkeletonText(
                                     text = "${readComicsList.size}",
                                     fontSize = 24.sp,
                                     fontFamily = SpaceGroteskTabularFamily,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
                                 )
-                                Text(
+                                com.example.ui.components.HomeSkeletonText(
                                     text = "de ${profile.yearlyGoal} quadrinhos lidos",
                                     fontSize = 12.sp,
                                     color = s.textSecondary,
@@ -406,7 +411,7 @@ fun HomeReadingNowTab(
                                             .clip(CircleShape)
                                             .background(outerRingColor)
                                     )
-                                    Text(
+                                    com.example.ui.components.HomeSkeletonText(
                                         text = "Obras ($pct%)",
                                         fontSize = 10.5.sp,
                                         color = s.textSecondary,
@@ -423,7 +428,7 @@ fun HomeReadingNowTab(
                                             .clip(CircleShape)
                                             .background(innerRingColor)
                                     )
-                                    Text(
+                                    com.example.ui.components.HomeSkeletonText(
                                         text = "$totalPagesRead págs",
                                         fontSize = 10.5.sp,
                                         color = s.textSecondary,
@@ -436,7 +441,7 @@ fun HomeReadingNowTab(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
-                                Text(
+                                com.example.ui.components.HomeSkeletonText(
                                     text = "Ver Detalhes ›",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -445,7 +450,7 @@ fun HomeReadingNowTab(
                                     softWrap = false,
                                     modifier = Modifier.clickable { onOpenStatistics() }
                                 )
-                                Text(
+                                com.example.ui.components.HomeSkeletonText(
                                     text = "Ajustar meta",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
@@ -502,13 +507,13 @@ fun HomeReadingNowTab(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "Sua estante está pronta",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = s.textPrimary
                         )
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "Toque na lupa na barra inferior para pesquisar HQs e mangás online em tempo real ou cadastre manualmente.",
                             fontSize = 12.sp,
                             lineHeight = 18.sp,
@@ -532,7 +537,7 @@ fun HomeReadingNowTab(
                             tint = s.accentText,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "Buscar HQs Online",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -552,7 +557,7 @@ fun HomeReadingNowTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
+                        com.example.ui.components.HomeSkeletonText(
                             text = "Em leitura (${readingNowList.size})",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -587,13 +592,13 @@ fun HomeReadingNowTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                    com.example.ui.components.HomeSkeletonText(
                         text = "Recentes na Biblioteca",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textSecondary
                     )
-                    Text(
+                    com.example.ui.components.HomeSkeletonText(
                         text = "Ver todos (${comics.size})",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -697,7 +702,7 @@ private fun ComicGridCard(
                         .background(Color.Black.copy(alpha = 0.72f))
                         .padding(horizontal = 5.dp, vertical = 2.dp)
                 ) {
-                    Text(
+                    com.example.ui.components.HomeSkeletonText(
                         text = "#$issueNum",
                         fontSize = if (isCompact4Col) 8.5.sp else 9.5.sp,
                         fontFamily = SpaceGroteskTabularFamily,
@@ -723,7 +728,7 @@ private fun ComicGridCard(
             }
         }
 
-        Text(
+        com.example.ui.components.HomeSkeletonText(
             text = comic.title,
             fontSize = if (isCompact4Col) 11.sp else 12.sp,
             fontWeight = FontWeight.SemiBold,
@@ -750,7 +755,7 @@ private fun ComicGridCard(
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
                 }
-                Text(
+                com.example.ui.components.HomeSkeletonText(
                     text = comic.status.shortLabel,
                     fontSize = if (isCompact4Col) 9.sp else 10.sp,
                     color = s.textTertiary,

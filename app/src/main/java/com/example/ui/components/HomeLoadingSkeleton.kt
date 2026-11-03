@@ -1,52 +1,70 @@
 package com.example.ui.components
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.*
+import androidx.compose.ui.text.style.*
+import androidx.compose.ui.unit.*
+import com.example.model.*
+import com.example.ui.screens.HomeReadingNowTab
 import com.example.ui.theme.LocalAppMotion
 import com.example.ui.theme.LocalIOS27Theme
 
+internal val LocalHomeSkeleton = staticCompositionLocalOf<State<Float>?> { null }
+
 @Composable
-fun HomeLoadingSkeleton() {
-    val theme = LocalIOS27Theme.current
-    val reduced = LocalAppMotion.current.reduced
-    val pulse = if (reduced) remember { mutableFloatStateOf(0.65f) } else {
-        rememberInfiniteTransition(label = "collectionLoading").animateFloat(
-            0.4f, 0.8f,
-            infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "skeletonPulse"
-        )
+internal fun Modifier.homeSkeleton(verticalInset: Float = 0f): Modifier {
+    val pulse = LocalHomeSkeleton.current ?: return this
+    val color = LocalIOS27Theme.current.textSecondary
+    return this.clearAndSetSemantics {}.drawWithContent {
+        drawRoundRect(color.copy(alpha = 0.18f * pulse.value),
+            topLeft = androidx.compose.ui.geometry.Offset(0f, size.height * verticalInset),
+            size = androidx.compose.ui.geometry.Size(size.width, size.height * (1f - 2f * verticalInset)),
+            cornerRadius = CornerRadius(6.dp.toPx()))
     }
-    Column(
-        Modifier.fillMaxSize().background(theme.bgPrimary).statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 28.dp)
-            .semantics { contentDescription = "Preparando sua coleção" },
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        @Composable fun Placeholder(modifier: Modifier) {
-            Box(modifier.graphicsLayer { alpha = pulse.value }
-                .background(theme.textSecondary.copy(alpha = 0.14f), RoundedCornerShape(14.dp)))
-        }
-        Placeholder(Modifier.width(108.dp).height(16.dp))
-        Placeholder(Modifier.width(210.dp).height(32.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            Placeholder(Modifier.width(138.dp).height(204.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Placeholder(Modifier.fillMaxWidth().height(24.dp))
-                Placeholder(Modifier.fillMaxWidth(0.7f).height(16.dp))
-                Spacer(Modifier.height(72.dp))
-                Placeholder(Modifier.fillMaxWidth().height(40.dp))
-            }
-        }
-        Placeholder(Modifier.fillMaxWidth().height(48.dp))
-        Placeholder(Modifier.width(150.dp).height(20.dp))
-        repeat(2) { Placeholder(Modifier.fillMaxWidth().height(68.dp)) }
+}
+
+@Composable
+internal fun HomeSkeletonBlock(modifier: Modifier) { Box(modifier.homeSkeleton()) }
+
+/** Measures the real Home components; only their foreground drawing is replaced. */
+@Composable
+fun HomeLoadingSkeleton(comics: List<ComicEntry>, profile: ReaderProfile, appSettings: AppSettings) {
+    val pulse = if (LocalAppMotion.current.reduced) remember { mutableFloatStateOf(0.7f) } else {
+        rememberInfiniteTransition(label = "homeLoading").animateFloat(0.45f, 0.9f,
+            infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "homePlaceholder")
     }
+    val placeholders = remember {
+        List(6) { i -> ComicEntry("loading-$i", "", "Título do quadrinho", authors = "Autor da obra", publisher = "Editora",
+            status = if (i == 0) ReadingStatus.READING else ReadingStatus.WANT_TO_READ, pageCount = 160) }
+    }
+    CompositionLocalProvider(LocalHomeSkeleton provides pulse) {
+        HomeReadingNowTab(comics.ifEmpty { placeholders }, profile, appSettings, rememberLazyListState(),
+            onOpenSidebar = {}, onQuickRegister = {}, onOpenProfileSettings = {}, onGoToSearch = {},
+            onGoToShelf = {}, onSelectComic = {}, onQuickUpdateReadingPage = { _, _ -> })
+    }
+}
+
+@Composable
+internal fun HomeSkeletonText(
+    text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified, fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null, fontFamily: FontFamily? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified, textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null, lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true, maxLines: Int = Int.MAX_VALUE,
+    style: TextStyle = LocalTextStyle.current
+) {
+    Text(text, modifier.homeSkeleton(0.2f), color, fontSize, fontStyle, fontWeight, fontFamily,
+        letterSpacing, textDecoration, textAlign, lineHeight, overflow, softWrap, maxLines, style = style)
 }

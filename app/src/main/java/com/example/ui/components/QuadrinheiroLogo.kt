@@ -99,7 +99,7 @@ fun QuadrinheiroBrandText(
         color = Color.Transparent,
         maxLines = 1,
         softWrap = false,
-        modifier = modifier.drawWithContent {
+        modifier = modifier.homeSkeleton(0.2f).drawWithContent {
             val measuredW = brandTextPaint.measureText(text)
             val startX = (size.width - measuredW) / 2f
             val baselineY = size.height / 2f - (brandTextPaint.descent() + brandTextPaint.ascent()) / 2f

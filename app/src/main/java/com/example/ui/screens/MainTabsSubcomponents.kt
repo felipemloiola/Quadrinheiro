@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.homeSkeleton
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -152,6 +154,10 @@ fun DeferredLinearProgressBar(
     fillColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (com.example.ui.components.LocalHomeSkeleton.current != null) {
+        com.example.ui.components.HomeSkeletonBlock(modifier); return
+    }
+
     Box(
         modifier = modifier.drawWithCache {
             val cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
@@ -225,13 +231,13 @@ fun HomeReadingNowComicCard(
                     .fillMaxWidth()
                     .clickable { onSelectComic(item) }
             ) {
-                Text(
+                com.example.ui.components.HomeSkeletonText(
                     text = "${item.publisher.uppercase()} • $pct% CONCLUÍDO",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = s.textSecondary
                 )
-                Text(
+                com.example.ui.components.HomeSkeletonText(
                     text = item.title,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -239,7 +245,7 @@ fun HomeReadingNowComicCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
+                com.example.ui.components.HomeSkeletonText(
                     text = item.authors,
                     fontSize = 12.sp,
                     color = s.textSecondary,
@@ -263,7 +269,7 @@ fun HomeReadingNowComicCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
+                    com.example.ui.components.HomeSkeletonText(
                         text = "Pág. ${item.currentPage} de ${item.pageCount}",
                         fontSize = 11.sp,
                         fontFamily = SpaceGroteskTabularFamily,
@@ -272,6 +278,7 @@ fun HomeReadingNowComicCard(
                     )
 
                     AppleStepper(
+                        modifier = Modifier.homeSkeleton(0.16f),
                         value = item.currentPage,
                         min = 0,
                         max = item.pageCount.coerceAtLeast(1),
