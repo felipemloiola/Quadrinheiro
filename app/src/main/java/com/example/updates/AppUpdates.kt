@@ -8,6 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -258,7 +262,8 @@ fun CheckForUpdatesButton() {
     Text(
         text = if (UpdateSignals.downloading) "Baixando atualização…" else if (UpdateSignals.busy) "Verificando atualizações…" else "Versão ${BuildConfig.VERSION_NAME} · Verificar atualizações",
         color = theme.textSecondary,
-        modifier = Modifier.clickable(enabled = !UpdateSignals.busy && !UpdateSignals.downloading) {
+        fontSize = 12.sp,
+        modifier = Modifier.heightIn(min = 44.dp).wrapContentHeight().testTag("settings_update_button").clickable(enabled = !UpdateSignals.busy && !UpdateSignals.downloading) {
             UpdateSignals.requests.value = UpdateSignals.requests.value + 1
         }
     )

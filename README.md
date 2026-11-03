@@ -13,9 +13,10 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
 - **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o sistema. A leitura atual acompanha a HQ selecionada no aplicativo.
-- **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca e Exibição**.
+- **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca**.
 - **Compartilhamento:** cartões verticais de leitura concluída, momento e metas, com prévia, salvamento e compartilhamento pelo Android.
-- **Personalização e acessibilidade:** cores, aparência, tamanho do texto, contraste, transparência e movimento reduzido.
+- **Personalização e acessibilidade:** cores, fundo do ícone no launcher, aparência, tamanho do texto, contraste, transparência e movimento reduzido.
+- **Armazenamento:** medição dos dados locais e limpeza de cache em Ajustes, preservando biblioteca, contas e backups. Capas e respostas HTTP têm limites separados de 64 e 16 MiB.
 - **Atualizações:** download dentro do aplicativo, verificação do pacote e abertura do instalador do Android.
 
 ## Instalação e compatibilidade

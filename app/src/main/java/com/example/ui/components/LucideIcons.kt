@@ -5,6 +5,18 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 
 /**
  * Authentic Apple SF Symbols icons from icons.zip.
@@ -192,8 +204,8 @@ object LucideIcons {
     }
 
     // Aliases mapped accurately to their true SF Symbol shapes
-    val Sliders: ImageVector get() = Settings
-    val SlidersHorizontal: ImageVector get() = Settings
+    val Sliders: ImageVector get() = Icons.Default.Tune
+    val SlidersHorizontal: ImageVector get() = Icons.Default.Tune
     val Gear: ImageVector get() = Settings
     val GearFilled: ImageVector get() = Settings
     val SearchIcon: ImageVector get() = Search
@@ -202,28 +214,28 @@ object LucideIcons {
     val BookOpenFilled: ImageVector get() = OpenBookFilled
     val ShelfFilled: ImageVector get() = OpenBookFilled
     val Book: ImageVector get() = BookClosed
-    val Library: ImageVector get() = BookClosed
+    val Library: ImageVector get() = BooksVertical
     val LibraryFilled: ImageVector get() = BooksVertical
-    val Layers: ImageVector get() = BookClosed
+    val Layers: ImageVector get() = Icons.Default.Layers
     val Shelf: ImageVector get() = BookClosed
     val SingleBook: ImageVector get() = DocumentUpload
     val BookFilled: ImageVector get() = DocumentUploadFilled
     val Upload: ImageVector get() = DocumentUpload
-    val CheckCircle: ImageVector get() = FilterCircle
-    val CheckCircleFilled: ImageVector get() = FilterCircleFilled
-    val CloseCircle: ImageVector get() = Globe
-    val ChevronRight: ImageVector get() = SidebarLeft
+    val CheckCircle: ImageVector get() = Icons.Default.CheckCircle
+    val CheckCircleFilled: ImageVector get() = Icons.Default.CheckCircle
+    val CloseCircle: ImageVector get() = Icons.Default.Cancel
+    val ChevronRight: ImageVector get() = Icons.AutoMirrored.Filled.KeyboardArrowRight
     val PanelLeft: ImageVector get() = SidebarLeft
-    val Check: ImageVector get() = ArrowLeft
-    val Checkmark: ImageVector get() = ArrowLeft
-    val Close: ImageVector get() = PhotoCircle
-    val X: ImageVector get() = PhotoCircle
+    val Check: ImageVector get() = Icons.Default.Check
+    val Checkmark: ImageVector get() = Icons.Default.Check
+    val Close: ImageVector get() = Icons.Default.Close
+    val X: ImageVector get() = Icons.Default.Close
     val StarOutline: ImageVector get() = Star
-    val Sparkles: ImageVector get() = Star
-    val Grid: ImageVector get() = Star
-    val GridFilled: ImageVector get() = StarFilled
-    val Grid3x2: ImageVector get() = StarHalf
-    val Maximize2: ImageVector get() = FilterCircle
+    val Sparkles: ImageVector get() = Icons.Default.AutoAwesome
+    val Grid: ImageVector get() = Icons.Default.GridView
+    val GridFilled: ImageVector get() = Icons.Default.GridView
+    val Grid3x2: ImageVector get() = Icons.Default.ViewModule
+    val Maximize2: ImageVector get() = Icons.Default.OpenInFull
 
     // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS)
     val ShareIos: ImageVector by lazy {

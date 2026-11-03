@@ -1062,19 +1062,17 @@ private fun CoverShimmerPlaceholder(
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val themeColors = com.example.ui.theme.LocalIOS27Theme.current
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "coverShimmerTransition")
-    val shimmerProgress = if (motion.reduced) 0f else transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 2f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = motion.tween(
-                durationMillis = 1350,
-                easing = androidx.compose.animation.core.LinearEasing
-            ),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Restart
-        ),
-        label = "coverShimmerSweep"
-    ).value
+    val phase = remember { androidx.compose.runtime.mutableFloatStateOf(-1f) }
+    LaunchedEffect(motion.reduced) {
+        if (motion.reduced) { phase.floatValue = 0f; return@LaunchedEffect }
+        val start = androidx.compose.runtime.withFrameNanos { it }
+        while (true) {
+            val elapsed = androidx.compose.runtime.withFrameNanos { (it - start) / 1_000_000L }
+            if (elapsed >= 6000L) break
+            phase.floatValue = -1f + (elapsed % 1350L) / 1350f * 3f
+        }
+        phase.floatValue = .15f
+    }
 
     // Cores derivadas do tema com saturação suavizada (blend translúcido com branco editorial)
     val softPrimaryTint = remember(themeColors.accent) {
@@ -1091,7 +1089,7 @@ private fun CoverShimmerPlaceholder(
         val w = size.width.coerceAtLeast(1f)
         val h = size.height.coerceAtLeast(1f)
         val bandWidth = w * 0.85f
-        val startX = shimmerProgress * w
+        val startX = phase.floatValue * w
 
         // Camada base translúcida com saturação suave do tema
         drawRect(color = ambientBaseTint)
@@ -2597,245 +2595,8 @@ fun SettingsSquircleIcon(
  * 6. IOS27LiquidGlassController (Compacto e adaptável ao tema selecionado, como na referência do iOS 27).
  */
 @Composable
-fun IOS27LiquidGlassController(
-    glassLevel: Int,
-    onChangeGlassLevel: (Int) -> Unit,
-    edgeRefraction: Boolean,
-    glassVariant: String
-) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-    val density = LocalDensity.current
-
-    val variantOffset = if (glassVariant == "frosted") 0.38f else 0.08f
-    val ratio = (glassLevel / 100f).coerceIn(0f, 1f)
-    val centerFillAlpha = min(0.86f, 0.14f + variantOffset + ratio.pow(1.15f) * 0.70f)
-    val lakeLensFill = if (s.isLight) {
-        Color.White.copy(alpha = centerFillAlpha)
-    } else {
-        s.gradLinearMid.copy(alpha = (centerFillAlpha * 0.85f).coerceIn(0.16f, 0.82f))
-    }
-    val lensBlurDp = (if (glassVariant == "frosted") 15f + ratio * 8.5f else 1.5f + ratio * 8.5f).dp
-
-    val cardBgColor = if (s.isLight) {
-        s.gradLinearMid
-    } else {
-        s.gradLinearStart
-    }
-
-    @Composable
-    fun LakeBackgroundContent(
-        textColor: Color = s.textPrimary.copy(alpha = 0.86f),
-        titleColor: Color = s.textPrimary
-    ) {
-        Column {
-            Text(
-                text = "O lago",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = titleColor,
-                letterSpacing = (-0.4).sp
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = "With gentle lapping waves and a surrounding of trees, it's one of the most serene spots on campus.",
-                fontSize = 13.5.sp,
-                lineHeight = 18.sp,
-                color = textColor
-            )
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(4.dp, RoundedCornerShape(20.dp))
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(cardBgColor, s.baseBg)
-                    )
-                )
-                .border(0.6.dp, mat.contentMaterialBorder, RoundedCornerShape(20.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                LakeBackgroundContent()
-            }
-
-            val controlsTopOffsetDp = 24.dp
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = controlsTopOffsetDp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .shadow(8.dp, CircleShape, spotColor = Color.Black.copy(alpha = if (s.isLight) 0.16f else 0.45f))
-                        .clip(CircleShape)
-                        .background(lakeLensFill)
-                        .drawWithContent {
-                            drawContent()
-                            drawOpticalGlassMeniscus(
-                                cornerRadiusPx = size.height / 2f,
-                                isLight = s.isLight,
-                                edgeRefraction = edgeRefraction,
-                                cyanDispersionStrength = (1f - ratio * 0.45f) * 0.55f
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.5.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(16.dp)
-                                .height(2.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(s.textPrimary)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(12.dp)
-                                .height(2.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(s.textPrimary)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(14.dp)
-                                .height(2.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(s.textPrimary)
-                        )
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp)
-                        .shadow(8.dp, RoundedCornerShape(999.dp), spotColor = Color.Black.copy(alpha = if (s.isLight) 0.16f else 0.45f))
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(lakeLensFill)
-                        .drawWithContent {
-                            drawContent()
-                            drawOpticalGlassMeniscus(
-                                cornerRadiusPx = size.height / 2f,
-                                isLight = s.isLight,
-                                edgeRefraction = edgeRefraction,
-                                cyanDispersionStrength = (1f - ratio * 0.45f) * 0.55f
-                            )
-                        }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = s.textPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "Search",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = s.textSecondary
-                        )
-                    }
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .contentMaterialSurface(RoundedCornerShape(20.dp), elevation = 3.dp)
-                .padding(horizontal = 14.dp, vertical = 8.dp)
-        ) {
-            AppleSlider(
-                value = glassLevel.toFloat(),
-                min = 0f,
-                max = 100f,
-                step = 1f,
-                ticks = listOf(0f, 33f, 66f, 100f),
-                lightSurface = s.isLight,
-                accentColor = s.accentColor,
-                onChange = { v ->
-                    onChangeGlassLevel(v.roundToInt())
-                },
-                leadingIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clickable { onChangeGlassLevel(0) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.size(22.dp, 18.dp)) {
-                            drawRoundRect(
-                                color = s.textSecondary,
-                                topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
-                                size = Size(12.dp.toPx(), 9.dp.toPx()),
-                                cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
-                                style = Stroke(width = 1.5.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = s.textSecondary,
-                                topLeft = Offset(7.dp.toPx(), 6.dp.toPx()),
-                                size = Size(12.dp.toPx(), 9.dp.toPx()),
-                                cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx()),
-                                style = Stroke(width = 1.5.dp.toPx())
-                            )
-                        }
-                    }
-                },
-                trailingIcon = {
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clickable { onChangeGlassLevel(100) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.size(22.dp, 18.dp)) {
-                            drawRoundRect(
-                                color = s.textSecondary.copy(alpha = 0.68f),
-                                topLeft = Offset(2.dp.toPx(), 2.dp.toPx()),
-                                size = Size(12.dp.toPx(), 9.dp.toPx()),
-                                cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx())
-                            )
-                            drawRoundRect(
-                                color = s.textSecondary,
-                                topLeft = Offset(7.dp.toPx(), 6.dp.toPx()),
-                                size = Size(12.dp.toPx(), 9.dp.toPx()),
-                                cornerRadius = CornerRadius(2.5.dp.toPx(), 2.5.dp.toPx())
-                            )
-                        }
-                    }
-                }
-            )
-        }
-
-        Text(
-            text = "Clear é mais transparente e Tinted aumenta a opacidade, adicionando contraste ao conteúdo e controles.",
-            fontSize = 11.5.sp,
-            lineHeight = 16.sp,
-            color = s.textSecondary,
-            modifier = Modifier.padding(horizontal = 6.dp)
-        )
-    }
+fun IOS27LiquidGlassController(glassLevel: Int, onChangeGlassLevel: (Int) -> Unit, edgeRefraction: Boolean, glassVariant: String) {
+    GlassLevelPreview(glassLevel, onChangeGlassLevel, edgeRefraction)
 }
 
 /**

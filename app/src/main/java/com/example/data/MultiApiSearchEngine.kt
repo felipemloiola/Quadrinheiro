@@ -93,7 +93,7 @@ class MultiApiSearchEngine {
             isCacheInitialized = true
             try {
                 val httpCacheDir = java.io.File(context.cacheDir, "quadrinheiro_http_cache")
-                val httpCache = okhttp3.Cache(httpCacheDir, 32L * 1024L * 1024L)
+                val httpCache = okhttp3.Cache(httpCacheDir, 16L * 1024L * 1024L)
                 sharedHttpClient = sharedHttpClient.newBuilder()
                     .cache(httpCache)
                     .build()

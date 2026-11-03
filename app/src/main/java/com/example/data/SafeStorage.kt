@@ -63,6 +63,7 @@ class SafeStorage(context: Context) {
     fun setItem(key: String = STORAGE_KEY, value: String) {
         memoryFallback[key] = value
         try {
+            if (prefs?.getString(key, null) == value) return
             prefs?.edit()?.putString(key, value)?.apply()
         } catch (_: Throwable) {
         }

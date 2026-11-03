@@ -81,3 +81,14 @@ Referências desta revisão: [materiais](https://developer.apple.com/design/huma
 As mudanças de estabilidade tratam riscos observados no código. Um teste de estresse em emulador não identifica sozinho a causa de todo crash no aparelho Samsung; não há stack trace do aparelho do usuário nesta revisão.
 
 Referências: [menus](https://developer.apple.com/design/human-interface-guidelines/menus), [toggles](https://developer.apple.com/design/human-interface-guidelines/toggles), [materiais](https://developer.apple.com/design/human-interface-guidelines/materials), [Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219/), [GraphicsLayer](https://developer.android.com/reference/kotlin/androidx/compose/ui/graphics/layer/GraphicsLayer).
+
+## Revisão de ajustes, materiais e consumo contínuo
+
+- **Ajustes:** nomes curtos em uma linha e descrições específicas. Voltar mantém símbolo, forma e alvo de 44 dp durante a rolagem. Biblioteca e ordenação voltam à mesma linha, com intervalo explícito. A marca do rodapé mantém moldura de 42 dp, amplia somente o Q e apresenta a atualização abaixo da descrição.
+- **Liquid Glass:** o nível passa a modificar desfoque, opacidade e intensidade dos materiais efetivos. A prévia usa uma fonte própria de conteúdo; Padrão e Fosco continuam distintos. Os controles interativos mantêm refração e molas.
+- **Aparência:** seleção do fundo do ícone com a paleta existente, preservando o Q multicolorido. A opção padrão acompanha claro/escuro; cores fixas dispensam o trabalho periódico de sincronização de tema.
+- **Iluminação:** a capa ocupa somente a metade superior, com fade completo até a cor de fundo no limite. A imagem decorativa usa resolução reduzida e dispensa blur de tela inteira.
+- **Armazenamento:** capas limitadas a 64 MiB e respostas HTTP a 16 MiB, substituindo os limites anteriores de 96/32 MiB. Ajustes mede cache e dados locais, com limpeza dos caches recuperáveis pelas APIs dos respectivos motores. Biblioteca, contas, backups e dados pendentes do Firestore são preservados.
+- **Processamento:** o placeholder de capas encerra sua animação após o feedback inicial. O prefetch limita-se a seis capas e cancela pedidos anteriores; escritas idênticas não são repetidas. A reserva de shaders passa de oito para uma instância por programa, mantendo a propriedade exclusiva das instâncias mutáveis. Estas mudanças reduzem trabalho evitável; temperatura física e consumo de bateria no Samsung não foram medidos pelo emulador.
+
+Referências: [toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars), [layout](https://developer.apple.com/design/human-interface-guidelines/layout), [materiais](https://developer.apple.com/design/human-interface-guidelines/materials), [activity-alias](https://developer.android.com/guide/topics/manifest/activity-alias-element).

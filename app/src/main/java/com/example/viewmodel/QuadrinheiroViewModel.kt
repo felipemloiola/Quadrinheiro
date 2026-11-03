@@ -233,6 +233,8 @@ class QuadrinheiroViewModel(
     val usernameVerification: StateFlow<UsernameVerificationState> = _usernameVerification.asStateFlow()
     private var handleCheckJob: Job? = null
     private var persistJob: Job? = null
+    private val pendingCoverPrefetches = mutableListOf<coil.request.Disposable>()
+    private var coverPrefetchStopped = false
     private var cloudProfileSaveJob: Job? = null
 
     // Shelf (Biblioteca) states: "shelf" (Estante inicial) vs "diary" (Diário)
@@ -1258,13 +1260,17 @@ class QuadrinheiroViewModel(
         }
     }
 
+    @Synchronized
     private fun prefetchCovers(items: List<ComicEntry>) {
+        if (coverPrefetchStopped) return
+        pendingCoverPrefetches.forEach { it.dispose() }
+        pendingCoverPrefetches.clear()
         if (items.isEmpty()) return
         val loader = appContext.imageLoader
         val isHd = _appSettings.value.hdCovers
         val targetW = if (isHd) 200 else 140
         val targetH = (targetW * 1.5f).toInt()
-        items.forEach { item ->
+        items.distinctBy { it.coverUrl }.take(6).forEach { item ->
             val url = item.coverUrl.trim().replace("http://", "https://")
             if (url.startsWith("https://")) {
                 val req = ImageRequest.Builder(appContext)
@@ -1277,9 +1283,17 @@ class QuadrinheiroViewModel(
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .build()
-                loader.enqueue(req)
+                pendingCoverPrefetches.add(loader.enqueue(req))
             }
         }
+    }
+
+    @Synchronized
+    override fun onCleared() {
+        coverPrefetchStopped = true
+        pendingCoverPrefetches.forEach { it.dispose() }
+        pendingCoverPrefetches.clear()
+        super.onCleared()
     }
 
     private fun persistAll(ownerUid: String? = null, sessionChanged: Boolean = false) {

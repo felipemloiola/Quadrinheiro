@@ -35,7 +35,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
                     .diskCache {
                         DiskCache.Builder()
                             .directory(this.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                            .maxSizeBytes(96L * 1024L * 1024L)
+                            .maxSizeBytes(64L * 1024L * 1024L)
                             .build()
                     }
                     .crossfade(50)

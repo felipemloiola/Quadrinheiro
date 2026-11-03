@@ -51,7 +51,7 @@ object LiquidGlassShaderPrewarmer {
     @androidx.annotation.RequiresApi(33)
     private fun fill(source: String) {
         val queue = pools.getOrPut(source) { java.util.concurrent.ConcurrentLinkedQueue() }
-        repeat((8 - queue.size).coerceAtLeast(0)) {
+        repeat((1 - queue.size).coerceAtLeast(0)) {
             runCatching { android.graphics.RuntimeShader(source) }.getOrNull()?.let(queue::offer)
         }
     }

@@ -63,6 +63,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
@@ -255,7 +256,7 @@ fun SettingsTabScreen(
                 start = 16.dp,
                 end = 16.dp,
                 top = if (settingsSubPage != null) 64.dp else 12.dp,
-                bottom = 88.dp
+                bottom = if (comics.any { it.status == ReadingStatus.READING }) 192.dp else 128.dp
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -367,7 +368,7 @@ fun SettingsTabScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Aparência e materiais ópticos",
+                        text = "Aparência",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textSecondary,
@@ -392,9 +393,9 @@ fun SettingsTabScreen(
                         HorizontalDivider(color = themeColors.divider, thickness = 0.5.dp)
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.AccessibilityNew, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
-                            title = "Acessibilidade e Contraste",
-                            subtitle = null,
-                            trailingValue = if (appSettings.reduceTransparency || appSettings.increaseContrast || appSettings.boldText) "Personalizado" else "Padrão",
+                            title = "Acessibilidade",
+                            subtitle = "Texto, contraste e movimento",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -422,9 +423,9 @@ fun SettingsTabScreen(
                     ) {
                         SettingsMenuRow(
                             icon = { Icon(LucideIcons.Layers, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
-                            title = "Biblioteca e Exibição",
-                            subtitle = null,
-                            trailingValue = "${appSettings.shelfColumns} colunas",
+                            title = "Biblioteca",
+                            subtitle = "Estante, capas e acompanhamento",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -434,9 +435,9 @@ fun SettingsTabScreen(
                         HorizontalDivider(color = themeColors.divider, thickness = 0.5.dp)
                         SettingsMenuRow(
                             icon = { Icon(LucideIcons.Calendar, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
-                            title = "Diário e Resenhas",
-                            subtitle = null,
-                            trailingValue = if (appSettings.spoilerProtection) "Spoilers ocultos" else "Padrão",
+                            title = "Diário",
+                            subtitle = "Avaliações, resenhas e spoilers",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -446,13 +447,9 @@ fun SettingsTabScreen(
                         HorizontalDivider(color = themeColors.divider, thickness = 0.5.dp)
                         SettingsMenuRow(
                             icon = { Icon(LucideIcons.Globe, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
-                            title = "Catálogo e Busca",
-                            subtitle = null,
-                            trailingValue = when (appSettings.searchProvider) {
-                                "MULTI" -> "Global"
-                                "MANGA" -> "Mangás"
-                                else -> "Quadrinhos"
-                            },
+                            title = "Busca",
+                            subtitle = "Fontes e idioma do catálogo",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -479,10 +476,10 @@ fun SettingsTabScreen(
                             .contentMaterialSurface(RoundedCornerShape(24.dp))
                     ) {
                         SettingsMenuRow(
-                            icon = { Icon(LucideIcons.Upload, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
-                            title = "Backup e Armazenamento",
-                            subtitle = null,
-                            trailingValue = "${comics.size} ${if (comics.size == 1) "obra" else "obras"}",
+                            icon = { Icon(Icons.Outlined.Storage, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
+                            title = "Armazenamento",
+                            subtitle = "Backups, dados locais e cache",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -501,13 +498,11 @@ fun SettingsTabScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    QuadrinheiroLogo(
-                        // SETTINGS_LOGO_ADAPTIVE_V8
-                        adaptiveBadgeBackground = true,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                    )
+                    Box(Modifier.size(42.dp).testTag("settings_footer_icon").clip(RoundedCornerShape(12.dp))
+                        .background(if (themeColors.isDark) Color.Black else themeColors.bgPrimary), contentAlignment = Alignment.Center) {
+                        QuadrinheiroLogo(variant = com.example.ui.components.QuadrinheiroLogoVariant.Primary,
+                            modifier = Modifier.size(34.dp).testTag("settings_footer_mark"))
+                    }
                     com.example.ui.components.QuadrinheiroBrandText(
                         text = "Quadrinheiro",
                         fontSize = 17.sp,
@@ -519,6 +514,9 @@ fun SettingsTabScreen(
                         color = themeColors.textTertiary,
                         textAlign = TextAlign.Center
                     )
+                    // APP_UPDATES_SETTINGS_V1: keep the release control below the brand description.
+                    com.example.updates.CheckForUpdatesButton()
+
                 }
             }
         } else {
@@ -529,7 +527,7 @@ fun SettingsTabScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             Column {
                                 Text(
-                                    text = "Acabamento óptico do sistema",
+                                    text = "Aparência dos controles",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = s.textSecondary
@@ -913,10 +911,12 @@ fun SettingsTabScreen(
                                 }
                             }
 
+                            com.example.ui.components.LauncherIconPicker()
+
                             // 3. Menu Exclusivo do Liquid Glass dentro de Aparência
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "Refração e opacidade do sistema",
+                                    text = "Materiais",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = s.textSecondary,
@@ -928,9 +928,9 @@ fun SettingsTabScreen(
                                         .contentMaterialSurface(RoundedCornerShape(24.dp))
                                 ) {
                                     SettingsMenuRow(
-                                        icon = { Icon(LucideIcons.Sparkles, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
+                                        icon = { Icon(Icons.Default.Tune, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                                         title = "Liquid Glass",
-                                        subtitle = "Regulador Clear vs. Tinted, refração de borda e lente transiente",
+                                        subtitle = "Transparência, desfoque e refração",
                                         trailingValue = "${appSettings.glassLevel}%",
                                         onClick = {
                                             viewModel.scrollMemory[routeKey] =
@@ -956,7 +956,7 @@ fun SettingsTabScreen(
                                     color = s.textSecondary
                                 )
                                 Text(
-                                    text = "Acessibilidade e Contraste",
+                                    text = "Acessibilidade",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
@@ -1112,7 +1112,7 @@ fun SettingsTabScreen(
                                     color = s.textSecondary
                                 )
                                 Text(
-                                    text = "Biblioteca e Exibição",
+                                    text = "Biblioteca",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
@@ -1257,7 +1257,7 @@ fun SettingsTabScreen(
                                     color = s.textSecondary
                                 )
                                 Text(
-                                    text = "Diário e Resenhas",
+                                    text = "Diário",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
@@ -1426,7 +1426,7 @@ fun SettingsTabScreen(
                                     color = s.textSecondary
                                 )
                                 Text(
-                                    text = "Catálogo e Busca",
+                                    text = "Busca",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
@@ -2104,17 +2104,18 @@ fun SettingsTabScreen(
 
                 // SUB-TELA 8: BACKUP E ARMAZENAMENTO
                 "backupConfig" -> {
+                    item { StorageSettingsCard() }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             Column {
                                 Text(
-                                    text = "Persistência e sincronização",
+                                    text = "Seus dados",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = s.textSecondary
                                 )
                                 Text(
-                                    text = "Backup e Armazenamento",
+                                    text = "Armazenamento",
                                     fontSize = 28.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = s.textPrimary
@@ -2254,139 +2255,9 @@ fun SettingsTabScreen(
             }
         }
 
-        // Botão Voltar fixo na parte superior estilo Ajustes do iOS:
-        // - No topo da tela: exibe o ícone "<" junto com o nome da página anterior (ex: "Ajustes" ou "Aparência").
-        // - Ao rolar a tela: desaparece suavemente enquanto o usuário rola e reaparece quando a rolagem para.
-        // - Fora do topo: a escrita recolhe com animação suave, mantendo apenas o ícone em uma bolinha Liquid Glass.
         if (settingsSubPage != null) {
-            val isAtTop by remember {
-                derivedStateOf {
-                    listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 28
-                }
-            }
-            val isScrolling = listState.isScrollInProgress
-
-            val previousPageLabel = remember(settingsParentPage) {
-                when (settingsParentPage) {
-                    "appearance" -> "Aparência"
-                    "liquidGlass" -> "Liquid Glass"
-                    "accessibility" -> "Acessibilidade"
-                    "libraryConfig" -> "Biblioteca"
-                    "diaryConfig" -> "Diário"
-                    "searchConfig" -> "Catálogo"
-                    "profile" -> "Meu Perfil"
-                    "backupConfig" -> "Backup"
-                    else -> "Ajustes"
-                }
-            }
-
-            val backBtnAlpha by animateFloatAsState(
-                targetValue = if (isScrolling) 0f else 1f,
-                animationSpec = motion.spring(
-                    dampingRatio = 1f,
-                    stiffness = if (isScrolling) 420f else 260f
-                ),
-                label = "iosBackBtnAlpha"
-            )
-            val backBtnScale by animateFloatAsState(
-                targetValue = if (isScrolling) 0.86f else 1f,
-                animationSpec = motion.spring(
-                    dampingRatio = 0.82f,
-                    stiffness = 320f
-                ),
-                label = "iosBackBtnScale"
-            )
-            val startPadDp by animateDpAsState(
-                targetValue = if (isAtTop) 10.dp else 10.dp,
-                animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f),
-                label = "iosBackBtnStartPad"
-            )
-            val endPadDp by animateDpAsState(
-                targetValue = if (isAtTop) 15.dp else 10.dp,
-                animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f),
-                label = "iosBackBtnEndPad"
-            )
-
-            val pillShape = RoundedCornerShape(999.dp)
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = 12.dp)
-                    .height(42.dp)
-                    .graphicsLayer {
-                        alpha = backBtnAlpha
-                        scaleX = backBtnScale
-                        scaleY = backBtnScale
-                        translationY = (1f - backBtnAlpha) * -10f
-                    }
-                    .shadow(
-                        elevation = 10.dp * backBtnAlpha,
-                        shape = pillShape,
-                        spotColor = s.accentColor.copy(alpha = if (s.isLight) 0.14f else 0.28f)
-                    )
-                    .clip(pillShape)
-                    .border(
-                        width = 1.2.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.30f),
-                                Color.Transparent
-                            ),
-                            start = Offset(0f, 0f),
-                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                        ),
-                        shape = pillShape
-                    )
-                    .clickable(enabled = !isScrolling && backBtnAlpha > 0.15f) {
-                        viewModel.goBackSettings()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .liquidGlass(shape = pillShape, elevation = 10.dp)
-                )
-                Row(
-                    modifier = Modifier.padding(start = startPadDp, end = endPadDp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Voltar para $previousPageLabel",
-                        tint = s.textPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    AnimatedVisibility(
-                        visible = isAtTop,
-                        enter = fadeIn(
-                            animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
-                        ) + expandHorizontally(
-                            expandFrom = Alignment.Start,
-                            animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 320f)
-                        ),
-                        exit = fadeOut(
-                            animationSpec = motion.spring(stiffness = Spring.StiffnessMedium)
-                        ) + shrinkHorizontally(
-                            shrinkTowards = Alignment.Start,
-                            animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 340f)
-                        )
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = previousPageLabel,
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = s.textPrimary,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsBackButton(onBack = viewModel::goBackSettings,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp))
         }
 
         pendingCropBitmap?.let { bmpToCrop ->
@@ -2432,6 +2303,8 @@ private fun SettingsMenuRow(
                 Text(
                     text = title,
                     fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Medium,
                     color = themeColors.textPrimary
                 )

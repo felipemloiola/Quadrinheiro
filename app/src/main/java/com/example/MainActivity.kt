@@ -79,6 +79,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -472,6 +473,8 @@ fun QuadrinheiroApp(
     }
 
     QuadrinheiroTheme(settings = appSettings) {
+        // APP_UPDATES_HOST_V1: identical updater host in local and release builds.
+        com.example.updates.AppUpdatePrompt()
         if (isLoggingOut) {
             SessionTransitionScreen("Saindo da conta…")
             return@QuadrinheiroTheme
@@ -708,17 +711,14 @@ fun QuadrinheiroApp(
                                             animatedGlowColor.copy(alpha = topGlowAlpha),
                                             Color.Transparent
                                         ),
-                                        center = Offset(size.width * 0.32f, size.height * 0.22f),
-                                        radius = size.maxDimension * 0.82f
-                                    )
+                                        center = Offset(size.width * 0.32f, size.height * 0.10f),
+                                        radius = size.height * 0.40f
+                                    ),
+                                    size = Size(size.width, size.height * .5f)
                                 )
                             }
 
-                            val bottomGlowColor = if (currentlyReadingComic != null && appSettings.backgroundExtension) {
-                                animatedGlowColor
-                            } else {
-                                animatedAccentColor
-                            }
+                            val bottomGlowColor = animatedAccentColor
                             drawRect(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
@@ -734,50 +734,7 @@ fun QuadrinheiroApp(
                         // B. A própria imagem da HQ em leitura como iluminação difusa perceptível e elegante
                         // Desfoque orgânico de 14.dp + opacidade calibrada (32% em ambos os modos claro e escuro) para iluminação ambiente viva e equilibrada
                         if (hasReadingCoverBg) {
-                            val bgCoverRequest = remember(resolvedCoverUrl, context) {
-                                ImageRequest.Builder(context)
-                                    .data(resolvedCoverUrl)
-                                    .size(28, 42)
-                                    .precision(coil.size.Precision.INEXACT)
-                                    .crossfade(false)
-                                    .allowHardware(true)
-                                    .allowRgb565(true)
-                                    .memoryCacheKey(resolvedCoverUrl + "_ambient")
-                                    .diskCacheKey(resolvedCoverUrl + "_ambient")
-                                    .memoryCachePolicy(CachePolicy.ENABLED)
-                                    .diskCachePolicy(CachePolicy.ENABLED)
-                                    .build()
-                            }
-
-                            // Atmosfera difusa perceptível de tela inteira (iluminação cromática da capa em 32% no claro e no escuro)
-                            AsyncImage(
-                                model = bgCoverRequest,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        scaleX = 1.14f
-                                        scaleY = 1.14f
-                                    }
-                                    /* LAG_FIX_NO_FULLSCREEN_BLUR: 28x42 source is already soft when upscaled */
-                                    .alpha(0.18f)
-                            )
-
-                            // Véu de vinheta atmosférica mais translúcido no topo (24% em ambos os modos claro e escuro) para deixar a capa brilhar sem perder legibilidade
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                themeColors.bgPrimary.copy(alpha = 0.24f),
-                                                themeColors.bgPrimary.copy(alpha = if (isDark) 0.52f else 0.44f),
-                                                themeColors.bgPrimary.copy(alpha = if (isDark) 0.82f else 0.74f)
-                                            )
-                                        )
-                                    )
-                            )
+                            com.example.ui.components.ReadingCoverAtmosphere(resolvedCoverUrl, themeColors.bgPrimary)
                         }
                     }
 

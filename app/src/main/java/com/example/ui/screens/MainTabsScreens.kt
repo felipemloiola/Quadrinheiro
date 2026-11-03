@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -905,13 +906,14 @@ fun ShelfLibraryTab(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "shelf-header", contentType = "tab_header") {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text(
                             text = if (shelfSection == "shelf") "Acervo catalogado" else "Registro cronológico",
                             fontSize = 12.sp,
@@ -920,10 +922,12 @@ fun ShelfLibraryTab(
                         )
                         Text(
                             text = "Biblioteca",
-                            fontSize = 32.sp,
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = s.textPrimary,
-                            letterSpacing = (-0.5).sp
+                            letterSpacing = (-0.5).sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -933,6 +937,7 @@ fun ShelfLibraryTab(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             AppleMenuPicker(
+                                modifier = Modifier.widthIn(max = 144.dp),
                                 value = shelfSort,
                                 onChange = onChangeShelfSort,
                                 options = listOf(
