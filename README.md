@@ -10,9 +10,9 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 
 - **Início:** leitura atual, progresso e metas, com acesso rápido às suas histórias.
 - **Explorar:** recomendações baseadas nas leituras, avaliações e editora favorita; catálogo com carregamento por páginas e remoção de duplicatas. A aba Comunidade reúne publicações, avaliações, resenhas e comentários dos leitores.
-- **Perfil:** banner panorâmico com recorte, zoom e fade, foto, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos pesquisáveis em português e inglês. Biblioteca fica abaixo dos personagens; edição retorna ao Perfil. Favoritos e banner são preservados por conta e sincronizados.
+- **Perfil:** banner panorâmico com recorte, zoom e fade, foto, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos pesquisáveis em português e inglês. Biblioteca e catálogo ficam abaixo dos personagens; edição retorna ao Perfil. Favoritos e banner são preservados por conta e sincronizados.
 - **Biblioteca:** estante em grade ou lista, filtros de status, diário, tags, notas, resenhas e cadastro manual.
-- **Busca e catálogo:** Comic Vine para obras e edições, Superhero API para retratos e nomes de personagens. Cada HQ tem uma prévia e uma página completa com sinopse, dados editoriais, equipe, personagens, edições relacionadas e Comunidade. Os favoritos do perfil podem usar até seis imagens reais da fonte, incluindo capas da coleção e retratos alternativos; a disponibilidade depende da obra e do personagem.
+- **Busca e catálogo:** Metron para edições, paginação, créditos e capas, com Comic Vine como complemento e Superhero API para personagens. Cada HQ tem um formulário único de prévia e registro e uma página completa com sinopse, dados editoriais, equipe, personagens, edições relacionadas e Comunidade. Os favoritos do perfil podem usar até seis imagens reais da fonte, incluindo capas da coleção e retratos alternativos; a disponibilidade depende da obra e do personagem.
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
 - **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o tema escolhido no app. A leitura atual acompanha a HQ selecionada no aplicativo.
@@ -77,6 +77,7 @@ npm test
 npx wrangler login
 npx wrangler secret put COMIC_VINE_API_KEY
 npx wrangler secret put SUPERHERO_API_KEY
+npx wrangler secret put METRON_API_KEY
 npx wrangler secret put APIFY_API_TOKEN
 npm run deploy
 ```

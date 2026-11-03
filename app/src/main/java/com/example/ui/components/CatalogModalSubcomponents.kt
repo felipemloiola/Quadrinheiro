@@ -313,63 +313,9 @@ fun LiquidGlassSheetRefractiveLayer(
     sheetShape: Shape = RoundedRectangle(cornerRadiusDp.dp),
     modifier: Modifier = Modifier
 ) {
-    val mat = LocalAppleMaterials.current
-    val s = mat.scheme
-    val context = LocalContext.current
-    val rootBackdrop = rememberCurrentBackdrop()
-
-    Box(
-        modifier = modifier.fillMaxSize()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .liquidGlassRegistrationSheet(
-                    backdrop = rootBackdrop,
-                    cornerRadiusDp = cornerRadiusDp
-                )
-        )
-
-        Box(Modifier.fillMaxSize().background(com.example.ui.theme.LocalIOS27Theme.current.bgSecondary.copy(alpha = 0.92f)))
-
-        if (coverUrl.isNotBlank()) {
-            val cleanCover = remember(coverUrl) {
-                coverUrl.trim().replace("http://", "https://")
-            }
-            val blurredRequest = remember(cleanCover, context) {
-                ImageRequest.Builder(context)
-                    .data(cleanCover)
-                    .size(24, 36)
-                    .precision(coil.size.Precision.INEXACT)
-                    .crossfade(false)
-                    .allowHardware(true)
-                    .allowRgb565(true)
-                    .memoryCacheKey(cleanCover + "_sheet_amb")
-                    .diskCacheKey(cleanCover + "_sheet_amb")
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .build()
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        val scrollY = scrollOffsetProvider()
-                        val dragY = dragOffsetYProvider()
-                        scaleX = 1.15f
-                        scaleY = 1.18f
-                        translationY = (-scrollY * 0.04f + dragY * 0.08f).coerceIn(-28f, 28f)
-                    }
-                    .alpha(if (s.isLight) 0.05f else 0.07f)
-            ) {
-                AsyncImage(
-                    model = blurredRequest,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
+    val background=com.example.ui.theme.LocalIOS27Theme.current.bgSecondary
+    Box(modifier.fillMaxSize().background(background)) {
+        if(coverUrl.isNotBlank())ReadingCoverAtmosphere(coverUrl,background,fraction=.25f)
     }
 }
 
@@ -863,7 +809,7 @@ internal fun CatalogWorkSummaryHeader(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = listOfNotNull(draftComic.publisher.takeIf { it.isNotBlank() }, draftComic.releaseYear.toString(), draftComic.pageCount.takeIf { it > 1 || draftComic.sourceLabel != "Comic Vine" }?.let { "$it págs" }).joinToString(" • "),
+                text = listOfNotNull(draftComic.publisher.takeIf { it.isNotBlank() }, draftComic.releaseYear.toString(), draftComic.pageCount.takeIf { it > 1 }?.let { "$it págs" }).joinToString(" • "),
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = s.textSecondary

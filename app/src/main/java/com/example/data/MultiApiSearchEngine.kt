@@ -122,6 +122,6 @@ class MultiApiSearchEngine {
     suspend fun fetchCatalogPage(page:Int,favoriteUniverse:String):CatalogPage=ComicVineCatalog.catalog(page).also { ModernCatalog.accept(it.items) }
     suspend fun runOnlineApiDiagnostics():ApiDiagnosticsReport {
         val start=System.currentTimeMillis();val ok=runCatching{ComicVineCatalog.catalog(0)}.isSuccess
-        return ApiDiagnosticsReport(testedAt=SimpleDateFormat("HH:mm",Locale.getDefault()).format(Date()),totalMs=System.currentTimeMillis()-start,endpoints=listOf(ApiEndpointStatus("Comic Vine",ok,System.currentTimeMillis()-start)))
+        return ApiDiagnosticsReport(testedAt=SimpleDateFormat("HH:mm",Locale.getDefault()).format(Date()),totalMs=System.currentTimeMillis()-start,endpoints=listOf(ApiEndpointStatus("Catálogo",ok,System.currentTimeMillis()-start)))
     }
 }

@@ -43,7 +43,7 @@ service cloud.firestore {
     //   - genre: string (required, 0..120 chars)
     //   - format: string (required, 0..120 chars)
     //   - releaseYear: int (required, 1800..2100)
-    //   - pageCount: int (required, 1..20000)
+    //   - pageCount: int (required, 0..20000; 0 means unknown)
     //   - currentPage: int (required, 0..20000)
     //   - status: string (required, in ['READ', 'READING', 'WANT_TO_READ'])
     //   - rating: number (required, 0.0..5.0)
@@ -221,7 +221,7 @@ service cloud.firestore {
         data.genre is string && data.genre.size() <= 120 &&
         data.format is string && data.format.size() <= 120 &&
         data.releaseYear is int && data.releaseYear >= 1800 && data.releaseYear <= 2100 &&
-        data.pageCount is int && data.pageCount >= 1 && data.pageCount <= 20000 &&
+        data.pageCount is int && data.pageCount >= 0 && data.pageCount <= 20000 &&
         data.currentPage is int && data.currentPage >= 0 && data.currentPage <= data.pageCount &&
         data.status is string && (data.status in ['READ', 'READING', 'WANT_TO_READ']) &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&

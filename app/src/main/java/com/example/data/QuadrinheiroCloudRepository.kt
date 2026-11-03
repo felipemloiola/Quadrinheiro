@@ -389,7 +389,7 @@ data class CloudComicDocument(
             genre = genre.ifBlank { "Graphic Novel" },
             format = format.ifBlank { "Encadernado (TPB)" },
             releaseYear = releaseYear.coerceIn(1800, 2100),
-            pageCount = pageCount.coerceIn(1, 20000),
+            pageCount = pageCount.coerceIn(0, 20000),
             currentPage = currentPage.coerceIn(0, 20000),
             status = ReadingStatus.fromKey(status),
             rating = rating.toFloat().coerceIn(0f, 5f),
@@ -417,7 +417,7 @@ data class CloudComicDocument(
         fun fromComicEntry(uid: String, comic: ComicEntry): CloudComicDocument {
             val safeId = comic.id.ifBlank { comic.externalId.ifBlank { "hq-${System.currentTimeMillis()}" } }
                 .replace("/", "_")
-            val safePages = comic.pageCount.coerceIn(1, 20000)
+            val safePages = comic.pageCount.coerceIn(0, 20000)
             val resolvedTitle = comic.titlePtBr.ifBlank { comic.title }.trim().ifBlank { "Sem Título" }.take(300)
             val resolvedSynopsisPtBr = comic.synopsisPtBr.ifBlank {
                 if (comic.synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(comic.synopsis)) {
@@ -516,7 +516,7 @@ class QuadrinheiroCloudRepository(
     init {
         // Habilita Offline Persistence do Firestore (PersistentCacheSettings) para que leituras repetidas
         // venham do cache local sem custo de rede ou consumo desnecessário da cota diária.
-        runCatching {
+        if(db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings) runCatching {
             val cacheSettings = PersistentCacheSettings.newBuilder()
                 .setSizeBytes(100L * 1024L * 1024L) // 100 MB de cache persistente local
                 .build()
@@ -1206,4 +1206,5 @@ class QuadrinheiroCloudRepository(
         }
     }
 }
+
 

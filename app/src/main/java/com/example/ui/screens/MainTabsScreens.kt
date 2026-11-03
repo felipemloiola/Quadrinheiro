@@ -315,7 +315,7 @@ fun HomeReadingNowTab(
                 val outerRatio = (readComicsList.size.toFloat() / profile.yearlyGoal.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
                 val targetPagesYear = (profile.dailyPagesGoal.coerceAtLeast(5) * 30).toFloat()
                 val innerRatio = (totalPagesRead.toFloat() / targetPagesYear).coerceIn(0f, 1f)
-                val activeReadsRatio = ((readComicsList.size + readingNowList.size).toFloat() / 12f).coerceIn(0.08f, 1f)
+                val activeReadsRatio = ((readComicsList.size + readingNowList.size).toFloat() / 12f).coerceIn(0f, 1f)
                 val pct = (outerRatio * 100f).roundToInt().coerceIn(0, 100)
 
                 Column(

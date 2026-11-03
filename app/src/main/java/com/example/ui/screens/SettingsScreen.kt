@@ -343,10 +343,10 @@ fun SettingsTabScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Conta, sincronização na nuvem e perfil",
+                            text = "Conta e sincronização",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = themeColors.accent
+                            color = themeColors.accent,maxLines=1,overflow=TextOverflow.Ellipsis
                         )
                     }
                     Icon(
@@ -1414,7 +1414,7 @@ fun SettingsTabScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             Column {
                                 Text(
-                                    text = "Motores de busca de HQs e mangás na nuvem",
+                                    text = "Preferências de pesquisa",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = s.textSecondary
@@ -1439,7 +1439,7 @@ fun SettingsTabScreen(
                                     value = appSettings.searchProvider,
                                     onChange = { v -> viewModel.updateSettings { it.copy(searchProvider = v) } },
                                     options = listOf(
-                                        SegmentOption("MULTI", "Comic Vine")
+                                        SegmentOption("MULTI", "Catálogo online")
                                     )
                                 )
                             }
@@ -1531,7 +1531,7 @@ fun SettingsTabScreen(
                             // Diagnóstico ao Vivo das 4 APIs Públicas
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
-                                    text = "Status das APIs de quadrinhos",
+                                    text = "Conexão",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = s.textSecondary,
@@ -1562,13 +1562,13 @@ fun SettingsTabScreen(
                                             )
                                             Column {
                                                 Text(
-                                                    text = "Motor Multi-API Paralelo Ativo",
+                                                    text = "Pesquisa online",
                                                     fontSize = 13.5.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = s.textPrimary
                                                 )
                                                 Text(
-                                                    text = "Comic Vine · Superhero API",
+                                                    text = "Busca e informações editoriais",
                                                     fontSize = 11.5.sp,
                                                     color = s.textSecondary
                                                 )
@@ -1585,7 +1585,7 @@ fun SettingsTabScreen(
                                                 .padding(horizontal = 14.dp, vertical = 7.dp)
                                         ) {
                                             Text(
-                                                text = if (isTestingApis) "Testando..." else "Testar APIs",
+                                                text = if (isTestingApis) "Testando..." else "Verificar conexão",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = s.accentText

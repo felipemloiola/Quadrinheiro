@@ -1,1 +1,1 @@
-module.exports = require('./providers.cjs');
+module.exports = require('./service.cjs');

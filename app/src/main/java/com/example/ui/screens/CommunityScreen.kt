@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,13 @@ import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+private object CommunityMemory {
+    data class Snapshot(val page:CommunityPage<CommunityReview>,val revision:Long,val savedAt:Long=System.currentTimeMillis())
+    private val pages=object:LinkedHashMap<String,Snapshot>(8,.75f,true){override fun removeEldestEntry(e:MutableMap.MutableEntry<String,Snapshot>?)=size>8}
+    @Synchronized fun get(key:String)=pages[key]?.takeIf {System.currentTimeMillis()-it.savedAt<60000}
+    @Synchronized fun put(key:String,page:CommunityPage<CommunityReview>,revision:Long){pages[key]=Snapshot(page,revision)}
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, onLogin: () -> Unit, comic: ComicEntry? = null) {
@@ -37,19 +45,24 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
     }
     key(uid) {
         val scope = rememberCoroutineScope()
-        var posts by remember { mutableStateOf(emptyList<CommunityReview>()) }
+        val cacheKey=uid+":"+(comic?.let(::communityComicKey) ?: "feed")
+        val cached=remember(cacheKey){CommunityMemory.get(cacheKey)}
+        var posts by remember(cacheKey) { mutableStateOf(cached?.page?.items.orEmpty()) }
         var cursor by remember { mutableStateOf<CommunityCursor?>(null) }
         var more by remember { mutableStateOf(true) }
+        var attempted by remember {mutableStateOf(cached!=null)}
         var busy by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         var composing by remember { mutableStateOf(false) }
         var discussion by remember { mutableStateOf<CommunityReview?>(null) }
+        val publicationRevision by CommunityAutoSync.revision.collectAsState()
         fun load(refresh: Boolean = false) {
             if (busy) return
-            busy = true; error = null
+            attempted=true;busy = true; error = null
             scope.launch {
                 try {
-                    val page = repo.reviews(if (refresh) null else cursor, comic?.let(::communityComicKey))
+                    val page = kotlinx.coroutines.withTimeout(8000){repo.reviews(if (refresh) null else cursor, comic?.let(::communityComicKey))}
+                    if(refresh)CommunityMemory.put(cacheKey,page,publicationRevision)
                     if (repo.currentUid() == uid) {
                         posts = ((if (refresh) emptyList() else posts) + page.items).distinctBy { it.id }.takeLast(100)
                         cursor = page.cursor; more = page.hasMore
@@ -59,11 +72,28 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                 finally { busy = false }
             }
         }
-        val publicationRevision by CommunityAutoSync.revision.collectAsState()
-        LaunchedEffect(uid,publicationRevision,comic?.externalId) { load(true) }
+        LaunchedEffect(uid,publicationRevision,comic?.externalId) {
+            if(cached==null||cached.revision!=publicationRevision)load(true) else {cursor=cached.page.cursor;more=cached.page.hasMore}
+        }
         LazyColumn(Modifier.fillMaxSize().testTag("community_feed"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (posts.isEmpty() && !busy && error == null) item {
-                SectionHeading("A conversa começa com uma leitura", "As avaliações e resenhas salvas na biblioteca aparecem aqui automaticamente.")
+            if (posts.isEmpty() && attempted && !busy && error == null) item {
+                Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=48.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){
+                    Icon(Icons.Default.ChatBubbleOutline,null,tint=t.textSecondary,modifier=Modifier.size(32.dp))
+                    Text("Sem avaliações por enquanto",color=t.textPrimary,fontSize=18.sp,fontWeight=FontWeight.SemiBold,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                    Text("As avaliações e resenhas aparecem aqui quando uma leitura é salva.",color=t.textSecondary,fontSize=14.sp,lineHeight=21.sp,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                }
+            }
+            if(posts.isEmpty()&&(!attempted||busy))items(3){
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                        Box(Modifier.size(56.dp,84.dp).background(t.textTertiary.copy(alpha=.10f),RoundedCornerShape(8.dp)))
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                            Box(Modifier.fillMaxWidth(.5f).height(12.dp).background(t.textTertiary.copy(alpha=.12f),RoundedCornerShape(6.dp)))
+                            Box(Modifier.fillMaxWidth(.85f).height(18.dp).background(t.textTertiary.copy(alpha=.12f),RoundedCornerShape(6.dp)))
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(12.dp).background(t.textTertiary.copy(alpha=.10f),RoundedCornerShape(6.dp)))
+                }
             }
             items(posts, key = { it.id }) { post ->
                 Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -88,8 +118,8 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     error?.let { Text(it, color = t.textSecondary) }
-                    if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp)
-                    else if (more || error != null) TextButton(onClick = { load() }) { Text(if (error == null) "Ver mais" else "Tentar novamente", color = t.accent) }
+                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center){CircularProgressIndicator(Modifier.size(24.dp),color=t.accent,strokeWidth=2.dp)}
+                    else if (!busy && (more || error != null)) TextButton(onClick = { load() }) { Text(if (error == null) "Ver mais" else "Tentar novamente", color = t.accent) }
                 }
             }
         }

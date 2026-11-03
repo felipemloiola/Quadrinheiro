@@ -42,6 +42,8 @@ import kotlin.math.roundToInt
 /** The menu is measured once at its final size. Springs only transform its render layer. */
 @Composable
 internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdrop, modifier: Modifier) {
+    val textMeasurer=androidx.compose.ui.text.rememberTextMeasurer()
+    val menuTextStyle=androidx.compose.material3.LocalTextStyle.current.copy(fontSize=14.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Medium)
     val motion by rememberUpdatedState(LocalAppMotion.current)
     val active = state.currentRequest
     var retained by remember { mutableStateOf<LiquidGlassMenuRequest?>(null) }
@@ -90,7 +92,8 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         state.dismissMenu(currentRequest.id)
     }
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.positionInRoot() }) {
-        val menuWidth = minOf(244.dp, maxWidth - 28.dp)
+        val widest=remember(request.items.map {it.label},density.fontScale,menuTextStyle){request.items.maxOfOrNull {textMeasurer.measure(androidx.compose.ui.text.AnnotatedString(it.label),menuTextStyle).size.width} ?: 0}
+        val menuWidth = minOf(maxOf(with(density){widest.toDp()}+76.dp,with(density){request.anchorBounds.width.toDp()},112.dp), maxWidth - 28.dp)
         val menuHeight = minOf(rowHeight * request.items.size + .5.dp * (request.items.size - 1) + 14.dp, maxHeight - 28.dp)
         val width = with(density) { menuWidth.roundToPx() }
         val height = with(density) { menuHeight.roundToPx() }
@@ -105,7 +108,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         if (active != null) Box(Modifier.fillMaxSize().pointerInput(request.id) {
             awaitEachGesture { awaitFirstDown(false); state.dismissMenu() }
         })
-        Box(Modifier.offset { IntOffset(left, top) }.size(menuWidth, menuHeight)
+        Box(Modifier.offset { IntOffset(left, top) }.size(menuWidth, menuHeight).testTag("retained_glass_menu")
             .graphicsLayer {
                 transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
                 scaleX = (anchor.width.toFloat() / width + (1f - anchor.width.toFloat() / width) * x.value).coerceAtLeast(0.05f)

@@ -169,11 +169,20 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         item {
             Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Leitura")
-                AppleTextField(yearly,{yearly=it.filter(Char::isDigit).take(4)},"Meta anual de HQs",useContentMaterial=true)
-                AppleTextField(daily,{daily=it.filter(Char::isDigit).take(4)},"Páginas por dia",useContentMaterial=true)
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                        Column(Modifier.weight(1f)){Text("Meta anual",color=theme.textPrimary,fontSize=15.sp);Text("$yearly HQs",color=theme.textSecondary,fontSize=13.sp)}
+                        AppleStepper(yearly.toIntOrNull() ?: 1,min=1,max=1000,onChange={yearly=it.toString()})
+                    }
+                    HorizontalDivider(color=theme.divider)
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                        Column(Modifier.weight(1f)){Text("Meta diária",color=theme.textPrimary,fontSize=15.sp);Text("$daily páginas",color=theme.textSecondary,fontSize=13.sp)}
+                        AppleStepper(daily.toIntOrNull() ?: 1,min=1,max=2000,onChange={daily=it.toString()})
+                    }
+                }
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                     Text("Meta no Início",Modifier.weight(1f),color=theme.textPrimary)
-                    Switch(showGoal,{showGoal=it})
+                    AppleToggleSwitch(showGoal,{showGoal=it},Modifier.testTag("profile_goal_toggle"))
                 }
             }
         }

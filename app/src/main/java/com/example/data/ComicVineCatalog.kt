@@ -20,7 +20,7 @@ data class CatalogDetails(val id: String, val type: String, val title: String, v
     val description: String, val publisher: String, val date: String, val url: String, val covers: List<String>,
     val characters: List<CatalogCredit>, val creators: List<CatalogCredit>, val issues: List<ComicEntry>,
     val realName: String = "", val aliases: String = "", val powers: List<String> = emptyList(), val appearances: Int = 0,
-    val creditsScope: String = "issue")
+    val creditsScope: String = "issue",val pageCount:Int=0,val isbn:String="",val format:String="")
 
 /** The app only talks to our bounded catalog service. Provider credentials never enter the APK. */
 object ComicVineCatalog {
@@ -31,7 +31,7 @@ object ComicVineCatalog {
     }
     private suspend fun request(op: String, q: String = "", id: String = "", page: Int = 0, kind: String = "issue"): JSONObject = withContext(Dispatchers.IO) {
         val url = ENDPOINT.toHttpUrl().newBuilder().addQueryParameter("op", op).addQueryParameter("q", q.take(100))
-            .addQueryParameter("id", id).addQueryParameter("page", page.toString()).addQueryParameter("kind",kind).addQueryParameter("v","51").build()
+            .addQueryParameter("id", id).addQueryParameter("page", page.toString()).addQueryParameter("kind",kind).addQueryParameter("v","52").build()
         val body = suspendCancellableCoroutine<String> { continuation ->
             val call = client.newCall(Request.Builder().url(url).get().build())
             continuation.invokeOnCancellation { call.cancel() }
@@ -59,11 +59,11 @@ object ComicVineCatalog {
         val name = j.optString("name")
         val title = if (volume.isNotBlank() && name.isNotBlank() && !volume.equals(name, true)) "$volume: $name" else volume.ifBlank { name.ifBlank { "HQ" } }
         val volumeEntry=j.optString("type")=="volume"
-        val key=if(volumeEntry) "cv-volume-$id" else "cv-$id"
-        return ComicEntry(id = key, externalId = key, title = title, authors = "", publisher = j.optString("publisher"),
+        val key=if(j.optString("type")=="metron-issue") "mt-$id" else if(volumeEntry) "cv-volume-$id" else "cv-$id"
+        return ComicEntry(id = key, externalId = key, title = if(j.optString("type")=="metron-issue" && issue>0 && j.optString("format")=="Edição") "$title #$issue" else title, authors = "", publisher = j.optString("publisher"),
             coverUrl = j.optString("image"), releaseYear = j.optString("date").take(4).toIntOrNull() ?: 2026,
-            synopsis = plain(j.optString("description")), sourceLabel = "Comic Vine", isOnlineResult=true, seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
-            format = if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição", pageCount = 1)
+            synopsis = plain(j.optString("description")), sourceLabel = if(key.startsWith("mt-")) "Metron" else "Comic Vine", isOnlineResult=true, seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
+            format = j.optString("format").ifBlank {if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição"}, pageCount = j.optInt("pageCount",0),isbn=j.optString("isbn"))
     }
     internal fun plain(html: String): String = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
     suspend fun search(query: String, page: Int = 0): MultiApiSearchEngine.CatalogPage {
@@ -89,21 +89,24 @@ object ComicVineCatalog {
             name, c.optString("image"), listOf(name, pt, real))
     }
     suspend fun details(type: String, id: String): CatalogDetails {
-        val key = "$type:$id"
+        val operation=if(id.startsWith("mt-")) "metron-$type" else type
+        val resourceId=id.removePrefix("mt-")
+        val key = "$operation:$resourceId"
         synchronized(memory) { memory[key] }?.let { return it }
-        val j = request(type, id = id)
+        val j = request(operation, id = resourceId)
         val publisher = j.optString("publisher").ifBlank {
             if (type == "issue" && j.optString("volumeId").isNotBlank()) runCatching { request("volume", id = j.optString("volumeId")).optString("publisher") }.getOrDefault("") else ""
         }
         fun credits(key: String) = j.objects(key).map { CatalogCredit(it.optString("id"), it.optString("name"), it.optString("role")) }
         fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
-        return CatalogDetails(id, type, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
+        return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
             plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), strings("covers").distinct().take(6),
-            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"))
+            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"))
             .also { synchronized(memory) { memory[key] = it } }
     }
     suspend fun resolve(comic: ComicEntry): CatalogDetails? {
         val key=comic.externalId.ifBlank { comic.id }
+        if(key.startsWith("mt-"))return details("metron-issue",key.removePrefix("mt-"))
         if(key.startsWith("cv-volume-"))return details("volume",key.removePrefix("cv-volume-"))
         val id = comic.externalId.removePrefix("cv-").takeIf { comic.externalId.startsWith("cv-") }
             ?: comic.id.removePrefix("cv-").takeIf { comic.id.startsWith("cv-") }
@@ -117,6 +120,7 @@ object ComicVineCatalog {
     }
     suspend fun coverChoices(comic:ComicEntry):List<String>{
         val ref=comic.externalId.ifBlank { comic.id };val volume=ref.startsWith("cv-volume-")
+        if(ref.startsWith("mt-"))return request("covers",id=ref.removePrefix("mt-"),kind="metron-issue").optJSONArray("items")?.let {a->(0 until a.length()).map {a.optString(it)} }.orEmpty()
         val id=ref.removePrefix(if(volume) "cv-volume-" else "cv-")
         return request("covers",id=id,kind=if(volume) "volume" else "issue").optJSONArray("items")?.let { a -> (0 until a.length()).map { a.optString(it) }.distinct().take(6) }.orEmpty()
     }

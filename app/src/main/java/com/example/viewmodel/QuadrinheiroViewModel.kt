@@ -2000,7 +2000,7 @@ class QuadrinheiroViewModel(
                 (itemData.externalId.isNotBlank() && c.externalId == itemData.externalId)
         }
         val base = existing ?: itemData
-        val pageCount = base.pageCount.coerceAtLeast(1)
+        val pageCount = base.pageCount.coerceAtLeast(0)
         val defaultFmt = _appSettings.value.defaultFormat
 
         if (chosenStatus == ReadingStatus.WANT_TO_READ) {
@@ -2026,7 +2026,7 @@ class QuadrinheiroViewModel(
 
         val currentPage = when (chosenStatus) {
             ReadingStatus.READ -> pageCount
-            ReadingStatus.READING -> if (base.currentPage in 1..pageCount) base.currentPage else minOf(pageCount, 24)
+            ReadingStatus.READING -> if (base.currentPage in 1..pageCount) base.currentPage else 0
             ReadingStatus.WANT_TO_READ -> 0
         }
 
@@ -2071,7 +2071,7 @@ class QuadrinheiroViewModel(
             itemData.externalId.ifBlank { "hq-${System.currentTimeMillis()}" }
         }
         val extId = itemData.externalId.ifBlank { uniqueId }
-        val pageCount = itemData.pageCount.coerceAtLeast(1)
+        val pageCount = itemData.pageCount.coerceAtLeast(0)
         val status = itemData.status
         val isWantToRead = status == ReadingStatus.WANT_TO_READ
         val isRead = status == ReadingStatus.READ
@@ -2221,6 +2221,7 @@ class QuadrinheiroViewModel(
     }
 
     fun quickUpdateReadingPage(comicItem: ComicEntry, nextPage: Int) {
+        if(comicItem.pageCount<=0){selectComicForSheet(comicItem);showNotice("Informe o total de páginas para atualizar o progresso.");return}
         val total = comicItem.pageCount.coerceAtLeast(1)
         val clamped = nextPage.coerceIn(0, total)
         val wasFinishedNow = clamped >= total && comicItem.status != ReadingStatus.READ

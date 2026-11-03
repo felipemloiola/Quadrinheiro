@@ -679,7 +679,7 @@ fun SearchResultComicCard(
             )
 
             Text(
-                text = "${displayItem.publisher} • ${displayItem.releaseYear} • ${displayItem.pageCount} págs",
+                text = "${displayItem.publisher} • ${displayItem.releaseYear}" + if(displayItem.pageCount>1) " • ${displayItem.pageCount} págs" else "",
                 fontSize = 11.sp,
                 color = s.textTertiary
             )

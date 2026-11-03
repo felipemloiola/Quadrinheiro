@@ -44,6 +44,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     var remoteComics by remember { mutableStateOf(emptyList<ComicEntry>()) }
     val remoteCatalog by com.example.data.ModernCatalog.entries.collectAsState()
     LaunchedEffect(Unit){com.example.data.CharacterDirectory.preload(context)}
+    var catalogOpen by remember {mutableStateOf(false)}
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var characterResults by remember { mutableStateOf(emptyList<com.example.data.CharacterResult>()) }
     var characterLoading by remember { mutableStateOf(false) }
@@ -86,34 +87,37 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         ProfileEditorScreen(profile, settings, { editorOpen = false }, onCommitProfile,onHandleChange,handleFeedback, { isCharacter,slot -> characters=isCharacter;editSlot=slot;slotMenu=(if(isCharacter) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).getOrNull(slot)!=null;query="" })
     } else
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("reader_profile"),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 208.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 208.dp),
         verticalArrangement = Arrangement.spacedBy(26.dp)) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth().padding(horizontal=20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Perfil", color = theme.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                 IconButton(onClick = onSettings, modifier = Modifier.testTag("profile_settings")) {
                     Icon(LucideIcons.Settings, "Ajustes", tint = theme.textPrimary)
                 }
             }
         }
-        if (settings.profileBannerUrl.isNotBlank()) item {
-            Box(Modifier.fillMaxWidth().aspectRatio(3f)) {
-            ProfileImage(settings.profileBannerUrl, "Banner de "+profile.name,
-                Modifier.fillMaxWidth().aspectRatio(3f).testTag("profile_banner"))
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(54.dp).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent,theme.bgPrimary))))
-            }
-        }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    UserAvatar(profile, sizeDp = 72)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(profile.name, color = theme.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Text(profile.handle, color = theme.textSecondary, fontSize = 14.sp)
-                        Text("Editar perfil", color = theme.accent, fontSize = 14.sp,
-                            modifier = Modifier.clickable { editorOpen = true }.padding(vertical = 10.dp))
+            Column {
+                val hasBanner=settings.profileBannerUrl.isNotBlank()
+                BoxWithConstraints(Modifier.fillMaxWidth()){
+                val bannerHeight=maxWidth/3f
+                Box(Modifier.fillMaxWidth().height(if(hasBanner)bannerHeight else 40.dp)){
+                    if(hasBanner)Box(Modifier.fillMaxWidth().height(bannerHeight)){
+                        ProfileImage(settings.profileBannerUrl,"Banner de "+profile.name,Modifier.fillMaxSize().testTag("profile_banner"))
+                        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(0f to androidx.compose.ui.graphics.Color.Transparent,.55f to androidx.compose.ui.graphics.Color.Transparent,1f to theme.bgPrimary)))
                     }
+                    Box(Modifier.align(Alignment.BottomStart).offset(x=20.dp,y=40.dp).size(80.dp).testTag("profile_avatar").clip(CircleShape).background(theme.bgPrimary).padding(4.dp)){UserAvatar(profile,sizeDp=72)}
                 }
+                }
+                    Row(Modifier.fillMaxWidth().padding(start=116.dp,end=20.dp,top=8.dp).heightIn(min=80.dp)){
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)){
+                            Text(profile.name,color=theme.textPrimary,fontSize=24.sp,fontWeight=FontWeight.Bold)
+                            if(profile.handle.isNotBlank())Text(profile.handle,color=theme.textSecondary,fontSize=14.sp)
+                            Text("Editar perfil",color=theme.accent,fontSize=14.sp,modifier=Modifier.clickable{editorOpen=true}.padding(vertical=10.dp))
+                        }
+                    }
+                Column(Modifier.padding(horizontal=20.dp).padding(top=16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 if (profile.bio.isNotBlank()) Text(profile.bio, color = theme.textSecondary, fontSize = 15.sp, lineHeight = 21.sp)
                 Row(Modifier.fillMaxWidth().clickable(onClick = onStatistics).padding(vertical=18.dp),
                     horizontalArrangement = Arrangement.SpaceAround) {
@@ -125,8 +129,9 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 }
             }
         }
+        }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(horizontal=20.dp),verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("HQs favoritas", "Escolha quatro histórias que dizem quem você é.")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     repeat(4) { slot ->
@@ -144,7 +149,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.padding(horizontal=20.dp),verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Personagens favoritos")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     repeat(4) { slot ->
@@ -161,22 +166,20 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         }
                     }
                 }
-                if (settings.profileShowcaseDetails.filterKeys { it.startsWith("character:") }.values.any { it.contains("comicvine.gamespot.com") }) {
-                    Text("Comic Vine ↗", color = theme.textTertiary, fontSize = 11.sp,
-                        modifier = Modifier.clickable { uriHandler.openUri("https://comicvine.gamespot.com/") }.padding(vertical = 6.dp))
-                }
+
             }
         }
         item {
-            Column {
-                HorizontalDivider(color=theme.divider)
-                ProfileLink("Biblioteca", "Sua coleção e seu diário", Icons.AutoMirrored.Filled.MenuBook, onLibrary)
+            Column(Modifier.padding(horizontal=20.dp).fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp))){
+                ProfileLink("Biblioteca","Estante e diário",Icons.AutoMirrored.Filled.MenuBook,onLibrary)
+                HorizontalDivider(Modifier.padding(start=56.dp),color=theme.divider)
+                ProfileLink("Catálogo","Encontre novas edições",Icons.Default.GridView,{catalogOpen=true})
             }
         }
         if (reviews.isNotEmpty()) {
-            item { SectionHeading("Suas resenhas") }
+            item { Box(Modifier.padding(horizontal=20.dp)){SectionHeading("Suas resenhas")} }
             items(reviews, key = { "review-${it.id}" }) { comic ->
-                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).clickable { onComic(comic) }.padding(16.dp),
+                Column(Modifier.padding(horizontal=20.dp).fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).clickable { onComic(comic) }.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(comic.displayTitle, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
                     Text(comic.review, color = theme.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
@@ -184,6 +187,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
     }
+    if(catalogOpen)CatalogBrowserDialog(profile.favoriteUniverse,{catalogOpen=false}){next->catalogOpen=false;onComic(next)}
     if(editSlot>=0 && slotMenu){
         val name=settings.profileFavoriteCharacters.getOrNull(editSlot)
         val selected=settings.profileFavoriteComicIds.getOrNull(editSlot)?.let(byId::get)

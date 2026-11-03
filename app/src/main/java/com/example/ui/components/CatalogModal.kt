@@ -150,39 +150,26 @@ fun CatalogSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
-    onLogin: () -> Unit = {}
+    onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     var draftComic by remember(selectedComic.id) { mutableStateOf(selectedComic) }
     var fullPage by remember(selectedComic.id) { mutableStateOf(false) }
-    var totalPagesInput by remember(selectedComic.id) { mutableStateOf(if (selectedComic.sourceLabel == "Comic Vine" && selectedComic.pageCount <= 1 && !isExistingInShelf) "" else selectedComic.pageCount.toString()) }
+    var totalPagesInput by remember(selectedComic.id) { mutableStateOf(if (selectedComic.pageCount <= 1) "" else selectedComic.pageCount.toString()) }
+    val editorScope=androidx.compose.runtime.rememberCoroutineScope()
+    var pagesEdited by remember(selectedComic.id){mutableStateOf(false)}
+    var remoteInfo by remember(selectedComic.id){mutableStateOf<com.example.data.CatalogDetails?>(null)}
+    var synopsisExpanded by remember(selectedComic.id){mutableStateOf(false)}
+    var metadataLoading by remember(selectedComic.id){mutableStateOf(false)}
     var pagesError by remember(selectedComic.id) { mutableStateOf(false) }
 
     if (fullPage) com.example.ui.screens.ComicDetailDialog(draftComic, readerProfile, allUserComics,
-        onClose = { fullPage = false }, onRegister = { next -> draftComic = next; fullPage = false },
+        onClose = { fullPage = false }, onRegister = { next -> fullPage=false;if(onRegisterFromPage!=null)onRegisterFromPage(next) else draftComic=next },
         onCover = { draftComic = draftComic.copy(coverUrl = it) }, onLogin = onLogin,
         onShare = { onShareComic(draftComic, SocialShareCardType.COMPLETED_READING, null) })
 
-    LaunchedEffect(selectedComic.id, selectedComic.synopsisPtBr) {
-        if (selectedComic.synopsisPtBr.isNotBlank() && draftComic.synopsisPtBr != selectedComic.synopsisPtBr) {
-            draftComic = draftComic.copy(
-                synopsis = selectedComic.synopsisPtBr,
-                synopsisPtBr = selectedComic.synopsisPtBr
-            )
-        } else if (draftComic.synopsisPtBr.isBlank()) {
-            val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.example.data.PortugueseComicTranslator.localizeComic(selectedComic, allowNetworkTranslation = true)
-            }
-            if (enriched.synopsisPtBr.isNotBlank()) {
-                draftComic = draftComic.copy(
-                    synopsis = enriched.synopsisPtBr,
-                    synopsisPtBr = enriched.synopsisPtBr
-                )
-            }
-        }
-    }
     var comicTagInput by remember(selectedComic.id) { mutableStateOf("") }
     var showMiniCalendar by remember(selectedComic.id) { mutableStateOf(false) }
     var momentNoteInput by remember(selectedComic.id) { mutableStateOf("") }
@@ -192,7 +179,8 @@ fun CatalogSheetModal(
     var selectedMomentTag by remember(selectedComic.id) { mutableStateOf("⚡ Momento Épico") }
 
     fun buildFinalComicForSave(): ComicEntry {
-        var finalComic = draftComic
+        val count=totalPagesInput.toIntOrNull()?.coerceIn(1,20000) ?: 0
+        var finalComic = draftComic.copy(pageCount=count,currentPage=if(draftComic.status==ReadingStatus.READ)count else draftComic.currentPage.coerceIn(0,count))
         val pendingTag = comicTagInput.trim().replace(",", "")
         if (pendingTag.isNotEmpty() && !finalComic.tags.contains(pendingTag)) {
             finalComic = finalComic.copy(tags = finalComic.tags + pendingTag)
@@ -218,16 +206,31 @@ fun CatalogSheetModal(
     val context = LocalContext.current
     val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { onSetExpanded(true) })
     LaunchedEffect(selectedComic.externalId) {
-        if (selectedComic.externalId.startsWith("cv-")) try {
+        metadataLoading=true
+        try {
             val details = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.example.data.ComicVineCatalog.resolve(selectedComic) }
-            if (details != null) draftComic = draftComic.copy(
+            if (details != null) {
+              remoteInfo=details;
+              if(!pagesEdited && details.pageCount>1 && (!isExistingInShelf || draftComic.pageCount<=1)){totalPagesInput=details.pageCount.toString();draftComic=draftComic.copy(pageCount=details.pageCount)}
+              draftComic = draftComic.copy(
                 publisher = draftComic.publisher.ifBlank { details.publisher },
-                authors = draftComic.authors.ifBlank { details.creators.filter { it.role.contains("writer", true) || it.role.contains("artist", true) }.take(4).joinToString(", ") { it.name } }
-            )
+                authors = draftComic.authors.ifBlank { details.creators.filter { it.role.contains("writer", true) || it.role.contains("artist", true) }.take(4).joinToString(", ") { it.name } },
+                isbn=draftComic.isbn.ifBlank {details.isbn},synopsis=details.description,
+                coverUrl=draftComic.coverUrl.ifBlank {details.image},
+                releaseYear=if(!isExistingInShelf) details.date.take(4).toIntOrNull() ?: draftComic.releaseYear else draftComic.releaseYear
+              )
+            }
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-        catch (_: Exception) { }
+        catch (_: Exception) { }finally{metadataLoading=false}
     }
 
+    LaunchedEffect(remoteInfo?.id,remoteInfo?.type){
+        val info=remoteInfo ?: return@LaunchedEffect
+        if(info.description.isNotBlank())try{
+            val translated=com.example.data.ComicVineCatalog.translated(info)
+            draftComic=draftComic.copy(synopsis=translated.description,synopsisPtBr=translated.description)
+        }catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}catch(_:Exception){}
+    }
     // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
     LaunchedEffect(draftComic.coverUrl) {
         val cleanUrl = draftComic.coverUrl.trim().replace("http://", "https://")
@@ -324,11 +327,11 @@ fun CatalogSheetModal(
 
                 SheetToolbar(
                     title = if (isExistingInShelf) "Editar Quadrinho" else "Registrar",
-                    closeTag = "modal_cancel_button", shareTag = "modal_share_card_button",
+                    closeTag = closeTag, shareTag = "modal_share_card_button",
                     onClose = { sheet.dismiss() },
                     onShare = { onShareComic(buildFinalComicForSave(), SocialShareCardType.COMPLETED_READING, null) },
                     onSave = {
-                        if (totalPagesInput.toIntOrNull()?.let { it in 1..20000 } != true) pagesError = true
+                        if (totalPagesInput.isNotBlank() && totalPagesInput.toIntOrNull()?.let { it in 1..20000 } != true){pagesError=true;editorScope.launch {sheetScrollState.animateScrollToItem(0)}}
                         else onSave(buildFinalComicForSave())
                     }
                 )
@@ -358,28 +361,25 @@ fun CatalogSheetModal(
                     androidx.compose.material3.TextButton(onClick = { fullPage = true }, modifier = Modifier.testTag("open_comic_page"),contentPadding=PaddingValues(horizontal=0.dp)) {
                         Text("Detalhes da HQ ›", color = s.accentColor, fontSize = 14.sp)
                     }
+                    if(draftComic.synopsis.isNotBlank()||draftComic.synopsisPtBr.isNotBlank()){
+                        androidx.compose.material3.TextButton(onClick={synopsisExpanded=!synopsisExpanded},contentPadding=PaddingValues(horizontal=0.dp)){
+                            Text(if(synopsisExpanded)"Sinopse ⌃" else "Sinopse ⌄",color=s.textSecondary,fontSize=14.sp)
+                        }
+                        if(synopsisExpanded)Text(draftComic.synopsisPtBr.ifBlank {draftComic.synopsis},color=s.textSecondary,fontSize=14.sp,lineHeight=21.sp)
+                    }
                     androidx.compose.material3.Text("Total de páginas", color = s.textSecondary, fontSize = 12.sp)
                     AppleTextField(totalPagesInput, { value ->
+                        pagesEdited=true
                         totalPagesInput = value.filter(Char::isDigit).take(5)
                         totalPagesInput.toIntOrNull()?.takeIf { it in 1..20000 }?.let { count ->
                             draftComic = draftComic.copy(pageCount = count, currentPage = if (draftComic.status == ReadingStatus.READ) count else draftComic.currentPage.coerceAtMost(count))
                             pagesError = false
                         }
                     }, "Informe o total de páginas")
+                    if(metadataLoading) Text("Buscando informações da edição…",color=s.textSecondary,fontSize=12.sp)
+                    else if(totalPagesInput.isBlank())Text("Não informado nesta edição. Você pode preencher depois.",color=s.textSecondary,fontSize=12.sp)
                     if (pagesError) Text("Informe um total entre 1 e 20.000 páginas.", color = s.accentColor, fontSize = 12.sp)
 // Item 1.5: Sequência da Série (#1, #2, #3...)
-                    ComicSequenceCarouselCard(
-                        currentComic = draftComic,
-                        allUserComics = allUserComics,
-                        onlineSequencePool = onlineSequencePool,
-                        spine3d = appSettings.spine3dEffect,
-                        onSelectSequenceIssue = { nextComic ->
-                            onSelectSequenceComic(nextComic)
-                        },
-                        onAddNextIssue = { nextTemplate ->
-                            onSelectSequenceComic(nextTemplate)
-                        }
-                    )
                         }
                     }
                     item(key = "editor-section-2") {
@@ -455,7 +455,7 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                         )
 
                         // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
-                        if (draftComic.status == ReadingStatus.READING) {
+                        if (draftComic.status == ReadingStatus.READING && draftComic.pageCount>1) {
                             CatalogReadingProgressSection(
                                 currentPageProvider = { draftComic.currentPage },
                                 pageCount = draftComic.pageCount,
@@ -554,7 +554,7 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                             .shadow(6.dp, RoundedCornerShape(999.dp))
                             .clip(RoundedCornerShape(999.dp))
                             .background(s.accentBg)
-                            .clickable { onSave(buildFinalComicForSave()) }
+                            .clickable { if(totalPagesInput.isBlank() || totalPagesInput.toIntOrNull()?.let {it in 1..20000}==true)onSave(buildFinalComicForSave()) else {pagesError=true;editorScope.launch {sheetScrollState.animateScrollToItem(0)}} }
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -625,52 +625,18 @@ fun ComicInfoSynopsisSheetModal(
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
     onLogin: () -> Unit = {},
-    onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> }
+    onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> },
+    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },onDeleteRegistration:(String)->Unit = {}
 ) {
-    val t=com.example.ui.theme.LocalIOS27Theme.current
-    var fullPage by remember(comic.id){mutableStateOf(false)}
-    val sheet=rememberFluidSheet(onDismiss=onDismiss,onExpand={fullPage=true})
-    var displayComic by remember(comic.id){mutableStateOf(comic)}
-    var loading by remember(comic.id){mutableStateOf(true)}
-    LaunchedEffect(comic.id){
-        try { com.example.data.ComicVineCatalog.resolve(comic)?.let { original ->
-            displayComic=displayComic.copy(synopsis=original.description,publisher=original.publisher.ifBlank { comic.publisher },authors=original.creators.take(3).joinToString(", "){it.name}.ifBlank { comic.authors })
-            val detail=com.example.data.ComicVineCatalog.translated(original)
-            displayComic=displayComic.copy(synopsis=detail.description,synopsisPtBr=detail.description)
-        } }catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}catch(_:Exception){}finally{loading=false}
-    }
-    if(fullPage)com.example.ui.screens.ComicDetailDialog(displayComic,readerProfile,allUserComics,
-        onClose={fullPage=false},onRegister={next->fullPage=false;val saved=com.example.model.catalogEntryForEditing(next,allUserComics);if(saved!=null)onEditSavedComic(saved) else onOpenCatalogWithStatus(next,ReadingStatus.READ)},
-        onCover={},onLogin=onLogin,onShare={onShareComic(savedEntry ?: displayComic,SocialShareCardType.COMPLETED_READING,null)})
-    Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black.copy(alpha=.24f*sheet.scrimFraction)) }.clickable {sheet.dismiss()},contentAlignment=Alignment.BottomCenter){
-        Column(Modifier.graphicsLayer {translationY=sheet.offset}.fillMaxWidth(.96f).padding(bottom=12.dp).heightIn(max=620.dp).clip(RoundedCornerShape(24.dp)).background(t.bgSecondary)
-            .clickable(interactionSource=remember{MutableInteractionSource()},indication=null) {}){
-            Box(Modifier.fillMaxWidth().height(24.dp).then(sheet.dragModifier),contentAlignment=Alignment.Center){Box(Modifier.size(40.dp,5.dp).clip(RoundedCornerShape(4.dp)).background(t.textTertiary))}
-            SheetToolbar("Prévia da HQ","synopsis_close_button","synopsis_share_card_button",{sheet.dismiss()},{onShareComic(savedEntry ?: displayComic,SocialShareCardType.COMPLETED_READING,null)})
-            Column(Modifier.weight(1f,false).verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){
-                Row(Modifier.fillMaxWidth().testTag("open_comic_page").clickable{fullPage=true},horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){
-                    BookCover(displayComic.coverUrl,displayComic.displayTitle,spine3d=false,modifier=Modifier.width(88.dp).aspectRatio(2f/3f))
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)){
-                        Text(displayComic.displayTitle,color=t.textPrimary,fontSize=21.sp,fontWeight=FontWeight.Bold,maxLines=3)
-                        if(displayComic.authors.isNotBlank())Text(displayComic.authors,color=t.textSecondary,fontSize=14.sp,maxLines=2)
-                        if(displayComic.publisher.isNotBlank())Text(displayComic.publisher,color=t.textSecondary,fontSize=12.sp)
-                        Text("Detalhes da HQ ›",color=t.accent,fontSize=14.sp)
-                    }
-                }
-                if(loading)androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth(),color=t.accent)
-                val synopsis=displayComic.synopsisPtBr.ifBlank {displayComic.synopsis}
-                if(synopsis.isNotBlank())Text(synopsis,color=t.textSecondary,fontSize=15.sp,lineHeight=22.sp,maxLines=5,overflow=TextOverflow.Ellipsis)
-                androidx.compose.material3.HorizontalDivider(color=t.divider)
-                if(savedEntry!=null)androidx.compose.material3.TextButton(onClick={onEditSavedComic(savedEntry)},modifier=Modifier.fillMaxWidth()){
-                    Text("Editar registro",color=t.accent)
-                }else Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)){
-                    listOf(ReadingStatus.READ to "Lido",ReadingStatus.READING to "Lendo",ReadingStatus.WANT_TO_READ to "Quero ler").forEach{(status,label)->
-                        androidx.compose.material3.TextButton(onClick={onOpenCatalogWithStatus(displayComic,status)},modifier=Modifier.weight(1f).heightIn(min=44.dp),contentPadding=PaddingValues(horizontal=4.dp)){Text(label,color=t.accent,fontSize=14.sp,maxLines=1)}
-                    }
-                }
-            }
-        }
-    }
+    var expanded by remember {mutableStateOf(false)}
+    CatalogSheetModal(selectedComic=savedEntry ?: comic,isExistingInShelf=savedEntry!=null,isSheetExpanded=expanded,
+        appSettings=appSettings,allUserComics=allUserComics,onlineSequencePool=onlineSequencePool,
+        onSelectSequenceComic=onSelectSequenceComic,onUpdateComic={},onToggleExpand={expanded=!expanded},onSetExpanded={expanded=it},
+        onSave=onSaveRegistration,onDelete=onDeleteRegistration,onDismiss=onDismiss,onShareComic=onShareComic,
+        readerProfile=readerProfile,onLogin=onLogin,closeTag="synopsis_close_button",onRegisterFromPage={next->
+            val saved=com.example.model.catalogEntryForEditing(next,allUserComics)
+            if(saved!=null)onEditSavedComic(saved) else onOpenCatalogWithStatus(next,ReadingStatus.READ)
+        })
 }
 
 /**

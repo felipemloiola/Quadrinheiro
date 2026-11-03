@@ -226,6 +226,7 @@ class UpdatePageAction : ActionCallback {
                 else com.example.model.activeReadingComic(comics, stored.profile.activeReadingComicId))
                 ?: return@withContext null
 
+            if(targetComic.pageCount<=0)return@withContext null
             val totalPages = targetComic.pageCount.coerceAtLeast(1)
             val nextPage = (targetComic.currentPage + delta).coerceIn(0, totalPages)
             val nextStatus = when {

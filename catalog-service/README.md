@@ -1,6 +1,6 @@
 # Serviço do catálogo
 
-Worker de leitura usado pelo Quadrinheiro. As credenciais do Comic Vine e da Superhero API ficam nos secrets do Cloudflare. O cliente Android recebe somente metadados e URLs públicas de imagens.
+Worker de leitura usado pelo Quadrinheiro. As credenciais do Metron, Comic Vine e da Superhero API ficam nos secrets do Cloudflare. O cliente Android recebe somente metadados e URLs públicas de imagens.
 
 ## Operações
 
@@ -33,7 +33,10 @@ npm test
 npx wrangler login
 npx wrangler secret put COMIC_VINE_API_KEY
 npx wrangler secret put SUPERHERO_API_KEY
+npx wrangler secret put METRON_API_KEY
 npm run deploy
 ```
 
 Não coloque secrets em `wrangler.jsonc`, assets, arquivos Kotlin ou logs. A configuração de AI e Assets está no arquivo do Worker; testes usam respostas simuladas e não consomem as APIs externas.
+
+Metron fornece as edições e o campo real de páginas (`page` na resposta atual, também aceitando `page_count`). As consultas são somente de leitura a recursos de catálogo; o serviço não acessa coleções ou contas do Metron. Títulos em português são normalizados, edições exatas são priorizadas sobre séries homônimas e o catálogo geral filtra publicações dos últimos dois anos. Paginação desconhecida permanece zero, sem inventar uma contagem.

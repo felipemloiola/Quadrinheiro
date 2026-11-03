@@ -752,7 +752,9 @@ object PortugueseComicTranslator {
 
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
-        val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
+        val (format, inferredPages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
+        val modern=entry.sourceLabel in listOf("Metron","Comic Vine")||entry.externalId.startsWith("cv-")||entry.externalId.startsWith("mt-")
+        val pages=if(modern) entry.pageCount.coerceAtLeast(0).let {if(it==1)0 else it} else inferredPages
         val issueNum = SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle, format = format, pageCount = pages))
         val ptSeries = if (entry.seriesName.isNotBlank()) {
             translateTitleToPtBr(entry.seriesName)
@@ -798,6 +800,7 @@ object PortugueseComicTranslator {
      * - Assim que traduzir a sinopse ou título, salva no `SafeStorage` e no `QuadrinheiroCloudRepository` via `onTranslationPersisted`.
      */
     fun localizeComic(entry: ComicEntry, allowNetworkTranslation: Boolean = false): ComicEntry {
+        if(entry.sourceLabel in listOf("Metron","Comic Vine") || entry.externalId.startsWith("cv-") || entry.externalId.startsWith("mt-"))return localizeComicMetadataOnly(entry)
         ensureCuratedCatalogSeeded()
         val key = resolveComicCacheKey(entry)
         val extKey = entry.externalId.trim()
@@ -811,7 +814,9 @@ object PortugueseComicTranslator {
 
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
-        val (format, pages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
+        val (format, inferredPages) = normalizeFormatAndPages(entry.format, entry.pageCount, ptTitle, genre)
+        val modern=entry.sourceLabel in listOf("Metron","Comic Vine")||entry.externalId.startsWith("cv-")||entry.externalId.startsWith("mt-")
+        val pages=if(modern) entry.pageCount.coerceAtLeast(0).let {if(it==1)0 else it} else inferredPages
         val issueNum = SeriesSequenceEngine.inferIssueNumber(entry.copy(title = ptTitle, format = format, pageCount = pages))
         val ptSeries = if (entry.seriesName.isNotBlank()) {
             translateTitleToPtBr(entry.seriesName)

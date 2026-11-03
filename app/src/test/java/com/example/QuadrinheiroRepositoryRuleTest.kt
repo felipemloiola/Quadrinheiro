@@ -322,5 +322,19 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertEquals(1, dirtyToPush.size)
         assertEquals("hq-2", dirtyToPush.first().id)
     }
+    @Test fun unknownPaginationRoundTripsAndCannotHavePositiveProgress()=runBlocking {
+        val uid=signInTestUser("pages52@example.com")
+        val repo=QuadrinheiroCloudRepository(context,db,auth)
+        withTimeout(10000){repo.saveComic(uid,sampleComic("unknown52").copy(externalId="mt-9999",pageCount=0,currentPage=0,sourceLabel="Metron"))}
+        assertEquals(0,withTimeout(10000){repo.getComic(uid,"unknown52")}!!.pageCount)
+        val ref=db.collection("users").document(uid).collection("comics").document("unknown52")
+        try{withTimeout(10000){ref.update("currentPage",1).await()};fail("Unknown pagination must not accept progress above zero")}
+        catch(error:FirebaseFirestoreException){assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED,error.code)}
+        try{withTimeout(10000){ref.update("pageCount",-1).await()};fail("Negative page counts must remain invalid")}
+        catch(error:FirebaseFirestoreException){assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED,error.code)}
+        withTimeout(10000){ref.update(mapOf("pageCount" to 144,"currentPage" to 144)).await()}
+        assertEquals(144,repo.getComic(uid,"unknown52")!!.pageCount)
+    }
+
 }
 

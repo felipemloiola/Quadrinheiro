@@ -24,13 +24,13 @@ function detail(item,type) {
  creators:(item.person_credits||item.creators||item.people||[]).slice(0,60).map(c=>({id:String(c.id),name:text(c.name,200),role:text(c.role,160)})),
  powers:(item.powers||[]).slice(0,30).map(c=>text(c.name,150)),issues:(item.issue_credits||item.issues||[]).slice(0,24).map(c=>brief(c)),creditsScope:type==='volume'?'series':'issue'};
 }
-const allowed=['search','catalog','issue','character','person','volume','characters','superhero','portraits','translated','covers'];
+const allowed=['search','catalog','issue','character','person','volume','characters','superhero','portraits','translated','covers','metron-issue','metron-character','metron-person'];
 function validate(query) {
  const op=String(query.op||'search'),q=String(query.q||'').trim().slice(0,100),id=String(query.id||''),page=Number(query.page||0),kind=String(query.kind||'issue');
  if(!allowed.includes(op)||!Number.isInteger(page)||page<0||page>1000)throw Error('invalid-input');
- if(['issue','character','person','volume','translated','covers'].includes(op)&&!/^\d{1,12}$/.test(id))throw Error('invalid-input');
+ if(['issue','character','person','volume','translated','covers','metron-issue','metron-character','metron-person'].includes(op)&&!/^\d{1,12}$/.test(id))throw Error('invalid-input');
  if(['search','characters','superhero','portraits'].includes(op)&&q.length<2)throw Error('invalid-input');
- if(!['issue','volume','character','person'].includes(kind))throw Error('invalid-input');
+ if(!['issue','volume','character','person','metron-issue','metron-character','metron-person'].includes(kind))throw Error('invalid-input');
  return {op,q,id,page,kind};
 }
 const keyFor=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -75,11 +75,11 @@ async function upstream(input,secrets,fetcher=fetch) {
  const params={limit:24,offset:page*24,field_list:'id,name,issue_number,volume,image,associated_images,cover_date,deck,publisher,real_name,aliases,count_of_issue_appearances,site_detail_url'};
  if(op==='catalog'){params.sort='cover_date:desc';params.filter=`cover_date:1900-01-01|${new Date().toISOString().slice(0,10)}`;}
  else {params.query=q;params.resources=op==='characters'?'character':'issue';}
- if(op==='catalog'){params.sort='count_of_issues:desc';params.filter='count_of_issues:1|10000';params.field_list+=',start_year,count_of_issues';}
+ if(op==='catalog'){params.sort='start_year:desc';params.filter='count_of_issues:1|10000';params.field_list+=',start_year,count_of_issues';}
  if(op==='search'){
   const volumes=await cv('search/',{...params,resources:'volume',limit:12,offset:page*12,field_list:params.field_list+',start_year,count_of_issues'});
   const editions=await cv('search/',{...params,limit:12,offset:page*12});
-  const ranked=(volumes.results||[]).sort((a,b)=>Number(!!(b.deck||b.description))-Number(!!(a.deck||a.description)) || Number(a.start_year||3000)-Number(b.start_year||3000));
+  const ranked=(volumes.results||[]).sort((a,b)=>Number(!!(b.deck||b.description))-Number(!!(a.deck||a.description)) || Number(b.start_year||0)-Number(a.start_year||0));
   return {items:[...ranked.map(i=>brief(i,'volume')),...(editions.results||[]).map(i=>brief(i))],hasMore:page*12+12<Math.max(Number(volumes.number_of_total_results||0),Number(editions.number_of_total_results||0))};
  }
  const j=await cv(op==='catalog'?'volumes/':'search/',params);

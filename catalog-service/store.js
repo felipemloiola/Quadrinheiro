@@ -25,7 +25,7 @@ export class CatalogStore extends DurableObject {
    if(count+amount>limit)throw Error('provider-limit');await tx.put(key,{bucket,count:count+amount});});
  }
  async load(input){
-  const key=keyFor(input),saved=await this.cached(key);if(saved)return saved;
+  const key=keyFor({...input,schema:"52-final"}),saved=await this.cached(key);if(saved)return saved;
   if(this.pending.has(key))return this.pending.get(key);
   const work=(async()=>{
    let body;
@@ -33,6 +33,7 @@ export class CatalogStore extends DurableObject {
     const original=await this.load({...input,op:input.kind,kind:'issue',q:''});
     const source=String(original.description||'').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim().slice(0,10000);
     if(!source)return {descriptionPt:''};
+    if(original.language==='pt')return {descriptionPt:source};
     await this.permit('translation',source.length,100000,86400000);
     const chunks=source.match(/.{1,850}(?:\s|$)|.{1,850}/g)||[source];
     const translated=[];
@@ -45,8 +46,8 @@ export class CatalogStore extends DurableObject {
     if(translated.some(s=>!s))throw Error('translation-unavailable');
     body={descriptionPt:translated.join(' ')};
    }else{
-    body=await upstream(input,{comicVine:this.env.COMIC_VINE_API_KEY,superhero:this.env.SUPERHERO_API_KEY},async(url,opts)=>{
-     const u=new URL(url);if(u.hostname==='comicvine.gamespot.com')await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
+    body=await upstream(input,{comicVine:this.env.COMIC_VINE_API_KEY,superhero:this.env.SUPERHERO_API_KEY,metron:this.env.METRON_API_KEY?.trim()},async(url,opts)=>{
+     const u=new URL(url);if(u.hostname==='metron.cloud')await this.permit('metron');if(u.hostname==='comicvine.gamespot.com')await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
      return fetch(url,opts);
     });
    }

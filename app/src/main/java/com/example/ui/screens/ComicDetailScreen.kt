@@ -118,7 +118,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                         if (isComic && authors.isNotBlank()) Text(authors, color = t.textSecondary, fontSize = 14.sp)
                         if (isComic) {
                             rating?.takeIf { it.count > 0 }?.let { Text("★ ${String.format(java.util.Locale.getDefault(), "%.1f", it.average)} · ${it.count} avaliações", color = t.textPrimary, fontSize = 13.sp) }
-                            TextButton(onClick = { onRegister(comic.copy(coverUrl = effectiveCover)) }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Registrar leitura", color = t.accent) }
+                            TextButton(onClick = { onRegister(comic.copy(coverUrl = effectiveCover,pageCount=detail?.pageCount?.takeIf{it>1} ?: comic.pageCount,isbn=comic.isbn.ifBlank {detail?.isbn.orEmpty()})) }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Registrar leitura", color = t.accent) }
                         }
                     }
                 }
@@ -135,8 +135,8 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 item {
                     DetailSection("Detalhes") {
                         val rows = if (isComic) listOf("Publicação" to detail?.date.orEmpty().ifBlank { comic.releaseYear.toString() },
-                            "Formato" to comic.format, "ISBN" to comic.isbn,
-                            "Páginas" to comic.pageCount.takeIf { it > 1 }?.toString().orEmpty())
+                            "Formato" to comic.format, "ISBN" to comic.isbn.ifBlank{detail?.isbn.orEmpty()},
+                            "Páginas" to (detail?.pageCount?.takeIf{it>1} ?: comic.pageCount).takeIf { it > 1 }?.toString().orEmpty())
                         else listOf("Nome" to detail?.realName.orEmpty(), "Também conhecido como" to detail?.aliases.orEmpty(),
                             "Aparições" to detail?.appearances?.takeIf { it > 0 }?.toString().orEmpty(), "Poderes" to detail?.powers.orEmpty().joinToString(", "))
                         rows.filter { it.second.isNotBlank() }.forEach { (label, value) ->
@@ -149,7 +149,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 val appearances = detail?.issues.orEmpty()
                 if (!isComic && appearances.isNotEmpty()) item {
                     DetailSection("Aparições em quadrinhos") {
-                        Text("Seleção de edições registradas no Comic Vine.", color = t.textSecondary, fontSize = 12.sp)
+                        Text("Edições relacionadas a este perfil.", color = t.textSecondary, fontSize = 12.sp)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(appearances, key = { it.id }) { issue ->
                                 Column(Modifier.width(100.dp).clickable { openComic(issue) }) {
@@ -181,9 +181,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 }
                 if (!loading && credits.isEmpty()) item { Text("Ainda não há informações desta edição no catálogo.", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp)) }
             }
-            detail?.url?.takeIf { it.startsWith("https://comicvine.gamespot.com/") }?.let { source -> item {
-                TextButton(onClick = { uriHandler.openUri(source) }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Informações: Comic Vine ↗", color = t.textSecondary, fontSize = 12.sp) }
-            } }
+
         }
     }
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->

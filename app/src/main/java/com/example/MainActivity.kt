@@ -1020,7 +1020,7 @@ fun QuadrinheiroApp(
                         }
                     }
                     ComicInfoSynopsisSheetModal(
-                        onCoverSelected = viewModel::updateComicCover,
+                        onCoverSelected = viewModel::updateComicCover, onSaveRegistration=viewModel::saveComic,onDeleteRegistration=viewModel::deleteComic,
                         readerProfile = profile, onLogin = { viewModel.openAuthModalForLinking() },
                         comic = currentInfoComic,
                         savedEntry = savedMatch,

@@ -24,7 +24,7 @@ data class CommunityPage<T>(val items: List<T>, val cursor: CommunityCursor?, va
 data class CommunityRating(val average: Double, val count: Long)
 
 fun communityComicKey(comic: ComicEntry): String {
-    val identity = comic.externalId.takeIf { it.startsWith("cv-") } ?: comic.id.takeIf { it.startsWith("cv-") }
+    val identity = comic.externalId.takeIf { (it.startsWith("cv-")||it.startsWith("mt-")) } ?: comic.id.takeIf { it.startsWith("cv-") }
         ?: (PortugueseComicTranslator.canonicalWorkKey(comic.displayTitle) + ":" + SeriesSequenceEngine.extractPrimaryAuthor(comic.authors).lowercase())
     return MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 }
