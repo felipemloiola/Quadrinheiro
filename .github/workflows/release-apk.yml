@@ -71,6 +71,8 @@ jobs:
           echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=v1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Verify protected catalog service
+        run: node --test catalog-service/test/*.test.cjs
       - name: Discover tests and assemble signed release
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/quadrinheiro-release.p12

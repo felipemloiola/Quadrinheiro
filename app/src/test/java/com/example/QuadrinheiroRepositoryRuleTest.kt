@@ -55,6 +55,9 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val customSettings = AppSettings(
             profileFavoriteComicIds = listOf("comic-one", "comic-two", "comic-three", "comic-four"),
             profileFavoriteCharacters = listOf("Batman", "Magali", "Luffy", "Tempestade"),
+            profileBannerUrl = "data:image/jpeg;base64,profile-banner",
+            profileShowcaseDetails = mapOf("character:Batman" to "https://example.com/batman.jpg", "comic:comic-one" to "{\"id\":\"comic-one\",\"title\":\"HQ favorita\"}"),
+            profileShowcaseUpdatedAt = 123L,
             themeId = "carmineRed",
             colorScheme = "dark",
             shelfColumns = 4,
@@ -94,6 +97,13 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val restoredSettings = fetchedProfile?.toAppSettings()
         assertEquals(customSettings.profileFavoriteComicIds, restoredSettings?.profileFavoriteComicIds)
         assertEquals(customSettings.profileFavoriteCharacters, restoredSettings?.profileFavoriteCharacters)
+        assertEquals(customSettings.profileBannerUrl, restoredSettings?.profileBannerUrl)
+        assertEquals(customSettings.profileShowcaseDetails, restoredSettings?.profileShowcaseDetails)
+        assertEquals(customSettings.profileShowcaseUpdatedAt, restoredSettings?.profileShowcaseUpdatedAt)
+        auth.signOut()
+        signInTestUser("alice@example.com")
+        val serverProfile = db.collection("users").document(aliceUid).get(com.google.firebase.firestore.Source.SERVER).await()
+        assertEquals(customSettings.profileBannerUrl, serverProfile.getString("preferences.profileBannerUrl"))
         assertEquals("carmineRed", restoredSettings?.themeId)
         assertEquals(4, restoredSettings?.shelfColumns)
         assertEquals("RATING", restoredSettings?.defaultShelfSort)

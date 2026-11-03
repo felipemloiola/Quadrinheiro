@@ -103,7 +103,12 @@ class MultiApiSearchEngine {
 
     private val httpClient: OkHttpClient get() = sharedHttpClient
 
-    private val onlineSearchCache = ConcurrentHashMap<String, List<ComicEntry>>()
+    private val onlineSearchCache = object : ConcurrentHashMap<String, List<ComicEntry>>() {
+        override fun put(key: String, value: List<ComicEntry>): List<ComicEntry>? {
+            if (size >= 48 && !containsKey(key)) keys.firstOrNull()?.let { remove(it) }
+            return super.put(key, value)
+        }
+    }
 
     private fun Request.Builder.withBrowserHeaders(): Request.Builder = this
         .header(
@@ -176,7 +181,12 @@ class MultiApiSearchEngine {
         }
     }
 
-    private val sequenceCache = ConcurrentHashMap<String, List<ComicEntry>>()
+    private val sequenceCache = object : ConcurrentHashMap<String, List<ComicEntry>>() {
+        override fun put(key: String, value: List<ComicEntry>): List<ComicEntry>? {
+            if (size >= 32 && !containsKey(key)) keys.firstOrNull()?.let { remove(it) }
+            return super.put(key, value)
+        }
+    }
 
     suspend fun fetchSequenceIssuesOnline(comic: ComicEntry, hdCovers: Boolean = true): List<ComicEntry> = withContext(Dispatchers.IO) {
         val baseSeries = SeriesSequenceEngine.inferBaseSeriesTitle(comic)
@@ -275,6 +285,18 @@ class MultiApiSearchEngine {
         onlineSearchCache[cacheKey]?.let { cached ->
             send(cached)
             return@channelFlow
+        }
+
+        if (provider == "MULTI" || provider == "COMICVINE") {
+            try {
+                val primary = ComicVineCatalog.search(q).items
+                if (primary.isNotEmpty()) {
+                    onlineSearchCache[cacheKey] = primary
+                    send(primary)
+                    return@channelFlow
+                }
+            } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+            catch (_: Exception) { /* Existing providers remain the offline/service fallback. */ }
         }
 
         val mapByCanonicalKey = LinkedHashMap<String, ComicEntry>()
@@ -486,12 +508,32 @@ class MultiApiSearchEngine {
         }
     }
 
-    private fun fetchGoogleBooks(encoded: String, langRestrict: String): List<ComicEntry> {
+    data class CatalogPage(val items: List<ComicEntry>, val hasMore: Boolean)
+    suspend fun fetchCatalogPage(page: Int, favoriteUniverse: String): CatalogPage = withContext(Dispatchers.IO) {
+        require(page in 0..10000)
+        try { return@withContext ComicVineCatalog.catalog(page) }
+        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { /* Redundant providers use the same page cursor. */ }
+        val favorite = when { favoriteUniverse.contains("Marvel", true) -> "Marvel"; favoriteUniverse.contains("DC", true) -> "DC Comics"; favoriteUniverse.contains("Mang", true) -> "manga"; else -> "comics" }
+        val seeds = listOf("$favorite graphic novels", "graphic novels", "manga", "DC Comics graphic novel", "Marvel graphic novel", "quadrinhos brasileiros").distinct()
+        val encoded = URLEncoder.encode(seeds[page % seeds.size], "UTF-8")
+        val offset = (page / seeds.size) * 12
+        supervisorScope {
+            val google = async { runCatching { fetchGoogleBooks(encoded, "pt", offset, 12, true) } }
+            val open = async { runCatching { fetchOpenLibrary(encoded, true, offset, 12, true) } }
+            val results = listOf(google.await(), open.await())
+            val items = results.flatMap { it.getOrDefault(emptyList()) }
+            if (items.isEmpty() && results.any { it.isFailure }) throw java.io.IOException("Não foi possível carregar mais quadrinhos. Tente novamente.")
+            CatalogPage(items, items.isNotEmpty())
+        }
+    }
+
+    private fun fetchGoogleBooks(encoded: String, langRestrict: String, startIndex: Int = 0, pageSize: Int = 10, strict: Boolean = false): List<ComicEntry> {
         return try {
-            val url = "https://www.googleapis.com/books/v1/volumes?q=$encoded&maxResults=10&printType=books&langRestrict=$langRestrict"
+            val url = "https://www.googleapis.com/books/v1/volumes?q=$encoded&maxResults=$pageSize&startIndex=$startIndex&printType=books&langRestrict=$langRestrict"
             val req = Request.Builder().url(url).withBrowserHeaders().get().build()
             httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return emptyList()
+                if (!resp.isSuccessful) { if (strict) throw java.io.IOException("Catálogo indisponível: ${resp.code}"); return emptyList() }
                 val body = resp.body?.string() ?: return emptyList()
                 val items = JSONObject(body).optJSONArray("items") ?: return emptyList()
                 val out = mutableListOf<ComicEntry>()
@@ -630,12 +672,12 @@ class MultiApiSearchEngine {
         }
     }
 
-    private fun fetchOpenLibrary(encoded: String, hdCovers: Boolean = true): List<ComicEntry> {
+    private fun fetchOpenLibrary(encoded: String, hdCovers: Boolean = true, offset: Int = 0, pageSize: Int = 10, strict: Boolean = false): List<ComicEntry> {
         return try {
-            val url = "https://openlibrary.org/search.json?q=$encoded&limit=10&fields=key,title,subtitle,author_name,first_publish_year,number_of_pages_median,cover_i,publisher,isbn,first_sentence"
+            val url = "https://openlibrary.org/search.json?q=$encoded&limit=$pageSize&offset=$offset&fields=key,title,subtitle,author_name,first_publish_year,number_of_pages_median,cover_i,publisher,isbn,first_sentence"
             val req = Request.Builder().url(url).withBrowserHeaders().get().build()
             httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return emptyList()
+                if (!resp.isSuccessful) { if (strict) throw java.io.IOException("Open Library indisponível"); return emptyList() }
                 val body = resp.body?.string() ?: return emptyList()
                 val docs = JSONObject(body).optJSONArray("docs") ?: return emptyList()
                 val out = mutableListOf<ComicEntry>()

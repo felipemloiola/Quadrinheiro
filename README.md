@@ -9,10 +9,10 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 ## Recursos
 
 - **Início:** leitura atual, progresso e metas, com acesso rápido às suas histórias.
-- **Explorar:** recomendações locais baseadas nas leituras e avaliações, seleções por universo e catálogo, com páginas expandidas. A área de comunidades está reservada para uma futura atualização.
-- **Perfil:** resumo das leituras, resenhas, quatro HQs favoritas e quatro personagens; acesso à Biblioteca e aos Ajustes. Favoritos são preservados por conta e sincronizados nas preferências.
+- **Explorar:** recomendações baseadas nas leituras, avaliações e editora favorita; catálogo com carregamento por páginas e remoção de duplicatas. A aba Comunidade reúne publicações, avaliações, resenhas e comentários dos leitores.
+- **Perfil:** banner panorâmico, foto, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos pesquisáveis em português e inglês. Biblioteca fica abaixo dos personagens; edição retorna ao Perfil. Favoritos e banner são preservados por conta e sincronizados.
 - **Biblioteca:** estante em grade ou lista, filtros de status, diário, tags, notas, resenhas e cadastro manual.
-- **Busca:** pesquisa por título, autor ou editora na coleção e nos catálogos externos, com metadados em português e organização de séries e edições.
+- **Busca e catálogo:** Comic Vine como fonte principal, com fornecedores redundantes. Cada HQ tem uma prévia e uma página completa com sinopse, dados editoriais, equipe, personagens, edições relacionadas e Comunidade. Até seis capas alternativas reais podem ser oferecidas pela fonte; o número depende da edição.
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
 - **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o sistema. A leitura atual acompanha a HQ selecionada no aplicativo.
@@ -25,6 +25,8 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 ## Instalação e compatibilidade
 
 Requer **Android 7.0 ou superior**. Baixe o APK na página de releases. O Android pode pedir autorização para instalar aplicativos desta origem. Nas próximas versões, o próprio Quadrinheiro conduz o download e solicita a confirmação de instalação do sistema.
+
+A Comunidade exige uma conta conectada. Avaliações e textos só são compartilhados quando o leitor escolhe publicá-los; a biblioteca e as preferências continuam privadas. Informações editoriais e imagens são atribuídas ao Comic Vine. Quando uma fonte não informa páginas ou equipe, o app não inventa esses dados; o total de páginas pode ser informado no registro.
 
 A apresentação de notificações na tela bloqueada e na Now Bar depende da versão do Android, da One UI, das permissões e das preferências de privacidade do aparelho. A leitura utiliza uma notificação de progresso; não simula reprodução de áudio nem uma sessão do Spotify.
 
@@ -63,6 +65,23 @@ gradle :app:connectedDebugAndroidTest
 ```
 
 Os testes que exercitam autenticação e regras exigem os emuladores Firebase. Consulte o [workflow de publicação](.github/workflows/release-apk.yml) para comandos, portas e variáveis usados no CI. Os testes de interface exigem um dispositivo ou emulador Android; o CI utiliza API 34. Testes em emulador não substituem a validação de funções específicas da Samsung em aparelho real.
+
+### Serviço do catálogo
+
+O diretório [`catalog-service`](catalog-service) contém o Worker Cloudflare. As chaves dos fornecedores ficam em secrets do servidor, nunca em `BuildConfig`, recursos Android ou no APK. O aplicativo usa somente o endereço público do serviço. O Firebase permanece no plano Spark; o catálogo usa Workers Free com Durable Object SQLite, cache compartilhado e limites globais por recurso.
+
+```sh
+cd catalog-service
+npm ci
+npm test
+npx wrangler login
+npx wrangler secret put COMIC_VINE_API_KEY
+npx wrangler secret put SUPERHERO_API_KEY
+npx wrangler secret put APIFY_API_TOKEN
+npm run deploy
+```
+
+O serviço aceita somente operações de catálogo definidas no código. Respostas duplicadas compartilham a mesma consulta, o cache possui tamanho limitado e falhas não expõem URLs com credenciais. O Comic Vine limita consultas por recurso; os resultados ficam em cache por até 24 horas. O Actor GCD indicado foi avaliado, mas o teste inicial não retornou registros; não é executado a cada pesquisa ou seleção de capa.
 
 ### Organização
 

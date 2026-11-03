@@ -1,0 +1,10 @@
+{
+  "name": "quadrinheiro-catalog",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": { "bindings": [{ "name": "CATALOG", "class_name": "CatalogStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CatalogStore"] }],
+  "observability": { "enabled": false }
+}

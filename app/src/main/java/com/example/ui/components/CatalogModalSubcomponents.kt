@@ -863,7 +863,7 @@ internal fun CatalogWorkSummaryHeader(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "${draftComic.publisher} • ${draftComic.releaseYear} • ${draftComic.pageCount} págs",
+                text = listOfNotNull(draftComic.publisher.takeIf { it.isNotBlank() }, draftComic.releaseYear.toString(), draftComic.pageCount.takeIf { it > 1 || draftComic.sourceLabel != "Comic Vine" }?.let { "$it págs" }).joinToString(" • "),
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = s.textSecondary

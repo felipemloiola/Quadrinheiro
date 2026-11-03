@@ -600,6 +600,9 @@ data class ReaderProfile(
 @Immutable
 data class AppSettings(
     // SYSTEM_MONO_DEFAULT_V7: only new or missing preferences use these defaults.
+    val profileBannerUrl: String = "",
+    val profileShowcaseDetails: Map<String, String> = emptyMap(),
+    val profileShowcaseUpdatedAt: Long = 0L,
     val profileFavoriteComicIds: List<String> = emptyList(),
     val profileFavoriteCharacters: List<String> = emptyList(),
     val themeId: String = "SYSTEM_MONO",

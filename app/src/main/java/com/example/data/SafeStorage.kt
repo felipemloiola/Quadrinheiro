@@ -492,7 +492,7 @@ class SafeStorage(context: Context) {
                 val rawState = getItem(targetKey) ?: continue
                 val root = JSONObject(rawState)
                 val profObj = root.optJSONObject("profile") ?: continue
-                if (profObj.optBoolean("isDirty", false)) {
+                if (profObj.optBoolean("isDirty", false) && profObj.optLong("updatedAt", 0L) <= syncedAtMillis) {
                     profObj.put("isDirty", false)
                     if (profObj.optLong("updatedAt", 0L) <= 0L) {
                         profObj.put("updatedAt", syncedAtMillis)
@@ -509,6 +509,7 @@ class SafeStorage(context: Context) {
         if (!raw.isNullOrBlank()) {
             parseStoredStateJson(raw, loadTranslationCache())?.let { parsed ->
                 return parsed.copy(
+                    settings = getItem("profile_showcase_guest_local")?.let(ProfileShowcase::decode)?.let { ProfileShowcase.merge(it, parsed.settings) } ?: parsed.settings,
                     profile = parsed.profile.copy(
                         name = "Leitor Convidado",
                         handle = "@convidado",
@@ -528,7 +529,10 @@ class SafeStorage(context: Context) {
         if (uid.isBlank()) return null
         if (uid == "guest_local") return loadGuestState()
         val raw = getItem(accountStateKey(uid)) ?: return null
-        return parseStoredStateJson(raw, loadTranslationCache())
+        return parseStoredStateJson(raw, loadTranslationCache())?.let { state ->
+            val showcase = getItem("profile_showcase_$uid")?.let(ProfileShowcase::decode)
+            if (showcase == null) state else state.copy(settings = ProfileShowcase.merge(showcase, state.settings))
+        }
     }
 
     private fun parseStoredStateJson(
@@ -1053,7 +1057,14 @@ class SafeStorage(context: Context) {
         )
     }
 
+    fun saveShowcase(ownerUid: String, settings: AppSettings) {
+        if (ownerUid.isNotBlank()) setItem("profile_showcase_$ownerUid", ProfileShowcase.encode(settings))
+    }
+
     private fun serializeSettings(s: AppSettings): JSONObject = JSONObject().apply {
+        put("profileBannerUrl", s.profileBannerUrl.take(200000))
+        put("profileShowcaseDetails", JSONObject(s.profileShowcaseDetails))
+        put("profileShowcaseUpdatedAt", s.profileShowcaseUpdatedAt)
         put("profileFavoriteComicIds", JSONArray(s.profileFavoriteComicIds.distinct().take(4)))
         put("profileFavoriteCharacters", JSONArray(s.profileFavoriteCharacters.map { it.take(60) }.distinct().take(4)))
         put("themeId", s.themeId)
@@ -1109,6 +1120,9 @@ class SafeStorage(context: Context) {
             }
         }
         return AppSettings(
+            profileBannerUrl = obj.optString("profileBannerUrl").take(200000),
+            profileShowcaseUpdatedAt = obj.optLong("profileShowcaseUpdatedAt", 0L),
+            profileShowcaseDetails = obj.optJSONObject("profileShowcaseDetails").let { d -> d?.keys()?.asSequence()?.take(8)?.associateWith { d.optString(it).take(5000) }.orEmpty() },
             profileFavoriteComicIds = obj.optJSONArray("profileFavoriteComicIds").let { a -> (0 until (a?.length() ?: 0)).map { a!!.optString(it).take(200) }.filter { it.isNotBlank() }.distinct().take(4) },
             profileFavoriteCharacters = obj.optJSONArray("profileFavoriteCharacters").let { a -> (0 until (a?.length() ?: 0)).map { a!!.optString(it).take(60) }.filter { it.isNotBlank() }.distinct().take(4) },
             themeId = obj.optString("themeId", def.themeId),

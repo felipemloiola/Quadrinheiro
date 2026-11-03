@@ -548,15 +548,16 @@ class QuadrinheiroViewModel(
         storage.markComicsSynced(validIds, syncedAtMillis)
     }
 
-    private fun markProfileCleanInMemoryAndStorage(syncedAtMillis: Long = System.currentTimeMillis()) {
+    private fun markProfileCleanInMemoryAndStorage(syncedAtMillis: Long, ownerUid: String) {
+        if (activeOwnerUid() != ownerUid) { storage.markProfileSynced(syncedAtMillis, ownerUid); return }
         val cur = _profile.value
-        if (cur.isDirty) {
+        if (cur.isDirty && cur.updatedAt <= syncedAtMillis) {
             _profile.value = cur.copy(
                 isDirty = false,
                 updatedAt = if (cur.updatedAt > 0L) cur.updatedAt else syncedAtMillis
             )
         }
-        storage.markProfileSynced(syncedAtMillis)
+        storage.markProfileSynced(syncedAtMillis, ownerUid)
     }
 
     private fun startOrStopCloudListeners(user: CloudAuthUser?) {
@@ -577,7 +578,9 @@ class QuadrinheiroViewModel(
                                     localProfile = _profile.value,
                                     remoteProfile = remoteProfile
                                 )
-                                val remoteSettings = remoteProfile.preferences?.toAppSettings()
+                                val incomingSettings = remoteProfile.preferences?.toAppSettings()
+                                val remoteSettings = incomingSettings?.let { com.example.data.ProfileShowcase.merge(_appSettings.value, it) }
+                                val showcaseNeedsPush = incomingSettings != null && remoteSettings != incomingSettings
                                 var changedAny = false
                                 if (resolvedProfile != _profile.value) {
                                     _profile.value = resolvedProfile
@@ -631,15 +634,15 @@ class QuadrinheiroViewModel(
                                 if (changedAny) {
                                     persistAll(user.uid)
                                 }
-                                if (shouldPushLocal) {
+                                if (shouldPushLocal || showcaseNeedsPush) {
                                     runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
-                                        markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt)
+                                        markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt, user.uid)
                                     }
                                 }
                             } else {
                                 val localProf = _profile.value
                                 runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
-                                    markProfileCleanInMemoryAndStorage(localProf.updatedAt)
+                                    markProfileCleanInMemoryAndStorage(localProf.updatedAt, user.uid)
                                 }
                             }
                         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -1238,8 +1241,9 @@ class QuadrinheiroViewModel(
             _isSyncingCloud.value = true
             val dirtyComics = _comics.value.filter { it.isDirty }
             runCatching {
-                repo.saveUserProfile(user.uid, _profile.value, _appSettings.value)
-                markProfileCleanInMemoryAndStorage()
+                val snapshot = _profile.value
+                repo.saveUserProfile(user.uid, snapshot, _appSettings.value)
+                markProfileCleanInMemoryAndStorage(snapshot.updatedAt, user.uid)
                 val syncedIds = if (dirtyComics.isNotEmpty()) {
                     repo.syncDirtyComicsBatch(user.uid, _comics.value)
                 } else {
@@ -1531,7 +1535,7 @@ class QuadrinheiroViewModel(
                     if (repo != null && cloudUid != null && repo.currentAuthUser()?.uid == cloudUid) {
                         kotlinx.coroutines.withTimeoutOrNull(3500L) {
                             runCatching { repo.saveUserProfile(cloudUid, restoredProfile, _appSettings.value, strictHandleReservation = true) }.onSuccess {
-                                markProfileCleanInMemoryAndStorage(nowMs)
+                                markProfileCleanInMemoryAndStorage(nowMs, cloudUid!!)
                             }
                         }
                     }
@@ -1640,7 +1644,7 @@ class QuadrinheiroViewModel(
                     }
                     if (result != null) {
                         result.onSuccess {
-                            markProfileCleanInMemoryAndStorage(nowMs)
+                            markProfileCleanInMemoryAndStorage(nowMs, cloudUid!!)
                         }.onFailure { err ->
                             val msg = err.message.orEmpty()
                             if (msg.contains("PERMISSION_DENIED", ignoreCase = true)) {
@@ -1715,7 +1719,10 @@ class QuadrinheiroViewModel(
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
         val nowMs = System.currentTimeMillis()
-        val nextSettings = transform(_appSettings.value)
+        val candidateSettings = transform(_appSettings.value)
+        val showcaseChanged = com.example.data.ProfileShowcase.differs(_appSettings.value, candidateSettings)
+        val nextSettings = if (showcaseChanged) candidateSettings.copy(profileShowcaseUpdatedAt = maxOf(nowMs, _appSettings.value.profileShowcaseUpdatedAt + 1)) else candidateSettings
+        if (showcaseChanged) storage.saveShowcase(activeOwnerUid(), nextSettings)
         _appSettings.value = nextSettings
         if (nextSettings.shelfLayout.isNotBlank() && _shelfLayout.value != nextSettings.shelfLayout) {
             _shelfLayout.value = nextSettings.shelfLayout
@@ -1752,7 +1759,7 @@ class QuadrinheiroViewModel(
                     runCatching { repo.saveUserProfile(uid, profileSnap, settingsSnap) }
                 }
                 if (res != null && res.isSuccess) {
-                    markProfileCleanInMemoryAndStorage(updatedAtMs)
+                    markProfileCleanInMemoryAndStorage(profileSnap.updatedAt, uid)
                 } else {
                     QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
@@ -2041,6 +2048,21 @@ class QuadrinheiroViewModel(
             readDate = existing?.readDate?.ifBlank { if (_appSettings.value.autoFillReadDate) today else "" }
                 ?: if (_appSettings.value.autoFillReadDate) today else ""
         )
+    }
+
+    fun updateComicCover(item: ComicEntry, url: String) {
+        if (!url.startsWith("https://") || url.length > 2000) return
+        val owner = activeOwnerUid()
+        val old = _comics.value.firstOrNull { it.id == item.id || (item.externalId.isNotBlank() && it.externalId == item.externalId) } ?: return
+        if (old.coverUrl == url) return
+        val updated = old.copy(coverUrl = url, updatedAt = System.currentTimeMillis(), isDirty = true)
+        _comics.value = _comics.value.map { if (it.id == old.id) updated else it }
+        _infoModalComic.value?.takeIf { it.id == item.id }?.let { _infoModalComic.value = it.copy(coverUrl = url) }
+        if (old.id in _appSettings.value.profileFavoriteComicIds) updateSettings { settings ->
+            settings.copy(profileShowcaseDetails = settings.profileShowcaseDetails + ("comic:${old.id}" to com.example.data.ProfileShowcase.comicSnapshot(updated)))
+        }
+        persistAll(owner)
+        QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
     }
 
     fun saveComic(itemData: ComicEntry) {

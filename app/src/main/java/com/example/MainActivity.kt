@@ -48,6 +48,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.Icons.Outlined
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.Icons
@@ -511,6 +515,18 @@ fun QuadrinheiroApp(
         // Se o usuário ainda não tiver sessão ativa nem tiver escolhido o Modo Convidado,
         // renderiza exclusivamente a AuthScreen edge-to-edge.
         if (authUiState == AuthUiState.Unauthenticated) {
+            var authSurfaceReady by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    com.kyant.backdrop.LiquidGlassShaderPrewarmer.prewarmSynchronously()
+                }
+                androidx.compose.runtime.withFrameNanos { }
+                authSurfaceReady = true
+            }
+            if (!authSurfaceReady) {
+                com.example.ui.components.AuthLoadingSkeleton()
+                return@QuadrinheiroTheme
+            }
             androidx.compose.animation.AnimatedVisibility(
                 visibleState = remember {
                     androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
@@ -780,11 +796,13 @@ fun QuadrinheiroApp(
                                         onSettings = { viewModel.switchMainTab("settings") },
                                         onLibrary = { viewModel.switchMainTab("shelf") },
                                         onEditProfile = { viewModel.switchMainTab("settings"); viewModel.openSettingsCategory("profile") },
-                                        onUpdateShowcase = { ids, characters -> viewModel.updateSettings { it.copy(profileFavoriteComicIds = ids, profileFavoriteCharacters = characters) } },
+                                        onUpdateShowcase = { ids, characters, details -> viewModel.updateSettings { it.copy(profileFavoriteComicIds = ids, profileFavoriteCharacters = characters, profileShowcaseDetails = details) } },
+                                        onCommitProfile = { next, banner -> viewModel.updateProfile { next }; viewModel.updateSettings { it.copy(profileBannerUrl = banner) } },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
                                         onStatistics = { viewModel.openReadingStatistics() }
                                     )
                                     "explore" -> com.example.ui.screens.ExploreScreen(comics, routeListState,
+                                        profile = profile, onLogin = { viewModel.openAuthModalForLinking() },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
                                         onSearch = { query -> viewModel.setSearchQuery(query); viewModel.switchMainTab("search") })
                                     "settings" -> SettingsTabScreen(
@@ -1001,6 +1019,8 @@ fun QuadrinheiroApp(
                         }
                     }
                     ComicInfoSynopsisSheetModal(
+                        onCoverSelected = viewModel::updateComicCover,
+                        readerProfile = profile, onLogin = { viewModel.openAuthModalForLinking() },
                         comic = currentInfoComic,
                         savedEntry = savedMatch,
                         appSettings = appSettings,
@@ -1034,6 +1054,7 @@ fun QuadrinheiroApp(
                         comics.any { it.id == currentComic.id }
                     }
                     CatalogSheetModal(
+                        readerProfile = profile, onLogin = { viewModel.openAuthModalForLinking() },
                         selectedComic = currentComic,
                         isExistingInShelf = isExisting,
                         isSheetExpanded = isSheetExpanded,
@@ -1464,7 +1485,7 @@ private fun IOS27BottomTabViewContainer(
                 // Tab 1: Biblioteca
                 LiquidBottomTab(onClick = { onSelectTab("explore") }) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Explore,
+                        imageVector = if (selectedTabIndex == 1) androidx.compose.material.icons.Icons.Default.Explore else androidx.compose.material.icons.Icons.Outlined.Explore,
                         contentDescription = "Explorar",
                         tint = tabLayerColor,
                         modifier = Modifier
@@ -1500,7 +1521,7 @@ private fun IOS27BottomTabViewContainer(
                 // Tab 2: Ajustes
                 LiquidBottomTab(onClick = { onSelectTab("profile") }) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.PersonOutline,
+                        imageVector = if (selectedTabIndex == 2) androidx.compose.material.icons.Icons.Default.Person else androidx.compose.material.icons.Icons.Outlined.PersonOutline,
                         contentDescription = "Perfil",
                         tint = tabLayerColor,
                         modifier = Modifier

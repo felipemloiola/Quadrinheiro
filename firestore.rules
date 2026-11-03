@@ -87,9 +87,27 @@ service cloud.firestore {
         ));
     }
 
+    // Optional private showcase: four IDs/names, at most eight small snapshots/portraits,
+    // one compressed banner and a monotonic client revision. Existing fields stay compatible.
+    function boundedStringAt(values, index, maximum) {
+      return values.size() <= index || (values[index] is string && values[index].size() <= maximum);
+    }
+    function validShowcaseList(values, maximum) {
+      // join rejects non-string elements and bounds the entire private field.
+      return values is list && values.size() <= 4 && values.join('').size() <= 4 * maximum;
+    }
+    function validShowcaseDetails(details) {
+      return details is map && details.size() <= 8 && details.values().join('').size() <= 20000;
+    }
+
     function isValidUserPreferences(prefs) {
       return prefs is map &&
         prefs.size() <= 45 &&
+        (!('profileFavoriteComicIds' in prefs) || validShowcaseList(prefs.profileFavoriteComicIds, 200)) &&
+        (!('profileFavoriteCharacters' in prefs) || validShowcaseList(prefs.profileFavoriteCharacters, 100)) &&
+        (!('profileShowcaseDetails' in prefs) || validShowcaseDetails(prefs.profileShowcaseDetails)) &&
+        (!('profileShowcaseUpdatedAt' in prefs) || (prefs.profileShowcaseUpdatedAt is int && prefs.profileShowcaseUpdatedAt >= 0)) &&
+        (!('profileBannerUrl' in prefs) || (prefs.profileBannerUrl is string && prefs.profileBannerUrl.size() <= 200000)) &&
         (!('themeId' in prefs) || (prefs.themeId is string && prefs.themeId.size() >= 1 && prefs.themeId.size() <= 60)) &&
         (!('colorScheme' in prefs) || (prefs.colorScheme is string && prefs.colorScheme.size() >= 1 && prefs.colorScheme.size() <= 20)) &&
         (!('glassLevel' in prefs) || (prefs.glassLevel is int && prefs.glassLevel >= 0 && prefs.glassLevel <= 100)) &&
@@ -256,6 +274,50 @@ service cloud.firestore {
           resource.data.ownerId == request.resource.data.ownerId &&
           isValidCloudComic(request.resource.data, userId);
         allow delete: if isOwner(userId);
+      }
+    }
+
+    // Community schema: explicit opt-in snapshots, never reads from users/{uid}/comics.
+    // Reviews: ownerId, author(1..80), handle(0..60), avatar/cover(HTTPS or empty,
+    // <=2000), comicKey(32), title(1..300), body(0..5000), rating(0..5),
+    // published(bool), createdAt/updatedAt(server timestamps).
+    // Comments: ownerId, author(1..80), body(1..1200), createdAt(server timestamp).
+    function communityImage(value) {
+      return value is string && value.size() <= 2000 && (value == '' || value.matches('https://.*'));
+    }
+    function validCommunityReview(data) {
+      return data.keys().hasAll(['ownerId','author','handle','avatar','comicKey','title','cover','body','rating','published','createdAt','updatedAt']) &&
+        data.keys().hasOnly(['ownerId','author','handle','avatar','comicKey','title','cover','body','rating','published','createdAt','updatedAt']) &&
+        data.ownerId is string && data.ownerId == request.auth.uid &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 80 &&
+        data.handle is string && data.handle.size() <= 60 && communityImage(data.avatar) && communityImage(data.cover) &&
+        data.comicKey is string && data.comicKey.size() == 32 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.body is string && data.body.size() <= 5000 && data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        (data.body.size() > 0 || data.rating > 0) && data.published is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time && data.updatedAt == request.time;
+    }
+    function validCommunityComment(data) {
+      return data.keys().hasAll(['ownerId','author','body','createdAt']) && data.keys().hasOnly(['ownerId','author','body','createdAt']) &&
+        data.ownerId is string && data.ownerId == request.auth.uid &&
+        data.author is string && data.author.size() >= 1 && data.author.size() <= 80 &&
+        data.body is string && data.body.size() >= 1 && data.body.size() <= 1200 && data.createdAt == request.time;
+    }
+    match /communityReviews/{reviewId} {
+      allow get: if isSignedIn() && ((!exists(/databases/$(database)/documents/communityReviews/$(reviewId)) && reviewId.matches(request.auth.uid + '_.*')) || resource.data.published == true || resource.data.ownerId == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.published == true;
+      allow create: if isSignedIn() && validCommunityReview(request.resource.data) && request.resource.data.createdAt == request.time;
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId && request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.comicKey == resource.data.comicKey && validCommunityReview(request.resource.data);
+      allow delete: if false; // Withdrawal keeps comments addressable to their own authors.
+      match /comments/{commentId} {
+        allow read: if isSignedIn() && get(/databases/$(database)/documents/communityReviews/$(reviewId)).data.published == true;
+        allow create: if isSignedIn() && get(/databases/$(database)/documents/communityReviews/$(reviewId)).data.published == true &&
+          validCommunityComment(request.resource.data);
+        allow update: if false;
+        allow delete: if isSignedIn() && (resource.data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/communityReviews/$(reviewId)).data.ownerId == request.auth.uid);
       }
     }
 

@@ -66,6 +66,9 @@ data class CloudAuthUser(
 @IgnoreExtraProperties
 @Immutable
 data class CloudUserPreferences(
+    val profileBannerUrl: String = "",
+    val profileShowcaseDetails: Map<String, String> = emptyMap(),
+    val profileShowcaseUpdatedAt: Long = 0L,
     val profileFavoriteComicIds: List<String> = emptyList(),
     val profileFavoriteCharacters: List<String> = emptyList(),
     val themeId: String = "SYSTEM_MONO",
@@ -113,6 +116,9 @@ data class CloudUserPreferences(
     )
 ) {
     fun toAppSettings(): AppSettings = AppSettings(
+        profileBannerUrl = profileBannerUrl.take(200000),
+        profileShowcaseDetails = profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
+        profileShowcaseUpdatedAt = profileShowcaseUpdatedAt.coerceAtLeast(0L),
         profileFavoriteComicIds = profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
         profileFavoriteCharacters = profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
         themeId = themeId.ifBlank { "SYSTEM_MONO" },
@@ -157,6 +163,9 @@ data class CloudUserPreferences(
 
     companion object {
         fun fromAppSettings(s: AppSettings): CloudUserPreferences = CloudUserPreferences(
+            profileBannerUrl = s.profileBannerUrl.take(200000),
+            profileShowcaseDetails = s.profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
+            profileShowcaseUpdatedAt = s.profileShowcaseUpdatedAt.coerceAtLeast(0L),
             profileFavoriteComicIds = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
             profileFavoriteCharacters = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
             themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),

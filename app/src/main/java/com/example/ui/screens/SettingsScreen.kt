@@ -494,7 +494,7 @@ fun SettingsTabScreen(
                 ) {
                     Box(Modifier.size(42.dp).testTag("settings_footer_icon").clip(RoundedCornerShape(12.dp))
                         .background(if (themeColors.isDark) Color.Black else themeColors.bgPrimary), contentAlignment = Alignment.Center) {
-                        QuadrinheiroLogo(variant = com.example.ui.components.QuadrinheiroLogoVariant.Primary,
+                        QuadrinheiroLogo(variant = com.example.ui.components.QuadrinheiroLogoVariant.OnDark,
                             modifier = Modifier.size(34.dp).testTag("settings_footer_mark"))
                     }
                     com.example.ui.components.QuadrinheiroBrandText(

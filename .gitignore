@@ -33,3 +33,10 @@ public/assets/
 
 
 /macrobenchmark/build/
+functions/node_modules/
+functions/.secret.local
+functions/.env*
+catalog-service/node_modules/
+catalog-service/.wrangler/
+catalog-service/.dev.vars*
+/.wrangler/

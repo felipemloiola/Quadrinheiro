@@ -146,12 +146,23 @@ fun CatalogSheetModal(
     onSave: (ComicEntry) -> Unit,
     onDelete: (String) -> Unit,
     onDismiss: () -> Unit,
-    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
+    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
+    readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
+    onLogin: () -> Unit = {}
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     var draftComic by remember(selectedComic.id) { mutableStateOf(selectedComic) }
+    var fullPage by remember(selectedComic.id) { mutableStateOf(false) }
+    var totalPagesInput by remember(selectedComic.id) { mutableStateOf(if (selectedComic.sourceLabel == "Comic Vine" && selectedComic.pageCount <= 1 && !isExistingInShelf) "" else selectedComic.pageCount.toString()) }
+    var pagesError by remember(selectedComic.id) { mutableStateOf(false) }
+
+    if (fullPage) com.example.ui.screens.ComicDetailDialog(draftComic, readerProfile, allUserComics,
+        onClose = { fullPage = false }, onRegister = { next -> draftComic = next; fullPage = false },
+        onCover = { draftComic = draftComic.copy(coverUrl = it) }, onLogin = onLogin,
+        onShare = { onShareComic(draftComic, SocialShareCardType.COMPLETED_READING, null) })
+
     LaunchedEffect(selectedComic.id, selectedComic.synopsisPtBr) {
         if (selectedComic.synopsisPtBr.isNotBlank() && draftComic.synopsisPtBr != selectedComic.synopsisPtBr) {
             draftComic = draftComic.copy(
@@ -204,6 +215,16 @@ fun CatalogSheetModal(
     val sheetScrollState = rememberLazyListState()
     val context = LocalContext.current
     val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { onSetExpanded(true) })
+    LaunchedEffect(selectedComic.externalId) {
+        if (selectedComic.externalId.startsWith("cv-")) try {
+            val details = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.example.data.ComicVineCatalog.resolve(selectedComic) }
+            if (details != null) draftComic = draftComic.copy(
+                publisher = draftComic.publisher.ifBlank { details.publisher },
+                authors = draftComic.authors.ifBlank { details.creators.filter { it.role.contains("writer", true) || it.role.contains("artist", true) }.take(4).joinToString(", ") { it.name } }
+            )
+        } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { }
+    }
 
     // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
     LaunchedEffect(draftComic.coverUrl) {
@@ -304,7 +325,10 @@ fun CatalogSheetModal(
                     closeTag = "modal_cancel_button", shareTag = "modal_share_card_button",
                     onClose = { sheet.dismiss() },
                     onShare = { onShareComic(buildFinalComicForSave(), SocialShareCardType.COMPLETED_READING, null) },
-                    onSave = { onSave(buildFinalComicForSave()) }
+                    onSave = {
+                        if (totalPagesInput.toIntOrNull()?.let { it in 1..20000 } != true) pagesError = true
+                        else onSave(buildFinalComicForSave())
+                    }
                 )
 
                 // Compose and measure only the editor sections near the viewport.
@@ -329,6 +353,18 @@ fun CatalogSheetModal(
                         draftComic = draftComic,
                         onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
                     )
+                    androidx.compose.material3.TextButton(onClick = { fullPage = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Ver página da HQ", color = s.accentColor, fontSize = 14.sp)
+                    }
+                    androidx.compose.material3.Text("Total de páginas", color = s.textSecondary, fontSize = 12.sp)
+                    AppleTextField(totalPagesInput, { value ->
+                        totalPagesInput = value.filter(Char::isDigit).take(5)
+                        totalPagesInput.toIntOrNull()?.takeIf { it in 1..20000 }?.let { count ->
+                            draftComic = draftComic.copy(pageCount = count, currentPage = if (draftComic.status == ReadingStatus.READ) count else draftComic.currentPage.coerceAtMost(count))
+                            pagesError = false
+                        }
+                    }, "Informe o total de páginas")
+                    if (pagesError) Text("Informe um total entre 1 e 20.000 páginas.", color = s.accentColor, fontSize = 12.sp)
 // Item 1.5: Sequência da Série (#1, #2, #3...)
                     ComicSequenceCarouselCard(
                         currentComic = draftComic,
@@ -584,7 +620,10 @@ fun ComicInfoSynopsisSheetModal(
     onOpenCatalogWithStatus: (ComicEntry, ReadingStatus) -> Unit,
     onEditSavedComic: (ComicEntry) -> Unit,
     onDismiss: () -> Unit,
-    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> }
+    onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
+    readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
+    onLogin: () -> Unit = {},
+    onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> }
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
@@ -629,6 +668,12 @@ fun ComicInfoSynopsisSheetModal(
         }
     }
 
+    var fullPage by remember(comic.id) { mutableStateOf(false) }
+    if (fullPage) com.example.ui.screens.ComicDetailDialog(displayComic, readerProfile, allUserComics,
+        onClose = { fullPage = false }, onRegister = { next -> fullPage = false; onOpenCatalogWithStatus(next, savedEntry?.status ?: com.example.model.ReadingStatus.WANT_TO_READ) },
+        onCover = { url -> displayComic = displayComic.copy(coverUrl = url); savedEntry?.let { onCoverSelected(it, url) } }, onLogin = onLogin,
+        onShare = { onShareComic(savedEntry ?: displayComic, SocialShareCardType.COMPLETED_READING, null) })
+
     val synopsisText = remember(displayComic) {
         val candidate = displayComic.synopsisPtBr.trim().ifBlank { displayComic.synopsis.trim() }
         if (candidate.isNotBlank() && PortugueseComicTranslator.isPortugueseText(candidate)) {
@@ -650,7 +695,7 @@ fun ComicInfoSynopsisSheetModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = if (s.isLight) 0.14f else 0.24f))
+            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
             .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -708,8 +753,11 @@ fun ComicInfoSynopsisSheetModal(
                     )
                 }
 
-                SheetToolbar("Informações da HQ", "synopsis_close_button", "synopsis_share_card_button",
+                SheetToolbar("Prévia da HQ", "synopsis_close_button", "synopsis_share_card_button",
                     onClose = { sheet.dismiss() }, onShare = { onShareComic(savedEntry ?: displayComic, SocialShareCardType.COMPLETED_READING, null) })
+                androidx.compose.material3.TextButton(onClick = { fullPage = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Ver página da HQ", color = s.accentColor, fontSize = 14.sp)
+                }
 
                 Column(
                     modifier = Modifier
@@ -776,7 +824,7 @@ fun ComicInfoSynopsisSheetModal(
                             )
 
                             Text(
-                                text = "${displayComic.publisher} • ${displayComic.releaseYear} • ${displayComic.pageCount} páginas",
+                                text = listOfNotNull(displayComic.publisher.takeIf { it.isNotBlank() }, displayComic.releaseYear.toString(), displayComic.pageCount.takeIf { it > 1 || displayComic.sourceLabel != "Comic Vine" }?.let { "$it páginas" }).joinToString(" • "),
                                 fontSize = 11.5.sp,
                                 color = s.textSecondary
                             )
@@ -873,7 +921,7 @@ fun ComicInfoSynopsisSheetModal(
                         ) {
                             Text("Ano e Extensão", fontSize = 12.sp, color = s.textSecondary)
                             Text(
-                                "${displayComic.releaseYear} • ${displayComic.pageCount} págs",
+                                listOfNotNull(displayComic.releaseYear.toString(), displayComic.pageCount.takeIf { it > 1 || displayComic.sourceLabel != "Comic Vine" }?.let { "$it págs" }).joinToString(" • "),
                                 fontSize = 12.sp,
                                 fontFamily = SpaceGroteskTabularFamily,
                                 fontWeight = FontWeight.SemiBold,
