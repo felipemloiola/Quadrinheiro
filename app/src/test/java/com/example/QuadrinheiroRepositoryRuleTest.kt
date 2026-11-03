@@ -53,6 +53,8 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val aliceUid = signInTestUser("alice@example.com")
 
         val customSettings = AppSettings(
+            profileFavoriteComicIds = listOf("comic-one", "comic-two", "comic-three", "comic-four"),
+            profileFavoriteCharacters = listOf("Batman", "Magali", "Luffy", "Tempestade"),
             themeId = "carmineRed",
             colorScheme = "dark",
             shelfColumns = 4,
@@ -90,6 +92,8 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertEquals("init-batman-fraction-2", fetchedProfile?.activeReadingComicId)
 
         val restoredSettings = fetchedProfile?.toAppSettings()
+        assertEquals(customSettings.profileFavoriteComicIds, restoredSettings?.profileFavoriteComicIds)
+        assertEquals(customSettings.profileFavoriteCharacters, restoredSettings?.profileFavoriteCharacters)
         assertEquals("carmineRed", restoredSettings?.themeId)
         assertEquals(4, restoredSettings?.shelfColumns)
         assertEquals("RATING", restoredSettings?.defaultShelfSort)

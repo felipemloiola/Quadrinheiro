@@ -8,14 +8,17 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 
 ## Recursos
 
-- **Biblioteca:** estante em grade ou lista, filtros de status, favoritos, tags, notas, resenhas e cadastro manual.
-- **Descoberta:** recomendações locais baseadas nas leituras e avaliações, busca em catálogos externos, metadados em português e organização de séries e edições. O que já está na coleção é excluído das sugestões iniciais.
+- **Início:** leitura atual, progresso e metas, com acesso rápido às suas histórias.
+- **Explorar:** recomendações locais baseadas nas leituras e avaliações, seleções por universo e catálogo, com páginas expandidas. A área de comunidades está reservada para uma futura atualização.
+- **Perfil:** resumo das leituras, resenhas, quatro HQs favoritas e quatro personagens; acesso à Biblioteca e aos Ajustes. Favoritos são preservados por conta e sincronizados nas preferências.
+- **Biblioteca:** estante em grade ou lista, filtros de status, diário, tags, notas, resenhas e cadastro manual.
+- **Busca:** pesquisa por título, autor ou editora na coleção e nos catálogos externos, com metadados em português e organização de séries e edições.
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
 - **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o sistema. A leitura atual acompanha a HQ selecionada no aplicativo.
 - **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca**.
 - **Compartilhamento:** cartões verticais de leitura concluída, momento e metas, com prévia, salvamento e compartilhamento pelo Android.
-- **Personalização e acessibilidade:** cores, fundo do ícone no launcher, aparência, tamanho do texto, contraste, transparência e movimento reduzido.
+- **Personalização e acessibilidade:** cores de destaque e do Q do ícone, fundo neutro claro/escuro, tamanho do texto, contraste, transparência e movimento reduzido. O ícone é aplicado após sair do app, preservando a tela em uso.
 - **Armazenamento:** medição dos dados locais e limpeza de cache em Ajustes, preservando biblioteca, contas e backups. Capas e respostas HTTP têm limites separados de 64 e 16 MiB.
 - **Atualizações:** download dentro do aplicativo, verificação do pacote e abertura do instalador do Android.
 

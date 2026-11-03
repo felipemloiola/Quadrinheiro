@@ -12,7 +12,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         com.example.data.CacheMaintenance.schedule(this)
-        runCatching { LauncherAppearance.sync(this); LauncherAppearance.schedule(this) }
+        runCatching { LauncherAppearance.schedule(this) }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

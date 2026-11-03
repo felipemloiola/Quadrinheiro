@@ -225,7 +225,16 @@ data class IOS27ThemeColors(
 
 typealias IOS27ThemeState = IOS27ThemeColors
 
-fun getIOS27ThemeColors(appTheme: AppTheme, isDark: Boolean): IOS27ThemeColors {
+fun getIOS27ThemeColors(appTheme: AppTheme, isDark: Boolean): IOS27ThemeColors =
+    legacyThemeColors(appTheme, isDark).copy(
+        bgPrimary = if (isDark) Color(0xFF000000) else Color(0xFFF2F2F7),
+        bgSecondary = if (isDark) Color(0xFF1C1C1E) else Color.White,
+        bgTertiary = if (isDark) Color(0xFF2C2C2E) else Color(0xFFE5E5EA),
+        islandSurface = (if (isDark) Color(0xFF1C1C1E) else Color.White).copy(alpha = .94f),
+        isAllBlack = false, isAllWhite = false
+    )
+
+private fun legacyThemeColors(appTheme: AppTheme, isDark: Boolean): IOS27ThemeColors {
     return when {
         // 1. MODO ESCURO + PRETO (ALL-BLACK OLED STEALTH)
         isDark && appTheme == AppTheme.BLACK -> IOS27ThemeColors(
@@ -428,6 +437,10 @@ fun QuadrinheiroTheme(
 ) {
     // SYSTEM_MONO_THEME_V7: explicit user choices always take precedence.
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val launcherContext = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(settings.themeId) {
+        com.example.LauncherAppearance.rememberAccent(launcherContext, settings.themeId)
+    }
     val isDark = when (settings.colorScheme.lowercase()) {
         "system" -> systemDark
         "light" -> false

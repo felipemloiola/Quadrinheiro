@@ -48,6 +48,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -250,12 +252,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        runCatching { LauncherAppearance.sync(this) }
+        LauncherAppearance.foreground = true
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
     }
 
     override fun onStop() {
         super.onStop()
+        LauncherAppearance.foreground = false
+        if (!isChangingConfigurations) LauncherAppearance.scheduleBackgroundSync(this)
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
     }
 
@@ -448,6 +452,7 @@ fun QuadrinheiroApp(
             isSidebarOpen -> viewModel.setSidebarOpen(false)
             isStatisticsOpen -> viewModel.closeReadingStatistics()
             activeTab == "shelf" && shelfSection != "shelf" -> viewModel.setShelfSection("shelf")
+            activeTab == "shelf" || activeTab == "settings" -> viewModel.switchMainTab("profile")
             else -> viewModel.switchMainTab("home")
         }
     }
@@ -549,31 +554,6 @@ fun QuadrinheiroApp(
             isFirstFrameRendered = true
         }
 
-        // Cache em memória da cor dominante vibrante extraída diretamente do bitmap real da capa
-        val extractedCoverColors = remember { androidx.compose.runtime.mutableStateMapOf<String, Color>() }
-        val activeCoverUrl = currentlyReadingComic?.coverUrl?.trim().orEmpty()
-        LaunchedEffect(isFirstFrameRendered, activeCoverUrl, currentlyReadingComic?.title) {
-            if (!isFirstFrameRendered) return@LaunchedEffect
-            val comic = currentlyReadingComic ?: return@LaunchedEffect
-            val rawUrl = comic.coverUrl.trim().replace("http://", "https://").let { u ->
-                if (u.isEmpty() || u.contains("covers.openlibrary.org")) {
-                    com.example.data.CuratedCatalog.findCoverUrlByTitle(comic.title) ?: u
-                } else u
-            }
-            if (rawUrl.isNotEmpty() && !extractedCoverColors.containsKey(rawUrl)) {
-                val color = com.example.ui.components.AmbientImageProcessor.processAmbientCoverColor(
-                    context = context,
-                    rawUrl = rawUrl,
-                    dispatcher = kotlinx.coroutines.Dispatchers.Default
-                )
-                if (color != null) {
-                    extractedCoverColors[rawUrl] = color
-                }
-            }
-        }
-
-        // Cor de luz de fundo: segue o tema ativo se não houver HQ com status "Lendo".
-        // Quando há uma HQ com status READING ("Lendo"), usa a cor vibrante extraída da capa (ou fallback fiel à capa)!
         val resolvedCoverUrl = remember(currentlyReadingComic) {
             val comic = currentlyReadingComic ?: return@remember ""
             val raw = comic.coverUrl.trim().replace("http://", "https://")
@@ -581,63 +561,6 @@ fun QuadrinheiroApp(
                 com.example.data.CuratedCatalog.findCoverUrlByTitle(comic.title) ?: raw
             } else raw
         }
-        val sampledCoverColor = if (resolvedCoverUrl.isNotEmpty()) extractedCoverColors[resolvedCoverUrl] else null
-
-        val backgroundGlowColor = remember(
-            currentlyReadingComic,
-            sampledCoverColor,
-            themeColors.accent,
-            themeColors.accentSecondary,
-            isDark
-        ) {
-            if (currentlyReadingComic == null) {
-                if (isDark) themeColors.accentSecondary else themeColors.accent
-            } else if (sampledCoverColor != null) {
-                sampledCoverColor
-            } else {
-                when {
-                    currentlyReadingComic.title.contains("Ano Um", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Year One", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Batman", ignoreCase = true) -> Color(0xFFE11D48) // Vermelho Carmim da capa
-                    currentlyReadingComic.title.contains("Watchmen", ignoreCase = true) -> Color(0xFFF5C518)
-                    currentlyReadingComic.title.contains("Sandman", ignoreCase = true) -> Color(0xFFD97706)
-                    currentlyReadingComic.title.contains("Berserk", ignoreCase = true) -> Color(0xFFDC2626)
-                    currentlyReadingComic.title.contains("Persepolis", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Study Guide", ignoreCase = true) -> Color(0xFF14B8A6)
-                    currentlyReadingComic.title.contains("X-Men", ignoreCase = true) -> Color(0xFFEA580C)
-                    currentlyReadingComic.title.contains("Saga", ignoreCase = true) -> Color(0xFFEA580C)
-                    currentlyReadingComic.title.contains("Akira", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Spider", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Aranha", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Demolidor", ignoreCase = true) ||
-                        currentlyReadingComic.title.contains("Daredevil", ignoreCase = true) -> Color(0xFFEF4444)
-                    currentlyReadingComic.genre.contains("Manga", ignoreCase = true) ||
-                        currentlyReadingComic.genre.contains("Mangá", ignoreCase = true) -> Color(0xFFEC4899)
-                    currentlyReadingComic.genre.contains("Sci-Fi", ignoreCase = true) -> Color(0xFF06B6D4)
-                    currentlyReadingComic.publisher.contains("Marvel", ignoreCase = true) -> Color(0xFFEF4444)
-                    currentlyReadingComic.publisher.contains("DC", ignoreCase = true) -> Color(0xFFE11D48)
-                    else -> {
-                        val hash = kotlin.math.abs(currentlyReadingComic.title.hashCode())
-                        val palette = listOf(
-                            Color(0xFFE11D48), Color(0xFFF5C518), Color(0xFF8B5CF6),
-                            Color(0xFF06B6D4), Color(0xFF10B981), Color(0xFFF97316)
-                        )
-                        palette[hash % palette.size]
-                    }
-                }
-            }
-        }
-        val animatedGlowColor by animateColorAsState(
-            targetValue = backgroundGlowColor,
-            animationSpec = motion.tween(550),
-            label = "coverColorGlow"
-        )
-        val animatedAccentColor by animateColorAsState(
-            targetValue = themeColors.accent,
-            animationSpec = motion.tween(550),
-            label = "accentColorGlow"
-        )
-
         val menuHostState = remember { com.example.ui.components.LiquidGlassMenuHostState() }
         LaunchedEffect(activeTab, settingsSubPage, shelfSection) {
             menuHostState.dismissMenu()
@@ -669,8 +592,7 @@ fun QuadrinheiroApp(
                     val hasReadingCoverBg = isFirstFrameRendered &&
                         currentlyReadingComic != null &&
                         appSettings.backgroundExtension &&
-                        resolvedCoverUrl.isNotEmpty() &&
-                        !themeColors.isAllBlack
+                        resolvedCoverUrl.isNotEmpty()
 
                     Box(
                         modifier = Modifier
@@ -682,57 +604,8 @@ fun QuadrinheiroApp(
                             )
                             .background(themeColors.bgPrimary)
                     ) {
-                        // A. Gradiente escultural base do tema + luz ambiente suave
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            drawRect(themeColors.bgPrimary)
-
-                            if (!themeColors.isAllBlack) {
-                                drawRect(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(s.gradLinearStart, s.gradLinearMid, s.gradLinearEnd),
-                                        start = Offset.Zero,
-                                        end = Offset(size.width, size.height)
-                                    ),
-                                    alpha = if (hasReadingCoverBg) 0.35f else 0.85f
-                                )
-                            }
-
-                            val globalAlphaMultiplier = if (themeColors.isAllBlack) 0.05f else 1.0f
-
-                            if (appSettings.backgroundExtension) {
-                                val topGlowAlpha = if (currentlyReadingComic != null) {
-                                    0.12f * globalAlphaMultiplier
-                                } else {
-                                    (if (isDark) 0.14f else 0.09f) * globalAlphaMultiplier
-                                }
-                                drawRect(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            animatedGlowColor.copy(alpha = topGlowAlpha),
-                                            Color.Transparent
-                                        ),
-                                        center = Offset(size.width * 0.32f, size.height * 0.10f),
-                                        radius = size.height * 0.40f
-                                    ),
-                                    size = Size(size.width, size.height * .5f)
-                                )
-                            }
-
-                            val bottomGlowColor = animatedAccentColor
-                            drawRect(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        bottomGlowColor.copy(alpha = (if (isDark) 0.10f else 0.07f) * globalAlphaMultiplier),
-                                        Color.Transparent
-                                    ),
-                                    center = Offset(size.width * 0.5f, size.height * 0.90f),
-                                    radius = size.maxDimension * 0.68f
-                                )
-                            )
-                        }
-
-                        // B. A própria imagem da HQ em leitura como iluminação difusa perceptível e elegante
-                        // Desfoque orgânico de 14.dp + opacidade calibrada (32% em ambos os modos claro e escuro) para iluminação ambiente viva e equilibrada
+                        // Neutral system surface; cover atmosphere supplies the only background tint.
+                        // Cover light fades into the neutral surface within the top quarter.
                         if (hasReadingCoverBg) {
                             com.example.ui.components.ReadingCoverAtmosphere(resolvedCoverUrl, themeColors.bgPrimary)
                         }
@@ -800,8 +673,7 @@ fun QuadrinheiroApp(
                                         onOpenProfileSettings = {
                                             viewModel.scrollMemory[currentRouteKey] =
                                                 activeListState.firstVisibleItemIndex to activeListState.firstVisibleItemScrollOffset
-                                            viewModel.switchMainTab("settings")
-                                            viewModel.openSettingsCategory("profile")
+                                            viewModel.switchMainTab("profile")
                                         },
                                         onGoToSearch = { viewModel.switchMainTab("search") },
                                         onGoToShelf = { viewModel.switchMainTab("shelf") },
@@ -818,6 +690,7 @@ fun QuadrinheiroApp(
                                     )
 
                                     "shelf" -> ShelfLibraryTab(
+                                        onBackToProfile = { viewModel.switchMainTab("profile") },
                                         comics = comics,
                                         profile = profile,
                                         appSettings = appSettings,
@@ -902,6 +775,18 @@ fun QuadrinheiroApp(
                                         }
                                     )
 
+                                    "profile" -> com.example.ui.screens.ReaderProfileScreen(
+                                        comics, profile, appSettings, routeListState,
+                                        onSettings = { viewModel.switchMainTab("settings") },
+                                        onLibrary = { viewModel.switchMainTab("shelf") },
+                                        onEditProfile = { viewModel.switchMainTab("settings"); viewModel.openSettingsCategory("profile") },
+                                        onUpdateShowcase = { ids, characters -> viewModel.updateSettings { it.copy(profileFavoriteComicIds = ids, profileFavoriteCharacters = characters) } },
+                                        onComic = { viewModel.openInfoSynopsisModal(it) },
+                                        onStatistics = { viewModel.openReadingStatistics() }
+                                    )
+                                    "explore" -> com.example.ui.screens.ExploreScreen(comics, routeListState,
+                                        onComic = { viewModel.openInfoSynopsisModal(it) },
+                                        onSearch = { query -> viewModel.setSearchQuery(query); viewModel.switchMainTab("search") })
                                     "settings" -> SettingsTabScreen(
                                         viewModel = viewModel,
                                         comics = comics,
@@ -948,7 +833,7 @@ fun QuadrinheiroApp(
                 CompositionLocalProvider(
                     LocalLiquidGlassBackdrop provides mainContentBackdrop
                 ) {
-                    if (activeTab != "settings" && !isStatisticsOpen && appSettings.showFloatingMenu) {
+                    if (activeTab == "home" && !isStatisticsOpen && appSettings.showFloatingMenu) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1501,8 +1386,8 @@ private fun IOS27BottomTabViewContainer(
         }
 
         val selectedTabIndex = when (activeTab) {
-            "shelf", "diary" -> 1
-            "settings" -> 2
+            "explore" -> 1
+            "profile", "settings", "shelf", "diary" -> 2
             "search" -> -1
             else -> 0
         }
@@ -1520,8 +1405,8 @@ private fun IOS27BottomTabViewContainer(
                 onTabSelected = { index ->
                     when (index) {
                         0 -> onSelectTab("home")
-                        1 -> onSelectTab("shelf")
-                        2 -> onSelectTab("settings")
+                        1 -> onSelectTab("explore")
+                        2 -> onSelectTab("profile")
                     }
                 },
                 backdrop = mainBackdrop,
@@ -1544,7 +1429,7 @@ private fun IOS27BottomTabViewContainer(
                 LiquidBottomTab(onClick = { onSelectTab("home") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 0) LucideIcons.OpenBookFilled else LucideIcons.OpenBook,
-                        contentDescription = "Lendo",
+                        contentDescription = "Início",
                         tint = tabLayerColor,
                         modifier = Modifier
                             .size(29.dp)
@@ -1557,7 +1442,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                     )
                     BasicText(
-                        text = "Lendo",
+                        text = "Início",
                         style = TextStyle(
                             color = tabLayerColor,
                             fontSize = 10.5.sp,
@@ -1577,10 +1462,10 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 1: Biblioteca
-                LiquidBottomTab(onClick = { onSelectTab("shelf") }) {
+                LiquidBottomTab(onClick = { onSelectTab("explore") }) {
                     Icon(
-                        imageVector = if (selectedTabIndex == 1) LucideIcons.BooksVertical else LucideIcons.BookClosed,
-                        contentDescription = "Biblioteca",
+                        imageVector = androidx.compose.material.icons.Icons.Default.Explore,
+                        contentDescription = "Explorar",
                         tint = tabLayerColor,
                         modifier = Modifier
                             .size(29.dp)
@@ -1593,7 +1478,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                     )
                     BasicText(
-                        text = "Biblioteca",
+                        text = "Explorar",
                         style = TextStyle(
                             color = tabLayerColor,
                             fontSize = 10.5.sp,
@@ -1613,10 +1498,10 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 2: Ajustes
-                LiquidBottomTab(onClick = { onSelectTab("settings") }) {
+                LiquidBottomTab(onClick = { onSelectTab("profile") }) {
                     Icon(
-                        imageVector = LucideIcons.Settings,
-                        contentDescription = "Ajustes",
+                        imageVector = androidx.compose.material.icons.Icons.Default.PersonOutline,
+                        contentDescription = "Perfil",
                         tint = tabLayerColor,
                         modifier = Modifier
                             .size(29.dp)
@@ -1629,7 +1514,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                     )
                     BasicText(
-                        text = "Ajustes",
+                        text = "Perfil",
                         style = TextStyle(
                             color = tabLayerColor,
                             fontSize = 10.5.sp,

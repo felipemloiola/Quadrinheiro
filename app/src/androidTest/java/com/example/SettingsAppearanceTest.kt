@@ -61,16 +61,18 @@ class SettingsAppearanceTest {
         assertTrue(update.top > description.bottom)
         capture("revision46-footer.png")
     }
-    @Test fun backButtonKeepsItsShapeAndRemainsAvailableDuringScroll() {
+    @Test fun backButtonCompactsItsLabelButRemainsAvailableDuringScroll() {
         compose.runOnIdle { vm.openSettingsCategory("appearance") }
         val back = compose.onNodeWithTag("settings_back_button")
         val before = back.getUnclippedBoundsInRoot()
         val list = compose.onNodeWithTag("settings_list", true)
         list.performTouchInput { swipeUp() }
         back.assertIsDisplayed().assertHasClickAction()
-        assertEquals(before, back.getUnclippedBoundsInRoot())
+        val after = back.getUnclippedBoundsInRoot()
+        assertEquals(before.bottom - before.top, after.bottom - after.top)
+        assertTrue(after.right - after.left < before.right - before.left)
         back.performClick()
-        compose.onNodeWithTag("settings_back_button").assertDoesNotExist()
+        compose.onNodeWithTag("settings_back_button").assert(hasText("Perfil"))
     }
     @Test fun glassSliderChangesThePreviewAndTheStoredLevel() {
         compose.runOnIdle { vm.updateSettings { it.copy(glassLevel = 0) }; vm.openSettingsCategory("liquidGlass", "appearance") }
@@ -81,14 +83,19 @@ class SettingsAppearanceTest {
         assertFalse(before.sameAs(preview.captureToImage().asAndroidBitmap()))
         capture("revision46-glass.png")
     }
-    @Test fun iconChoiceChangesOnlyTheLauncherAliasWithoutClosingTheApp() {
+    @Test fun iconChoiceNeverDisablesTheForegroundLauncherComponent() {
         compose.runOnIdle { vm.openSettingsCategory("appearance") }
-        compose.onNodeWithTag("settings_list", true).performScrollToNode(hasTestTag("launcher-icon-orange"))
-        compose.onNodeWithTag("launcher-icon-orange").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick) { it() }
-        compose.waitUntil(5000) { LauncherAppearance.selected(compose.activity) == LauncherIconStyle.ORANGE &&
-            compose.activity.packageManager.getComponentEnabledSetting(ComponentName(compose.activity.packageName, LauncherIconStyle.ORANGE.alias)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED }
-        compose.onNodeWithTag("launcher-icon-orange").assertIsSelected()
+        compose.onNodeWithTag("settings_list", true).performScrollToNode(hasTestTag("launcher_icon_style"))
+        val pm = compose.activity.packageManager
+        val before = pm.getComponentEnabledSetting(ComponentName(compose.activity.packageName, LauncherAppearance.DAY))
+        compose.runOnIdle {
+            LauncherAppearance.setFollowsApp(compose.activity, false)
+            LauncherAppearance.rememberAccent(compose.activity, "ORANGE")
+            LauncherAppearance.sync(compose.activity)
+            assertTrue(LauncherAppearance.foreground)
+            assertEquals(before, pm.getComponentEnabledSetting(ComponentName(compose.activity.packageName, LauncherAppearance.DAY)))
+        }
         capture("revision46-icons.png")
-        LauncherAppearance.select(compose.activity, LauncherIconStyle.DEFAULT)
+        LauncherAppearance.setFollowsApp(compose.activity, true)
     }
 }

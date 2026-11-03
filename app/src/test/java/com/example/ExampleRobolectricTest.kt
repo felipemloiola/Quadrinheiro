@@ -51,12 +51,12 @@ class ExampleRobolectricTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val vm = QuadrinheiroViewModel(app)
 
-        // Select Diary tab (capsuleIndex = 1), then Search Lupa
+        // Diary is a child of Profile (capsuleIndex = 2), then Search Lupa.
         vm.switchMainTab("diary")
-        assertEquals(1, vm.lastCapsuleIndex.value)
+        assertEquals(2, vm.lastCapsuleIndex.value)
         vm.switchMainTab("search")
         assertEquals("search", vm.activeTab.value)
-        assertEquals(1, vm.lastCapsuleIndex.value) // Remembers Shelf/Diary slot!
+        assertEquals(2, vm.lastCapsuleIndex.value) // Remembers the Profile family.
 
         // Opening catalog modal for a new comic must initialize rating at 0.0f
         val candidate = CuratedCatalog.curatedComicsCatalog.last()

@@ -45,7 +45,7 @@ class DecorativeWorkTest {
             assertTrue(settled.sameAs(compose.onRoot().captureToImage().asAndroidBitmap()))
         } finally { Coil.setImageLoader(old); loader.shutdown() }
     }
-    @Test fun coverAtmosphereEndsAtTheMidpoint() {
+    @Test fun coverAtmosphereEndsAtTheFirstQuarter() {
         compose.setContent { QuadrinheiroTheme(AppSettings(reduceMotion = true)) {
             Box(Modifier.size(300.dp, 400.dp).background(Color.Black).testTag("host")) {
                 ReadingCoverAtmosphere("", Color.Black)
@@ -53,6 +53,6 @@ class DecorativeWorkTest {
         } }
         val host = compose.onNodeWithTag("host").getUnclippedBoundsInRoot()
         val light = compose.onNodeWithTag("reading_cover_atmosphere", true).getUnclippedBoundsInRoot()
-        assertTrue(kotlin.math.abs((light.bottom - light.top).value - (host.bottom - host.top).value / 2f) < 1f)
+        assertTrue(kotlin.math.abs((light.bottom - light.top).value - (host.bottom - host.top).value / 4f) < 1f)
     }
 }

@@ -246,6 +246,9 @@ fun SettingsTabScreen(
     }
 
     val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
+    val backCollapsed by remember(listState) { androidx.compose.runtime.derivedStateOf {
+        listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
+    } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -255,20 +258,11 @@ fun SettingsTabScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = if (settingsSubPage != null) 64.dp else 12.dp,
+                top = 64.dp,
                 bottom = if (comics.any { it.status == ReadingStatus.READING }) 192.dp else 128.dp
             ),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (settingsSubPage == null && appSettings.showFloatingMenu) {
-                item {
-                    TopFloatingToolbar(
-                        hasComics = comics.isNotEmpty(),
-                        onOpenSidebar = onOpenSidebar,
-                        onQuickRegister = onQuickRegister
-                    )
-                }
-            }
 
             if (settingsSubPage == null) {
             // ROOT DE AJUSTES
@@ -382,8 +376,8 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.Palette, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Aparência",
-                            subtitle = null,
-                            trailingValue = if (appSettings.colorScheme == "system") "Automático" else if (themeColors.isDark) "Escuro" else "Claro",
+                            subtitle = "Tema, cores e materiais",
+                            trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -394,7 +388,7 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.AccessibilityNew, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Acessibilidade",
-                            subtitle = "Texto, contraste e movimento",
+                            subtitle = "Texto e movimento",
                             trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
@@ -424,7 +418,7 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(LucideIcons.Layers, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Biblioteca",
-                            subtitle = "Estante, capas e acompanhamento",
+                            subtitle = "Estante e leitura",
                             trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
@@ -436,7 +430,7 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(LucideIcons.Calendar, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Diário",
-                            subtitle = "Avaliações, resenhas e spoilers",
+                            subtitle = "Avaliações e resenhas",
                             trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
@@ -478,7 +472,7 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.Storage, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Armazenamento",
-                            subtitle = "Backups, dados locais e cache",
+                            subtitle = "Backups e cache",
                             trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
@@ -781,7 +775,7 @@ fun SettingsTabScreen(
                                 ) {
                                     IphoneModePreview(
                                         label = "Claro",
-                                        isSelected = appSettings.colorScheme == "light",
+                                        isSelected = !themeColors.isDark,
                                         swatchStart = mat.themeDef.light.swatchStart,
                                         swatchEnd = mat.themeDef.light.swatchEnd,
                                         isLightMode = true,
@@ -791,7 +785,7 @@ fun SettingsTabScreen(
                                     )
                                     IphoneModePreview(
                                         label = "Escuro",
-                                        isSelected = appSettings.colorScheme != "light",
+                                        isSelected = themeColors.isDark,
                                         swatchStart = mat.themeDef.dark.swatchStart,
                                         swatchEnd = mat.themeDef.dark.swatchEnd,
                                         isLightMode = false,
@@ -930,7 +924,7 @@ fun SettingsTabScreen(
                                     SettingsMenuRow(
                                         icon = { Icon(Icons.Default.Tune, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                                         title = "Liquid Glass",
-                                        subtitle = "Transparência, desfoque e refração",
+                                        subtitle = "Transparência e refração",
                                         trailingValue = "${appSettings.glassLevel}%",
                                         onClick = {
                                             viewModel.scrollMemory[routeKey] =
@@ -2255,8 +2249,15 @@ fun SettingsTabScreen(
             }
         }
 
+        if (settingsSubPage == null) {
+            SettingsBackButton(onBack = { viewModel.switchMainTab("profile") }, label = "Perfil",
+                collapsed = backCollapsed,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp))
+        }
         if (settingsSubPage != null) {
             SettingsBackButton(onBack = viewModel::goBackSettings,
+                collapsed = backCollapsed,
+                label = if (settingsParentPage == "appearance") "Aparência" else "Ajustes",
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp))
         }
 
@@ -2313,7 +2314,7 @@ private fun SettingsMenuRow(
                         text = subtitle,
                         fontSize = 13.sp,
                         color = themeColors.textSecondary,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

@@ -1054,6 +1054,8 @@ class SafeStorage(context: Context) {
     }
 
     private fun serializeSettings(s: AppSettings): JSONObject = JSONObject().apply {
+        put("profileFavoriteComicIds", JSONArray(s.profileFavoriteComicIds.distinct().take(4)))
+        put("profileFavoriteCharacters", JSONArray(s.profileFavoriteCharacters.map { it.take(60) }.distinct().take(4)))
         put("themeId", s.themeId)
         put("colorScheme", s.colorScheme)
         put("glassLevel", s.glassLevel)
@@ -1107,6 +1109,8 @@ class SafeStorage(context: Context) {
             }
         }
         return AppSettings(
+            profileFavoriteComicIds = obj.optJSONArray("profileFavoriteComicIds").let { a -> (0 until (a?.length() ?: 0)).map { a!!.optString(it).take(200) }.filter { it.isNotBlank() }.distinct().take(4) },
+            profileFavoriteCharacters = obj.optJSONArray("profileFavoriteCharacters").let { a -> (0 until (a?.length() ?: 0)).map { a!!.optString(it).take(60) }.filter { it.isNotBlank() }.distinct().take(4) },
             themeId = obj.optString("themeId", def.themeId),
             colorScheme = obj.optString("colorScheme", def.colorScheme),
             glassLevel = obj.optInt("glassLevel", def.glassLevel).coerceIn(0, 100),

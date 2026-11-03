@@ -66,6 +66,8 @@ data class CloudAuthUser(
 @IgnoreExtraProperties
 @Immutable
 data class CloudUserPreferences(
+    val profileFavoriteComicIds: List<String> = emptyList(),
+    val profileFavoriteCharacters: List<String> = emptyList(),
     val themeId: String = "SYSTEM_MONO",
     val colorScheme: String = "system",
     val glassLevel: Int = 26,
@@ -111,6 +113,8 @@ data class CloudUserPreferences(
     )
 ) {
     fun toAppSettings(): AppSettings = AppSettings(
+        profileFavoriteComicIds = profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
+        profileFavoriteCharacters = profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
         themeId = themeId.ifBlank { "SYSTEM_MONO" },
         colorScheme = colorScheme.ifBlank { "system" },
         glassLevel = glassLevel.coerceIn(0, 100),
@@ -153,6 +157,8 @@ data class CloudUserPreferences(
 
     companion object {
         fun fromAppSettings(s: AppSettings): CloudUserPreferences = CloudUserPreferences(
+            profileFavoriteComicIds = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
+            profileFavoriteCharacters = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
             themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),
             colorScheme = s.colorScheme.ifBlank { "system" }.take(30),
             glassLevel = s.glassLevel.coerceIn(0, 100),

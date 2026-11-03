@@ -27,7 +27,7 @@ class RapidAppStressTest {
                 repeat(64) { index ->
                     scenario.onActivity { activity ->
                         val vm = ViewModelProvider(activity)[QuadrinheiroViewModel::class.java]
-                        val tab = listOf("home", "shelf", "search", "settings")[index % 4]
+                        val tab = listOf("home", "explore", "profile", "shelf", "search", "settings")[index % 6]
                         vm.switchMainTab(tab)
                         if (tab == "settings") vm.openSettingsCategory(listOf("appearance", "liquidGlass", "accessibility")[index % 3])
                     }

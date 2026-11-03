@@ -1411,8 +1411,8 @@ class QuadrinheiroViewModel(
             savedStateHandle["shelfSection"] = "diary"
             _activeTab.value = "shelf"
             savedStateHandle["activeTab"] = "shelf"
-            _lastCapsuleIndex.value = 1
-            savedStateHandle["lastCapsuleIndex"] = 1
+            _lastCapsuleIndex.value = 2
+            savedStateHandle["lastCapsuleIndex"] = 2
             return
         }
 
@@ -1426,6 +1426,13 @@ class QuadrinheiroViewModel(
                 requestScrollToTop()
             }
             return
+        }
+
+        if (nextTab == "settings") {
+            _settingsSubPage.value = null
+            _settingsParentPage.value = null
+            savedStateHandle["settingsSubPage"] = null
+            savedStateHandle["settingsParentPage"] = null
         }
 
         if (nextTab == "shelf" && (_activeTab.value == "shelf" || _activeTab.value == "diary")) {
@@ -1445,7 +1452,7 @@ class QuadrinheiroViewModel(
             return
         }
 
-        val capsuleIdx = listOf("home", "shelf", "diary", "settings").indexOf(nextTab)
+        val capsuleIdx = when (nextTab) { "home" -> 0; "explore" -> 1; "profile", "shelf", "diary", "settings" -> 2; else -> -1 }
         if (capsuleIdx >= 0) {
             _lastCapsuleIndex.value = capsuleIdx
             savedStateHandle["lastCapsuleIndex"] = capsuleIdx

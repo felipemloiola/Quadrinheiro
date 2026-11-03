@@ -14,6 +14,8 @@ import org.robolectric.annotation.Config
 class LauncherThemeTest {
     @Test fun switchingAppearanceEnablesOnlyTheMatchingLauncherAlias() {
         val app: Context = ApplicationProvider.getApplicationContext()
+        LauncherAppearance.foreground = false
+        LauncherAppearance.select(app, LauncherIconStyle.DEFAULT)
         for (mode in listOf(Configuration.UI_MODE_NIGHT_YES, Configuration.UI_MODE_NIGHT_NO)) {
             val config = Configuration(app.resources.configuration).apply {
                 uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or mode

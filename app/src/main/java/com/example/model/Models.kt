@@ -600,6 +600,8 @@ data class ReaderProfile(
 @Immutable
 data class AppSettings(
     // SYSTEM_MONO_DEFAULT_V7: only new or missing preferences use these defaults.
+    val profileFavoriteComicIds: List<String> = emptyList(),
+    val profileFavoriteCharacters: List<String> = emptyList(),
     val themeId: String = "SYSTEM_MONO",
     val colorScheme: String = "system", // "dark" | "light"
     val glassLevel: Int = 26, // 0 = Clear, 100 = Tinted

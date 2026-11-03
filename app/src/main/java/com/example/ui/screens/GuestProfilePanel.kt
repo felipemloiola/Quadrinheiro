@@ -39,7 +39,7 @@ internal fun GuestProfilePanel(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        TextButton(onClick = onBack) { Text("Voltar", color = theme.accent) }
+        SettingsBackButton(onBack, label = "Ajustes")
         Column(
             modifier = Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(26.dp)).padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

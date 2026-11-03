@@ -276,7 +276,7 @@ fun HomeReadingNowTab(
                             )
                         }
                         com.example.ui.components.HomeSkeletonText(
-                            text = "Lendo Agora",
+                            text = "Início",
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
                             color = s.textPrimary,
@@ -802,7 +802,8 @@ fun ShelfLibraryTab(
     onLoadMoreComics: () -> Unit = {},
     onOpenStatistics: () -> Unit = {},
     onShareComicReview: (ComicEntry) -> Unit = {},
-    onShareGoalSummary: (String) -> Unit = {}
+    onShareGoalSummary: (String) -> Unit = {},
+    onBackToProfile: () -> Unit = {}
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -900,11 +901,12 @@ fun ShelfLibraryTab(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = if (appSettings.showFloatingMenu) 62.dp else 12.dp,
+                top = 12.dp,
                 bottom = 88.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item(key = "library-parent") { SettingsBackButton(onBackToProfile, label = "Perfil") }
             item(key = "shelf-header", contentType = "tab_header") {
                 Row(
                     modifier = Modifier
@@ -1712,24 +1714,11 @@ fun SearchMultiApiTab(
         map
     }
 
-    val recommendations by androidx.compose.runtime.produceState<List<ComicEntry>>(emptyList(), comics) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            com.example.data.PersonalizedDiscovery.recommend(CuratedCatalog.curatedComicsCatalog, comics)
-        }
-    }
-    val instantCuratedMatches = remember(searchQuery, savedExternalIds, savedIds, savedTitles, recommendations) {
+    val instantCuratedMatches = remember(searchQuery, comics, savedExternalIds, savedIds, savedTitles) {
         val q = searchQuery.trim().lowercase()
-        val base = if (q.isEmpty() && recommendations.isNotEmpty()) recommendations else CuratedCatalog.curatedComicsCatalog
+        val base = comics + CuratedCatalog.curatedComicsCatalog
         if (q.isEmpty()) {
-            // Do NOT show comics already in the library unless the user explicitly searches!
-            base.filterNot { item ->
-                val extId = item.externalId.trim().lowercase()
-                val id = item.id.trim().lowercase()
-                val title = item.title.trim().lowercase()
-                (extId.isNotEmpty() && savedExternalIds.contains(extId)) ||
-                    (id.isNotEmpty() && savedIds.contains(id)) ||
-                    (title.isNotEmpty() && savedTitles.contains(title))
-            }
+            emptyList()
         } else {
             base.filter {
                 it.title.lowercase().contains(q) ||
@@ -1740,7 +1729,8 @@ fun SearchMultiApiTab(
         }
     }
 
-    val combinedSearchResults = remember(instantCuratedMatches, remoteResults, searchSourceFilter) {
+    val combinedSearchResults = remember(searchQuery, instantCuratedMatches, remoteResults, searchSourceFilter) {
+        if (searchQuery.isBlank()) return@remember emptyList<ComicEntry>()
         val seenKeys = HashSet<String>()
         val finalItems = mutableListOf<ComicEntry>()
         fun addUnique(item: ComicEntry) {
@@ -1784,7 +1774,7 @@ fun SearchMultiApiTab(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = if (appSettings.showFloatingMenu) 62.dp else 12.dp,
+                top = 12.dp,
                 bottom = 88.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1919,39 +1909,6 @@ fun SearchMultiApiTab(
                     }
                 }
 
-                // Quick suggestion pills
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    CuratedCatalog.quickSearchSuggestions.forEach { tag ->
-                        val active = searchQuery.equals(tag, ignoreCase = true)
-                        Box(
-                            modifier = Modifier
-                                .then(
-                                    if (active) {
-                                        Modifier
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .background(s.accentBg)
-                                    } else {
-                                        Modifier.contentMaterialSurface(RoundedCornerShape(999.dp), elevation = 2.dp)
-                                    }
-                                )
-                                .clickable { onChangeSearchQuery(tag) }
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = tag,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (active) s.accentText else s.textPrimary
-                            )
-                        }
-                    }
-                }
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1963,7 +1920,7 @@ fun SearchMultiApiTab(
                         text = if (searchQuery.trim().isNotEmpty()) {
                             "Resultados para \"$searchQuery\" (${combinedSearchResults.size})"
                         } else {
-                            if (comics.any { it.status == ReadingStatus.READ }) "Para você" else "Destaques do catálogo"
+                            ""
                         },
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -1986,36 +1943,23 @@ fun SearchMultiApiTab(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .contentMaterialSurface(RoundedCornerShape(24.dp))
+                        .then(if (searchQuery.isBlank()) Modifier else Modifier.contentMaterialSurface(RoundedCornerShape(24.dp)))
                         .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Nenhum resultado encontrado para “$searchQuery”",
+                        text = if (searchQuery.isBlank()) "Qual será sua próxima leitura?" else "Nenhum resultado encontrado para “$searchQuery”",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textPrimary
                     )
                     Text(
-                        text = "Você pode cadastrar qualquer edição personalizada usando o botão Manual.",
+                        text = if (searchQuery.isBlank()) "Busque por título, autor ou editora." else "Você também pode cadastrar uma edição manualmente.",
                         fontSize = 12.sp,
                         color = s.textSecondary
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(s.accentBg)
-                            .clickable { onOpenManualModal(searchQuery) }
-                            .padding(horizontal = 20.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = "+ Cadastrar “$searchQuery” Manualmente",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = s.accentText
-                        )
-                    }
+
                 }
             }
         } else {

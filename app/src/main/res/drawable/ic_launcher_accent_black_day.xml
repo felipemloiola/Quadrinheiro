@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector android:tint="#FF111111" xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.80"
+        android:scaleY="0.80"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- 1. PAINEL ESQUERDO: Vermelho Carmim -> Rosa Neon -->
+        <path
+            android:strokeColor="#4DFFFFFF"
+            android:strokeWidth="1.0"
+            android:pathData="M44.8,26.3 L28.9,32.9 L25,54 L31.6,75.1 L39.5,69.8 L42.8,60.6 L40.1,52.7 L43.4,39.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="25"
+                    android:startY="26.3"
+                    android:endX="44.8"
+                    android:endY="75.1"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FFFF1493" />
+                    <item android:offset="0.5" android:color="#FFE11D48" />
+                    <item android:offset="1.0" android:color="#FF881337" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Sub-faceta superior do painel esquerdo -->
+        <path
+            android:pathData="M44.8,26.3 L28.9,32.9 L25,54 L40.1,52.7 L43.4,39.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="28.9"
+                    android:startY="32.9"
+                    android:endX="40.1"
+                    android:endY="52.7"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#3DFFFFFF" />
+                    <item android:offset="1.0" android:color="#00FFFFFF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- 2. PAINEL SUPERIOR: Amarelo Ouro -> Laranja Vibrante -->
+        <path
+            android:strokeColor="#4DFFFFFF"
+            android:strokeWidth="1.0"
+            android:pathData="M49.4,26.3 L67.2,26.3 L80.4,35.5 L80.4,50.7 L63.9,50.7 L61.9,44.8 L53.3,38.8 L48.1,39.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="49.4"
+                    android:startY="26.3"
+                    android:endX="80.4"
+                    android:endY="50.7"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FFFFD000" />
+                    <item android:offset="0.45" android:color="#FFFF9100" />
+                    <item android:offset="1.0" android:color="#FFFF3D00" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- 3. PAINEL INFERIOR & CAUDA DO Q: Azul Royal -> Ciano Elétrico -->
+        <path
+            android:strokeColor="#4DFFFFFF"
+            android:strokeWidth="1.0"
+            android:pathData="M63.9,55.3 L79.1,55.3 L76.4,63.9 L85.7,77.8 L83.7,83.7 L69.2,78.4 L55.3,80.4 L40.1,77.1 L46.1,65.9 L54,63.2 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="40.1"
+                    android:startY="63.2"
+                    android:endX="85.7"
+                    android:endY="83.7"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FF1E3A8A" />
+                    <item android:offset="0.35" android:color="#FF2563EB" />
+                    <item android:offset="0.80" android:color="#FF00B4D8" />
+                    <item android:offset="1.0" android:color="#FF00F5FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Sub-faceta luminosa da cauda do Q -->
+        <path
+            android:pathData="M63.9,55.3 L79.1,55.3 L76.4,63.9 L85.7,77.8 L83.7,83.7 L54,63.2 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="63.9"
+                    android:startY="55.3"
+                    android:endX="85.7"
+                    android:endY="83.7"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#33FFFFFF" />
+                    <item android:offset="0.6" android:color="#5900F5FF" />
+                    <item android:offset="1.0" android:color="#0000F5FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

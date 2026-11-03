@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.ViewSidebar
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 
 /**
@@ -225,7 +226,7 @@ object LucideIcons {
     val CheckCircleFilled: ImageVector get() = Icons.Default.CheckCircle
     val CloseCircle: ImageVector get() = Icons.Default.Cancel
     val ChevronRight: ImageVector get() = Icons.AutoMirrored.Filled.KeyboardArrowRight
-    val PanelLeft: ImageVector get() = SidebarLeft
+    val PanelLeft: ImageVector get() = Icons.Default.ViewSidebar
     val Check: ImageVector get() = Icons.Default.Check
     val Checkmark: ImageVector get() = Icons.Default.Check
     val Close: ImageVector get() = Icons.Default.Close

@@ -29,6 +29,56 @@ class AppearanceStorageTest {
     @Before fun installMainDispatcher() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
     @After fun restoreMainDispatcher() { Dispatchers.resetMain() }
 
+    @Test fun foregroundIconChangesAreDeferredUntilTheActivityLeaves() {
+        LauncherAppearance.foreground = false
+        LauncherAppearance.select(context, LauncherIconStyle.DEFAULT)
+        LauncherAppearance.sync(context)
+        val day = ComponentName(context.packageName, LauncherAppearance.DAY)
+        val before = context.packageManager.getComponentEnabledSetting(day)
+        try {
+            LauncherAppearance.foreground = true
+            LauncherAppearance.rememberAccent(context, "ORANGE")
+            LauncherAppearance.setFollowsApp(context, true)
+            LauncherAppearance.sync(context)
+            assertEquals(before, context.packageManager.getComponentEnabledSetting(day))
+            LauncherAppearance.foreground = false
+            LauncherAppearance.applyWhenBackground(context)
+            assertEquals(PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                context.packageManager.getComponentEnabledSetting(ComponentName(context.packageName,
+                    LauncherAppearance.aliasFor(LauncherIconStyle.ORANGE, false))))
+        } finally { LauncherAppearance.foreground = false }
+    }
+
+    @Test fun favoritesPersistInsideTheirAccountAndRoundTripCloudPreferences() {
+        val settings = AppSettings(profileFavoriteComicIds = listOf("a", "b", "c", "d"),
+            profileFavoriteCharacters = listOf("Batman", "Magali", "Luffy", "Tempestade"))
+        val storage = SafeStorage(context)
+        storage.saveState(emptyList(), com.example.model.ReaderProfile(), settings, ownerUid = "alice-showcase")
+        storage.saveState(emptyList(), com.example.model.ReaderProfile(), AppSettings(), ownerUid = "bob-showcase")
+        assertEquals(settings.profileFavoriteComicIds, storage.loadAccountState("alice-showcase")!!.settings.profileFavoriteComicIds)
+        assertTrue(storage.loadAccountState("bob-showcase")!!.settings.profileFavoriteCharacters.isEmpty())
+        assertEquals(settings, CloudUserPreferences.fromAppSettings(settings).toAppSettings())
+    }
+
+    @Test fun cloudShowcaseIsBoundedAndDeduplicated() {
+        val cloud = CloudUserPreferences.fromAppSettings(AppSettings(
+            profileFavoriteComicIds = listOf("a", "a", "b", "c", "d", "e"),
+            profileFavoriteCharacters = listOf("", "Batman", "Batman", "X".repeat(100), "Magali", "Luffy", "Goku")))
+        assertEquals(listOf("a", "b", "c", "d"), cloud.profileFavoriteComicIds)
+        assertEquals(4, cloud.profileFavoriteCharacters.size)
+        assertTrue(cloud.profileFavoriteCharacters.all { it.length in 1..60 })
+        assertTrue(cloud.javaClass.declaredFields.count { !it.isSynthetic && it.name != "Companion" } <= 45)
+    }
+
+    @Test fun accentChoiceDoesNotTintTheSystemBackground() {
+        for (dark in listOf(false, true)) {
+            val colors = com.example.ui.theme.AppTheme.entries.map { com.example.ui.theme.getIOS27ThemeColors(it, dark) }
+            assertEquals(1, colors.map { it.bgPrimary }.distinct().size)
+            assertEquals(1, colors.map { it.bgSecondary }.distinct().size)
+            assertTrue(colors.map { it.accent }.distinct().size > 1)
+        }
+    }
+
     @Test fun glassLevelChangesRealMaterialParametersInBothStyles() {
         for (style in listOf("regular", "frosted")) {
             val low = AppSettings(glassLevel = 0, glassVariant = style).withGlassAppearance()
@@ -41,13 +91,15 @@ class AppearanceStorageTest {
     }
 
     @Test fun eachLauncherChoiceEnablesExactlyOneAliasAndDefaultTracksNight() {
-        val names = listOf(LauncherAppearance.DAY, LauncherAppearance.NIGHT) + LauncherIconStyle.entries.filter { it != LauncherIconStyle.DEFAULT }.map { it.alias }
+        LauncherAppearance.foreground = false
+        val names = listOf(LauncherAppearance.DAY, LauncherAppearance.NIGHT) + LauncherIconStyle.entries.filter { it != LauncherIconStyle.DEFAULT }.flatMap { listOf(it.alias, it.alias + "Day", it.alias + "Night") }
         LauncherIconStyle.entries.forEach { style ->
             LauncherAppearance.select(context, style)
+            LauncherAppearance.sync(context)
             assertEquals(style, LauncherAppearance.selected(context))
             val active = names.filter { context.packageManager.getComponentEnabledSetting(ComponentName(context.packageName, it)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED }
             assertEquals(1, active.size)
-            if (style != LauncherIconStyle.DEFAULT) assertEquals(style.alias, active.single())
+            if (style != LauncherIconStyle.DEFAULT) assertTrue(active.single().startsWith(style.alias))
         }
         LauncherAppearance.select(context, LauncherIconStyle.DEFAULT)
         val night = context.createConfigurationContext(Configuration(context.resources.configuration).apply { uiMode = Configuration.UI_MODE_NIGHT_YES })

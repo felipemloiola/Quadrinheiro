@@ -12,7 +12,12 @@ import kotlin.math.abs
 
 @Immutable
 data class AppPage(val tab: String, val settings: String?, val parent: String?, val statistics: Boolean) {
-    val depth: Int get() = if (statistics) 3 else if (settings != null) 1 + if (parent != null) 1 else 0 else 0
+    val depth: Int get() = when {
+        statistics -> 4
+        tab == "settings" && settings != null -> 2 + if (parent != null) 1 else 0
+        tab == "settings" || tab == "shelf" -> 1
+        else -> 0
+    }
 }
 
 /** At most two live pages, even when navigation is interrupted repeatedly. */
@@ -38,7 +43,8 @@ fun AppPageTransition(page: AppPage, content: @Composable (AppPage) -> Unit) {
         val oldOutgoingAlpha = exitAlpha * (1f - p)
         val previousPage = current
         val nextDirection = if (page.depth >= current.depth) 1f else -1f
-        val nextSlide = !motion.reduced && page.tab == current.tab
+        val profileRoutes = setOf("profile", "shelf", "settings")
+        val nextSlide = !motion.reduced && (page.tab == current.tab || (page.tab in profileRoutes && current.tab in profileRoutes))
         outgoing = previousPage
         current = page
         exitX = oldCurrentX
