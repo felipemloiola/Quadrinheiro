@@ -54,6 +54,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     fun openEntity(type: String, id: String) { history.add(comic to entity); entity = type to id }
     var detail by remember(comic.id, entity) { mutableStateOf<CatalogDetails?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var translating by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     var tab by remember(comic.id, entity) { mutableIntStateOf(0) }
@@ -73,6 +74,13 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         catch (_: Exception) { failed = true }
         finally { loading = false }
     }
+    LaunchedEffect(detail?.id,detail?.type) {
+        val original=detail ?: return@LaunchedEffect
+        if(original.description.isBlank())return@LaunchedEffect
+        translating=true
+        try { val translated=ComicVineCatalog.translated(original);if(detail?.id==translated.id)detail=translated }
+        catch(cancel:CancellationException){throw cancel}catch(_:Exception){}finally{translating=false}
+    }
     LaunchedEffect(comic.id, comic.externalId, repository.currentUid()) {
         if (repository.currentUid() != null) try { rating = repository.rating(comic) }
         catch (cancel: CancellationException) { throw cancel }
@@ -91,16 +99,16 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             DetailTabs(tab, { tab = it })
             CommunityScreen(library, profile, onLogin, comic)
         } else LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            item {
+            if(!detail?.banner.isNullOrBlank()) item {
                 Box(Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(t.bgSecondary)) {
-                    val banner = detail?.banner.orEmpty().ifBlank { chosenCover }
+                    val banner = detail?.banner.orEmpty()
                     if (banner.isNotBlank()) ProfileImage(banner, null, Modifier.fillMaxSize())
                     Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color.Transparent, t.bgPrimary))))
                 }
             }
             item {
                 Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Top) {
-                    if (isComic) BookCover(effectiveCover, comic.displayTitle, spine3d = false, modifier = Modifier.width(104.dp).aspectRatio(2f / 3f).clickable { coversOpen = true })
+                    if (isComic) BookCover(effectiveCover, comic.displayTitle, spine3d = false, modifier = Modifier.width(104.dp).aspectRatio(2f / 3f))
                     else ProfileImage(detail?.image.orEmpty(), detail?.title, Modifier.size(110.dp).clip(RoundedCornerShape(22.dp)), face = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(if (isComic) comic.displayTitle else detail?.title ?: "Carregando…", color = t.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
@@ -123,7 +131,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             }
             if (!isComic || tab == 0) {
                 val description = detail?.description.orEmpty().ifBlank { if (isComic) comic.synopsisPtBr.ifBlank { comic.synopsis } else "" }
-                if (description.isNotBlank()) item { DetailSection(if (isComic) "Sobre a HQ" else "Biografia") { Text(description, color = t.textPrimary, fontSize = 15.sp, lineHeight = 23.sp) } }
+                if (description.isNotBlank()) item { DetailSection(if (isComic) "Sinopse" else "Biografia") { Text(if(translating) "Traduzindo…" else description, color = t.textPrimary, fontSize = 15.sp, lineHeight = 23.sp) } }
                 item {
                     DetailSection("Detalhes") {
                         val rows = if (isComic) listOf("Publicação" to detail?.date.orEmpty().ifBlank { comic.releaseYear.toString() },
@@ -138,7 +146,6 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                         }
                     }
                 }
-                if (isComic && detail?.covers.orEmpty().size > 1) item { TextButton(onClick = { coversOpen = true }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Escolher capa", color = t.accent) } }
                 val appearances = detail?.issues.orEmpty()
                 if (!isComic && appearances.isNotEmpty()) item {
                     DetailSection("Aparições em quadrinhos") {
@@ -168,6 +175,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 }
             } else {
                 val credits = if (tab == 1) detail?.characters.orEmpty() else detail?.creators.orEmpty()
+                if(detail?.creditsScope=="series")item {Text("Personagens e equipe da série",color=t.textSecondary,modifier=Modifier.padding(horizontal=20.dp),fontSize=12.sp)}
                 items(credits, key = { it.id }) { credit ->
                     CreditRow(credit, if (tab == 1) "character" else "person") { openEntity(if (tab == 1) "character" else "person", credit.id) }
                 }
@@ -178,8 +186,6 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             } }
         }
     }
-    if (coversOpen) CoverChooser(detail?.covers.orEmpty().ifEmpty { listOf(chosenCover).filter { it.isNotBlank() } }, chosenCover,
-        onChoose = { chosenCover = it; if (comic.id == initialComic.id) onCover(it); coversOpen = false }, onClose = { coversOpen = false })
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->
         comic = comic.copy(externalId = edition.externalId, sourceLabel = edition.sourceLabel,
             publisher = edition.publisher.ifBlank { comic.publisher })
@@ -211,11 +217,12 @@ private fun DetailSection(title: String, content: @Composable ColumnScope.() -> 
 
 @Composable
 private fun CreditRow(credit: CatalogCredit, type: String, onClick: () -> Unit) {
+    val context=LocalContext.current
     val t = LocalIOS27Theme.current
     var image by remember(credit.id) { mutableStateOf("") }
     // Thumbnails load only for visible rows; the bounded catalog cache reuses detail requests.
     LaunchedEffect(credit.id) {
-        try { image = withContext(Dispatchers.IO) { ComicVineCatalog.details(type, credit.id).image } }
+        try { image = if(type=="character") CharacterDirectory.search(context,credit.name).firstOrNull()?.image.orEmpty() else "" }
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { }
     }
@@ -223,7 +230,7 @@ private fun CreditRow(credit: CatalogCredit, type: String, onClick: () -> Unit) 
         Box(Modifier.size(62.dp).clip(RoundedCornerShape(14.dp)).background(t.bgSecondary)) { ProfileImage(image, null, Modifier.fillMaxSize(), face = true) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(credit.name, color = t.textPrimary)
-            if (credit.role.isNotBlank()) Text(credit.role, color = t.textSecondary, fontSize = 13.sp)
+            if (credit.role.isNotBlank()) Text(credit.role.split(",").joinToString(", "){role -> mapOf("writer" to "Roteiro","artist" to "Arte","penciler" to "Desenho","inker" to "Arte-final","colorist" to "Cores","letterer" to "Letras","editor" to "Edição","cover" to "Capa")[role.trim().lowercase()] ?: role.trim() }, color = t.textSecondary, fontSize = 13.sp)
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = t.textSecondary)
     }

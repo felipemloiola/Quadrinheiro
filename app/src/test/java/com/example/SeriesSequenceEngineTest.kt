@@ -12,11 +12,11 @@ class SeriesSequenceEngineTest {
 
     @Test
     fun testStandaloneGraphicNovelWatchmenEntersRecommendationMode() {
-        val watchmen = CuratedCatalog.curatedComicsCatalog.first { it.title.contains("Watchmen", ignoreCase = true) }
+        val watchmen = com.example.data.LegacyCatalogFixture.curatedComicsCatalog.first { it.title.contains("Watchmen", ignoreCase = true) }
         val seqGroup = SeriesSequenceEngine.findSequenceForComic(
             target = watchmen,
             userComics = listOf(watchmen),
-            catalogComics = CuratedCatalog.curatedComicsCatalog
+            catalogComics = com.example.data.LegacyCatalogFixture.curatedComicsCatalog
         )
 
         assertTrue("Watchmen deve entrar em modo de recomendação/títulos relacionados", seqGroup.isRecommendationMode)
@@ -33,11 +33,11 @@ class SeriesSequenceEngineTest {
 
     @Test
     fun testStandaloneGraphicNovelMausEntersRecommendationMode() {
-        val maus = CuratedCatalog.curatedComicsCatalog.first { it.title.contains("Maus", ignoreCase = true) }
+        val maus = com.example.data.LegacyCatalogFixture.curatedComicsCatalog.first { it.title.contains("Maus", ignoreCase = true) }
         val seqGroup = SeriesSequenceEngine.findSequenceForComic(
             target = maus,
             userComics = listOf(maus),
-            catalogComics = CuratedCatalog.curatedComicsCatalog
+            catalogComics = com.example.data.LegacyCatalogFixture.curatedComicsCatalog
         )
 
         assertTrue("Maus deve entrar em modo de recomendação/títulos relacionados", seqGroup.isRecommendationMode)
@@ -51,12 +51,12 @@ class SeriesSequenceEngineTest {
 
     @Test
     fun testSerializedSeriesDoesNotEnterRecommendationMode() {
-        val batman1 = CuratedCatalog.curatedComicsCatalog.first { it.title == "Batman #1" }
-        val batmanComics = CuratedCatalog.curatedComicsCatalog.filter { it.title.startsWith("Batman #") }
+        val batman1 = com.example.data.LegacyCatalogFixture.curatedComicsCatalog.first { it.title == "Batman #1" }
+        val batmanComics = com.example.data.LegacyCatalogFixture.curatedComicsCatalog.filter { it.title.startsWith("Batman #") }
         val seqGroup = SeriesSequenceEngine.findSequenceForComic(
             target = batman1,
             userComics = batmanComics,
-            catalogComics = CuratedCatalog.curatedComicsCatalog
+            catalogComics = com.example.data.LegacyCatalogFixture.curatedComicsCatalog
         )
 
         assertFalse("Série serializada como Batman #1..#5 NÃO deve entrar em modo de recomendação", seqGroup.isRecommendationMode)

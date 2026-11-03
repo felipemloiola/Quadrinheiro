@@ -10,13 +10,14 @@ import org.json.JSONArray
 import java.io.File
 import java.text.Normalizer
 
-data class CharacterResult(val id: String, val name: String, val originalName: String, val image: String, val aliases: List<String>)
+data class CharacterResult(val id: String, val name: String, val originalName: String, val image: String, val aliases: List<String>, val publisher: String = "")
 
 /** Public Superhero API, fetched once; local bilingual matching never downloads portraits in bulk. */
 object CharacterDirectory {
     private val mutex = Mutex()
     @Volatile private var entries: List<CharacterResult>? = null
     internal val portuguese = mapOf(
+        "Hal Jordan" to "Lanterna Verde", "John Stewart" to "Lanterna Verde", "Raven" to "Ravena", "Starfire" to "Estelar", "Beast Boy" to "Mutano",
         "Swamp Thing" to "Monstro do Pântano", "Clayface" to "Cara-de-Barro", "Green Lantern" to "Lanterna Verde",
         "Wonder Woman" to "Mulher-Maravilha", "Spider-Man" to "Homem-Aranha", "Daredevil" to "Demolidor",
         "Storm" to "Tempestade", "Black Panther" to "Pantera Negra", "Captain America" to "Capitão América",
@@ -32,51 +33,66 @@ object CharacterDirectory {
         "Colossus" to "Colossus", "Iceman" to "Homem de Gelo", "Luke Cage" to "Luke Cage", "Iron Fist" to "Punho de Ferro",
         "Sandman" to "Homem-Areia", "Black Bolt" to "Raio Negro", "Aquaman" to "Aquaman", "Supergirl" to "Supergirl")
     internal fun normalized(s: String) = Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+
+    internal fun display(name: String, real: String): String {
+        val pt = portuguese[name] ?: name
+        val civil = when { name == "Batman" && real.contains("Bruce", true) -> "Bruce Wayne"; name == "Hal Jordan" -> "Hal Jordan"; else -> real }
+        return if (civil.isNotBlank() && civil != pt) "$pt ($civil)" else pt
+    }
     internal fun parse(raw: String): List<CharacterResult> {
-        val a = JSONArray(raw)
-        return (0 until a.length()).mapNotNull { index ->
-            val j = a.optJSONObject(index) ?: return@mapNotNull null
-            val name = j.optString("name"); val image = j.optJSONObject("images")?.optString("md").orEmpty()
-            if (name.isBlank() || !image.startsWith("https://")) return@mapNotNull null
-            val bio = j.optJSONObject("biography"); val full = bio?.optString("fullName").orEmpty()
-            val pt = portuguese[name] ?: name
-            val display = if (full.isNotBlank() && !pt.contains(full, true)) "$pt ($full)" else pt
-            val aliases = bio?.optJSONArray("aliases").let { arr -> (0 until (arr?.length() ?: 0)).map { arr!!.optString(it) } }
-            CharacterResult(j.optString("id"), display.take(100), name, image, aliases + listOf(name, pt, full))
+        val array = if(raw.trimStart().startsWith("{")) org.json.JSONObject(raw).getJSONArray("items") else JSONArray(raw)
+        return (0 until array.length()).mapNotNull { index ->
+            val j=array.optJSONObject(index) ?: return@mapNotNull null
+            val name=j.optString("name");val bio=j.optJSONObject("biography");val real=j.optString("realName").ifBlank { bio?.optString("fullName").orEmpty() }
+            val image=j.optString("image").ifBlank { j.optJSONObject("images")?.optString("md").orEmpty() }
+            if(name.isBlank() || !image.startsWith("https://")) return@mapNotNull null
+            val a=j.optJSONArray("aliases") ?: bio?.optJSONArray("aliases")
+            val aliases=(0 until (a?.length() ?: 0)).map { a!!.optString(it) } + listOf(name, portuguese[name] ?: name, real)
+            CharacterResult(j.optString("id"),display(name,real),name,image,aliases,j.optString("publisher").ifBlank { bio?.optString("publisher").orEmpty() })
         }
     }
     internal fun match(list: List<CharacterResult>, query: String): List<CharacterResult> {
-        val q = normalized(query)
-        return list.filter { q.isBlank() || (it.aliases + it.name).any { text -> normalized(text).contains(q) } }
-            .sortedWith(compareByDescending<CharacterResult> { normalized(it.originalName) == q || normalized(it.name) == q }
-                .thenBy { it.name }).take(40)
+        val q=normalized(query.substringBefore('('))
+        fun popularity(c:CharacterResult):Int = when {
+            c.originalName=="Batman" && c.name.contains("Bruce") -> 1000
+            c.originalName=="Hal Jordan" -> 980
+            c.originalName=="Superman" -> 960
+            c.originalName=="Spider-Man" && c.name.contains("Peter") -> 950
+            c.originalName in listOf("Wonder Woman","Storm","Swamp Thing","Clayface","Green Arrow","Daredevil") -> 900
+            else -> 0
+        }
+        return list.filter { q.isBlank() || (it.aliases+it.name).any { normalized(it).contains(q) } }
+            .distinctBy { normalized(it.originalName)+normalized(it.name) }
+            .sortedWith(compareByDescending<CharacterResult> { if(normalized(it.originalName)==q || normalized(portuguese[it.originalName] ?: "")==q) 2000 else 0 }.thenByDescending(::popularity).thenBy { it.name }).take(if(q.isBlank()) 16 else 32)
+    }
+    private var complete=false
+    private fun local(context:Context):List<CharacterResult> {
+        entries?.let { return it }
+        val file=File(context.cacheDir,"character_directory_v2.json")
+        val cached=if(file.exists() && file.length() < 2000000) runCatching { parse(file.readText()) }.getOrNull() else null
+        complete=cached!=null
+        return (cached ?: context.assets.open("character-seed.json").bufferedReader().use { parse(it.readText()) }).also { entries=it }
+    }
+    suspend fun preload(context:Context) = withContext(Dispatchers.IO) {
+        local(context)
+        mutex.withLock {
+            val file=File(context.cacheDir,"character_directory_v2.json")
+            if(complete && System.currentTimeMillis()-file.lastModified()<7*86400000L) return@withLock
+            try {
+                val client=MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(4,java.util.concurrent.TimeUnit.SECONDS).build()
+                client.newCall(Request.Builder().url("https://quadrinheiro-catalog.uadrinheiro.workers.dev/characters.json").build()).execute().use { r ->
+                    check(r.isSuccessful);val raw=r.body!!.string();require(raw.length<2000000)
+                    val parsed=parse(raw);entries=parsed;complete=true;file.writeText(raw)
+                }
+            } catch(cancel:kotlinx.coroutines.CancellationException){throw cancel} catch(_:Exception) { }
+        }
     }
     suspend fun search(context: Context, query: String): List<CharacterResult> = withContext(Dispatchers.IO) {
-        if (query.isNotBlank()) {
-            try { ComicVineCatalog.characters(query).takeIf { it.isNotEmpty() }?.let { return@withContext it } }
-            catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-            catch (_: Exception) { /* Public cached directory remains available offline. */ }
-            try { ComicVineCatalog.superheroCharacters(query).takeIf { it.isNotEmpty() }?.let { return@withContext it } }
-            catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-            catch (_: Exception) { /* Last fallback is the bounded public directory. */ }
-        }
-        val all = entries ?: mutex.withLock {
-            entries ?: run {
-                val file = File(context.cacheDir, "character_directory_v1.json")
-                val cached = if (file.exists() && file.length() in 1..3_000_000L) runCatching { file.readText() }.getOrNull() else null
-                val fresh = cached != null && System.currentTimeMillis() - file.lastModified() < 7 * 86400000L
-                val raw = if (fresh) cached!! else try {
-                    val client = MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(6, java.util.concurrent.TimeUnit.SECONDS).build()
-                    client.newCall(Request.Builder().url("https://akabab.github.io/superhero-api/api/all.json").build()).execute().use { response ->
-                        check(response.isSuccessful) { "Catálogo de personagens indisponível" }
-                        val body = response.body ?: error("Resposta vazia")
-                        require(body.contentLength() <= 3_000_000L)
-                        body.string().also { require(it.length <= 3_000_000); parse(it); file.writeText(it) }
-                    }
-                } catch (e: Exception) { cached ?: throw e }
-                parse(raw).also { entries = it }
-            }
-        }
-        match(all, query)
+        val immediate=match(local(context),query)
+        if(immediate.isNotEmpty()) return@withContext immediate
+        if(!complete) preload(context)
+        val indexed=match(entries.orEmpty(),query)
+        if(indexed.isNotEmpty()) return@withContext indexed
+        try { ComicVineCatalog.characters(query).take(24) } catch(cancel:kotlinx.coroutines.CancellationException){throw cancel} catch(_:Exception){emptyList()}
     }
 }

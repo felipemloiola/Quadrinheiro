@@ -19,18 +19,19 @@ data class CatalogCredit(val id: String, val name: String, val role: String = ""
 data class CatalogDetails(val id: String, val type: String, val title: String, val image: String, val banner: String,
     val description: String, val publisher: String, val date: String, val url: String, val covers: List<String>,
     val characters: List<CatalogCredit>, val creators: List<CatalogCredit>, val issues: List<ComicEntry>,
-    val realName: String = "", val aliases: String = "", val powers: List<String> = emptyList(), val appearances: Int = 0)
+    val realName: String = "", val aliases: String = "", val powers: List<String> = emptyList(), val appearances: Int = 0,
+    val creditsScope: String = "issue")
 
 /** The app only talks to our bounded catalog service. Provider credentials never enter the APK. */
 object ComicVineCatalog {
     private const val ENDPOINT = "https://quadrinheiro-catalog.uadrinheiro.workers.dev"
-    private val client by lazy { MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(10, TimeUnit.SECONDS).build() }
+    private val client by lazy { MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(25, TimeUnit.SECONDS).build() }
     private val memory = object : LinkedHashMap<String, CatalogDetails>(24, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CatalogDetails>?) = size > 24
     }
-    private suspend fun request(op: String, q: String = "", id: String = "", page: Int = 0): JSONObject = withContext(Dispatchers.IO) {
+    private suspend fun request(op: String, q: String = "", id: String = "", page: Int = 0, kind: String = "issue"): JSONObject = withContext(Dispatchers.IO) {
         val url = ENDPOINT.toHttpUrl().newBuilder().addQueryParameter("op", op).addQueryParameter("q", q.take(100))
-            .addQueryParameter("id", id).addQueryParameter("page", page.toString()).build()
+            .addQueryParameter("id", id).addQueryParameter("page", page.toString()).addQueryParameter("kind",kind).addQueryParameter("v","51").build()
         val body = suspendCancellableCoroutine<String> { continuation ->
             val call = client.newCall(Request.Builder().url(url).get().build())
             continuation.invokeOnCancellation { call.cancel() }
@@ -57,10 +58,12 @@ object ComicVineCatalog {
         val standalone = issue <= 1 && Regex("year one|ano um|killing joke|piada mortal|long halloween|longo dia das bruxas|dark victory|vitória sombria|arkham asylum|asilo arkham", RegexOption.IGNORE_CASE).containsMatchIn(volume)
         val name = j.optString("name")
         val title = if (volume.isNotBlank() && name.isNotBlank() && !volume.equals(name, true)) "$volume: $name" else volume.ifBlank { name.ifBlank { "HQ" } }
-        return ComicEntry(id = "cv-$id", externalId = "cv-$id", title = title, authors = "", publisher = j.optString("publisher"),
+        val volumeEntry=j.optString("type")=="volume"
+        val key=if(volumeEntry) "cv-volume-$id" else "cv-$id"
+        return ComicEntry(id = key, externalId = key, title = title, authors = "", publisher = j.optString("publisher"),
             coverUrl = j.optString("image"), releaseYear = j.optString("date").take(4).toIntOrNull() ?: 2026,
-            synopsis = plain(j.optString("description")), sourceLabel = "Comic Vine", seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
-            format = if (standalone) "Graphic Novel" else "Edição", pageCount = 1)
+            synopsis = plain(j.optString("description")), sourceLabel = "Comic Vine", isOnlineResult=true, seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
+            format = if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição", pageCount = 1)
     }
     internal fun plain(html: String): String = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
     suspend fun search(query: String, page: Int = 0): MultiApiSearchEngine.CatalogPage {
@@ -96,14 +99,27 @@ object ComicVineCatalog {
         fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
         return CatalogDetails(id, type, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
             plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), strings("covers").distinct().take(6),
-            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"))
+            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"))
             .also { synchronized(memory) { memory[key] = it } }
     }
     suspend fun resolve(comic: ComicEntry): CatalogDetails? {
+        val key=comic.externalId.ifBlank { comic.id }
+        if(key.startsWith("cv-volume-"))return details("volume",key.removePrefix("cv-volume-"))
         val id = comic.externalId.removePrefix("cv-").takeIf { comic.externalId.startsWith("cv-") }
             ?: comic.id.removePrefix("cv-").takeIf { comic.id.startsWith("cv-") }
         // Never attach credits from a guessed edition to a locally cataloged book.
         return id?.takeIf { it.all(Char::isDigit) }?.let { details("issue", it) }
     }
+    suspend fun translated(details: CatalogDetails): CatalogDetails {
+        if(details.description.isBlank()) return details
+        val pt=request("translated",id=details.id,kind=details.type).optString("descriptionPt")
+        return if(pt.isBlank()) details else details.copy(description=pt).also { synchronized(memory){memory["${details.type}:${details.id}"]=it} }
+    }
+    suspend fun coverChoices(comic:ComicEntry):List<String>{
+        val ref=comic.externalId.ifBlank { comic.id };val volume=ref.startsWith("cv-volume-")
+        val id=ref.removePrefix(if(volume) "cv-volume-" else "cv-")
+        return request("covers",id=id,kind=if(volume) "volume" else "issue").optJSONArray("items")?.let { a -> (0 until a.length()).map { a.optString(it) }.distinct().take(6) }.orEmpty()
+    }
+    suspend fun portraits(name: String): List<String> = request("portraits",q=name.substringBefore('(').trim()).optJSONArray("items")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.startsWith("https://") }.distinct().take(6) }.orEmpty()
     private fun JSONObject.objects(key: String): List<JSONObject> = optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
 }

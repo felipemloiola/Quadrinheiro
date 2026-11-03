@@ -28,12 +28,12 @@ fun LauncherIconPicker() {
             QuadrinheiroLogo(if (follow) QuadrinheiroLogoVariant.OnDark else QuadrinheiroLogoVariant.Primary, Modifier.size(32.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Ícone do app", color = theme.textPrimary, fontSize = 15.sp)
+            Text("Ícone", color = theme.textPrimary, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
             Text("Fundo do sistema", color = theme.textSecondary, fontSize = 12.sp, maxLines = 1)
         }
         AppleMenuPicker(value = if (follow) "accent" else "original", onChange = {
             follow = it == "accent"; LauncherAppearance.setFollowsApp(context, follow)
-        }, options = listOf(SegmentOption("accent", "Cor do app"), SegmentOption("original", "Original")),
-            modifier = Modifier.widthIn(max = 126.dp).testTag("launcher_icon_style"))
+        }, options = listOf(SegmentOption("accent", "Tema"), SegmentOption("original", "Original")),
+            modifier = Modifier.widthIn(max = 108.dp).testTag("launcher_icon_style"))
     }
 }

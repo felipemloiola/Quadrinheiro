@@ -85,7 +85,7 @@ class ReadingNowWidget : GlanceAppWidget() {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val sessionSnapshot = storage.loadWidgetSessionSnapshot()
                         val stored = sessionSnapshot.state
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, WidgetVisualRenderer.resolveWidgetDark(stored.settings.colorScheme, night))
                         val currentComic = com.example.model.activeReadingComic(stored.comics, stored.profile.activeReadingComicId)
 
                         val coverBitmap = currentComic?.let {

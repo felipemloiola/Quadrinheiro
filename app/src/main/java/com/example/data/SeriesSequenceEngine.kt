@@ -173,8 +173,15 @@ object SeriesSequenceEngine {
     private val baseSeriesCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val normalizeKeyCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    private val catalogByNormalizedSeries: Map<String, List<ComicEntry>> by lazy {
-        CuratedCatalog.curatedComicsCatalog.groupBy { normalizeKey(inferBaseSeriesTitle(it)) }
+    private var indexedCatalog: List<ComicEntry>? = null
+    private var indexedSeries: Map<String,List<ComicEntry>> = emptyMap()
+    @Synchronized private fun catalogSeries(): Map<String,List<ComicEntry>> {
+        val current=CuratedCatalog.curatedComicsCatalog
+        if(current !== indexedCatalog){
+            indexedSeries=current.groupBy { normalizeKey(inferBaseSeriesTitle(it)) }
+            indexedCatalog=current
+        }
+        return indexedSeries
     }
 
     fun stripAccents(input: String): String {
@@ -419,7 +426,7 @@ object SeriesSequenceEngine {
         // Gather matching candidates using normalized base title bucket when available
         val matchingUser = userComics.filter { isSameSequence(localizedTarget, it) }
         val catalogCandidates = if (catalogComics === CuratedCatalog.curatedComicsCatalog) {
-            catalogByNormalizedSeries[normalizedBaseTitle].orEmpty()
+            catalogSeries()[normalizedBaseTitle].orEmpty()
         } else {
             catalogComics
         }

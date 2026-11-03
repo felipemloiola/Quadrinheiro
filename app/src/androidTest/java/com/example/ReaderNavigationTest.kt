@@ -51,7 +51,7 @@ class ReaderNavigationTest {
         compose.runOnIdle { assertTrue(vm.appSettings.value.profileFavoriteCharacters.single().startsWith("Batman (")) }
         screenshot("profile-favorites")
         page.performScrollToNode(hasText("Biblioteca"))
-        page.performScrollToIndex(4)
+        page.performTouchInput { swipeUp() }
         compose.onNodeWithText("Biblioteca").performClick()
         compose.runOnIdle { assertEquals("shelf", vm.activeTab.value) }
         compose.onNodeWithTag("settings_back_button").performClick()
@@ -65,7 +65,7 @@ class ReaderNavigationTest {
         compose.runOnIdle { vm.switchMainTab("explore") }
         val page = compose.onNodeWithTag("explore_page")
         page.performScrollToNode(hasText("Catálogo"))
-        page.performScrollToIndex(5)
+        page.performTouchInput { swipeUp() }
         screenshot("explore")
         compose.onNodeWithText("Catálogo").performClick()
         compose.onNodeWithTag("explore_collection").assertExists()
@@ -91,9 +91,18 @@ class ReaderNavigationTest {
         assertTrue((banner.right - banner.left).value / (banner.bottom - banner.top).value > 2.9f)
         screenshot("banner-profile")
     }
+    @Test fun exploreSelectorDoesNotJumpWhenOpeningCommunity() {
+        compose.runOnIdle {vm.switchMainTab("explore")}
+        val before=compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
+        compose.onNodeWithText("Comunidade").performClick()
+        val after=compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
+        assertEquals(before.top.value,after.top.value,.5f)
+        compose.onNodeWithText("Publicar").assertDoesNotExist()
+        compose.onNodeWithText("Atualizar").assertDoesNotExist()
+    }
     @Test fun previewOpensFullComicPageAndCommunityRequiresSignIn() {
         compose.runOnIdle { vm.openInfoSynopsisModal(ComicEntry("cv-1142807", "cv-1142807", "Batman", authors = "", publisher = "DC Comics", sourceLabel = "Comic Vine")) }
-        compose.onNodeWithText("Ver página da HQ").performClick()
+        compose.onNodeWithTag("open_comic_page").performClick()
         compose.onNodeWithTag("comic_detail_page").assertExists()
         compose.onNodeWithText("Comunidade").performScrollTo().performClick()
         compose.onNodeWithText("Histórias para conversar").assertExists()
@@ -109,7 +118,7 @@ class ReaderNavigationTest {
                 if (index == 1) vm.saveComic(comic)
                 vm.openInfoSynopsisModal(comic)
             }
-            compose.onNodeWithText("Ver página da HQ").performClick()
+            compose.onNodeWithTag("open_comic_page").performClick()
             compose.onNodeWithText("Registrar leitura").performClick()
             compose.onNodeWithTag("modal_cancel_button").assertExists()
             compose.runOnIdle {

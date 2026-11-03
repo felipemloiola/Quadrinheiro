@@ -85,6 +85,12 @@ class CommunityRepository(context: Context,
         requireOwner(expectedUid)
         db.collection("communityReviews").document(postId).update(mapOf("published" to false, "updatedAt" to FieldValue.serverTimestamp())).await()
     }
+    suspend fun withdrawKey(expectedUid:String,comicKey:String) = withTimeout(12000) {
+        requireOwner(expectedUid)
+        val ref=db.collection("communityReviews").document("${expectedUid}_$comicKey")
+        if(ref.get(Source.SERVER).await().exists())ref.update(mapOf("published" to false,"updatedAt" to FieldValue.serverTimestamp())).await()
+        Unit
+    }
     suspend fun comments(postId: String, cursor: CommunityCursor? = null): CommunityPage<CommunityComment> = withTimeout(12000) {
         check(currentUid() != null)
         val results = afterCursor(db.pipeline().collection("communityReviews/$postId/comments"), cursor)

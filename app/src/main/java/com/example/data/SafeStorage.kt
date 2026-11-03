@@ -18,6 +18,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class SafeStorage(context: Context) {
+    val systemIsDark: Boolean get() = (appContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    private val appContext = context.applicationContext
 
     private val prefs = try {
         context.getSharedPreferences(STORAGE_KEY, Context.MODE_PRIVATE)
@@ -508,14 +510,16 @@ class SafeStorage(context: Context) {
         val raw = getItem(GUEST_STATE_KEY)
         if (!raw.isNullOrBlank()) {
             parseStoredStateJson(raw, loadTranslationCache())?.let { parsed ->
-                return parsed.copy(
-                    settings = getItem("profile_showcase_guest_local")?.let(ProfileShowcase::decode)?.let { ProfileShowcase.merge(it, parsed.settings) } ?: parsed.settings,
+                val result=parsed.copy(
+                    settings = getItem("profile_showcase_guest_local")?.let(ProfileShowcase::decode)?.let { if(JSONObject(raw).optInt("catalogEpoch")<CatalogEpoch.VERSION) CatalogEpoch.settings(ProfileShowcase.merge(it,parsed.settings)) else ProfileShowcase.merge(it,parsed.settings) } ?: parsed.settings,
                     profile = parsed.profile.copy(
                         name = "Leitor Convidado",
                         handle = "@convidado",
                         isDirty = false
                     )
                 )
+                if(JSONObject(raw).optInt("catalogEpoch")<CatalogEpoch.VERSION){saveState(result.comics,result.profile,result.settings,"guest_local");saveShowcase("guest_local",result.settings)}
+                return result
             }
         }
         return StoredState(
@@ -531,7 +535,10 @@ class SafeStorage(context: Context) {
         val raw = getItem(accountStateKey(uid)) ?: return null
         return parseStoredStateJson(raw, loadTranslationCache())?.let { state ->
             val showcase = getItem("profile_showcase_$uid")?.let(ProfileShowcase::decode)
-            if (showcase == null) state else state.copy(settings = ProfileShowcase.merge(showcase, state.settings))
+            val merged=if (showcase == null) state else state.copy(settings = ProfileShowcase.merge(showcase, state.settings))
+            if(JSONObject(raw).optInt("catalogEpoch")<CatalogEpoch.VERSION){
+                val clean=merged.copy(settings=CatalogEpoch.settings(merged.settings));saveState(clean.comics,clean.profile,clean.settings,uid);saveShowcase(uid,clean.settings);clean
+            }else merged
         }
     }
 
@@ -542,7 +549,8 @@ class SafeStorage(context: Context) {
         return try {
             val root = JSONObject(raw)
             val comicsArr = root.optJSONArray("comics")
-            val comics = if (comicsArr != null) parseComics(comicsArr) else emptyList()
+            val obsolete = root.optInt("catalogEpoch",0) < CatalogEpoch.VERSION
+            val comics = if (!obsolete && comicsArr != null) parseComics(comicsArr) else emptyList()
             PortugueseComicTranslator.seedPersistedTranslations(comics, persistedTranslations)
             val profile = root.optJSONObject("profile")?.let { parseProfile(it) } ?: ReaderProfile()
             val settings = root.optJSONObject("settings")?.let { saved ->
@@ -558,7 +566,7 @@ class SafeStorage(context: Context) {
                     }
                 )
             } ?: AppSettings()
-            StoredState(comics, profile, settings)
+            StoredState(comics, if(obsolete) CatalogEpoch.profile(profile) else profile, if(obsolete) CatalogEpoch.settings(settings) else settings)
         } catch (_: Throwable) {
             null
         }
@@ -663,6 +671,7 @@ class SafeStorage(context: Context) {
         pretty: Boolean = true
     ): String {
         val root = JSONObject()
+        root.put("catalogEpoch", CatalogEpoch.VERSION)
         root.put("comics", serializeComics(comics))
         root.put("profile", serializeProfile(profile))
         root.put("settings", serializeSettings(settings))

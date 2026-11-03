@@ -1439,9 +1439,7 @@ fun SettingsTabScreen(
                                     value = appSettings.searchProvider,
                                     onChange = { v -> viewModel.updateSettings { it.copy(searchProvider = v) } },
                                     options = listOf(
-                                        SegmentOption("MULTI", "Todas"),
-                                        SegmentOption("BOOKS", "HQs Ocidentais"),
-                                        SegmentOption("MANGA", "Mangás (Jikan)")
+                                        SegmentOption("MULTI", "Comic Vine")
                                     )
                                 )
                             }
@@ -1570,7 +1568,7 @@ fun SettingsTabScreen(
                                                     color = s.textPrimary
                                                 )
                                                 Text(
-                                                    text = "Apple Books + AniList GraphQL + Kitsu DB + Open Library",
+                                                    text = "Comic Vine · Superhero API",
                                                     fontSize = 11.5.sp,
                                                     color = s.textSecondary
                                                 )

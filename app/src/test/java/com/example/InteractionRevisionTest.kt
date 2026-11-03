@@ -42,7 +42,7 @@ class InteractionRevisionTest {
     }
 
     @Test fun discoveriesUseReadingHistoryAndExcludeEveryOwnedStatus() {
-        val catalog = CuratedCatalog.curatedComicsCatalog
+        val catalog = com.example.data.LegacyCatalogFixture.curatedComicsCatalog
         val watchmen = catalog.first { it.title.contains("Watchmen") }.copy(status = ReadingStatus.READ, rating = 5f)
         val sandman = catalog.first { it.title.contains("Sandman") }.copy(status = ReadingStatus.WANT_TO_READ)
         val result = PersonalizedDiscovery.recommend(catalog, listOf(watchmen, sandman))
@@ -52,12 +52,12 @@ class InteractionRevisionTest {
     }
 
     @Test fun sequenceCacheDoesNotReuseAnotherSameSizeLibrary() = runBlocking {
-        val catalog = CuratedCatalog.curatedComicsCatalog
+        val catalog = com.example.data.LegacyCatalogFixture.curatedComicsCatalog
         val watchmen = catalog.first { it.title.contains("Watchmen") }
         val vengeance = catalog.first { it.title.contains("Vingança") }
         val sandman = catalog.first { it.title.contains("Sandman") }
-        val first = SeriesSequenceEngine.findSequenceForComicAsync(watchmen, listOf(vengeance.copy(status = ReadingStatus.READ)))
-        val second = SeriesSequenceEngine.findSequenceForComicAsync(watchmen, listOf(sandman.copy(status = ReadingStatus.READING)))
+        val first = SeriesSequenceEngine.findSequenceForComicAsync(watchmen, listOf(vengeance.copy(status = ReadingStatus.READ)),catalog)
+        val second = SeriesSequenceEngine.findSequenceForComicAsync(watchmen, listOf(sandman.copy(status = ReadingStatus.READING)),catalog)
         assertNotSame(first, second)
         val key = PortugueseComicTranslator.canonicalWorkKey(vengeance.title)
         assertNotNull(first.recommendations.first { PortugueseComicTranslator.canonicalWorkKey(it.comic.title) == key }.savedEntry)

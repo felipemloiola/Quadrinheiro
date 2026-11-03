@@ -797,6 +797,7 @@ fun QuadrinheiroApp(
                                         onLibrary = { viewModel.switchMainTab("shelf") },
                                         onEditProfile = { viewModel.switchMainTab("settings"); viewModel.openSettingsCategory("profile") },
                                         onUpdateShowcase = { ids, characters, details -> viewModel.updateSettings { it.copy(profileFavoriteComicIds = ids, profileFavoriteCharacters = characters, profileShowcaseDetails = details) } },
+                                        onHandleChange = viewModel::onHandleInputChanged, handleFeedback = viewModel.usernameVerification.collectAsStateWithLifecycle().value.message,
                                         onCommitProfile = { next, banner -> viewModel.updateProfile { next }; viewModel.updateSettings { it.copy(profileBannerUrl = banner) } },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
                                         onStatistics = { viewModel.openReadingStatistics() }

@@ -329,8 +329,10 @@ object WidgetVisualRenderer {
 
     fun resolveWidgetPalette(storage: SafeStorage): WidgetThemePalette {
         val state = storage.loadWidgetState()
-        return resolvePaletteForThemeId(state.settings.themeId, true)
+        return resolvePaletteForThemeId(state.settings.themeId, resolveWidgetDark(state.settings.colorScheme, storage.systemIsDark))
     }
+
+    fun resolveWidgetDark(mode: String, systemDark: Boolean): Boolean = when(mode) { "dark" -> true; "light" -> false; else -> systemDark }
 
     fun resolvePaletteForThemeId(themeId: String, isDark: Boolean = true): WidgetThemePalette {
         // Widgets seguem fielmente a paleta de cores e anéis escolhida pelo usuário no app
@@ -341,8 +343,8 @@ object WidgetVisualRenderer {
         val onAccent = if (lum > 0.52f) Color(0xFF0A0A0E) else Color.White
 
         return WidgetThemePalette(
-            bgCard = if (isDark) Color(0xFF14151B) else Color(0xFFF2F2F7),
-            bgSurfaceElevated = if (isDark) Color(0xFF22242E) else Color(0xFFE4E5EA),
+            bgCard = if (isDark) Color(0xFF1C1C1E) else Color.White,
+            bgSurfaceElevated = if (isDark) Color(0xFF2C2C2E) else Color(0xFFF2F2F7),
             textPrimary = if (isDark) Color(0xFFF5F5F7) else Color(0xFF101116),
             textSecondary = if (isDark) Color(0xFFA6A6B2) else Color(0xFF50525C),
             outerRingColor = moveColor,

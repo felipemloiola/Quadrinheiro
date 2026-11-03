@@ -40,3 +40,4 @@ catalog-service/node_modules/
 catalog-service/.wrangler/
 catalog-service/.dev.vars*
 /.wrangler/
+/.codex-attachments/

@@ -46,7 +46,7 @@ class QuadrinheiroSyncWorker(
             val dirtyComics = persisted.comics.filter { it.isDirty }
             val profileDirty = persisted.profile.isDirty
 
-            if (dirtyComics.isEmpty() && !profileDirty) {
+            if (dirtyComics.isEmpty() && !profileDirty && !CommunityAutoSync.hasPending(storage,uid)) {
                 return@withContext Result.success()
             }
 
@@ -65,7 +65,7 @@ class QuadrinheiroSyncWorker(
                 }
             }
 
-            Result.success()
+            if(CommunityAutoSync.flush(applicationContext,uid,storage)) Result.success() else Result.retry()
         } catch (cancel: kotlinx.coroutines.CancellationException) {
             // WORKER_CANCELLATION_V13: cancellation is not a retryable sync failure.
             throw cancel

@@ -78,7 +78,7 @@ class ActivityRingsWidget : GlanceAppWidget() {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val sessionSnapshot = storage.loadWidgetSessionSnapshot()
                         val stored = sessionSnapshot.state
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, WidgetVisualRenderer.resolveWidgetDark(stored.settings.colorScheme, night))
 
                         val stats = computeReadingStatistics(
                             comics = stored.comics,

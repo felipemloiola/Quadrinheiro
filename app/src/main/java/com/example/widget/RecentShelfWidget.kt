@@ -77,7 +77,7 @@ class RecentShelfWidget : GlanceAppWidget() {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val sessionSnapshot = storage.loadWidgetSessionSnapshot()
                         val stored = sessionSnapshot.state
-                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, night)
+                        val palette = WidgetVisualRenderer.resolvePaletteForThemeId(stored.settings.themeId, WidgetVisualRenderer.resolveWidgetDark(stored.settings.colorScheme, night))
 
                         val queueComics = stored.comics.filter { it.status == ReadingStatus.WANT_TO_READ }
                         val featuredList = (if (queueComics.size >= 2) queueComics else stored.comics).take(4)

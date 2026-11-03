@@ -663,7 +663,7 @@ class QuadrinheiroViewModel(
                 if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
                     val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                         localComics = _comics.value,
-                        remoteComics = cachedComics
+                        remoteComics = cachedComics.filter(com.example.data.CatalogEpoch::afterReset)
                     )
                     if (initialMerged != _comics.value) {
                         _comics.value = initialMerged
@@ -682,7 +682,8 @@ class QuadrinheiroViewModel(
                 // 3. Listener em tempo real com limite para os 35 quadrinhos mais recentes (evita leituras excessivas)
                 repo.observeUserComics(user.uid, limit = 35L)
                     .catch { }
-                    .collectLatest { remoteComics ->
+                    .collectLatest { incomingComics ->
+                        val remoteComics=incomingComics.filter(com.example.data.CatalogEpoch::afterReset)
                         try {
                             if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
                             if (remoteComics.isNotEmpty()) {
@@ -751,7 +752,7 @@ class QuadrinheiroViewModel(
                     if (result.items.isNotEmpty()) {
                         val (merged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                             localComics = _comics.value,
-                            remoteComics = result.items
+                            remoteComics = result.items.filter(com.example.data.CatalogEpoch::afterReset)
                         )
                         if (merged != _comics.value) {
                             _comics.value = merged
@@ -2143,13 +2144,16 @@ class QuadrinheiroViewModel(
         val idx = currentList.indexOfFirst { c ->
             c.id == entry.id || (c.externalId.isNotBlank() && c.externalId == entry.externalId)
         }
+        val previousReview=currentList.getOrNull(idx)
         if (idx >= 0) {
             currentList[idx] = entry
         } else {
             currentList.add(0, entry)
         }
         _comics.value = currentList
+        if(previousReview?.rating!=entry.rating || previousReview?.review!=entry.review)com.example.data.CommunityAutoSync.enqueue(storage,activeOwnerUid(),entry)
         persistAll()
+        QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
 
         val uid = activeCloudUid()
         val repo = cloudRepo

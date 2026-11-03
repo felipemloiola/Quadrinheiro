@@ -31,7 +31,7 @@ class ExampleRobolectricTest {
         assertTrue(state.comics.isEmpty())
 
         // Save a collection and verify ZIP generation
-        storage.saveState(CuratedCatalog.initialUserCollection, state.profile, state.settings)
+        storage.saveState(com.example.data.LegacyCatalogFixture.initialUserCollection, state.profile, state.settings)
         val populatedState = storage.loadState()
         assertTrue(populatedState.comics.isNotEmpty())
 
@@ -59,7 +59,7 @@ class ExampleRobolectricTest {
         assertEquals(2, vm.lastCapsuleIndex.value) // Remembers the Profile family.
 
         // Opening catalog modal for a new comic must initialize rating at 0.0f
-        val candidate = CuratedCatalog.curatedComicsCatalog.last()
+        val candidate = com.example.data.LegacyCatalogFixture.curatedComicsCatalog.last()
         vm.openCatalogSheetForComic(candidate, ReadingStatus.READ)
         val selected = vm.selectedComic.value
         assertNotNull(selected)

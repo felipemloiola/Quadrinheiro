@@ -59,16 +59,11 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                 finally { busy = false }
             }
         }
-        LaunchedEffect(uid) { load(true) }
+        val publicationRevision by CommunityAutoSync.revision.collectAsState()
+        LaunchedEffect(uid,publicationRevision,comic?.externalId) { load(true) }
         LazyColumn(Modifier.fillMaxSize().testTag("community_feed"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { load(true) }, enabled = !busy) { Text("Atualizar", color = t.accent) }
-                    TextButton(onClick = { composing = true }) { Text("Publicar", color = t.accent) }
-                }
-            }
             if (posts.isEmpty() && !busy && error == null) item {
-                SectionHeading("A conversa começa com uma leitura", "Publique uma avaliação ou resenha da sua biblioteca.")
+                SectionHeading("A conversa começa com uma leitura", "As avaliações e resenhas salvas na biblioteca aparecem aqui automaticamente.")
             }
             items(posts, key = { it.id }) { post ->
                 Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -86,13 +81,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                             Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp), tint = t.accent)
                             Spacer(Modifier.width(8.dp)); Text("Comentários", color = t.accent)
                         }
-                        if (post.ownerId == uid) TextButton(onClick = {
-                            scope.launch {
-                                try { repo.withdraw(uid, post.id); posts = posts.filterNot { it.id == post.id } }
-                                catch (cancel: CancellationException) { throw cancel }
-                                catch (_: Exception) { error = "Não foi possível retirar a publicação." }
-                            }
-                        }) { Text("Retirar", color = t.textSecondary) }
+
                     }
                 }
             }
@@ -101,42 +90,6 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                     error?.let { Text(it, color = t.textSecondary) }
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp)
                     else if (more || error != null) TextButton(onClick = { load() }) { Text(if (error == null) "Ver mais" else "Tentar novamente", color = t.accent) }
-                }
-            }
-        }
-        if (composing) {
-            var selected by remember { mutableStateOf<ComicEntry?>(comic) }
-            var body by remember { mutableStateOf(comic?.review.orEmpty()) }
-            var publishing by remember { mutableStateOf(false) }
-            var failure by remember { mutableStateOf(false) }
-            ModalBottomSheet(onDismissRequest = { composing = false }, containerColor = t.bgSecondary) {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 560.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    item { SectionHeading("Publicar leitura", "Seu nome, avaliação e texto ficarão visíveis para outros leitores.") }
-                    if (selected == null) {
-                        if (comics.isEmpty()) item { Text("Adicione uma HQ à biblioteca para publicar.", color = t.textSecondary) }
-                        items(comics, key = { it.id }) { comic ->
-                            Row(Modifier.fillMaxWidth().clickable { selected = comic; body = comic.review }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.width(40.dp).height(60.dp))
-                                Text(comic.displayTitle, color = t.textPrimary)
-                            }
-                        }
-                    } else item {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            TextButton(onClick = { selected = null }) { Text(selected!!.displayTitle, color = t.accent) }
-                            if (selected!!.rating > 0) Text("★ ${selected!!.rating}", color = t.accent)
-                            AppleTextEditor(body, { body = it.take(5000) }, "Resenha")
-                            if (failure) Text("Não foi possível publicar. Tente novamente.", color = t.textSecondary)
-                            TextButton(enabled = !publishing && (body.isNotBlank() || selected!!.rating > 0), onClick = {
-                                publishing = true; failure = false
-                                scope.launch {
-                                    try { repo.publish(uid, profile, selected!!, body, selected!!.rating.toDouble()); composing = false; load(true) }
-                                    catch (cancel: CancellationException) { throw cancel }
-                                    catch (_: Exception) { failure = true }
-                                    finally { publishing = false }
-                                }
-                            }) { Text(if (publishing) "Publicando…" else "Publicar", color = t.accent) }
-                        }
-                    }
                 }
             }
         }

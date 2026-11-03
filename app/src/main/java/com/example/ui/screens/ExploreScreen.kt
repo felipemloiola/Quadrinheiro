@@ -46,11 +46,12 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
     val motion = LocalAppMotion.current
     var collection by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    val catalog = CuratedCatalog.curatedComicsCatalog
-    val recommendations by produceState<List<ComicEntry>>(emptyList(), comics, profile.favoriteUniverse) {
+    val catalog by com.example.data.ModernCatalog.entries.collectAsState()
+    LaunchedEffect(Unit){com.example.data.ModernCatalog.load()}
+    val recommendations by produceState<List<ComicEntry>>(emptyList(), comics, profile.favoriteUniverse,catalog) {
         value = withContext(Dispatchers.Default) { PersonalizedDiscovery.recommend(catalog, comics, profile.favoriteUniverse) }
     }
-    val window = remember(profile.favoriteUniverse) { CatalogWindow(catalog.take(24)) }
+    val window = remember(profile.favoriteUniverse) { CatalogWindow() }
     var catalogItems by remember(window) { mutableStateOf(window.items) }
     var catalogLoading by remember(window) { mutableStateOf(false) }
     var catalogError by remember(window) { mutableStateOf(false) }
@@ -76,16 +77,15 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
         "Todo o catálogo" to catalog
     ) }
     BackHandler(collection != null) { collection = null }
-    if (collection == null && tab == 1) {
-        Column(Modifier.fillMaxSize()) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Explorar", color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
+    Column(Modifier.fillMaxSize()) {
+        if(collection==null) Column(Modifier.padding(horizontal=20.dp,vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+                Text("Explorar",Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.Bold,fontSize=32.sp)
+                IconButton(onClick={onSearch("")}){Icon(Icons.Default.Search,"Buscar quadrinhos",tint=theme.textPrimary)}
             }
-            CommunityScreen(comics, profile, onLogin)
+            AppleSegmentedPicker(listOf("Descobrir","Comunidade"),tab,{tab=it},Modifier.fillMaxWidth())
         }
-        return
-    }
+        if(collection==null&&tab==1) CommunityScreen(comics,profile,onLogin) else
     AnimatedContent(collection, transitionSpec = { fadeIn(motion.tween(180)) togetherWith fadeOut(motion.tween(120)) }, label = "explore_collection") { selected ->
         val expandedState = rememberLazyListState()
         LaunchedEffect(selected, expandedState, catalogItems.size, catalogLoading, catalogError) {
@@ -99,7 +99,7 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
             modifier = Modifier.fillMaxSize().testTag(if (selected == null) "explore_page" else "explore_collection"),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 208.dp),
             verticalArrangement = Arrangement.spacedBy(26.dp)) {
-            item {
+            if(selected!=null) item {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (selected == null) AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
                     if (selected != null) SettingsBackButton({ collection = null }, label = "Explorar")
@@ -152,6 +152,7 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                 }
             }
         }
+    }
     }
 }
 
