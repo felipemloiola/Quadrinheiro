@@ -15,11 +15,23 @@ Revisão dos componentes compartilhados e dos fluxos relatados: menus, catálogo
 
 ## Now Bar / Live Update
 
-A tela inicial oferece **Iniciar Now Bar** para uma sessão explícita e **Encerrar sessão**. Após permissão de notificações, o app publica uma notificação padrão de progresso com capa, título, página, percentual e ações −1/+1/Encerrar. A seleção acompanha `activeReadingComicId`, a mesma usada pela iluminação de fundo e pelos widgets. Troca de conta/logout encerra a sessão e ações antigas não alteram outra conta. Carga de capa e atualização da sessão executam fora da thread da interface; uma revisão impede uma capa atrasada de republicar uma sessão encerrada.
+A opção **Leitura na Now Bar** fica em **Ajustes → Biblioteca e Exibição**. Ela é salva com as preferências da conta e inicia automaticamente o acompanhamento da HQ selecionada, após permissão de notificações. A tela inicial não contém um botão de ativação. Desativar a opção remove a notificação. Encerrar ou dispensar a notificação suspende aquela HQ até escolher outra ou desligar/ligar a preferência.
+
+A seleção acompanha `activeReadingComicId`, a mesma usada pela iluminação de fundo e pelos widgets. A notificação fornece capa, página, percentual e controles −1/+1/Encerrar. No Android 16 ou superior, usa `NotificationCompat.ProgressStyle`, com a capa como marcador de progresso. Em versões anteriores mantém o template padrão. O canal permite conteúdo na tela bloqueada; as escolhas de privacidade do usuário têm precedência. Troca de conta/logout invalida a sessão e as identidades dos PendingIntents incluem conta e HQ, impedindo que controles antigos sejam redirecionados para outra leitura. Carga de capa e publicação executam fora da thread de interface.
 
 O manifesto solicita `POST_PROMOTED_NOTIFICATIONS`; a notificação usa `setRequestPromotedOngoing(true)`, é contínua e usa template padrão, sem `RemoteViews` customizado ou sessão de mídia artificial. Samsung/Android decidem a elegibilidade e a promoção. O estilo exato da Now Bar, tela bloqueada e AOD é controlado pela One UI: o app fornece os mesmos dados e a capa dos widgets, não consegue impor seu layout. A integração foi direcionada ao Android 17/One UI 9 informado pelo usuário; a promoção em um Samsung real precisa ser verificada nesse aparelho.
 
+O exemplo do Spotify é um cartão de reprodução: usa MediaSession/MediaStyle e controles de áudio. Não foi encontrada nas fontes públicas consultadas da Samsung uma API que permita impor esse cartão a uma atividade de leitura. A implementação não simula áudio para obter uma aparência de player. Por isso, a reprodução exata do cartão do Spotify permanece fora do que pode ser garantido por esta integração.
+
+No Samsung, verificar **Configurações → Tela de bloqueio e AOD → Now Bar → Notificações ao vivo**, além das notificações e do conteúdo na tela bloqueada para o Quadrinheiro. A preferência do app inclui um atalho para a autorização de notificações promovidas (`Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS`) quando necessário; após autorizada, abre as configurações de notificações do aplicativo. A promoção final depende da elegibilidade definida pela One UI.
+
 O repositório NowBar de styropyr0 é uma recriação visual em Compose, não uma API de integração ao sistema; seu código não foi incorporado.
+
+## Ajustes adicionais de apresentação
+
+- Ações Lido/Lendo/Quero Ler: cápsula visual de cerca de 30 dp e área de toque independente de 48 dp, rótulos de 13 sp e preenchimento menor. A quebra de linha continua disponível para fontes ampliadas.
+- Compartilhamento: os seletores usam uma camada gravada da própria superfície do painel, sem amostrar a tela anterior. O atalho grande de leitura concluída foi removido do editor; a ação no cabeçalho continua disponível.
+- Boas-vindas: cada etapa mede apenas o conteúdo visível. Logo, título e botão participam do mesmo fluxo; o tamanho da etapa é animado, sem deslocamentos fixos que dependam da altura de conteúdo oculto.
 
 ## Validação
 
@@ -36,3 +48,8 @@ Testes cobrem contraste dos temas claros/escuros e preferência de contraste, mu
 - [Samsung Now Bar](https://www.samsung.com/africa_pt/support/mobile-devices/how-to-use-the-now-bar-on-the-lock-screen-of-your-samsung-galaxy-device/)
 - [NowBar: recriação visual](https://github.com/styropyr0/NowBar)
 - [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) e [LiquidGlassKMP](https://github.com/philipplackner/LiquidGlassKMP)
+
+- [Samsung: configuração e permissões da Now Bar](https://www.samsung.com/my/support/mobile-devices/how-to-use-the-now-bar-on-the-lock-screen-of-your-samsung-galaxy-device/)
+- [Android: controles de mídia](https://developer.android.com/media/implement/surfaces/mobile)
+- [Android: ProgressStyle](https://developer.android.com/reference/androidx/core/app/NotificationCompat.ProgressStyle)
+- [Android: tela de autorização de promoção](https://developer.android.com/reference/android/provider/Settings#ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)

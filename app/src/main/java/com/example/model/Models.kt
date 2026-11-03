@@ -612,6 +612,7 @@ data class AppSettings(
     val glassOpacity: Float = 1.0f,
     val backgroundExtension: Boolean = true,
     val showBottomAccessory: Boolean = true,
+    val showReadingNowBar: Boolean = false,
     val showFloatingMenu: Boolean = true,
     val minimizeTabBarOnScroll: Boolean = true,
     val reduceTransparency: Boolean = false,

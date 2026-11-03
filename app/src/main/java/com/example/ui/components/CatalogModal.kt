@@ -542,64 +542,7 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                                 onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
                             )
 
-                            // Atalho direto para o Card Social "Leitura Concluída" (9:16 Stories / 1:1 Feed)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("modal_share_completed_reading_cta")
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(s.accentColor.copy(alpha = 0.14f))
-                                    .border(0.8.dp, s.accentColor.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                                    .clickable {
-                                        onShareComic(
-                                            buildFinalComicForSave(),
-                                            SocialShareCardType.COMPLETED_READING,
-                                            null
-                                        )
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .clip(CircleShape)
-                                            .background(s.accentBg),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = LucideIcons.ShareIos,
-                                            contentDescription = null,
-                                            tint = s.accentText,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                    }
-                                    Column {
-                                        Text(
-                                            text = "Compartilhar Card de Leitura Concluída",
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = s.textPrimary
-                                        )
-                                        Text(
-                                            text = "Gere um card estilo Apple para Stories (9:16) ou Feed (1:1)",
-                                            fontSize = 10.5.sp,
-                                            color = s.textSecondary
-                                        )
-                                    }
-                                }
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = s.accentColor,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+
                         }
                     }
                         }

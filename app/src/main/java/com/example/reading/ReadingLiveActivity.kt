@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.compose.ui.graphics.toArgb
 import com.example.R
 import com.example.data.SafeStorage
@@ -23,7 +24,7 @@ object ReadingLiveActivity {
     internal const val CHANNEL = "reading_session"
     private val generation = AtomicLong()
     private val publicationLock = Any()
-    private var refreshJob: Job? = null
+    @Volatile private var refreshJob: Job? = null
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val active = MutableStateFlow(false)
     private fun preferences(context: Context) = context.getSharedPreferences("reading_live_session", Context.MODE_PRIVATE)
@@ -34,6 +35,7 @@ object ReadingLiveActivity {
 
     fun isActive(context: Context): Boolean = preferences(context).contains("owner")
     fun stop(context: Context) = synchronized(publicationLock) {
+        refreshJob?.cancel()
         generation.incrementAndGet()
         preferences(context).edit().clear().apply()
         active.value = false
@@ -51,23 +53,31 @@ object ReadingLiveActivity {
     }
 
     suspend fun start(context: Context, comicId: String) = withContext(Dispatchers.IO) {
-        val session = SafeStorage(context).loadWidgetSessionSnapshot()
-        val owner = session.ownerUid ?: return@withContext
-        val comic = session.state.comics.firstOrNull { it.id == comicId && it.status == ReadingStatus.READING } ?: return@withContext
-        preferences(context).edit().putString("owner", owner).putString("comic", comicId).apply()
-        publish(context, session, comic, generation.incrementAndGet())
+        val snapshot = SafeStorage(context).loadWidgetSessionSnapshot()
+        if (!snapshot.state.settings.showReadingNowBar) return@withContext
+        val comic = snapshot.state.comics.firstOrNull { it.id == comicId && it.status == ReadingStatus.READING } ?: return@withContext
+        activate(context, snapshot, comic)
     }
 
     suspend fun refresh(context: Context) = withContext(Dispatchers.IO) {
-        val preferences = preferences(context)
-        val owner = preferences.getString("owner", null) ?: return@withContext
         val snapshot = SafeStorage(context).loadWidgetSessionSnapshot()
-        if (snapshot.ownerUid != owner) { stop(context); return@withContext }
-        val previous = snapshot.state.comics.firstOrNull { it.id == preferences.getString("comic", null) }
-        if (previous == null || previous.status != ReadingStatus.READING) { stop(context); return@withContext }
         val comic = activeReadingComic(snapshot.state.comics, snapshot.state.profile.activeReadingComicId)
-        if (comic == null) { stop(context); return@withContext }
-        publish(context, snapshot, comic, generation.incrementAndGet())
+        if (!snapshot.state.settings.showReadingNowBar || snapshot.ownerUid == null || comic == null) {
+            stop(context); return@withContext
+        }
+        val prefs = preferences(context)
+        if (prefs.getString("dismissedOwner", null) == snapshot.ownerUid && prefs.getString("dismissedComic", null) == comic.id) return@withContext
+        activate(context, snapshot, comic)
+    }
+
+    private suspend fun activate(context: Context, snapshot: SafeStorage.WidgetSessionSnapshot, comic: ComicEntry) {
+        val owner = snapshot.ownerUid ?: return
+        val revision = synchronized(publicationLock) {
+            if (currentOwner(context) != owner) return
+            preferences(context).edit().putString("owner", owner).putString("comic", comic.id).apply()
+            generation.incrementAndGet()
+        }
+        publish(context, snapshot, comic, revision)
     }
 
     @Suppress("MissingPermission")
@@ -79,13 +89,14 @@ object ReadingLiveActivity {
         if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return
         val manager = context.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(CHANNEL, "Sessão de leitura", NotificationManager.IMPORTANCE_LOW).apply {
-            description = "Leitura iniciada por você, com progresso e controles de páginas"; setShowBadge(false)
+            description = "Sua HQ atual na barra de status e na tela bloqueada"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC; setShowBadge(false)
         })
         val open = PendingIntent.getActivity(context, ID, QuadrinheiroWidgetIntents.buildOpenReadingComicIntent(context, comic.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val total = comic.pageCount.coerceAtLeast(1)
         val page = comic.currentPage.coerceIn(0, total)
         val percentage = page * 100 / total
-        val notification = NotificationCompat.Builder(context, CHANNEL)
+        val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_reading_notification).setLargeIcon(cover)
             .setContentTitle(comic.displayTitle).setContentText("Pág. $page de $total · $percentage%")
             .setSubText("Lendo agora").setContentIntent(open)
@@ -96,7 +107,11 @@ object ReadingLiveActivity {
             .addAction(0, "− 1 pág.", action(context, owner, comic.id, -1))
             .addAction(0, "+ 1 pág.", action(context, owner, comic.id, 1))
             .addAction(0, "Encerrar", action(context, owner, comic.id, 0))
-            .setDeleteIntent(action(context, owner, comic.id, 0)).build()
+            .setDeleteIntent(action(context, owner, comic.id, 0))
+        if (Build.VERSION.SDK_INT >= 36) builder.setStyle(NotificationCompat.ProgressStyle()
+            .setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(total).setColor(palette.outerRingColor.toArgb())))
+            .setProgress(page).setProgressTrackerIcon(IconCompat.createWithBitmap(cover)))
+        val notification = builder.build()
         synchronized(publicationLock) {
             if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return
             preferences(context).edit().putString("comic", comic.id).apply()
@@ -108,12 +123,20 @@ object ReadingLiveActivity {
 
     private fun action(context: Context, owner: String, comic: String, delta: Int): PendingIntent =
         PendingIntent.getBroadcast(context, ID + delta, Intent(context, ReadingSessionAction::class.java)
+            .setData(android.net.Uri.parse("quadrinheiro://reading/session/${android.net.Uri.encode(owner)}/${android.net.Uri.encode(comic)}/$delta"))
             .setAction("reading.session.$delta").putExtra("owner", owner).putExtra("comic", comic).putExtra("delta", delta),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     internal suspend fun handle(context: Context, owner: String?, comic: String?, delta: Int) {
         if (owner == null || owner != preferences(context).getString("owner", null) || owner != SafeStorage(context).loadWidgetSessionSnapshot().ownerUid) return
-        if (delta == 0) { stop(context); return }
+        if (comic != preferences(context).getString("comic", null) || delta !in -1..1) return
+        if (delta == 0) {
+            synchronized(publicationLock) {
+                stop(context)
+                preferences(context).edit().putString("dismissedOwner", owner).putString("dismissedComic", comic).apply()
+            }
+            return
+        }
         if (comic != preferences(context).getString("comic", null) || delta !in listOf(-1, 1)) return
         UpdatePageAction.applyPageDelta(context, comic, delta, owner)
         refresh(context)

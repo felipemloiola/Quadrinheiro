@@ -24,6 +24,7 @@ import android.provider.MediaStore
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -1365,6 +1366,8 @@ fun SocialShareCardSheetModal(
         label = "socialCardAuraColor"
     )
 
+    val shareBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
+
     // GraphicsLayer para gravação nativa acelerada por hardware do Card Compose
     val cardGraphicsLayer = rememberGraphicsLayer()
     var isExporting by remember { mutableStateOf(false) }
@@ -1412,21 +1415,24 @@ fun SocialShareCardSheetModal(
             ) { onDismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 560.dp)
                 .fillMaxHeight(0.94f)
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                .contentMaterialSurface(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {}
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Box(Modifier.matchParentSize().background(themeColors.bgSecondary)
+                .layerBackdrop(shareBackdrop))
+            androidx.compose.runtime.CompositionLocalProvider(LocalLiquidGlassBackdrop provides shareBackdrop) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Grabber superior
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -1801,6 +1807,8 @@ fun SocialShareCardSheetModal(
                     )
                 }
             }
+        }
+    }
         }
     }
 }

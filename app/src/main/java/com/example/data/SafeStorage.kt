@@ -1044,6 +1044,7 @@ class SafeStorage(context: Context) {
         put("glassOpacity", s.glassOpacity.toDouble())
         put("backgroundExtension", s.backgroundExtension)
         put("showBottomAccessory", s.showBottomAccessory)
+        put("showReadingNowBar", s.showReadingNowBar)
         put("showFloatingMenu", s.showFloatingMenu)
         put("minimizeTabBarOnScroll", s.minimizeTabBarOnScroll)
         put("reduceTransparency", s.reduceTransparency)
@@ -1096,6 +1097,7 @@ class SafeStorage(context: Context) {
             glassOpacity = obj.optDouble("glassOpacity", def.glassOpacity.toDouble()).toFloat().coerceIn(0.2f, 2.0f),
             backgroundExtension = obj.optBoolean("backgroundExtension", def.backgroundExtension),
             showBottomAccessory = obj.optBoolean("showBottomAccessory", def.showBottomAccessory),
+            showReadingNowBar = obj.optBoolean("showReadingNowBar", def.showReadingNowBar),
             showFloatingMenu = obj.optBoolean("showFloatingMenu", def.showFloatingMenu),
             minimizeTabBarOnScroll = obj.optBoolean("minimizeTabBarOnScroll", def.minimizeTabBarOnScroll),
             reduceTransparency = obj.optBoolean("reduceTransparency", def.reduceTransparency),

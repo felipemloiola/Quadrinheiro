@@ -870,7 +870,7 @@ fun SearchResultComicCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AppleCapsuleButton(
+                    com.example.ui.components.CompactReadingAction(
                         label = "+ Lido",
                         prominent = true,
                         onClick = {
@@ -878,7 +878,7 @@ fun SearchResultComicCard(
                         }
                     )
 
-                    AppleCapsuleButton(
+                    com.example.ui.components.CompactReadingAction(
                         label = "Lendo",
                         prominent = false,
                         onClick = {
@@ -886,7 +886,7 @@ fun SearchResultComicCard(
                         }
                     )
 
-                    AppleCapsuleButton(
+                    com.example.ui.components.CompactReadingAction(
                         label = "Quero Ler",
                         prominent = false,
                         onClick = {

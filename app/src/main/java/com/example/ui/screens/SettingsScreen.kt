@@ -1185,6 +1185,11 @@ fun SettingsTabScreen(
                                         onChange = { v -> viewModel.updateSettings { it.copy(showBottomAccessory = v) } }
                                     )
                                     HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                    com.example.reading.ReadingNowBarPreference(
+                                        enabled = appSettings.showReadingNowBar,
+                                        onChange = { enabled -> viewModel.updateSettings { it.copy(showReadingNowBar = enabled) } }
+                                    )
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                                     SettingsToggleItem(
                                         title = "Exibir menu flutuante",
                                         subtitle = "Mostra ou oculta o botão circular de menu rápido no topo da tela",
