@@ -492,13 +492,13 @@ fun QuadrinheiroTheme(
     }
 
     val levelRatio = (settings.glassLevel.toFloat() / 100f).coerceIn(0f, 1f)
-    val isClearVariant = settings.glassVariant == "clear"
+    val isFrosted = settings.glassVariant == "frosted"
     val reduceTransp = settings.reduceTransparency
     val highContrast = settings.increaseContrast
 
     val navBaseAlpha = when {
         reduceTransp -> 0.92f
-        isClearVariant -> if (scheme.isLight) 0.50f + levelRatio * 0.24f else 0.42f + levelRatio * 0.24f
+        isFrosted -> if (scheme.isLight) 0.86f else 0.82f
         else -> if (scheme.isLight) 0.62f + levelRatio * 0.20f else 0.50f + levelRatio * 0.22f
     }
 
@@ -635,7 +635,7 @@ fun QuadrinheiroTheme(
 
     CompositionLocalProvider(
         LocalAppleMaterials provides computed,
-        LocalAppSettings provides settings,
+        LocalAppSettings provides settings.withGlassAppearance(),
         LocalAppMotion provides AppMotion(settings.reduceMotion),
         LocalIOS27Theme provides themeState,
         LocalIsDarkTheme provides isDark,

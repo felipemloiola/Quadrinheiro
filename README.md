@@ -9,7 +9,7 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 ## Recursos
 
 - **Biblioteca:** estante em grade ou lista, filtros de status, favoritos, tags, notas, resenhas e cadastro manual.
-- **Descoberta:** busca em catálogos externos, enriquecimento de metadados em português e organização de séries e edições.
+- **Descoberta:** recomendações locais baseadas nas leituras e avaliações, busca em catálogos externos, metadados em português e organização de séries e edições. O que já está na coleção é excluído das sugestões iniciais.
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
 - **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o sistema. A leitura atual acompanha a HQ selecionada no aplicativo.

@@ -74,6 +74,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -236,7 +237,7 @@ fun CatalogSheetModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = if (s.isLight) 0.14f else 0.24f))
+            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
             .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -507,7 +508,7 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                         }
                     }
                     item(key = "editor-section-6") {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 // Item 8: Botão Salvar Registro
                     Box(
                         modifier = Modifier
@@ -528,7 +529,6 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                     }
 
                     if (isExistingInShelf) {
-                        Spacer(modifier = Modifier.height(8.dp))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()

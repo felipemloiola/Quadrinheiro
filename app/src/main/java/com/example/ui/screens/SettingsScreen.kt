@@ -107,6 +107,7 @@ import com.example.model.ReadingStatus
 import com.example.model.UsernameAvailabilityStatus
 import com.example.model.UsernameValidator
 import com.example.ui.theme.AppTheme
+import com.example.ui.theme.accentThemesByDescendingHue
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.components.AppleMenuPicker
 import com.example.ui.components.AppleSegmentedPicker
@@ -380,8 +381,8 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.Palette, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Aparência",
-                            subtitle = "Modo ${if (themeColors.isDark) "Escuro" else "Claro"} • Liquid Glass (${appSettings.glassLevel}%)",
-                            trailingValue = AppTheme.fromId(appSettings.themeId).label,
+                            subtitle = null,
+                            trailingValue = if (appSettings.colorScheme == "system") "Automático" else if (themeColors.isDark) "Escuro" else "Claro",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
                                     listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
@@ -504,8 +505,8 @@ fun SettingsTabScreen(
                         // SETTINGS_LOGO_ADAPTIVE_V8
                         adaptiveBadgeBackground = true,
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(16.dp))
                     )
                     com.example.ui.components.QuadrinheiroBrandText(
                         text = "Quadrinheiro",
@@ -559,11 +560,11 @@ fun SettingsTabScreen(
                                     modifier = Modifier.padding(horizontal = 4.dp)
                                 )
                                 AppleSegmentedPicker(
-                                    value = appSettings.glassVariant,
+                                    value = if (appSettings.glassVariant == "frosted") "frosted" else "regular",
                                     onChange = { v -> viewModel.updateSettings { it.copy(glassVariant = v) } },
                                     options = listOf(
-                                        SegmentOption("regular", "Regular (Adaptativo)"),
-                                        SegmentOption("clear", "Cristalino (Mais Claro)")
+                                        SegmentOption("regular", "Padrão"),
+                                        SegmentOption("frosted", "Fosco")
                                     )
                                 )
                             }
@@ -852,7 +853,7 @@ fun SettingsTabScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        AppTheme.entries.forEach { theme ->
+                                        accentThemesByDescendingHue().forEach { theme ->
                                             val isSelected = currentAppTheme == theme
                                             val swatchColor = if (s.isLight) theme.swatchLight else theme.swatchDark
 
@@ -1275,8 +1276,8 @@ fun SettingsTabScreen(
                                     value = if (appSettings.halfStarRatings) "HALF" else "FULL",
                                     onChange = { v -> viewModel.updateSettings { it.copy(halfStarRatings = v == "HALF") } },
                                     options = listOf(
-                                        SegmentOption("HALF", "Meia Estrela (0.5 – 5.0 ★)"),
-                                        SegmentOption("FULL", "Inteiras (1 – 5 ★)")
+                                        SegmentOption("HALF", "Meia estrela"),
+                                        SegmentOption("FULL", "Inteiras")
                                     )
                                 )
                             }
@@ -1444,7 +1445,7 @@ fun SettingsTabScreen(
                                     value = appSettings.searchProvider,
                                     onChange = { v -> viewModel.updateSettings { it.copy(searchProvider = v) } },
                                     options = listOf(
-                                        SegmentOption("MULTI", "Multi-API (Todas)"),
+                                        SegmentOption("MULTI", "Todas"),
                                         SegmentOption("BOOKS", "HQs Ocidentais"),
                                         SegmentOption("MANGA", "Mangás (Jikan)")
                                     )

@@ -53,7 +53,7 @@ class LayerBackdrop internal constructor(
         coordinates: LayoutCoordinates?,
         layerBlock: (GraphicsLayerScope.() -> Unit)?
     ) {
-        if (isRecording) return
+        if (isRecording || graphicsLayer.isReleased) return
         val coords = coordinates ?: return
         if (!coords.isAttached) return
         val layerCoords = layerCoordinates ?: return

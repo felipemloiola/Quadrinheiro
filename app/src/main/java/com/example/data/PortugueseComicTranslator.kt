@@ -79,6 +79,9 @@ object PortugueseComicTranslator {
     }
     private val whitespaceRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""\s+""") }
     private val hashIssueDetectRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""#\s*\d+\b""") }
+    private val yearOneWorkRegex = Regex("(?i)\\b(?:ano um|year one)\\b")
+    private val yearOneOriginalIssuesRegex = Regex("#\\s*40[4-7]\\b")
+    private val mistakenStandaloneIssueRegex = Regex("\\s*#\\s*0*1\\b")
     private val ptAccentsRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("""[ãõçáéíóúâêô]""", RegexOption.IGNORE_CASE) }
     private val htmlTagRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("<[^>]*>?") }
     private val diacriticsRegex by lazy(LazyThreadSafetyMode.PUBLICATION) { Regex("\\p{InCombiningDiacriticalMarks}+") }
@@ -446,7 +449,12 @@ object PortugueseComicTranslator {
         genre: String
     ): Pair<String, Int> {
         val tLower = title.lowercase()
+        val yearOne = yearOneWorkRegex.containsMatchIn(title) && !yearOneOriginalIssuesRegex.containsMatchIn(title)
+        val explicitCollection = rawPages >= 64 && listOf("encadernado", "tpb", "capa dura", "omnibus", "graphic novel", "luxo")
+            .any { rawFormat.contains(it, ignoreCase = true) }
+        val collected = explicitCollection || yearOne
         val hasHashIssue = hashIssueDetectRegex.containsMatchIn(title) &&
+            !collected &&
             !tLower.contains("vol.") && !tLower.contains("volume") && !tLower.contains("livro") &&
             !tLower.contains("edição de luxo") && !tLower.contains("edição definitiva")
 
@@ -454,12 +462,14 @@ object PortugueseComicTranslator {
             genre == "Mangá" -> "Mangá (Tankobon)"
             tLower.contains("edição de luxo") || tLower.contains("edição definitiva") ||
                 tLower.contains("edição absoluta") || tLower.contains("capa dura") || tLower.contains("omnibus") -> "Edição de Luxo (Capa Dura)"
+            collected -> if (rawFormat.isBlank() || rawFormat.contains("mensal", true) || rawFormat.contains("issue", true)) "Encadernado (TPB)" else rawFormat
             hasHashIssue -> "Revista Mensal (Issue)"
             rawFormat.isNotBlank() -> rawFormat
             else -> "Encadernado (TPB)"
         }
 
         val pages = when {
+            yearOne && (rawPages <= 0 || rawPages == 32 || rawPages == 36) -> 144
             hasHashIssue && (rawPages <= 0 || rawPages == 160) -> 36
             rawPages > 0 -> rawPages
             genre == "Mangá" -> 200
@@ -468,6 +478,11 @@ object PortugueseComicTranslator {
 
         return format to pages
     }
+
+    private fun normalizeCollectedTitle(title: String): String =
+        if (yearOneWorkRegex.containsMatchIn(title))
+            title.replace(mistakenStandaloneIssueRegex, "").trim()
+        else title
 
     /**
      * Verifica se o texto já está em português.
@@ -733,7 +748,7 @@ object PortugueseComicTranslator {
             entry.titlePtBr.isNotBlank() -> entry.titlePtBr
             cached != null && cached.titlePtBr.isNotBlank() -> cached.titlePtBr
             else -> translateTitleToPtBr(entry.title)
-        }
+        }.let(::normalizeCollectedTitle)
 
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)
@@ -792,7 +807,7 @@ object PortugueseComicTranslator {
             entry.titlePtBr.isNotBlank() -> entry.titlePtBr
             cached != null && cached.titlePtBr.isNotBlank() -> cached.titlePtBr
             else -> translateTitleToPtBr(entry.title)
-        }
+        }.let(::normalizeCollectedTitle)
 
         val genre = normalizeGenre(entry.genre, ptTitle, entry.publisher, entry.authors)
         val publisher = normalizePublisher(entry.publisher, ptTitle, entry.authors, genre)

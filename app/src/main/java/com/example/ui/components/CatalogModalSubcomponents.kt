@@ -416,13 +416,13 @@ fun ComicSequenceCarouselCard(
         currentComic.title,
         currentComic.seriesName,
         currentComic.issueNumber,
-        allUserComics.size,
-        onlineSequencePool.size
+        allUserComics,
+        onlineSequencePool
     ) {
         SeriesSequenceEngine.buildCacheKey(currentComic, allUserComics.size, onlineSequencePool.size)
     }
 
-    var sequenceGroupState by remember(currentComic.id, currentComic.externalId) {
+    var sequenceGroupState by remember(currentComic, allUserComics, onlineSequencePool) {
         mutableStateOf(
             SeriesSequenceEngine.getCachedSequenceForComic(
                 target = currentComic,
@@ -432,7 +432,7 @@ fun ComicSequenceCarouselCard(
         )
     }
 
-    LaunchedEffect(cacheKey) {
+    LaunchedEffect(cacheKey, currentComic, allUserComics, onlineSequencePool) {
         sequenceGroupState = SeriesSequenceEngine.findSequenceForComicAsync(
             target = currentComic,
             userComics = allUserComics,
@@ -454,7 +454,8 @@ fun ComicSequenceCarouselCard(
     val nextIssueNumber = sequenceGroup.nextIssueNumber
 
     if (!isRecomMode && sequenceItems.size <= 1 && currentIssueNum <= 0 && currentComic.seriesName.isBlank()) return
-    if (isRecomMode && sequenceGroup.recommendations.isEmpty()) return
+    if (isRecomMode && sequenceGroup.recommendations.none { it.savedEntry == null }) return
+    if (!isRecomMode && sequenceItems.none { it.savedEntry == null }) return
 
     Column(
         modifier = modifier
@@ -507,24 +508,7 @@ fun ComicSequenceCarouselCard(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(s.accentColor.copy(alpha = 0.14f))
-                    .padding(horizontal = 9.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = if (isRecomMode) {
-                        "${sequenceGroup.recommendations.size} sugestões"
-                    } else {
-                        "$inShelfCount/${sequenceItems.size} na estante"
-                    },
-                    fontSize = 10.5.sp,
-                    fontFamily = SpaceGroteskTabularFamily,
-                    fontWeight = FontWeight.Bold,
-                    color = s.accentColor
-                )
-            }
+
         }
 
         Row(
@@ -535,7 +519,7 @@ fun ComicSequenceCarouselCard(
             verticalAlignment = Alignment.Top
         ) {
             if (isRecomMode) {
-                sequenceGroup.recommendations.forEach { recomItem ->
+                sequenceGroup.recommendations.filter { it.savedEntry == null }.forEach { recomItem ->
                     val userStatus = recomItem.savedEntry?.status
                     val statusBadgeText = when (userStatus) {
                         ReadingStatus.READ -> "✓ Lido"
@@ -627,7 +611,7 @@ fun ComicSequenceCarouselCard(
                     }
                 }
             } else {
-                sequenceItems.forEach { seqItem ->
+                sequenceItems.filter { it.savedEntry == null }.forEach { seqItem ->
                 val isCurrent = seqItem.comic.id == currentComic.id ||
                     (currentComic.externalId.isNotBlank() && seqItem.comic.externalId == currentComic.externalId) ||
                     (currentIssueNum > 0 && seqItem.issueNumber == currentIssueNum)

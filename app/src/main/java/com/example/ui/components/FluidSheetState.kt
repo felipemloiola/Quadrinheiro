@@ -48,6 +48,7 @@ class FluidSheetState internal constructor(
     private val tracker = VelocityTracker()
     private var rawPosition = 0f
     val offset: Float get() = held ?: animation.value
+    val scrimFraction: Float get() = (1f - offset / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     fun dismiss() = settle(height, 0f, dismiss = true)
     fun enter() = settle(0f, 0f)

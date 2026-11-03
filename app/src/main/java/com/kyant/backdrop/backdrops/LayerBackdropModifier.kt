@@ -71,6 +71,7 @@ private class LayerBackdropNode(
     var hasRecordedAtLeastOnce: Boolean = false
 
     override fun ContentDrawScope.draw() {
+        if (backdrop.graphicsLayer.isReleased) { drawContent(); return }
         val reuse = reuseRecordedContent && backdrop.recordsUnmodifiedContent && !backdrop.isRecording
         if (freezeSnapshot && hasRecordedAtLeastOnce && reuse) {
             // Congela a camada decorativa (raster snapshot) em VRAM durante inércia extrema (fling),

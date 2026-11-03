@@ -32,10 +32,12 @@ class DampedDragAnimation(
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
     val onDragCancelled: (DampedDragAnimation.() -> Unit)? = null,
     val reduceMotion: () -> Boolean = { false },
-    val horizontalSlop: Float? = null
+    val horizontalSlop: Float? = null,
+    val directTracking: Boolean = false
 ) {
     private val valueAnimation = Animatable(initialValue, visibilityThreshold)
-    private val velocityAnimation = Animatable(0f, 5f)
+    private var reportedVelocity by mutableFloatStateOf(0f)
+    private var heldValue by mutableFloatStateOf(Float.NaN)
     private val pressAnimation = Animatable(0f, 0.001f)
     private val scaleXAnimation = Animatable(initialScale, 0.001f)
     private val scaleYAnimation = Animatable(initialScale, 0.001f)
@@ -43,12 +45,11 @@ class DampedDragAnimation(
     private var settleJob: Job? = null
     private var pressJob: Job? = null
     private var releaseJob: Job? = null
-    private var velocityJob: Job? = null
     private val tracker = VelocityTracker()
     private var startTarget = initialValue
     private var pressed = false
 
-    val value: Float get() = valueAnimation.value
+    val value: Float get() = if (heldValue.isNaN()) valueAnimation.value else heldValue
     private val span: Float get() = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
     val progress: Float get() = ((value - valueRange.start) / span).coerceIn(0f, 1f)
     // Accumulate gesture deltas independently of the visual spring's lag.
@@ -56,7 +57,7 @@ class DampedDragAnimation(
     val pressProgress: Float get() = if (reduceMotion()) 0f else pressAnimation.value
     val scaleX: Float get() = if (reduceMotion()) initialScale else scaleXAnimation.value
     val scaleY: Float get() = if (reduceMotion()) initialScale else scaleYAnimation.value
-    val velocity: Float get() = if (reduceMotion()) 0f else velocityAnimation.value
+    val velocity: Float get() = if (reduceMotion()) 0f else reportedVelocity
 
     val modifier: Modifier = Modifier.pointerInput(this) {
         inspectDragGestures(
@@ -118,9 +119,17 @@ class DampedDragAnimation(
         }
     }
 
-    fun updateValue(value: Float) = moveTo(value, valueAnimation.velocity)
+    fun updateValue(value: Float) {
+        if (directTracking && pressed) {
+            settleJob?.cancel()
+            requestedValue = value.coerceIn(valueRange)
+            heldValue = requestedValue
+            tracker.addPosition(SystemClock.uptimeMillis(), Offset(requestedValue, 0f))
+            animateVelocity(tracker.calculateVelocity().x / span)
+        } else moveTo(value, valueAnimation.velocity)
+    }
 
-    fun animateToValue(value: Float, initialVelocity: Float = valueAnimation.velocity) {
+    fun animateToValue(value: Float, initialVelocity: Float = if (directTracking && !heldValue.isNaN()) reportedVelocity * span else valueAnimation.velocity) {
         if (!pressed) {
             releaseJob?.cancel()
             animatePress(true)
@@ -130,9 +139,14 @@ class DampedDragAnimation(
     }
 
     private fun moveTo(value: Float, initialVelocity: Float) {
+        val presentation = this.value
         requestedValue = value.coerceIn(valueRange)
         settleJob?.cancel()
         settleJob = animationScope.launch {
+            if (!heldValue.isNaN()) {
+                valueAnimation.snapTo(presentation)
+                heldValue = Float.NaN
+            }
             if (reduceMotion()) valueAnimation.snapTo(requestedValue)
             else valueAnimation.animateTo(
                 requestedValue,
@@ -147,11 +161,7 @@ class DampedDragAnimation(
     }
 
     private fun animateVelocity(value: Float) {
-        velocityJob?.cancel()
-        velocityJob = animationScope.launch {
-            if (reduceMotion()) velocityAnimation.snapTo(0f)
-            else velocityAnimation.animateTo(value, spring(0.5f, 300f, visibilityThreshold * 10f))
-        }
+        reportedVelocity = if (reduceMotion()) 0f else value
     }
 
     fun snapToValue(value: Float) {

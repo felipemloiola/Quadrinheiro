@@ -288,7 +288,7 @@ private class DrawBackdropNode(
 
     private val drawBackdropLayer: DrawScope.() -> Unit = {
         val layer = graphicsLayer
-        if (layer != null) {
+        if (layer != null && !layer.isReleased && size.width > 0f && size.height > 0f) {
             val padding = padding
 
             recordLayer(
@@ -335,6 +335,7 @@ private class DrawBackdropNode(
 
         if (effectsReady) {
             exportedBackdrop?.graphicsLayer?.let { layer ->
+                if (layer.isReleased) return@let
                 recordLayer(layer) {
                     onDrawBehind?.invoke(this)
                     drawBackdropLayer()
@@ -367,6 +368,7 @@ private class DrawBackdropNode(
     }
 
     private fun observeEffects() {
+        if (!isAttached) return
         if (effectScope.size == androidx.compose.ui.geometry.Size.Zero) return
         observeReads { updateEffects() }
     }

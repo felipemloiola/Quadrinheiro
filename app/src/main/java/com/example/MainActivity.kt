@@ -698,7 +698,7 @@ fun QuadrinheiroApp(
 
                             if (appSettings.backgroundExtension) {
                                 val topGlowAlpha = if (currentlyReadingComic != null) {
-                                    0.24f * globalAlphaMultiplier
+                                    0.12f * globalAlphaMultiplier
                                 } else {
                                     (if (isDark) 0.14f else 0.09f) * globalAlphaMultiplier
                                 }
@@ -722,7 +722,7 @@ fun QuadrinheiroApp(
                             drawRect(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        bottomGlowColor.copy(alpha = (if (isDark) 0.18f else 0.12f) * globalAlphaMultiplier),
+                                        bottomGlowColor.copy(alpha = (if (isDark) 0.10f else 0.07f) * globalAlphaMultiplier),
                                         Color.Transparent
                                     ),
                                     center = Offset(size.width * 0.5f, size.height * 0.90f),
@@ -761,7 +761,7 @@ fun QuadrinheiroApp(
                                         scaleY = 1.14f
                                     }
                                     /* LAG_FIX_NO_FULLSCREEN_BLUR: 28x42 source is already soft when upscaled */
-                                    .alpha(0.32f)
+                                    .alpha(0.18f)
                             )
 
                             // Véu de vinheta atmosférica mais translúcido no topo (24% em ambos os modos claro e escuro) para deixar a capa brilhar sem perder legibilidade

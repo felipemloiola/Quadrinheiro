@@ -802,7 +802,7 @@ object SeriesSequenceEngine {
         userComics: List<ComicEntry>,
         extraOnlineComics: List<ComicEntry> = emptyList()
     ): SeriesSequenceGroup? {
-        return sequenceCache[buildCacheKey(target, userComics.size, extraOnlineComics.size)]
+        return sequenceCache[buildCacheKey(target, userComics.size, extraOnlineComics.size) + "|${target.hashCode()}|${userComics.hashCode()}|${extraOnlineComics.hashCode()}|${CuratedCatalog.curatedComicsCatalog.hashCode()}"]
     }
 
     /**
@@ -814,7 +814,7 @@ object SeriesSequenceEngine {
         catalogComics: List<ComicEntry> = CuratedCatalog.curatedComicsCatalog,
         extraOnlineComics: List<ComicEntry> = emptyList()
     ): SeriesSequenceGroup = withContext(Dispatchers.Default) {
-        val key = buildCacheKey(target, userComics.size, extraOnlineComics.size)
+        val key = buildCacheKey(target, userComics.size, extraOnlineComics.size) + "|${target.hashCode()}|${userComics.hashCode()}|${extraOnlineComics.hashCode()}|${catalogComics.hashCode()}"
         sequenceCache[key]?.let { return@withContext it }
         findSequenceForComic(
             target = target,
@@ -822,7 +822,7 @@ object SeriesSequenceEngine {
             catalogComics = catalogComics,
             extraOnlineComics = extraOnlineComics
         ).also { computed ->
-            if (sequenceCache.size > 512) sequenceCache.clear()
+            if (sequenceCache.size >= 96) sequenceCache.keys.firstOrNull()?.let { sequenceCache.remove(it) }
             sequenceCache[key] = computed
         }
     }

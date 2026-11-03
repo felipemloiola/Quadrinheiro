@@ -92,6 +92,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
@@ -1204,7 +1205,7 @@ fun SocialShareCardSheetModal(
     onDismiss: () -> Unit
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    BackHandler(onBack = onDismiss)
+    val shareSheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = {})
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1368,14 +1369,9 @@ fun SocialShareCardSheetModal(
     val shareBackdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop()
 
     // GraphicsLayer para gravação nativa acelerada por hardware do Card Compose
-    val cardGraphicsLayer = rememberGraphicsLayer()
     var isExporting by remember { mutableStateOf(false) }
 
     suspend fun generateFinalShareBitmap(): Bitmap {
-        val capturedComposeBmp = runCatching {
-            cardGraphicsLayer.toImageBitmap().asAndroidBitmap()
-        }.getOrNull()
-
         val sfBoldTypeface = runCatching {
             ResourcesCompat.getFont(context, R.font.sf_pro_display_bold)
         }.getOrNull()
@@ -1396,7 +1392,7 @@ fun SocialShareCardSheetModal(
                 thirdRingColor = fitnessPalette.standRingColor,
                 coverBitmap = loadedCoverBitmap,
                 avatarBitmap = loadedAvatarBitmap,
-                capturedGraphicsBitmap = capturedComposeBmp,
+                capturedGraphicsBitmap = null,
                 starColor = effectiveStarColor,
                 customBoldTypeface = sfBoldTypeface
             )
@@ -1407,18 +1403,19 @@ fun SocialShareCardSheetModal(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(65f)
-            .background(Color.Black.copy(alpha = 0.72f))
+            .drawBehind { drawRect(Color.Black.copy(alpha = .36f * shareSheet.scrimFraction)) }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
-            ) { onDismiss() },
+            ) { shareSheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 560.dp)
-                .fillMaxHeight(0.94f)
+                .heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .94f)
+                .graphicsLayer { translationY = shareSheet.offset }
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
 
                 .clickable(
@@ -1430,7 +1427,7 @@ fun SocialShareCardSheetModal(
             Box(Modifier.matchParentSize().background(themeColors.bgSecondary)
                 .layerBackdrop(shareBackdrop))
             androidx.compose.runtime.CompositionLocalProvider(LocalLiquidGlassBackdrop provides shareBackdrop) {
-            Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Grabber superior
             Box(
@@ -1459,8 +1456,9 @@ fun SocialShareCardSheetModal(
                     color = s.textSecondary,
                     modifier = Modifier
                         .testTag("social_share_close_button")
+                        .heightIn(min = 44.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .clickable { onDismiss() }
+                        .clickable { shareSheet.dismiss() }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 )
 
@@ -1497,7 +1495,7 @@ fun SocialShareCardSheetModal(
             // Área rolável central: Prévia ao vivo do Card + Controles contextuais do modelo selecionado
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1f, fill = false)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1513,12 +1511,7 @@ fun SocialShareCardSheetModal(
                         .shadow(22.dp, RoundedCornerShape(24.dp), spotColor = Color.Black.copy(alpha = 0.65f))
                         .clip(RoundedCornerShape(24.dp))
                         .testTag("social_share_card_preview_canvas")
-                        .drawWithContent {
-                            cardGraphicsLayer.record {
-                                this@drawWithContent.drawContent()
-                            }
-                            drawLayer(cardGraphicsLayer)
-                        }
+
                 ) {
                     SocialShareCardLiveArtwork(
                         cardType = selectedCardType,
@@ -1654,7 +1647,6 @@ fun SocialShareCardSheetModal(
                         )
                     )
                 }
-            }
 
             // Barra de Ações Inferior: Salvar na Galeria + Compartilhar Card (Folha Nativa do Android)
             Row(
@@ -1772,6 +1764,7 @@ fun SocialShareCardSheetModal(
                         softWrap = false
                     )
                 }
+            }
             }
         }
     }

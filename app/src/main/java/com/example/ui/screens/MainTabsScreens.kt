@@ -905,16 +905,15 @@ fun ShelfLibraryTab(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "shelf-header", contentType = "tab_header") {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Column {
                         Text(
-                            text = if (shelfSection == "shelf") "Acervo catalogado • ${filteredShelf.size} de ${comics.size}" else "Registro cronológico • ${diaryGroups.sumOf { it.value.size }} leituras",
+                            text = if (shelfSection == "shelf") "Acervo catalogado" else "Registro cronológico",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = s.textSecondary
@@ -974,7 +973,7 @@ fun ShelfLibraryTab(
                     value = shelfSection,
                     onChange = onChangeShelfSection,
                     options = listOf(
-                        SegmentOption("shelf", "Estante (${comics.size})", LucideIcons.Library),
+                        SegmentOption("shelf", "Estante", LucideIcons.Library),
                         SegmentOption("diary", "Diário", LucideIcons.Calendar)
                     )
                 )
@@ -1037,14 +1036,14 @@ fun ShelfLibraryTab(
 
                 // Seletor rápido de visualização: Grade / Lista / Sequências (#1, #2, #3...)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf(
                         Triple("grid", "Grade", Icons.Default.GridView),
                         Triple("list", "Lista", Icons.AutoMirrored.Filled.FormatListBulleted),
-                        Triple("sequences", "Sequências (#1, #2...)", LucideIcons.Layers)
+                        Triple("sequences", "Sequências", LucideIcons.Layers)
                     ).forEach { (layoutKey, label, icon) ->
                         val active = shelfLayout == layoutKey
                         Row(
@@ -1074,7 +1073,9 @@ fun ShelfLibraryTab(
                                 text = label,
                                 fontSize = 11.5.sp,
                                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                                color = if (active) s.accentColor else s.textPrimary
+                                color = if (active) s.accentColor else s.textPrimary,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -1706,9 +1707,14 @@ fun SearchMultiApiTab(
         map
     }
 
-    val instantCuratedMatches = remember(searchQuery, savedExternalIds, savedIds, savedTitles) {
+    val recommendations by androidx.compose.runtime.produceState<List<ComicEntry>>(emptyList(), comics) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.example.data.PersonalizedDiscovery.recommend(CuratedCatalog.curatedComicsCatalog, comics)
+        }
+    }
+    val instantCuratedMatches = remember(searchQuery, savedExternalIds, savedIds, savedTitles, recommendations) {
         val q = searchQuery.trim().lowercase()
-        val base = CuratedCatalog.curatedComicsCatalog
+        val base = if (q.isEmpty() && recommendations.isNotEmpty()) recommendations else CuratedCatalog.curatedComicsCatalog
         if (q.isEmpty()) {
             // Do NOT show comics already in the library unless the user explicitly searches!
             base.filterNot { item ->
@@ -1952,7 +1958,7 @@ fun SearchMultiApiTab(
                         text = if (searchQuery.trim().isNotEmpty()) {
                             "Resultados para \"$searchQuery\" (${combinedSearchResults.size})"
                         } else {
-                            "Destaques do catálogo"
+                            if (comics.any { it.status == ReadingStatus.READ }) "Para você" else "Destaques do catálogo"
                         },
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,

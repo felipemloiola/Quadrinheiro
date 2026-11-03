@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -60,8 +61,8 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         if (active != null) {
             retained = active
             state.morphingMenuId = active.id
-            launch { x.animateTo(1f, motion.spring(0.72f, 520f)) }
-            y.animateTo(1f, motion.spring(0.76f, 480f))
+            launch { x.animateTo(1f, motion.spring(0.58f, 460f)) }
+            y.animateTo(1f, motion.spring(0.62f, 420f))
         } else if (retained != null) {
             launch { x.animateTo(0f, motion.spring(1f, 850f)) }
             y.animateTo(0f, motion.spring(1f, 850f))
@@ -75,7 +76,13 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val palette = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
     val dark = LocalIsDarkTheme.current
-    val rowHeight = if (density.fontScale > 1.2f) (44f * density.fontScale + 16f).dp else 48.dp
+    val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 46.dp
+    val hoverOffset by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = with(density) { (rowHeight + .5.dp).toPx() } * (hovered ?: 0),
+        animationSpec = motion.spring(.65f, 560f), label = "menuHoverPosition")
+    val hoverAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (hovered == null) 0f else 1f,
+        animationSpec = motion.tween(100), label = "menuHoverAlpha")
     BackHandler(active != null) { state.dismissMenu() }
     fun choose(index: Int) {
         val item = currentRequest.items.getOrNull(index) ?: return
@@ -83,8 +90,8 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         state.dismissMenu(currentRequest.id)
     }
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.positionInRoot() }) {
-        val menuWidth = minOf(260.dp, maxWidth - 28.dp)
-        val menuHeight = minOf(rowHeight * request.items.size + 14.dp, maxHeight - 28.dp)
+        val menuWidth = minOf(244.dp, maxWidth - 28.dp)
+        val menuHeight = minOf(rowHeight * request.items.size + .5.dp * (request.items.size - 1) + 14.dp, maxHeight - 28.dp)
         val width = with(density) { menuWidth.roundToPx() }
         val height = with(density) { menuHeight.roundToPx() }
         val margin = with(density) { 14.dp.roundToPx() }
@@ -110,16 +117,16 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
             .drawBackdrop(backdrop, shape = { ContinuousRoundedRectangle(26.dp) },
                 shadow = { Shadow(radius = 18.dp, alpha = 0.20f) },
                 effects = {
-                    if (!settings.reduceTransparency) { vibrancy(); blur((10f * settings.glassBlurIntensity).dp.toPx()) }
-                    if (!settings.reduceTransparency && settings.enableLensRefraction) lens((16f * settings.glassIntensity).dp.toPx(), (30f * settings.glassIntensity).dp.toPx(), depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
+                    if (!settings.reduceTransparency) { vibrancy(); blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 22f).dp.toPx()) }
+                    if (!settings.reduceTransparency && settings.enableLensRefraction) lens((24f * settings.glassIntensity).dp.toPx(), (42f * settings.glassIntensity).dp.toPx(), depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
                 },
-                onDrawSurface = { drawRect(palette.bgSecondary.copy(alpha = if (settings.reduceTransparency) 1f else if (dark) 0.58f else 0.66f)) })
+                onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = if (settings.reduceTransparency) 1f else ((if (dark) .28f else .24f) * settings.glassOpacity).coerceIn(.12f, .86f))) })
             .clip(RoundedCornerShape(26.dp))
             .pointerInput(request.id) {
                 awaitEachGesture {
                     val first = awaitFirstDown(false)
                     fun row(position: Offset): Int? = if (position.x in 0f..size.width.toFloat() && position.y in 0f..size.height.toFloat())
-                        ((position.y - 7.dp.toPx()) / rowHeight.toPx()).toInt().coerceIn(0, currentRequest.items.lastIndex) else null
+                        ((position.y - 7.dp.toPx()) / (rowHeight + .5.dp).toPx()).toInt().coerceIn(0, currentRequest.items.lastIndex) else null
                     hovered = row(first.position)
                     var released = false
                     try {
@@ -134,21 +141,29 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                     } finally { hovered = null; drag = Offset.Zero }
                 }
             }.padding(vertical = 7.dp)) {
+            Box(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
+                .graphicsLayer { translationY = hoverOffset; alpha = hoverAlpha }
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (dark) Color.White.copy(alpha = .13f) else Color.Black.copy(alpha = .075f)))
             Column {
                 request.items.forEachIndexed { index, item ->
                     Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (hovered == index) palette.accent.copy(alpha = 0.16f) else Color.Transparent)
+                        .background(if (item.selected && hovered == null) palette.accent.copy(alpha = .09f) else Color.Transparent)
                         .semantics(mergeDescendants = true) {
                             selected = item.selected; role = Role.RadioButton
                             onClick("Selecionar ${item.label}") { choose(index); true }
                         }.focusable().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.width(18.dp)) { if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp)) }
-                        Text(item.label, modifier = Modifier.weight(1f), fontSize = 17.sp, lineHeight = 22.sp,
-                            color = palette.textPrimary, maxLines = 2)
+                        Text(item.label, modifier = Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                            fontWeight = if (item.selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                            color = if (item.selected) palette.accent else palette.textPrimary, maxLines = 2)
                         item.icon?.let { Icon(it, null, tint = palette.textSecondary, modifier = Modifier.size(18.dp)) }
                     }
+                    if (index < request.items.lastIndex) Box(Modifier.fillMaxWidth().padding(horizontal = 13.dp)
+                        .height(.5.dp).testTag("menu-divider-$index")
+                        .background(if (dark) Color.White.copy(alpha = .11f) else Color.Black.copy(alpha = .08f)))
                 }
             }
         }

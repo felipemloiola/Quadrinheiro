@@ -93,6 +93,7 @@ fun LiquidToggle(
             pressedScale = 1.5f,
             reduceMotion = reduceMotion,
             horizontalSlop = with(density) { 2.dp.toPx() },
+            directTracking = true,
             onDragStarted = { didDrag = false },
             onDragStopped = {
                 val next = if (didDrag) targetValue >= 0.5f else !currentSelected()
@@ -208,11 +209,12 @@ fun LiquidToggle(
                     },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        blur(8f.dp.toPx() * (1f - progress))
+                        blur((if (settings.glassVariant == "frosted") 14f else 8f).dp.toPx() * (1f - progress) +
+                            if (settings.glassVariant == "frosted") 4f.dp.toPx() * progress else 0f)
                         lens(
                             5f.dp.toPx() * progress,
                             10f.dp.toPx() * progress,
-                            chromaticAberration = true
+                            chromaticAberration = settings.enableChromaticAberration
                         )
                     },
                     layerBlock = {
@@ -229,7 +231,7 @@ fun LiquidToggle(
                         } else {
                             Color.White
                         }
-                        drawRect(knobIdleColor.copy(alpha = lerp(1f, 0.16f, progress)))
+                        drawRect(knobIdleColor.copy(alpha = lerp(1f, if (settings.glassVariant == "frosted") .5f else .16f, progress)))
                     }
                 )
                 .size(40f.dp, 24f.dp)

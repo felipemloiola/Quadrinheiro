@@ -2396,9 +2396,9 @@ fun AppleTextField(
                 else Modifier
             )
             .heightIn(min = 48.dp)
-            .padding(horizontal = 14.dp),
+            .padding(start = 14.dp, end = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (leadingIcon != null) {
             Icon(
@@ -2442,14 +2442,15 @@ fun AppleTextField(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .clickable { onChange("") },
-                contentAlignment = Alignment.Center
+                    .clickable { onChange("") }
+                    .padding(end = 12.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Limpar",
-                    tint = mat.scheme.textPrimary,
-                    modifier = Modifier.size(12.dp)
+                    tint = mat.scheme.textSecondary,
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -2606,7 +2607,7 @@ fun IOS27LiquidGlassController(
     val s = mat.scheme
     val density = LocalDensity.current
 
-    val variantOffset = if (glassVariant == "clear") 0f else 0.08f
+    val variantOffset = if (glassVariant == "frosted") 0.38f else 0.08f
     val ratio = (glassLevel / 100f).coerceIn(0f, 1f)
     val centerFillAlpha = min(0.86f, 0.14f + variantOffset + ratio.pow(1.15f) * 0.70f)
     val lakeLensFill = if (s.isLight) {
@@ -2614,7 +2615,7 @@ fun IOS27LiquidGlassController(
     } else {
         s.gradLinearMid.copy(alpha = (centerFillAlpha * 0.85f).coerceIn(0.16f, 0.82f))
     }
-    val lensBlurDp = (1.5f + ratio * 8.5f).dp
+    val lensBlurDp = (if (glassVariant == "frosted") 15f + ratio * 8.5f else 1.5f + ratio * 8.5f).dp
 
     val cardBgColor = if (s.isLight) {
         s.gradLinearMid
