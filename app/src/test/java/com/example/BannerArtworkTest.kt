@@ -1,6 +1,7 @@
 package com.example
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.example.data.CatalogBanners
 import java.io.ByteArrayOutputStream
 import org.json.JSONArray
@@ -10,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -36,13 +38,26 @@ class BannerArtworkTest {
         val result = CatalogBanners.parse(JSONObject().put("artwork", rows))
         assertEquals(6, result.size); assertEquals(result.size, result.map { it.url }.distinct().size)
     }
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test fun selectedArtworkIsDownsampledBeforeCropping() {
         val source = Bitmap.createBitmap(2400, 800, Bitmap.Config.ARGB_8888)
         val out = ByteArrayOutputStream()
-        try { source.compress(Bitmap.CompressFormat.PNG, 100, out) } finally { source.recycle() }
-        val decoded = CatalogBanners.decode(out.toByteArray())
-        try { assertTrue(decoded.width <= 1800); assertTrue(decoded.height <= 1800); assertEquals(3.0, decoded.width.toDouble() / decoded.height, .01) }
-        finally { decoded.recycle() }
+        try { assertTrue("PNG fixture compression failed", source.compress(Bitmap.CompressFormat.PNG, 100, out)) }
+        finally { source.recycle() }
+        val bytes = out.toByteArray()
+        assertTrue("PNG fixture is empty", bytes.isNotEmpty())
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        assertEquals("PNG fixture width", 2400, bounds.outWidth)
+        assertEquals("PNG fixture height", 800, bounds.outHeight)
+        val decoded = CatalogBanners.decode(bytes)
+        try {
+            assertEquals(1200, decoded.width)
+            assertEquals(400, decoded.height)
+            assertTrue(decoded.width <= 1800)
+            assertTrue(decoded.height <= 1800)
+            assertEquals(3.0, decoded.width.toDouble() / decoded.height, .01)
+        } finally { decoded.recycle() }
     }
     @Test fun rejectsEmptyOrOversizedDownloadsBeforeDecoding() {
         for (bytes in listOf(ByteArray(0), ByteArray(6 * 1024 * 1024 + 1))) {
