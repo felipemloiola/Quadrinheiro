@@ -426,7 +426,10 @@ data class CloudComicDocument(
                     ""
                 }
             }.take(5000)
-            val tsMillis = if (comic.updatedAt > 0L) comic.updatedAt else System.currentTimeMillis()
+            // Relógio atrasado ou item migrado com updatedAt=0 ficaria abaixo de RESET_AT e sumiria
+            // da nuvem por causa do filtro `afterReset`. Só reescreve o carimbo nesses casos; itens
+            // posteriores ao reset preservam o valor original.
+            val tsMillis = if (comic.updatedAt > CatalogEpoch.RESET_AT) comic.updatedAt else System.currentTimeMillis()
             return CloudComicDocument(
                 id = safeId,
                 ownerId = uid,

@@ -18,6 +18,23 @@ object CommunityAutoSync {
         storage.setItem(key(uid),queue.toString())
     }
     fun hasPending(storage:SafeStorage,uid:String)=runCatching { JSONObject(storage.getItem(key(uid)) ?: "{}").length()>0 }.getOrDefault(false)
+
+    /** Decisão para um item da fila, isolada para permitir teste sem Firebase. */
+    enum class PendingAction { SKIP, WITHDRAW, PUBLISH }
+
+    /**
+     * Órfãos (quadrinho removido localmente, por exemplo pelo reset do epoch) precisam virar
+     * retirada: antes eram pulados para sempre, o item nunca era reconhecido e o worker
+     * ficava em `Result.retry()` indefinidamente.
+     */
+    internal fun pendingAction(deleted:Boolean,comic:ComicEntry?,revision:Long):PendingAction=when{
+        deleted->PendingAction.WITHDRAW
+        comic==null->PendingAction.WITHDRAW
+        comic.updatedAt<revision->PendingAction.SKIP
+        comic.rating<=0f&&comic.review.isBlank()->PendingAction.WITHDRAW
+        else->PendingAction.PUBLISH
+    }
+
     @Synchronized private fun acknowledge(storage:SafeStorage,uid:String,id:String,revision:Long){
         val queue=JSONObject(storage.getItem(key(uid)) ?: "{}")
         if(queue.optJSONObject(id)?.optLong("rev")==revision){queue.remove(id);storage.setItem(key(uid),queue.toString())}
@@ -29,9 +46,14 @@ object CommunityAutoSync {
         val queue=JSONObject(storage.getItem(key(uid)) ?: "{}")
         for(id in queue.keys().asSequence().take(20).toList()){
             val item=queue.getJSONObject(id);val rev=item.optLong("rev");val comic=state.comics.firstOrNull { it.id==id }
-            if(!item.optBoolean("deleted") && (comic==null || comic.updatedAt<rev))continue
-            if(item.optBoolean("deleted")||comic==null|| (comic.rating<=0f&&comic.review.isBlank()))repo.withdrawKey(uid,item.getString("key"))
-            else repo.publish(uid,state.profile,comic,comic.review,comic.rating.toDouble())
+            when(pendingAction(item.optBoolean("deleted"),comic,rev)){
+                PendingAction.SKIP->continue
+                PendingAction.WITHDRAW->repo.withdrawKey(uid,item.getString("key"))
+                PendingAction.PUBLISH->{
+                    val target=comic?:continue
+                    repo.publish(uid,state.profile,target,target.review,target.rating.toDouble())
+                }
+            }
             acknowledge(storage,uid,id,rev);change.value=System.currentTimeMillis()
         }
         return !hasPending(storage,uid)
