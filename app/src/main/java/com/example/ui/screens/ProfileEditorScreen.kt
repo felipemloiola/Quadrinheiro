@@ -49,6 +49,7 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
     var daily by rememberSaveable { mutableStateOf(profile.dailyPagesGoal.toString()) }
     var avatar by rememberSaveable { mutableStateOf(profile.avatarUrl) }
     var banner by rememberSaveable { mutableStateOf(settings.profileBannerUrl) }
+    var bannerSearchOpen by remember { mutableStateOf(false) }
     var imageBusy by remember { mutableStateOf(false) }
     var imageError by remember { mutableStateOf<String?>(null) }
     var pendingBanner by remember { mutableStateOf<Bitmap?>(null) }
@@ -97,7 +98,7 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                 Box(Modifier.fillMaxWidth().height(154.dp).clip(RoundedCornerShape(20.dp)).background(theme.bgSecondary)) {
                     if (banner.isNotBlank()) ProfileImage(banner, "Banner do perfil", Modifier.fillMaxSize())
                     Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(44.dp).clip(CircleShape).background(theme.bgSecondary.copy(alpha = .9f))
-                        .clickable(enabled = !imageBusy) { bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
+                        .clickable(enabled = !imageBusy) { bannerSearchOpen = true }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.AddPhotoAlternate, "Escolher banner", tint = theme.textPrimary)
                     }
                     Box(Modifier.align(Alignment.BottomStart).padding(12.dp).clip(CircleShape)
@@ -106,14 +107,18 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                     }
                     if (imageBusy) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp), color = theme.accent)
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { bannerSearchOpen = true }, enabled = !imageBusy, modifier = Modifier.heightIn(min = 44.dp).testTag("search_profile_banner")) { Text("Buscar arte", color = theme.accent) }
+                    TextButton(onClick = { bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !imageBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Galeria", color = theme.accent) }
+                }
                 if (banner.isNotBlank()) Row {
-                    TextButton(onClick = { scope.launch {
+                    TextButton(enabled = !imageBusy, onClick = { scope.launch {
                         pendingBanner = withContext(Dispatchers.Default) { runCatching {
                             val bytes = android.util.Base64.decode(banner.substringAfter("base64,"), android.util.Base64.DEFAULT)
                             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         }.getOrNull() }
                     } }) { Text("Reenquadrar", color = theme.accent) }
-                    TextButton(onClick = { banner = "" }) { Text("Remover banner", color = theme.accent) }
+                    TextButton(onClick = { banner = "" }, enabled = !imageBusy) { Text("Remover banner", color = theme.accent) }
                 }
                 if (avatar.isBlank()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     com.example.model.AppleAvatarPreset.entries.forEach { choice ->
@@ -190,6 +195,23 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                 }
             }
         }
+    }
+    if (bannerSearchOpen) {
+        val favoriteTitle = settings.profileFavoriteComicIds.firstOrNull()?.let { settings.profileShowcaseDetails["comic:$it"]?.let(com.example.data.ProfileShowcase::restoreComic)?.displayTitle }.orEmpty()
+        val character = settings.profileFavoriteCharacters.firstOrNull().orEmpty().substringBefore('(').trim()
+        BannerArtworkPicker(initialQuery = favoriteTitle.ifBlank { character }, initialKind = if (favoriteTitle.isBlank() && character.isNotBlank()) "character" else "volume",
+            onClose = { bannerSearchOpen = false },
+            onGallery = { bannerSearchOpen = false; bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            onChoose = { art ->
+                bannerSearchOpen = false
+                scope.launch {
+                    imageBusy = true; imageError = null
+                    try { pendingBanner = com.example.data.CatalogBanners.bitmap(art.url) }
+                    catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+                    catch (_: Exception) { imageError = "Não foi possível preparar essa arte. Escolha outra ou use a galeria." }
+                    finally { imageBusy = false }
+                }
+            })
     }
     pendingBanner?.let { bitmap -> BannerCropModal(bitmap, { pendingBanner = null }, { banner = it; pendingBanner = null }) }
     pendingAvatar?.let { bitmap -> ProfilePhotoCropModal(bitmap, onDismiss = { pendingAvatar = null }, onConfirmCrop = { avatar = it; pendingAvatar = null }) }
