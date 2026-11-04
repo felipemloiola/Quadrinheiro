@@ -506,6 +506,7 @@ class SafeStorage(context: Context) {
         }
     }
 
+    @Synchronized
     fun loadGuestState(): StoredState {
         val raw = getItem(GUEST_STATE_KEY)
         if (!raw.isNullOrBlank()) {
@@ -529,6 +530,7 @@ class SafeStorage(context: Context) {
         )
     }
 
+    @Synchronized
     fun loadAccountState(uid: String): StoredState? {
         if (uid.isBlank()) return null
         if (uid == "guest_local") return loadGuestState()
@@ -542,6 +544,7 @@ class SafeStorage(context: Context) {
         }
     }
 
+    @Synchronized
     private fun parseStoredStateJson(
         raw: String,
         persistedTranslations: Map<String, Pair<String, String>>
@@ -588,6 +591,7 @@ class SafeStorage(context: Context) {
 
     fun loadWidgetState(): StoredState = loadWidgetSessionSnapshot().state
 
+    @Synchronized
     fun loadState(): StoredState {
         val activeSession = loadAuthSession()
         if (isGuestMode() || activeSession?.isGuest == true) {
@@ -1066,6 +1070,7 @@ class SafeStorage(context: Context) {
         )
     }
 
+    @Synchronized
     fun saveShowcase(ownerUid: String, settings: AppSettings) {
         if (ownerUid.isNotBlank()) setItem("profile_showcase_$ownerUid", ProfileShowcase.encode(settings))
     }

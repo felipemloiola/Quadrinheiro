@@ -27,6 +27,23 @@ object PortugueseComicTranslator {
     private val canonicalWorkKeyCache = ConcurrentHashMap<String, String>()
     private val comicIdTranslationCache = ConcurrentHashMap<String, CachedComicTranslation>()
 
+    /**
+     * Normaliza a sinopse para uso como chave de cache. Antes a chave era só `take(180)`,
+     * então sinopses longas com o mesmo começo compartilhavam (e corrompiam) a tradução.
+     */
+    private fun synopsisCacheKey(normalized: String): String =
+        if (normalized.length <= 180) normalized
+        else normalized.take(180) + "#" + normalized.length + "#" + normalized.hashCode()
+
+    private fun normalizeSynopsisText(raw: String): String = raw
+        .replace(htmlTagRegex, " ")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace(whitespaceRegex, " ")
+        .trim()
+
     @Volatile
     var onTranslationPersisted: ((ComicEntry) -> Unit)? = null
 
@@ -514,14 +531,7 @@ object PortugueseComicTranslator {
         issueNumber: Int = 0,
         allowNetworkTranslation: Boolean = false
     ): String {
-        val clean = rawSynopsis
-            .replace(htmlTagRegex, " ")
-            .replace("&nbsp;", " ")
-            .replace("&amp;", "&")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace(whitespaceRegex, " ")
-            .trim()
+        val clean = normalizeSynopsisText(rawSynopsis)
 
         // 1. Se já está em português e não é apenas um placeholder curto, mantém imediatamente
         if (clean.isNotBlank() && isPortugueseText(clean) && !clean.contains("Apple Books") && !clean.contains("Google Books")) {
@@ -549,7 +559,7 @@ object PortugueseComicTranslator {
 
         // 3. Verifica cache ou traduz via HTTP se permitido (em chamadas de rede em background)
         if (clean.length >= 20) {
-            val cacheKey = clean.take(180)
+            val cacheKey = synopsisCacheKey(clean)
             synopsisTranslationCache[cacheKey]?.let { return it }
 
             if (allowNetworkTranslation) {
@@ -877,7 +887,8 @@ object PortugueseComicTranslator {
         val hasCatalogHit = catalogByWorkKey[workKey]?.any { it.synopsis == ptSynopsis } == true
         val isAlreadyPt = rawClean.isNotBlank() && isPortugueseText(rawClean) &&
             !rawClean.contains("Apple Books") && !rawClean.contains("Google Books")
-        val isCachedSentence = rawClean.length >= 20 && synopsisTranslationCache.containsKey(rawClean.take(180))
+        val isCachedSentence = rawClean.length >= 20 &&
+            synopsisTranslationCache.containsKey(synopsisCacheKey(normalizeSynopsisText(rawClean)))
         val isFinal = allowNetworkTranslation || hasCatalogHit || isAlreadyPt || isCachedSentence || rawClean.length < 20
 
         val finalSynopsisPtBr = if (isFinal) ptSynopsis else ""

@@ -1840,8 +1840,7 @@ class QuadrinheiroViewModel(
             return
         }
         val s = _appSettings.value
-        val countryCode = if (s.searchLanguage == "PT") "BR" else "US"
-        val cacheKey = "${s.searchProvider}:$countryCode:hd${s.hdCovers}:${q.lowercase()}"
+        val cacheKey = searchEngine.searchCacheKey(q, s.searchLanguage, s.searchProvider, s.hdCovers)
         val cached = searchEngine.getCached(cacheKey)
         if (cached != null) {
             _remoteResults.value = cached

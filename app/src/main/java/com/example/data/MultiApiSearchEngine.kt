@@ -104,7 +104,17 @@ class MultiApiSearchEngine {
 
 
     private val cache=object:LinkedHashMap<String,List<ComicEntry>>(48,.75f,true){override fun removeEldestEntry(eldest:MutableMap.MutableEntry<String,List<ComicEntry>>?)=size>48}
-    fun getCached(key:String):List<ComicEntry>?=synchronized(cache){cache[key.substringAfterLast(":").lowercase()]}
+
+    /**
+     * Chave de cache que distingue idioma, provedor e capas HD. Antes o prefixo era descartado
+     * na leitura, então trocar de idioma/provedor reaproveitava resultados de outra configuração.
+     */
+    fun searchCacheKey(query:String,searchLanguage:String,provider:String,hdCovers:Boolean):String{
+        val countryCode=if(searchLanguage=="PT")"BR" else "US"
+        return "$provider:$countryCode:hd$hdCovers:${query.trim()}".lowercase()
+    }
+
+    fun getCached(key:String):List<ComicEntry>?=synchronized(cache){cache[key.lowercase()]}
     fun updateCachedComicTranslation(comic:ComicEntry){ synchronized(cache){cache.keys.toList().forEach { key -> cache[key]=cache[key].orEmpty().map { if(it.id==comic.id) comic else it } }} }
     suspend fun resolveBestCoverUrl(title:String,authors:String=""):String {
         val key=PortugueseComicTranslator.canonicalWorkKey(title)
@@ -114,9 +124,10 @@ class MultiApiSearchEngine {
     suspend fun prewarmPopularSearches(){try{ModernCatalog.load()}catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}catch(_:Exception){}}
     fun searchOnlineProgressive(query:String,searchLanguage:String="ALL",provider:String="MULTI",hdCovers:Boolean=true):Flow<List<ComicEntry>> = kotlinx.coroutines.flow.flow {
         val q=query.trim();if(q.length<2){emit(emptyList());return@flow}
-        val cached=synchronized(cache){cache[q.lowercase()]};if(cached!=null){emit(cached);return@flow}
+        val key=searchCacheKey(q,searchLanguage,provider,hdCovers)
+        val cached=synchronized(cache){cache[key]};if(cached!=null){emit(cached);return@flow}
         val items=ComicVineCatalog.search(q).items.map { PortugueseComicTranslator.localizeComicMetadataOnly(it) }
-        synchronized(cache){cache[q.lowercase()]=items};ModernCatalog.accept(items);emit(items)
+        synchronized(cache){cache[key]=items};ModernCatalog.accept(items);emit(items)
     }.flowOn(Dispatchers.IO)
     data class CatalogPage(val items:List<ComicEntry>,val hasMore:Boolean)
     suspend fun fetchCatalogPage(page:Int,favoriteUniverse:String):CatalogPage=ComicVineCatalog.catalog(page).also { ModernCatalog.accept(it.items) }
