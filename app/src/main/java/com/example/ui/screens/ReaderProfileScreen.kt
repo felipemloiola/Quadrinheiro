@@ -114,7 +114,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)){
                             Text(profile.name,color=theme.textPrimary,fontSize=24.sp,fontWeight=FontWeight.Bold)
                             if(profile.handle.isNotBlank())Text(profile.handle,color=theme.textSecondary,fontSize=14.sp)
-                            Text("Editar perfil",color=theme.accent,fontSize=14.sp,modifier=Modifier.clickable{editorOpen=true}.padding(vertical=10.dp))
+                            Text("Editar perfil",color=theme.accent,fontSize=14.sp,modifier=Modifier.clickable{editorOpen=true}.heightIn(min = 44.dp).padding(vertical=10.dp))
                         }
                     }
                 Column(Modifier.padding(horizontal=20.dp).padding(top=16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){

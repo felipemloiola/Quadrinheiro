@@ -21,7 +21,8 @@ import kotlinx.coroutines.launch
 
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
-    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
+    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+    val reduceMotion: () -> Boolean = { false }
 ) {
 
     private val pressProgressAnimationSpec =
@@ -35,8 +36,8 @@ class InteractiveHighlight(
         Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
 
     private var startPosition = Offset.Zero
-    val pressProgress: Float get() = pressProgressAnimation.value
-    val offset: Offset get() = positionAnimation.value - startPosition
+    val pressProgress: Float get() = if (reduceMotion()) 0f else pressProgressAnimation.value
+    val offset: Offset get() = if (reduceMotion()) Offset.Zero else positionAnimation.value - startPosition
 
     private val shader =
         if (isRuntimeShaderSupported()) {
@@ -49,7 +50,8 @@ class InteractiveHighlight(
 
     val modifier: Modifier =
         Modifier.drawWithContent {
-            val progress = pressProgressAnimation.value
+            val progress = pressProgress
+            val animatedPosition = if (reduceMotion()) startPosition else positionAnimation.value
             if (progress > 0f) {
                 if (shader != null) {
                     drawRect(
@@ -57,7 +59,7 @@ class InteractiveHighlight(
                         blendMode = BlendMode.Plus
                     )
                     shader.apply {
-                        val position = position(size, positionAnimation.value)
+                        val position = position(size, animatedPosition)
                         setFloatUniform("size", size.width, size.height)
                         setColorUniform("color", Color.White.copy(0.15f * progress))
                         setFloatUniform("radius", size.minDimension * 1.5f)
@@ -88,20 +90,35 @@ class InteractiveHighlight(
                 onDragStart = { down ->
                     startPosition = down.position
                     animationScope.launch {
-                        launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
-                        launch { positionAnimation.snapTo(startPosition) }
+                        if (reduceMotion()) {
+                            pressProgressAnimation.snapTo(0f)
+                            positionAnimation.snapTo(startPosition)
+                        } else {
+                            launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
+                            launch { positionAnimation.snapTo(startPosition) }
+                        }
                     }
                 },
                 onDragEnd = {
                     animationScope.launch {
-                        launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
-                        launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                        if (reduceMotion()) {
+                            pressProgressAnimation.snapTo(0f)
+                            positionAnimation.snapTo(startPosition)
+                        } else {
+                            launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
+                            launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                        }
                     }
                 },
                 onDragCancel = {
                     animationScope.launch {
-                        launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
-                        launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                        if (reduceMotion()) {
+                            pressProgressAnimation.snapTo(0f)
+                            positionAnimation.snapTo(startPosition)
+                        } else {
+                            launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
+                            launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                        }
                     }
                 }
             ) { change, _ ->

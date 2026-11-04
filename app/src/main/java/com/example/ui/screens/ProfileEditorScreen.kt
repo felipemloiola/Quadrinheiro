@@ -8,6 +8,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ReaderProfile
@@ -101,23 +104,35 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                         Icon(Icons.Default.AddPhotoAlternate, "Escolher banner", tint = theme.textPrimary)
                     }
                     Box(Modifier.align(Alignment.BottomStart).padding(12.dp).clip(CircleShape)
-                        .clickable(enabled = !imageBusy) { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                        .clickable(enabled = !imageBusy) { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                        .semantics { contentDescription = "Foto de perfil, toque para alterar" }) {
                         UserAvatar(profile.copy(avatarUrl = avatar,avatarPreset=preset), sizeDp = 68)
                     }
                     if (imageBusy) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp), color = theme.accent)
                 }
-                if (banner.isNotBlank()) Row {
-                    TextButton(onClick = { scope.launch {
+                if (banner.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { scope.launch {
                         pendingBanner=withContext(Dispatchers.Default){runCatching {
                             val bytes=android.util.Base64.decode(banner.substringAfter("base64,"),android.util.Base64.DEFAULT)
                             BitmapFactory.decodeByteArray(bytes,0,bytes.size)
                         }.getOrNull()}
                     } }) { Text("Reenquadrar",color=theme.accent) }
-                    TextButton(onClick = { banner = "" }) { Text("Remover banner", color = theme.accent) }
+                    TextButton(modifier = Modifier.heightIn(min = 44.dp), onClick = { banner = "" }) { Text("Remover banner", color = theme.accent) }
                 }
                 if(avatar.isBlank())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
                     com.example.model.AppleAvatarPreset.entries.forEach { choice ->
-                        Box(Modifier.size(44.dp).clip(CircleShape).clickable{preset=choice.id},contentAlignment=Alignment.Center){UserAvatar(profile.copy(avatarUrl="",avatarPreset=choice.id),sizeDp=36)}
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape)
+                                .selectable(
+                                    selected = preset == choice.id,
+                                    interactionSource = null,
+                                    indication = null,
+                                    role = androidx.compose.ui.semantics.Role.RadioButton,
+                                    onClick = { preset = choice.id }
+                                )
+                                .semantics { contentDescription = "Avatar ${choice.label}" },
+                            contentAlignment = Alignment.Center
+                        ){UserAvatar(profile.copy(avatarUrl="",avatarPreset=choice.id),sizeDp=36)}
                     }
                 }
                 if (imageError != null) Text(imageError!!, color = theme.textSecondary, fontSize = 13.sp)

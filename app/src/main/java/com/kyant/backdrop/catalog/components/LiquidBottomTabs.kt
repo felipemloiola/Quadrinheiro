@@ -136,6 +136,7 @@ fun LiquidBottomTabs(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
+        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         var didDrag by remember { mutableStateOf(false) }
         var totalDragDistance by remember { mutableStateOf(0f) }
         val dampedDragAnimation = remember(animationScope) {
@@ -164,10 +165,14 @@ fun LiquidBottomTabs(
                     totalDragDistance = 0f
                     animateToValue(targetIndex.toFloat())
                     animationScope.launch {
-                        offsetAnimation.animateTo(
-                            0f,
-                            spring(1f, 300f, 0.5f)
-                        )
+                        if (reduceMotion()) {
+                            offsetAnimation.snapTo(0f)
+                        } else {
+                            offsetAnimation.animateTo(
+                                0f,
+                                spring(1f, 300f, 0.5f)
+                            )
+                        }
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -183,7 +188,8 @@ fun LiquidBottomTabs(
                     animationScope.launch {
                         offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
                     }
-                }
+                },
+                reduceMotion = reduceMotion
             )
         }
 
@@ -217,7 +223,8 @@ fun LiquidBottomTabs(
                         else size.width - (dampedDragAnimation.value + 0.5f) * tw + panelOffset,
                         size.height / 2f
                     )
-                }
+                },
+                reduceMotion = reduceMotion
             )
         }
 

@@ -93,6 +93,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -1151,11 +1153,7 @@ fun UserAvatar(
     } else {
         androidx.compose.ui.graphics.lerp(Color.White, startColor, 0.14f)
     }
-    val borderColor = if (isLightBadge) {
-        Color.Black.copy(alpha = 0.18f)
-    } else {
-        Color.White.copy(alpha = 0.35f)
-    }
+    val borderColor = Color.Black.copy(alpha = 0.18f)
 
     Box(
         modifier = modifier
@@ -1534,6 +1532,7 @@ fun LiquidGlassSegmentedControl(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
+        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         var didDrag by remember { mutableStateOf(false) }
 
         val dampedDragAnimation = remember(animationScope, tabsCount) {
@@ -1554,10 +1553,14 @@ fun LiquidGlassSegmentedControl(
                     }
                     animateToValue(targetIndex.toFloat())
                     animationScope.launch {
-                        offsetAnimation.animateTo(
-                            0f,
-                            spring(1f, 300f, 0.5f)
-                        )
+                        if (reduceMotion()) {
+                            offsetAnimation.snapTo(0f)
+                        } else {
+                            offsetAnimation.animateTo(
+                                0f,
+                                spring(1f, 300f, 0.5f)
+                            )
+                        }
                     }
                 },
                 onDrag = { _, dragAmount ->
@@ -1571,7 +1574,8 @@ fun LiquidGlassSegmentedControl(
                     animationScope.launch {
                         offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
                     }
-                }
+                },
+                reduceMotion = reduceMotion
             )
         }
 
@@ -1591,7 +1595,8 @@ fun LiquidGlassSegmentedControl(
                         else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset,
                         size.height / 2f
                     )
-                }
+                },
+                reduceMotion = reduceMotion
             )
         }
 
@@ -1600,7 +1605,8 @@ fun LiquidGlassSegmentedControl(
                 Column(
                     modifier = Modifier
                         .clip(ContinuousCapsule)
-                        .clickable(
+                        .selectable(
+                            selected = currentSelectedIndex == index,
                             interactionSource = null,
                             indication = null,
                             role = androidx.compose.ui.semantics.Role.Tab,
@@ -1668,7 +1674,8 @@ fun LiquidGlassSegmentedControl(
                     .then(interactiveHighlight.modifier)
                     .height(48.dp)
                     .fillMaxWidth()
-                    .padding(4.dp),
+                    .padding(4.dp)
+                    .selectableGroup(),
                 verticalAlignment = Alignment.CenterVertically,
                 content = rowContent
             )
@@ -1837,14 +1844,15 @@ fun LiquidGlassModeSwitcher(
             originX = if (previousIdx < selectedIdx) 0f else 1f
             previousIdx = selectedIdx
             scaleToggle.snapTo(1f)
+            val scaleAnimationSpec = if (motion.reduced) androidx.compose.animation.core.snap<Float>() else keyframes {
+                durationMillis = 440
+                1.0f at 0
+                1.16f at 220
+                1.0f at 440
+            }
             scaleToggle.animateTo(
                 targetValue = 1f,
-                animationSpec = keyframes {
-                    durationMillis = 440
-                    1.0f at 0
-                    1.16f at 220
-                    1.0f at 440
-                }
+                animationSpec = scaleAnimationSpec
             )
         }
     }

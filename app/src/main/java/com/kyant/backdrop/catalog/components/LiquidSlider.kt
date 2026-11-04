@@ -38,6 +38,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -116,6 +120,7 @@ fun LiquidSlider(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
+        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
         var isDraggingNow by remember { mutableStateOf(false) }
 
         val rangeSpan = (valueRange.endInclusive - valueRange.start).coerceAtLeast(0.0001f)
@@ -131,7 +136,8 @@ fun LiquidSlider(
                 pressedScale = 1.45f,
                 onDragStarted = {},
                 onDragStopped = {},
-                onDrag = { _, _ -> }
+                onDrag = { _, _ -> },
+                reduceMotion = reduceMotion
             )
         }
 
@@ -245,6 +251,17 @@ fun LiquidSlider(
                             currentOnValueChange(anim.targetValue)
                             anim.release()
                         }
+                    }
+                }
+                .semantics {
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = value().fastCoerceIn(valueRange.start, valueRange.endInclusive),
+                        range = valueRange
+                    )
+                    setProgress { target ->
+                        val newValue = target.fastCoerceIn(valueRange.start, valueRange.endInclusive)
+                        currentOnValueChange(newValue)
+                        true
                     }
                 },
             contentAlignment = Alignment.CenterStart

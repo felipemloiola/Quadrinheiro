@@ -30,6 +30,7 @@ class DampedDragAnimation(
     val onDragStarted: DampedDragAnimation.(position: Offset) -> Unit,
     val onDragStopped: DampedDragAnimation.() -> Unit,
     val onDrag: DampedDragAnimation.(size: IntSize, dragAmount: Offset) -> Unit,
+    val reduceMotion: () -> Boolean = { false },
 ) {
 
     private val valueAnimationSpec =
@@ -64,10 +65,10 @@ class DampedDragAnimation(
     val value: Float get() = pendingSnapValue ?: valueAnimation.value
     val progress: Float get() = (value - valueRange.start) / (valueRange.endInclusive - valueRange.start)
     val targetValue: Float get() = pendingSnapValue ?: valueAnimation.targetValue
-    val pressProgress: Float get() = pressProgressAnimation.value
-    val scaleX: Float get() = scaleXAnimation.value
-    val scaleY: Float get() = scaleYAnimation.value
-    val velocity: Float get() = velocityAnimation.value
+    val pressProgress: Float get() = if (reduceMotion()) 0f else pressProgressAnimation.value
+    val scaleX: Float get() = if (reduceMotion()) initialScale else scaleXAnimation.value
+    val scaleY: Float get() = if (reduceMotion()) initialScale else scaleYAnimation.value
+    val velocity: Float get() = if (reduceMotion()) 0f else velocityAnimation.value
 
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         inspectDragGestures(
@@ -95,6 +96,7 @@ class DampedDragAnimation(
     fun press() {
         velocityTracker.resetTracking()
         releaseJob?.cancel()
+        if (reduceMotion()) return
         animationScope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
             launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
@@ -104,6 +106,7 @@ class DampedDragAnimation(
 
     fun release() {
         releaseJob?.cancel()
+        if (reduceMotion()) return
         releaseJob = animationScope.launch {
             awaitFrame()
             if (value != targetValue) {
@@ -122,7 +125,11 @@ class DampedDragAnimation(
         val targetValue = value.coerceIn(valueRange)
         pendingSnapValue = null
         animationScope.launch {
-            launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
+            if (reduceMotion()) {
+                valueAnimation.snapTo(targetValue)
+            } else {
+                launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
+            }
         }
     }
 
@@ -130,13 +137,18 @@ class DampedDragAnimation(
         animationScope.launch {
             mutatorMutex.mutate {
                 pendingSnapValue = null
-                press()
                 val targetValue = value.coerceIn(valueRange)
-                launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
-                if (velocity != 0f) {
-                    launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
+                if (reduceMotion()) {
+                    valueAnimation.snapTo(targetValue)
+                    velocityAnimation.snapTo(0f)
+                } else {
+                    press()
+                    launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
+                    if (velocity != 0f) {
+                        launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
+                    }
+                    release()
                 }
-                release()
             }
         }
     }
