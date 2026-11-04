@@ -47,7 +47,8 @@ class InteractionRevisionTest {
         val sandman = catalog.first { it.title.contains("Sandman") }.copy(status = ReadingStatus.WANT_TO_READ)
         val result = PersonalizedDiscovery.recommend(catalog, listOf(watchmen, sandman))
         assertFalse(result.any { it.id == watchmen.id || it.id == sandman.id })
-        assertTrue(result.indexOfFirst { it.title.contains("Vingança") } < result.indexOfFirst { it.title.contains("Akira") })
+        assertTrue("A well-rated Watchmen reading should recommend V de Vingança", result.any { it.title.contains("Vingança") })
+        assertFalse("Unrelated zero-affinity Akira should be filtered, not required at a lower rank", result.any { it.title.contains("Akira") })
         assertNotEquals(PersonalizedDiscovery.recommend(catalog, emptyList()).take(5).map { it.id }, result.take(5).map { it.id })
     }
 
