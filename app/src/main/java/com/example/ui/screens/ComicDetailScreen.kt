@@ -93,6 +93,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val isComic = entity == null
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
+    val related = remember(comic.id, comic.externalId, detail?.issues) { ComicDetailPresentation.relatedEditions(comic, detail) }
     Box(Modifier.fillMaxSize().background(t.bgPrimary).windowInsetsPadding(WindowInsets.systemBars).testTag("comic_detail_page")) {
         if (isComic && tab == 3) {
             Column(Modifier.fillMaxSize().padding(top = 68.dp)) {
@@ -160,7 +161,6 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                         }
                     }
                 }
-                val related = remember(comic.id, comic.externalId, detail?.issues) { ComicDetailPresentation.relatedEditions(comic, detail) }
                 if (related.isNotEmpty()) item {
                     DetailSection(if (isComic) "Edições relacionadas" else "Aparições em quadrinhos") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
