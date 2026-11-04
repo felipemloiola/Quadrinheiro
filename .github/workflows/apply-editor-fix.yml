@@ -1,0 +1,88 @@
+name: Apply editor patch after validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/storage-discovery-profile]
+    paths:
+      - '.github/editor-fix/apply.py'
+      - '.github/workflows/apply-editor-fix.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apply-editor-fix-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.repository == 'felipemloiola/Quadrinheiro' && github.ref == 'refs/heads/fix/storage-discovery-profile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    env:
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      GCLOUD_PROJECT: demo-no-project
+      GOOGLE_CLOUD_PROJECT: demo-no-project
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - uses: ./.github/actions/setup-firebase
+      - name: Apply exact patch only to verified base files
+        run: python3 .github/editor-fix/apply.py apply
+      - name: Prepare temporary debug key
+        run: |
+          set -euo pipefail
+          test ! -e debug.keystore
+          keytool -genkeypair -keystore debug.keystore -storetype JKS -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Android Debug,O=Android,C=US'
+      - name: Validate catalog and editor sources
+        run: |
+          set -euo pipefail
+          node --test catalog-service/test/*.test.cjs
+          mkdir -p ci-reports
+          git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --check
+          gradle :app:tasks --all --no-daemon --console=plain | tee ci-reports/app-tasks.txt
+          task=$(awk '$1 ~ /^testDebug(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt)
+          test -n "$task" || { echo '::error::No compatible debug tests found.'; exit 1; }
+          firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$task :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain"
+      - name: Commit only validated editor files if branch has not changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/editor-fix/apply.py verify
+          remote=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/fix/storage-discovery-profile" --jq '.object.sha')
+          test "$remote" = "$GITHUB_SHA" || { echo '::error::Branch changed; refusing to push.'; exit 1; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- app/src/main/java/com/example/ui/components/CatalogModal.kt app/src/main/java/com/example/ui/components/CatalogEditionMetadata.kt app/src/main/java/com/example/model/CatalogPagePolicy.kt app/src/test/java/com/example/CatalogPagePolicyTest.kt app/src/androidTest/java/com/example/ReaderNavigationTest.kt
+          git commit -m 'Simplify comic editor metadata and automatically use real page counts'
+          gh auth setup-git --hostname github.com
+          git push origin HEAD:refs/heads/fix/storage-discovery-profile
+          printf 'Validated editor commit: %s\nAndroid UI tests compiled, not executed. No release or production deployment.\n' "$(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload diagnostics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-patch-diagnostics-${{ github.run_number }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ci-reports/
+            app/build/reports/tests/
+            app/build/test-results/
+            firebase-debug.log
+            firestore-debug.log
+      - name: Remove temporary debug key
+        if: always()
+        run: rm -f debug.keystore
