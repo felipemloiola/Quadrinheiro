@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.PersonalizedDiscovery
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
@@ -30,23 +31,33 @@ import com.example.ui.components.AppleSegmentedPicker
 import com.example.ui.components.BookCover
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalAppMotion
+import com.example.viewmodel.QuadrinheiroViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
 fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
     onComic: (ComicEntry) -> Unit, onSearch: (String) -> Unit,
-    profile: ReaderProfile = ReaderProfile(), onLogin: () -> Unit = {}) {
+    profile: ReaderProfile = ReaderProfile(),
+    viewModel: QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    onLogin: () -> Unit = {}) {
     val theme = LocalIOS27Theme.current
     val motion = LocalAppMotion.current
+    // Same Activity-scoped owner as the app host; its existing settings flow is isolated by account.
+    val settings by viewModel.appSettings.collectAsStateWithLifecycle()
     var collection by remember { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val catalog by com.example.data.ModernCatalog.entries.collectAsState()
-    // Entry resets only this route. Returning from an overlaid comic keeps its position.
     LaunchedEffect(listState) { listState.scrollToItem(0) }
     LaunchedEffect(Unit) { com.example.data.ModernCatalog.load() }
-    val recommendations by produceState<List<ComicEntry>>(emptyList(), comics, profile.favoriteUniverse, catalog) {
-        value = withContext(Dispatchers.Default) { PersonalizedDiscovery.recommend(catalog, comics, profile.favoriteUniverse) }
+    val recommendationState = remember(comics, profile.favoriteUniverse, settings.profileFavoriteComicIds,
+        settings.profileFavoriteCharacters, settings.profileShowcaseDetails) { mutableStateOf(emptyList<ComicEntry>()) }
+    val recommendations by recommendationState
+    LaunchedEffect(recommendationState, catalog) {
+        val preferences = settings
+        recommendationState.value = withContext(Dispatchers.Default) {
+            PersonalizedDiscovery.recommend(catalog, comics, profile.favoriteUniverse, preferences)
+        }
     }
     val collections = remember(catalog, recommendations) { linkedMapOf(
         "Para você" to recommendations,
@@ -89,7 +100,7 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                    if (entries.isEmpty()) item { Text("Novas seleções aparecerão aqui conforme o catálogo crescer.", color = theme.textSecondary) }
+                    if (entries.isEmpty()) item { Text("Ainda não há sugestões compatíveis no catálogo carregado.", color = theme.textSecondary) }
                 } else {
                     collections.forEach { (title, entries) ->
                         if (entries.isNotEmpty()) item(key = title) {
@@ -102,6 +113,11 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     items(entries.take(8), key = { it.id }) { comic -> ExplorePoster(comic, Modifier.width(112.dp), onComic) }
                                 }
+                            }
+                        } else if (title == "Para você") item(key = "discovery_empty") {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SectionHeading(title)
+                                Text("Ainda não há sugestões compatíveis no catálogo carregado.", color = theme.textSecondary, fontSize = 13.sp)
                             }
                         }
                     }
