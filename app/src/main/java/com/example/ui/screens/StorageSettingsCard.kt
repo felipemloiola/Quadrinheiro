@@ -52,6 +52,16 @@ internal fun StorageSettingsCard() {
                         Text(StorageMaintenance.formatBytes(size), color = theme.textPrimary, fontSize = 12.sp)
                     }
                 }
+                if (!usage?.largestItems.isNullOrEmpty()) {
+                    Text("Maiores itens locais", color = theme.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+                    usage?.largestItems.orEmpty().forEach { item ->
+                        Column(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                            Text(StorageMaintenance.formatBytes(item.bytes), color = theme.textPrimary, fontSize = 12.sp)
+                            Text(item.path, color = theme.textSecondary, fontSize = 10.sp, maxLines = 2)
+                        }
+                    }
+                    Text("A lista contém apenas caminhos e tamanhos; nenhum arquivo foi aberto ou enviado.", color = theme.textSecondary, fontSize = 11.sp)
+                }
                 Text("Os valores podem mudar durante a sincronização. O aplicativo instalado não está incluído.", color = theme.textSecondary, fontSize = 12.sp)
             }
         }

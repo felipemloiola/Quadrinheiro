@@ -81,11 +81,12 @@ class StorageRevisionTest {
             assertEquals(1024L, StorageMaintenance.bytes(privateFile))
             val usage = StorageMaintenance.usage(context)
             assertTrue(usage.localBytes >= 1024L)
-            assertTrue(usage.categories.getValue("Arquivos e backups") >= 1024L)
+            assertTrue(usage.categories.getValue("Arquivos do app") >= 1024L)
             assertTrue(usage.categories.containsKey("Preferências e estado local"))
             assertTrue(usage.categories.containsKey("Bancos e sincronização offline"))
             assertEquals(usage.cacheBytes + usage.localBytes, usage.totalBytes)
             assertTrue(usage.categories.values.all { it >= 0L })
+            assertTrue(usage.largestItems.any { it.path.endsWith("storage-revision-fixture") && it.bytes == 1024L })
         } finally { privateFile.delete() }
     }
 }
