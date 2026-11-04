@@ -48,11 +48,60 @@ internal object CatalogBanners {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BannerCacheValue>?) = size > 16
     }
 
+    private val extendedHosts = hosts + setOf(
+        "metron.cloud",
+        "static.metron.cloud",
+        "cdn.jsdelivr.net",
+        "uploads.mangadex.org",
+        "covers.openlibrary.org",
+        "books.google.com",
+        "books.googleusercontent.com",
+        "is1-ssl.mzstatic.com",
+        "is2-ssl.mzstatic.com",
+        "is3-ssl.mzstatic.com",
+        "is4-ssl.mzstatic.com",
+        "is5-ssl.mzstatic.com"
+    )
+
     internal fun allowed(raw: String): Boolean {
         if (raw.length > 2000) return false
         val u = raw.toHttpUrlOrNull() ?: return false
         return u.scheme == "https" && u.host in hosts && u.port == 443 && u.username.isEmpty() && u.password.isEmpty() &&
             u.query == null && u.fragment == null && (u.encodedPath.startsWith("/a/uploads/") || u.encodedPath.startsWith("/uploads/"))
+    }
+
+    internal fun allowedBannerSource(raw: String): Boolean {
+        if (raw.length > 2000) return false
+        val u = raw.toHttpUrlOrNull() ?: return false
+        if (u.scheme != "https" || u.port != 443 || u.username.isNotEmpty() || u.password.isNotEmpty() || u.fragment != null) return false
+        if (u.queryParameterNames.any { it.lowercase(Locale.ROOT) in setOf("api_key", "apikey", "api-key", "token", "access_token") }) return false
+        return u.host in extendedHosts || u.host.endsWith(".mzstatic.com") || u.host.endsWith(".metron.cloud")
+    }
+
+    private fun upgradeArtworkUrl(raw: String): String {
+        val trimmed = raw.trim().replace("http://", "https://")
+        return when {
+            trimmed.contains("cdn.jsdelivr.net/gh/akabab/superhero-api") && trimmed.contains("/images/md/") ->
+                trimmed.replace("/images/md/", "/images/lg/")
+            trimmed.contains("mzstatic.com/") && trimmed.contains("600x600bb") ->
+                trimmed.replace("600x600bb", "1200x1200bb")
+            trimmed.contains("mzstatic.com/") && trimmed.contains("100x100bb") ->
+                trimmed.replace("100x100bb", "1200x1200bb")
+            trimmed.contains("comicvine") && (trimmed.contains("/scale_small/") || trimmed.contains("/scale_medium/") || trimmed.contains("/scale_avatar/")) ->
+                trimmed.replace("/scale_small/", "/scale_super/")
+                    .replace("/scale_medium/", "/scale_super/")
+                    .replace("/scale_avatar/", "/scale_super/")
+            trimmed.contains("uploads.mangadex.org/covers/") && trimmed.endsWith(".256.jpg") ->
+                trimmed.removeSuffix(".256.jpg") + ".512.jpg"
+            else -> trimmed
+        }
+    }
+
+    private fun canonicalUrlKey(raw: String): String {
+        val u = raw.toHttpUrlOrNull() ?: return raw
+        return u.host + u.encodedPath
+            .replace(Regex("""/(?:scale_[^/]+|screen_[^/]+|original)/"""), "/")
+            .replace("/images/lg/", "/images/md/")
     }
 
     internal fun parse(root: JSONObject): List<BannerArtwork> {
@@ -82,7 +131,7 @@ internal object CatalogBanners {
             override fun onResponse(call: Call, response: Response) {
                 try {
                     val redirectUrl = if (response.code in listOf(301, 302, 307, 308)) {
-                        response.header("Location")?.let { loc -> response.request.url.resolve(loc)?.toString() }?.takeIf(::allowed)
+                        response.header("Location")?.let { loc -> response.request.url.resolve(loc)?.toString() }?.takeIf(::allowedBannerSource)
                     } else null
                     if (redirectUrl != null) {
                         response.close()
@@ -137,45 +186,123 @@ internal object CatalogBanners {
         buffer.readByteArray()
     }
 
-    private suspend fun fallbackViaCatalogDetails(query: String, kind: String): List<BannerArtwork> = coroutineScope {
+    private suspend fun fallbackViaCatalogDetails(query: String, kind: String, context: android.content.Context? = null): List<BannerArtwork> = coroutineScope {
         val terms = CatalogSearchPolicy.searchTerms(query).ifEmpty { listOf(query) }
-        val details = mutableListOf<CatalogDetails>()
+        val collected = mutableListOf<BannerArtwork>()
+
         if (kind == "character") {
-            val chars = terms.flatMap { term ->
-                runCatching { ComicVineCatalog.characters(term) }.getOrDefault(emptyList())
-            }.distinctBy { it.id }.take(3)
-            for (c in chars) {
-                val id = c.id.removePrefix("cv-")
-                if (id.all { it.isDigit() } && id.isNotEmpty()) {
-                    runCatching { ComicVineCatalog.details("character", id) }.getOrNull()?.let { details += it }
+            // 1. Local & cached CharacterDirectory (instant, high-res SuperHero API portraits)
+            val dirMatches = runCatching {
+                if (context != null) CharacterDirectory.search(context, query)
+                else CharacterDirectory.searchLoaded(query)
+            }.getOrDefault(emptyList())
+            for (c in dirMatches.take(8)) {
+                val url = upgradeArtworkUrl(c.image)
+                if (allowedBannerSource(url)) {
+                    collected += BannerArtwork(url, 1200, 675, c.name.take(300))
+                }
+            }
+
+            // 2. Remote ComicVine / SuperHero character portraits & details
+            val remoteChars = terms.take(2).flatMap { term ->
+                val cv = runCatching { ComicVineCatalog.characters(term) }.getOrDefault(emptyList())
+                val sh = runCatching { ComicVineCatalog.superheroCharacters(term) }.getOrDefault(emptyList())
+                cv + sh
+            }.distinctBy { it.id }.take(6)
+
+            for (c in remoteChars) {
+                val upgraded = upgradeArtworkUrl(c.image)
+                if (allowedBannerSource(upgraded)) {
+                    collected += BannerArtwork(upgraded, 1200, 675, c.name.take(300))
+                }
+                val rawId = c.id.removePrefix("cv-")
+                if (rawId.all { it.isDigit() } && rawId.isNotEmpty()) {
+                    val detail = runCatching { ComicVineCatalog.details("character", rawId) }.getOrNull()
+                    if (detail != null) {
+                        val title = detail.title.ifBlank { c.name }.ifBlank { query }
+                        val urls = listOf(detail.banner, detail.image) + detail.covers
+                        for (u in urls) {
+                            val up = upgradeArtworkUrl(u)
+                            if (allowedBannerSource(up)) {
+                                collected += BannerArtwork(up, 1200, 675, title.take(300))
+                            }
+                        }
+                    }
+                }
+            }
+
+            val portraits = runCatching { ComicVineCatalog.portraits(query) }.getOrDefault(emptyList())
+            for (u in portraits) {
+                val up = upgradeArtworkUrl(u)
+                if (allowedBannerSource(up)) {
+                    collected += BannerArtwork(up, 1200, 675, query.take(300))
                 }
             }
         } else {
-            val comics = terms.flatMap { term ->
-                runCatching { ComicVineCatalog.search(term, 0).items }.getOrDefault(emptyList())
-            }.distinctBy { it.id }.take(3)
-            for (c in comics) {
-                val rawId = c.id.removePrefix("cv-").removePrefix("cvvol-")
-                if (rawId.all { it.isDigit() } && rawId.isNotEmpty()) {
-                    val dType = if (c.id.startsWith("cvvol-")) "volume" else "issue"
-                    runCatching { ComicVineCatalog.details(dType, rawId) }.getOrNull()?.let { details += it }
+            // kind == "volume" (HQs)
+            // 1. Local ModernCatalog matches
+            val localMatches = CatalogSearchPolicy.filterAndRankForQuery(ModernCatalog.current, query).take(6)
+            for (c in localMatches) {
+                val up = upgradeArtworkUrl(c.coverUrl)
+                if (allowedBannerSource(up)) {
+                    collected += BannerArtwork(up, 1200, 675, c.displayTitle.take(300))
+                }
+            }
+
+            // 2. Parallel multi-source HQ artwork search (ComicVine, Apple Books BR, Google Books PT, MangaDex)
+            val deferredBatches = listOf(
+                async {
+                    terms.take(2).flatMap { term ->
+                        runCatching { ComicVineCatalog.search(term, 0).items }.getOrDefault(emptyList())
+                    }
+                },
+                async {
+                    runCatching { PortugueseBookSources.appleBrazil(query, 0) }.getOrDefault(emptyList())
+                },
+                async {
+                    runCatching { PortugueseBookSources.googlePortuguese(query, 0) }.getOrDefault(emptyList())
+                },
+                async {
+                    runCatching { AdditionalCatalogSources.load("mangadex", query, "ALL", 0) }.getOrDefault(emptyList())
+                }
+            )
+            val allComics = CatalogSearchPolicy.filterAndRankForQuery(
+                deferredBatches.awaitAll().flatten(),
+                query
+            ).take(10)
+
+            for (c in allComics) {
+                val up = upgradeArtworkUrl(c.coverUrl)
+                if (allowedBannerSource(up)) {
+                    collected += BannerArtwork(up, 1200, 675, c.displayTitle.take(300))
+                }
+                val ref = c.externalId.ifBlank { c.id }
+                val (dType, rawId) = when {
+                    ref.startsWith("mt-") -> "metron-issue" to ref.removePrefix("mt-")
+                    ref.startsWith("cv-volume-") -> "volume" to ref.removePrefix("cv-volume-")
+                    ref.startsWith("cvvol-") -> "volume" to ref.removePrefix("cvvol-")
+                    ref.startsWith("cv-") -> "issue" to ref.removePrefix("cv-")
+                    else -> "" to ""
+                }
+                if (dType.isNotEmpty() && rawId.all { it.isDigit() } && rawId.isNotEmpty() && collected.size < 8) {
+                    val detail = runCatching { ComicVineCatalog.details(dType, rawId) }.getOrNull()
+                    if (detail != null) {
+                        val title = detail.title.ifBlank { c.displayTitle }.ifBlank { query }
+                        for (u in listOf(detail.banner, detail.image) + detail.covers) {
+                            val upDetail = upgradeArtworkUrl(u)
+                            if (allowedBannerSource(upDetail)) {
+                                collected += BannerArtwork(upDetail, 1200, 675, title.take(300))
+                            }
+                        }
+                    }
                 }
             }
         }
-        val candidatePairs = details.flatMap { detail ->
-            val title = detail.title.ifBlank { query }
-            ComicBannerResolver.candidates(detail).map { url -> url to title }
-        }.distinctBy { (url, _) ->
-            val u = url.toHttpUrl()
-            u.host + u.encodedPath.replace(Regex("""/(?:scale_[^/]+|screen_[^/]+|original)/"""), "/")
-        }.take(8)
 
-        candidatePairs.map { (url, title) ->
-            async { ComicBannerResolver.probeLandscapeArtwork(url, title) }
-        }.awaitAll().filterNotNull().take(6)
+        collected.distinctBy { canonicalUrlKey(it.url) }.take(10)
     }
 
-    suspend fun search(query: String, kind: String): List<BannerArtwork> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String, kind: String, context: android.content.Context? = null): List<BannerArtwork> = withContext(Dispatchers.IO) {
         val q = query.trim().take(100)
         require(kind in setOf("volume", "character"))
         if (q.length < 2) return@withContext emptyList()
@@ -195,23 +322,21 @@ internal object CatalogBanners {
             emptyList()
         }
 
-        val items = if (primaryItems.isNotEmpty()) {
-            primaryItems
-        } else {
-            val fallback = try {
-                fallbackViaCatalogDetails(q, kind)
+        val fallback = if (primaryItems.size < 6) {
+            try {
+                fallbackViaCatalogDetails(q, kind, context)
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (_: Exception) {
                 emptyList()
             }
-            if (fallback.isNotEmpty()) {
-                fallback
-            } else if (primaryError != null) {
-                throw primaryError
-            } else {
-                emptyList()
-            }
+        } else {
+            emptyList()
+        }
+
+        val items = (primaryItems + fallback).distinctBy { canonicalUrlKey(it.url) }.take(10)
+        if (items.isEmpty() && primaryError != null) {
+            throw primaryError
         }
         synchronized(cache) { cache[key] = BannerCacheValue(items, System.currentTimeMillis()) }
         items
@@ -227,9 +352,30 @@ internal object CatalogBanners {
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }) ?: error("Imagem inválida")
     }
 
+    private fun decodeForBannerCrop(bytes: ByteArray): Bitmap {
+        require(bytes.isNotEmpty() && bytes.size <= 6 * 1024 * 1024) { "Imagem inválida." }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth in 180..32768 && bounds.outHeight in 120..32768) { "Imagem inválida." }
+        var sample = 1
+        while (bounds.outWidth / sample > 1800 || bounds.outHeight / sample > 1800) sample *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }) ?: error("Imagem inválida.")
+    }
+
     suspend fun bitmap(url: String): Bitmap = withContext(Dispatchers.IO) {
-        require(allowed(url)) { "Imagem não permitida." }
-        decode(read(url, 6L * 1024 * 1024))
+        val upgraded = upgradeArtworkUrl(url)
+        require(allowedBannerSource(upgraded) || allowedBannerSource(url)) { "Imagem não permitida." }
+        val bytes = try {
+            if (allowedBannerSource(upgraded)) read(upgraded, 6L * 1024 * 1024) else read(url, 6L * 1024 * 1024)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            read(url, 6L * 1024 * 1024)
+        }
+        decodeForBannerCrop(bytes)
     }
 
     suspend fun bitmapFromBannerValue(bannerValue: String): Bitmap = withContext(Dispatchers.IO) {
@@ -237,16 +383,7 @@ internal object CatalogBanners {
         if (trimmed.startsWith("data:image/", ignoreCase = true) && trimmed.contains(";base64,")) {
             val base64Part = trimmed.substringAfter(";base64,")
             val bytes = Base64.decode(base64Part, Base64.DEFAULT)
-            require(bytes.isNotEmpty() && bytes.size <= 6 * 1024 * 1024) { "Imagem inválida." }
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-            require(bounds.outWidth in 240..32768 && bounds.outHeight in 120..32768) { "Imagem inválida." }
-            var sample = 1
-            while (bounds.outWidth / sample > 1800 || bounds.outHeight / sample > 1800) sample *= 2
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
-                inSampleSize = sample
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }) ?: error("Imagem inválida.")
+            decodeForBannerCrop(bytes)
         } else {
             bitmap(trimmed)
         }

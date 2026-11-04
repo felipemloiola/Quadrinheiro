@@ -226,27 +226,53 @@ internal object FavoritePortraits {
         }
     }
 
+    private fun upgradePortraitQuality(raw: String): String {
+        val trimmed = raw.trim()
+        return when {
+            trimmed.contains("cdn.jsdelivr.net/gh/akabab/superhero-api") && trimmed.contains("/images/md/") ->
+                trimmed.replace("/images/md/", "/images/lg/")
+            trimmed.contains("comicvine") && (trimmed.contains("/scale_small/") || trimmed.contains("/scale_avatar/")) ->
+                trimmed.replace("/scale_small/", "/scale_super/").replace("/scale_avatar/", "/scale_super/")
+            else -> trimmed
+        }
+    }
+
     private suspend fun loadChoicesInternal(display: String, rawSnapshot: String): List<String> {
-        return withTimeoutOrNull(8500L) {
-            val snap = snapshot(rawSnapshot)
-            val snapImg = snap?.optString("imageUrl").orEmpty()
-            val original = snap?.optString("name").orEmpty().ifBlank {
-                val base = display.substringBefore('(').trim()
-                CharacterDirectory.portuguese.entries.firstOrNull { (_, pt) -> normalized(pt) == normalized(base) }?.key ?: base
-            }
-            val linked = linkedId(rawSnapshot)
-            if (linked == null && original.trim().length < 2) return@withTimeoutOrNull emptyList<String>()
+        val snap = snapshot(rawSnapshot)
+        val snapImg = snap?.optString("image").orEmpty().ifBlank { snap?.optString("imageUrl").orEmpty() }
+        val original = snap?.optString("name").orEmpty().ifBlank {
+            val base = display.substringBefore('(').trim()
+            CharacterDirectory.portuguese.entries.firstOrNull { (_, pt) -> normalized(pt) == normalized(base) }?.key ?: base
+        }
+        val linked = linkedId(rawSnapshot)
+        if (linked == null && original.trim().length < 2) return emptyList()
 
-            val collected = mutableListOf<String>()
-            if (publicImage(snapImg)) collected += snapImg
+        val collected = mutableListOf<String>()
+        if (publicImage(snapImg)) {
+            collected += upgradePortraitQuality(snapImg)
+            collected += snapImg
+        }
 
+        // Local verified directory portraits for this exact character
+        val localDir = CharacterDirectory.searchLoaded(display)
+        collected += matchVerifiedCharacterPortraits(display, original, localDir).map(::upgradePortraitQuality)
+
+        withTimeoutOrNull(8500L) {
             val id = resolveCharacterId(display, original, rawSnapshot)
             if (id != null) {
                 val detail = runCatching { ComicVineCatalog.details("character", id) }.getOrNull()
                 if (detail != null) {
-                    collected += resourceImages(detail, id)
-                    if (collected.distinctBy(::key).size < 6) {
-                        collected += issuePortraits(detail, id)
+                    collected += resourceImages(detail, id).map(::upgradePortraitQuality)
+                    val charNorm = normalized(original.substringBefore('('))
+                    if (collected.distinctBy(::key).size < 4 && charNorm.isNotBlank()) {
+                        val soloIssueCovers = detail.issues
+                            .filter { issue ->
+                                val titleNorm = normalized(issue.displayTitle)
+                                titleNorm == charNorm || titleNorm.startsWith("$charNorm ")
+                            }
+                            .map { upgradePortraitQuality(it.coverUrl) }
+                            .filter(::providerImage)
+                        collected += soloIssueCovers
                     }
                 }
             }
@@ -255,11 +281,22 @@ internal object FavoritePortraits {
                 val civil = display.substringAfter('(', "").substringBefore(')').trim()
                 val query = if (civil.length >= 3 && id == null) "$original $civil" else original
                 val supplementary = runCatching { ComicVineCatalog.superheroCharacters(query) }.getOrDefault(emptyList())
-                collected += matchVerifiedCharacterPortraits(display, original, supplementary)
+                collected += matchVerifiedCharacterPortraits(display, original, supplementary).map(::upgradePortraitQuality)
             }
 
-            collected.filter(::publicImage).distinctBy(::key).take(6)
-        } ?: throw IOException("Imagens temporariamente indisponíveis")
+            if (collected.distinctBy(::key).size < 6) {
+                val cvCandidates = runCatching { ComicVineCatalog.characters(original) }.getOrDefault(emptyList())
+                collected += matchVerifiedCharacterPortraits(display, original, cvCandidates).map(::upgradePortraitQuality)
+            }
+        }
+
+        val finalChoices = collected
+            .filter { publicImage(it) && !it.lowercase().contains("blank") && !it.lowercase().contains("question_mark") }
+            .distinctBy(::key)
+            .take(6)
+
+        if (finalChoices.isEmpty()) throw IOException("Imagens temporariamente indisponíveis")
+        return finalChoices
     }
 }
 

@@ -591,21 +591,26 @@ fun QuadrinheiroApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(themeColors.bgPrimary)
                     .nestedScroll(tabBarScrollConnection)
             ) {
                 // 1. CAMADA GRAVADA NO mainContentBackdrop (Fundo + Telas)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(themeColors.bgPrimary)
                         .layerBackdrop(
                             backdrop = mainContentBackdrop,
-                            reuseRecordedContent = true,
+                            reuseRecordedContent = false,
                             freezeSnapshot = isExtremeFling
                         )
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
                     // Usa a PRÓPRIA IMAGEM DA CAPA da HQ em leitura com desfoque atmosférico e efeitos (igual ao iOS / Apple Books)
+                    // Nunca aparece na aba Perfil.
                     val hasReadingCoverBg = isFirstFrameRendered &&
+                        activeTab != "profile" &&
+                        !(activeTab == "settings" && settingsSubPage == "profile") &&
                         currentlyReadingComic != null &&
                         appSettings.backgroundExtension &&
                         resolvedCoverUrl.isNotEmpty()
@@ -613,13 +618,18 @@ fun QuadrinheiroApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .background(themeColors.bgPrimary)
                             .layerBackdrop(
                                 backdrop = backgroundBackdrop,
-                                reuseRecordedContent = true,
+                                reuseRecordedContent = false,
                                 freezeSnapshot = isExtremeFling
                             )
-                            .background(themeColors.bgPrimary)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(themeColors.bgPrimary)
+                        )
                         // Neutral system surface; cover atmosphere supplies the only background tint.
                         // Cover light fades into the neutral surface within the top quarter.
                         if (hasReadingCoverBg) {
@@ -1013,11 +1023,8 @@ fun QuadrinheiroApp(
 
                 // Modal de Informações e Sinopse (ao clicar em qualquer HQ na aba Buscar)
                 infoModalComic?.let { currentInfoComic ->
-                    val savedMatch = remember(currentInfoComic.externalId, currentInfoComic.id, comics) {
-                        comics.firstOrNull {
-                            (currentInfoComic.externalId.isNotBlank() && it.externalId == currentInfoComic.externalId) ||
-                                (currentInfoComic.id.isNotBlank() && it.id == currentInfoComic.id)
-                        }
+                    val savedMatch = remember(currentInfoComic.externalId, currentInfoComic.id, currentInfoComic.displayTitle, comics) {
+                        com.example.model.catalogEntryForEditing(currentInfoComic, comics)
                     }
                     ComicInfoSynopsisSheetModal(
                         onCoverSelected = viewModel::updateComicCover, onSaveRegistration=viewModel::saveComic,onDeleteRegistration=viewModel::deleteComic,
@@ -1051,12 +1058,14 @@ fun QuadrinheiroApp(
 
                 // Cataloging & Review Sheet Modal
                 selectedComic?.let { currentComic ->
-                    val isExisting = remember(currentComic.id, comics) {
-                        comics.any { it.id == currentComic.id }
+                    val existingMatch = remember(currentComic.id, currentComic.externalId, currentComic.displayTitle, comics) {
+                        com.example.model.catalogEntryForEditing(currentComic, comics)
                     }
+                    val isExisting = existingMatch != null
+                    val comicToDisplay = existingMatch ?: currentComic
                     CatalogSheetModal(
                         readerProfile = profile, onLogin = { viewModel.openAuthModalForLinking() },
-                        selectedComic = currentComic,
+                        selectedComic = comicToDisplay,
                         isExistingInShelf = isExisting,
                         isSheetExpanded = isSheetExpanded,
                         appSettings = appSettings,

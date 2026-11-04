@@ -51,12 +51,23 @@ internal fun BannerArtworkPicker(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     fun submit() {
-        if (query.trim().length >= 2) {
-            submitted = query.trim() to if (kind == 1) "character" else "volume"
+        val clean = query.trim().ifBlank { if (kind == 1) "Batman" else "Batman" }
+        if (clean.length >= 2) {
+            submitted = clean to if (kind == 1) "character" else "volume"
             generation++
         }
     }
-    LaunchedEffect(Unit) { if (query.trim().length >= 2) submit() }
+    LaunchedEffect(query, kind) {
+        val trimmed = query.trim()
+        if (trimmed.length >= 2) {
+            kotlinx.coroutines.delay(320)
+            submitted = trimmed to if (kind == 1) "character" else "volume"
+            generation++
+        } else if (trimmed.isEmpty() && submitted == null) {
+            submitted = "Batman" to if (kind == 1) "character" else "volume"
+            generation++
+        }
+    }
     LaunchedEffect(submitted, generation) {
         items = emptyList()
         errorMessage = null
@@ -65,7 +76,7 @@ internal fun BannerArtworkPicker(
         val token = generation
         loading = true
         try {
-            val next = CatalogBanners.search(request.first, request.second)
+            val next = CatalogBanners.search(request.first, request.second, context)
             if (submitted == request && generation == token) items = next
         } catch (cancel: CancellationException) {
             throw cancel

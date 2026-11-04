@@ -136,9 +136,16 @@ internal object CatalogSearchPolicy {
         if (c.publisher.isBlank() || c.authors.isBlank() || c.releaseYear <= 0 || c.format.isBlank()) return "id:${c.externalId.ifBlank { c.id }}"
         return "edition:${normalize(c.displayTitle)}|${normalize(c.authors)}|${normalize(c.publisher)}|${c.releaseYear}|${normalize(c.format)}|${c.issueNumber}"
     }
-    private fun quality(c: ComicEntry) = (if (canonicalIsbn(c.isbn) != null) 4 else 0) + (if (c.pageCount > 0) 3 else 0) +
-        (if (c.coverUrl.isNotBlank()) 2 else 0) + (if (c.externalId.startsWith("ab-BR-")) 2 else 0) +
-        (if (isPortugueseEdition(c)) 2 else 0) + (if (c.authors.isNotBlank()) 1 else 0)
+    private fun quality(c: ComicEntry) =
+        (if (canonicalIsbn(c.isbn) != null) 4 else 0) +
+        (if (c.pageCount > 0) 6 else 0) +
+        (if (c.coverUrl.isNotBlank()) 3 else 0) +
+        (if (c.externalId.startsWith("ab-BR-")) 2 else 0) +
+        (if (isPortugueseEdition(c)) 4 else 0) +
+        (if (c.authors.isNotBlank()) 2 else 0) +
+        (if (c.publisher.isNotBlank()) 1 else 0) +
+        (if (c.synopsis.isNotBlank() || c.synopsisPtBr.isNotBlank()) 2 else 0)
+
     fun unique(items: List<ComicEntry>): List<ComicEntry> {
         val result = LinkedHashMap<String, ComicEntry>()
         for (candidate in items) {
@@ -151,11 +158,74 @@ internal object CatalogSearchPolicy {
         }
         return result.values.toList()
     }
+
+    private fun workDeduplicationKey(c: ComicEntry): String {
+        val rawTitle = c.titlePtBr.ifBlank {
+            PortugueseComicTranslator.translateTitleToPtBr(c.displayTitle.ifBlank { c.title })
+                .ifBlank { c.displayTitle.ifBlank { c.title } }
+        }
+        val canonicalWork = PortugueseComicTranslator.canonicalWorkKey(rawTitle)
+            .ifBlank { normalize(c.displayTitle.ifBlank { c.title }) }
+        val issuePart = if (c.issueNumber > 0) "#${c.issueNumber}" else ""
+        return "$canonicalWork$issuePart"
+    }
+
+    private fun mergeComplementaryEditionData(primary: ComicEntry, secondary: ComicEntry): ComicEntry {
+        return primary.copy(
+            titlePtBr = primary.titlePtBr.ifBlank {
+                secondary.titlePtBr.ifBlank {
+                    if (isPortugueseEdition(secondary) && PortugueseComicTranslator.isPortugueseText(secondary.title)) secondary.title else ""
+                }
+            },
+            synopsisPtBr = primary.synopsisPtBr.ifBlank {
+                secondary.synopsisPtBr.ifBlank {
+                    if (isPortugueseEdition(secondary) && PortugueseComicTranslator.isPortugueseText(secondary.synopsis)) secondary.synopsis else ""
+                }
+            },
+            synopsis = primary.synopsis.ifBlank { secondary.synopsis },
+            authors = primary.authors.ifBlank { secondary.authors },
+            publisher = primary.publisher.ifBlank { secondary.publisher },
+            pageCount = if (primary.pageCount > 0) primary.pageCount else secondary.pageCount,
+            releaseYear = if (primary.releaseYear > 0) primary.releaseYear else secondary.releaseYear,
+            isbn = primary.isbn.ifBlank { secondary.isbn },
+            coverUrl = primary.coverUrl.ifBlank { secondary.coverUrl }
+        )
+    }
+
+    internal fun deduplicateByCanonicalWork(items: List<ComicEntry>, language: String = "ALL"): List<ComicEntry> {
+        val uniqueItems = unique(items)
+        val grouped = LinkedHashMap<String, ComicEntry>()
+        for (item in uniqueItems) {
+            val key = workDeduplicationKey(item)
+            if (key.isBlank()) continue
+            val existing = grouped[key]
+            if (existing == null) {
+                grouped[key] = item
+            } else {
+                val existingScore = quality(existing) + (if (isPortugueseEdition(existing)) (if (language == "PT") 8 else 4) else 0)
+                val candidateScore = quality(item) + (if (isPortugueseEdition(item)) (if (language == "PT") 8 else 4) else 0)
+                if (candidateScore > existingScore) {
+                    grouped[key] = mergeComplementaryEditionData(item, existing)
+                } else {
+                    grouped[key] = mergeComplementaryEditionData(existing, item)
+                }
+            }
+        }
+        return grouped.values.toList()
+    }
+
     fun ranked(items: List<ComicEntry>, queries: List<String>, language: String = "ALL"): List<ComicEntry> {
         val expanded = queries.flatMap { searchTerms(it) }.map(::normalize).filter(String::isNotBlank).distinct()
         val primaryTerms = queries.map(::normalize).filter(String::isNotBlank)
         val words = expanded.flatMap { it.split(' ') }.filter { it.length >= 3 }.distinct()
-        return unique(items).sortedByDescending { c ->
+        val deduplicated = deduplicateByCanonicalWork(items, language)
+        val withPagesCount = deduplicated.count { it.pageCount > 0 }
+        val filtered = if (withPagesCount >= 4) {
+            deduplicated.filter { it.pageCount > 0 || it.authors.isNotBlank() || !it.isOnlineResult }
+        } else {
+            deduplicated
+        }
+        return filtered.sortedByDescending { c ->
             val displayTitle = normalize(c.displayTitle)
             val origTitle = normalize(c.title)
             val transTitle = normalize(PortugueseComicTranslator.translateTitleToPtBr(c.title))
@@ -167,8 +237,10 @@ internal object CatalogSearchPolicy {
                 expanded.any { q -> titles.any { it.contains(q) } } -> 120
                 else -> words.count { w -> titles.any { " $it ".contains(" $w ") } } * 12
             }
-            val langBonus = if (isPortugueseEdition(c)) (if (language == "PT") 30 else 8) else 0
-            relevance + langBonus + quality(c) * 2
+            val langBonus = if (isPortugueseEdition(c)) (if (language == "PT") 36 else 16) else 0
+            val pageBonus = if (c.pageCount > 0) 28 else -18
+            val metadataBonus = (if (c.authors.isNotBlank()) 10 else 0) + (if (c.synopsis.isNotBlank() || c.synopsisPtBr.isNotBlank()) 8 else 0)
+            relevance + langBonus + pageBonus + metadataBonus + quality(c) * 2
         }
     }
 
@@ -183,17 +255,25 @@ internal object CatalogSearchPolicy {
         language: String,
         excludedIds: Set<String> = emptySet(),
         limit: Int = 80
-    ): List<ComicEntry> = filterAndRankForQuery(candidates, rawQuery, excludedIds, limit)
+    ): List<ComicEntry> = filterAndRankForQueryInternal(candidates, rawQuery, language, excludedIds, limit)
 
     fun filterAndRankForQuery(
         candidates: List<ComicEntry>,
         rawQuery: String,
         excludedIds: Set<String> = emptySet(),
         limit: Int = 80
+    ): List<ComicEntry> = filterAndRankForQueryInternal(candidates, rawQuery, "PT", excludedIds, limit)
+
+    private fun filterAndRankForQueryInternal(
+        candidates: List<ComicEntry>,
+        rawQuery: String,
+        language: String,
+        excludedIds: Set<String> = emptySet(),
+        limit: Int = 80
     ): List<ComicEntry> {
         val cleanQuery = rawQuery.trim()
         if (cleanQuery.isEmpty()) {
-            return unique(candidates.filter { it.id !in excludedIds }).take(limit)
+            return deduplicateByCanonicalWork(candidates.filter { it.id !in excludedIds }, language).take(limit)
         }
         val q = normalize(cleanQuery)
         if (q.isEmpty()) return emptyList()
@@ -203,8 +283,9 @@ internal object CatalogSearchPolicy {
             .distinct()
         val queryTokens = q.split(' ').filter { it.isNotBlank() }
 
+        val deduplicated = deduplicateByCanonicalWork(candidates, language)
         val scored = mutableListOf<Pair<ComicEntry, Int>>()
-        for (c in unique(candidates)) {
+        for (c in deduplicated) {
             if (c.id in excludedIds) continue
             val displayNorm = normalize(c.displayTitle)
             val origNorm = normalize(c.title)
@@ -237,10 +318,15 @@ internal object CatalogSearchPolicy {
             }
 
             if (matchScore > 0) {
-                val totalScore = matchScore + (if (isPortugueseEdition(c)) 14 else 0) + quality(c) * 2
+                val langBonus = if (isPortugueseEdition(c)) (if (language == "PT") 32 else 18) else 0
+                val pageBonus = if (c.pageCount > 0) 26 else -14
+                val metaBonus = (if (c.authors.isNotBlank()) 8 else 0) + (if (c.synopsis.isNotBlank() || c.synopsisPtBr.isNotBlank()) 6 else 0)
+                val totalScore = matchScore + langBonus + pageBonus + metaBonus + quality(c) * 2
                 scored.add(c to totalScore)
             }
         }
-        return scored.sortedByDescending { it.second }.map { it.first }.take(limit)
+        val sorted = scored.sortedByDescending { it.second }.map { it.first }
+        val withPages = sorted.filter { it.pageCount > 0 || !it.isOnlineResult }
+        return (if (withPages.size >= 6) withPages + sorted.filterNot { it in withPages }.take(4) else sorted).take(limit)
     }
 }

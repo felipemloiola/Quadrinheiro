@@ -34,8 +34,9 @@ private object CommunityMemory {
 @Composable
 internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, onLogin: () -> Unit, comic: ComicEntry? = null) {
     val context = LocalContext.current
+    val storage = remember { SafeStorage(context) }
     val repo = remember { CommunityRepository(context) }
-    val uid = repo.currentUid()
+    val uid = repo.activeAccountUid()
     val t = LocalIOS27Theme.current
     if (uid == null) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -45,54 +46,85 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
     }
     key(uid) {
         val scope = rememberCoroutineScope()
-        val cacheKey=uid+":"+(comic?.let(::communityComicKey) ?: "feed")
-        val cached=remember(cacheKey){CommunityMemory.get(cacheKey)}
-        var posts by remember(cacheKey) { mutableStateOf(cached?.page?.items.orEmpty()) }
+        val comicFilterKey = comic?.let(::communityComicKey)
+        val cacheKey = uid + ":" + (comicFilterKey ?: "feed")
+        val publicationRevision by CommunityAutoSync.revision.collectAsState()
+        val localRatedPosts = remember(comics, profile, uid, publicationRevision, comicFilterKey) {
+            CommunityAutoSync.localReviews(storage, uid, comics, profile, comicFilterKey)
+        }
+        val cached = remember(cacheKey) { CommunityMemory.get(cacheKey) }
+        var cloudPosts by remember(cacheKey) { mutableStateOf(cached?.page?.items.orEmpty()) }
+        val posts = remember(localRatedPosts, cloudPosts) {
+            (cloudPosts + localRatedPosts)
+                .distinctBy { it.id }
+                .sortedByDescending { it.createdAt.toDate().time }
+                .take(100)
+        }
         var cursor by remember { mutableStateOf<CommunityCursor?>(null) }
-        var more by remember { mutableStateOf(true) }
-        var attempted by remember {mutableStateOf(cached!=null)}
+        var more by remember { mutableStateOf(false) }
+        var attempted by remember { mutableStateOf(cached != null || localRatedPosts.isNotEmpty()) }
         var busy by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
-        var composing by remember { mutableStateOf(false) }
         var discussion by remember { mutableStateOf<CommunityReview?>(null) }
-        val publicationRevision by CommunityAutoSync.revision.collectAsState()
+
         fun load(refresh: Boolean = false) {
             if (busy) return
-            attempted=true;busy = true; error = null
+            attempted = true
+            val firebaseUid = repo.currentUid()
+            if (firebaseUid == null) {
+                error = null
+                more = false
+                return
+            }
+            busy = true
+            error = null
             scope.launch {
                 try {
-                    val page = kotlinx.coroutines.withTimeout(8000){repo.reviews(if (refresh) null else cursor, comic?.let(::communityComicKey))}
-                    if(refresh)CommunityMemory.put(cacheKey,page,publicationRevision)
-                    if (repo.currentUid() == uid) {
-                        posts = ((if (refresh) emptyList() else posts) + page.items).distinctBy { it.id }.takeLast(100)
-                        cursor = page.cursor; more = page.hasMore
+                    if (refresh) {
+                        runCatching { CommunityAutoSync.flush(context, firebaseUid, storage) }
                     }
-                } catch (cancel: CancellationException) { throw cancel }
-                catch (_: Exception) { error = "Não foi possível carregar as publicações. Tente novamente." }
-                finally { busy = false }
+                    val page = kotlinx.coroutines.withTimeout(8000) {
+                        repo.reviews(if (refresh) null else cursor, comicFilterKey)
+                    }
+                    if (refresh) CommunityMemory.put(cacheKey, page, publicationRevision)
+                    if (repo.activeAccountUid() == uid) {
+                        cloudPosts = ((if (refresh) emptyList() else cloudPosts) + page.items).distinctBy { it.id }.takeLast(100)
+                        cursor = page.cursor
+                        more = page.hasMore
+                    }
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                    if (posts.isEmpty()) {
+                        error = "Não foi possível carregar as publicações da nuvem. Tente novamente."
+                    }
+                } finally {
+                    busy = false
+                }
             }
         }
-        LaunchedEffect(uid,publicationRevision,comic?.externalId) {
-            if(cached==null||cached.revision!=publicationRevision)load(true) else {cursor=cached.page.cursor;more=cached.page.hasMore}
+        LaunchedEffect(uid, publicationRevision, comic?.externalId) {
+            if (cached == null || cached.revision != publicationRevision) load(true)
+            else { cursor = cached.page.cursor; more = cached.page.hasMore }
         }
         LazyColumn(Modifier.fillMaxSize().testTag("community_feed"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (posts.isEmpty() && attempted && !busy && error == null) item {
-                Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=48.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){
-                    Icon(Icons.Default.ChatBubbleOutline,null,tint=t.textSecondary,modifier=Modifier.size(32.dp))
-                    Text("Sem avaliações por enquanto",color=t.textPrimary,fontSize=18.sp,fontWeight=FontWeight.SemiBold,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
-                    Text("As avaliações e resenhas aparecem aqui quando uma leitura é salva.",color=t.textSecondary,fontSize=14.sp,lineHeight=21.sp,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Icons.Default.ChatBubbleOutline, null, tint = t.textSecondary, modifier = Modifier.size(32.dp))
+                    Text("Sem avaliações por enquanto", color = t.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text("As avaliações e resenhas aparecem aqui quando uma leitura é avaliada.", color = t.textSecondary, fontSize = 14.sp, lineHeight = 21.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
-            if(posts.isEmpty()&&(!attempted||busy))items(3){
-                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                        Box(Modifier.size(56.dp,84.dp).background(t.textTertiary.copy(alpha=.10f),RoundedCornerShape(8.dp)))
-                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                            Box(Modifier.fillMaxWidth(.5f).height(12.dp).background(t.textTertiary.copy(alpha=.12f),RoundedCornerShape(6.dp)))
-                            Box(Modifier.fillMaxWidth(.85f).height(18.dp).background(t.textTertiary.copy(alpha=.12f),RoundedCornerShape(6.dp)))
+            if (posts.isEmpty() && (!attempted || busy)) items(3) {
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.size(56.dp, 84.dp).background(t.textTertiary.copy(alpha = .10f), RoundedCornerShape(8.dp)))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.fillMaxWidth(.5f).height(12.dp).background(t.textTertiary.copy(alpha = .12f), RoundedCornerShape(6.dp)))
+                            Box(Modifier.fillMaxWidth(.85f).height(18.dp).background(t.textTertiary.copy(alpha = .12f), RoundedCornerShape(6.dp)))
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(12.dp).background(t.textTertiary.copy(alpha=.10f),RoundedCornerShape(6.dp)))
+                    Box(Modifier.fillMaxWidth().height(12.dp).background(t.textTertiary.copy(alpha = .10f), RoundedCornerShape(6.dp)))
                 }
             }
             items(posts, key = { it.id }) { post ->
@@ -100,9 +132,10 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         BookCover(post.cover, post.title, spine3d = false, modifier = Modifier.width(56.dp).height(84.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text(post.author, color = t.textSecondary, fontSize = 13.sp)
+                            val authorLabel = if (post.handle.isNotBlank() && !post.author.contains(post.handle)) "${post.author} • ${post.handle}" else post.author
+                            Text(authorLabel, color = t.textSecondary, fontSize = 13.sp)
                             Text(post.title, color = t.textPrimary, fontWeight = FontWeight.SemiBold)
-                            if (post.rating > 0) Text("★ ${post.rating.toString().removeSuffix(".0")}", color = t.accent)
+                            if (post.rating > 0) Text("★ ${post.rating.toString().removeSuffix(".0")}", color = t.accent, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     if (post.body.isNotBlank()) Text(post.body, color = t.textPrimary, lineHeight = 23.sp)
@@ -111,46 +144,65 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                             Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp), tint = t.accent)
                             Spacer(Modifier.width(8.dp)); Text("Comentários", color = t.accent)
                         }
-
                     }
                 }
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     error?.let { Text(it, color = t.textSecondary) }
-                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center){CircularProgressIndicator(Modifier.size(24.dp),color=t.accent,strokeWidth=2.dp)}
+                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp) }
                     else if (!busy && (more || error != null)) TextButton(onClick = { load() }) { Text(if (error == null) "Ver mais" else "Tentar novamente", color = t.accent) }
                 }
             }
         }
-        discussion?.let { post -> CommunityComments(repo, uid, profile, post) { discussion = null } }
+        discussion?.let { post -> CommunityComments(repo, storage, uid, profile, post) { discussion = null } }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CommunityComments(repo: CommunityRepository, uid: String, profile: ReaderProfile, post: CommunityReview, onClose: () -> Unit) {
+private fun CommunityComments(
+    repo: CommunityRepository,
+    storage: SafeStorage,
+    uid: String,
+    profile: ReaderProfile,
+    post: CommunityReview,
+    onClose: () -> Unit
+) {
     val t = LocalIOS27Theme.current
     val scope = rememberCoroutineScope()
-    var comments by remember(post.id) { mutableStateOf(emptyList<CommunityComment>()) }
+    var comments by remember(post.id) { mutableStateOf(CommunityAutoSync.localComments(storage, post.id)) }
     var cursor by remember { mutableStateOf<CommunityCursor?>(null) }
-    var more by remember { mutableStateOf(true) }
+    var more by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var body by remember { mutableStateOf("") }
     fun load(refresh: Boolean = false) {
+        val localList = CommunityAutoSync.localComments(storage, post.id)
+        if (repo.currentUid() == null) {
+            comments = localList
+            more = false
+            return
+        }
         if (busy) return
         busy = true; error = false
         scope.launch {
             try {
                 val page = repo.comments(post.id, if (refresh) null else cursor)
-                if (repo.currentUid() == uid) {
-                    comments = ((if (refresh) emptyList() else comments) + page.items).distinctBy { it.id }.takeLast(100)
+                if (repo.activeAccountUid() == uid) {
+                    comments = ((if (refresh) emptyList() else comments) + page.items + localList)
+                        .distinctBy { it.id }
+                        .sortedByDescending { it.createdAt.toDate().time }
+                        .takeLast(100)
                     cursor = page.cursor; more = page.hasMore
                 }
-            } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { error = true }
-            finally { busy = false }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                comments = localList
+            } finally {
+                busy = false
+            }
         }
     }
     LaunchedEffect(post.id) { load(true) }
@@ -161,11 +213,27 @@ private fun CommunityComments(repo: CommunityRepository, uid: String, profile: R
                 Column {
                     AppleTextField(body, { body = it.take(1200) }, "Adicione um comentário")
                     TextButton(enabled = body.isNotBlank() && !busy, onClick = {
+                        val commentText = body.trim()
+                        if (commentText.isEmpty()) return@TextButton
                         busy = true
                         scope.launch {
-                            try { repo.comment(uid, post.id, profile, body); body = ""; busy = false; load(true) }
-                            catch (cancel: CancellationException) { throw cancel }
-                            catch (_: Exception) { error = true; busy = false }
+                            try {
+                                val fbUid = repo.currentUid()
+                                if (fbUid != null) {
+                                    runCatching { repo.comment(fbUid, post.id, profile, commentText) }
+                                        .onFailure { CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText) }
+                                } else {
+                                    CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText)
+                                }
+                                body = ""
+                                busy = false
+                                load(true)
+                            } catch (cancel: CancellationException) {
+                                throw cancel
+                            } catch (_: Exception) {
+                                error = true
+                                busy = false
+                            }
                         }
                     }) { Text("Enviar", color = t.accent) }
                 }
@@ -176,9 +244,18 @@ private fun CommunityComments(repo: CommunityRepository, uid: String, profile: R
                     Text(comment.body, color = t.textPrimary)
                     if (comment.ownerId == uid || post.ownerId == uid) TextButton(onClick = {
                         scope.launch {
-                            try { repo.deleteComment(uid, post.id, comment.id); comments = comments.filterNot { it.id == comment.id } }
-                            catch (cancel: CancellationException) { throw cancel }
-                            catch (_: Exception) { error = true }
+                            try {
+                                CommunityAutoSync.deleteLocalComment(storage, post.id, comment.id)
+                                val fbUid = repo.currentUid()
+                                if (fbUid != null && !comment.id.startsWith("local_c_")) {
+                                    runCatching { repo.deleteComment(fbUid, post.id, comment.id) }
+                                }
+                                comments = comments.filterNot { it.id == comment.id }
+                            } catch (cancel: CancellationException) {
+                                throw cancel
+                            } catch (_: Exception) {
+                                error = true
+                            }
                         }
                     }) { Text("Excluir", color = t.textSecondary) }
                     HorizontalDivider(color = t.divider)
@@ -187,7 +264,7 @@ private fun CommunityComments(repo: CommunityRepository, uid: String, profile: R
             item {
                 if (error) Text("Não foi possível concluir. Tente novamente.", color = t.textSecondary)
                 if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = t.accent)
-                else if (more || error) TextButton(onClick = { load() }) { Text("Carregar comentários", color = t.accent) }
+                else if (more) TextButton(onClick = { load() }) { Text("Carregar comentários", color = t.accent) }
                 else if (comments.isEmpty()) Text("Ainda não há comentários.", color = t.textSecondary)
             }
         }

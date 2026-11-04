@@ -61,7 +61,7 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
         }
     }
     val collections = remember(catalog, recommendations) { linkedMapOf(
-        "Para você" to recommendations,
+        "Para você" to (if (recommendations.isNotEmpty()) recommendations else catalog.take(12)),
         "Para começar" to catalog.filter { it.displayTitle.contains("Ano Um", true) || it.displayTitle.contains("Watchmen", true) || it.displayTitle.contains("Maus", true) || it.displayTitle.contains("Sandman", true) }.ifEmpty { catalog.take(12) },
         "Universo DC" to catalog.filter { it.publisher.contains("DC", true) || it.publisher.contains("Vertigo", true) || it.displayTitle.contains("Batman", true) },
         "Universo Marvel" to catalog.filter { it.publisher.contains("Marvel", true) || it.displayTitle.contains("Aranha", true) || it.displayTitle.contains("Demolidor", true) }

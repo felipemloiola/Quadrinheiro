@@ -29,55 +29,15 @@ internal fun CatalogEditionMetadata(
     onRetryTranslation: (() -> Unit)? = null
 ) {
     val s = LocalAppleMaterials.current.scheme
-    val count = CatalogPagePolicy.count(pages)
     var expanded by remember(entryId) { mutableStateOf(false) }
     var overflowing by remember(synopsis) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        if (synopsis.isBlank() && metadataLoading) {
             Text(
-                text = if (count != null) "$count ${if (count == 1) "página" else "páginas"}"
-                else if (metadataLoading) "Buscando dados da edição…"
-                else "Páginas não informadas",
+                text = "Buscando dados da edição…",
                 color = s.textSecondary,
-                fontSize = 13.sp,
-                modifier = Modifier.testTag("edition_page_count")
-            )
-            if (count == null && !pageEditorOpen) {
-                TextButton(
-                    onClick = onOpenPageEditor,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.heightIn(min = 44.dp).testTag("inform_edition_pages")
-                ) {
-                    Text("Informar páginas", color = s.accentColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                }
-            } else if (count != null && !pageEditorOpen) {
-                TextButton(
-                    onClick = onOpenPageEditor,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.heightIn(min = 44.dp).testTag("edit_edition_pages")
-                ) {
-                    Text("Editar páginas", color = s.accentColor, fontSize = 12.5.sp)
-                }
-            }
-        }
-        if (pageEditorOpen) {
-            AppleTextField(
-                value = pages,
-                onChange = onChangePages,
-                placeholder = "Páginas (opcional)",
-                modifier = Modifier.testTag("edition_page_count_input")
-            )
-        }
-        if (pagesError) {
-            Text(
-                text = "Use um total entre 1 e 20.000 páginas.",
-                color = s.accentColor,
-                fontSize = 12.sp
+                fontSize = 13.sp
             )
         }
         if (synopsis.isNotBlank()) {

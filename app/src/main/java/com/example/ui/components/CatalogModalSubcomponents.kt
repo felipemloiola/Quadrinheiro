@@ -954,7 +954,10 @@ internal fun CatalogRatingAndFavoriteSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -964,6 +967,8 @@ internal fun CatalogRatingAndFavoriteSection(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                    softWrap = false,
                     color = s.textPrimary.copy(alpha = 0.85f)
                 )
                 if (draftComic.rating > 0f) {
@@ -972,16 +977,20 @@ internal fun CatalogRatingAndFavoriteSection(
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = s.accentColor,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.clickable {
                             onUpdateDraftComic { it.copy(rating = 0f) }
                         }
                     )
                 } else {
                     Text(
-                        text = "Toque ou arraste para avaliar",
+                        text = "Toque para avaliar",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = s.textSecondary
+                        color = s.textSecondary,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
@@ -994,7 +1003,9 @@ internal fun CatalogRatingAndFavoriteSection(
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .width(1.dp)
@@ -1011,6 +1022,8 @@ internal fun CatalogRatingAndFavoriteSection(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                    softWrap = false,
                     color = s.textPrimary.copy(alpha = 0.85f)
                 )
                 Box(

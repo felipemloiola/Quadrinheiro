@@ -591,6 +591,50 @@ object PortugueseComicTranslator {
     }
 
     /**
+     * Formata e limpa sinopses: remove tags HTML/entidades, converte palavras inteiramente
+     * maiúsculas (ALL CAPS como BATMAN, GOTHAM, EDIÇÃO) para caixa adequada e garante pontuação padrão.
+     */
+    fun formatCleanSynopsis(rawText: String): String {
+        if (rawText.isBlank()) return ""
+        val unescaped = android.text.Html.fromHtml(rawText, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+        var clean = unescaped
+            .replace(htmlTagRegex, " ")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace(whitespaceRegex, " ")
+            .trim()
+        if (clean.isBlank()) return ""
+
+        val allowedAcronyms = setOf("DC", "EUA", "HQ", "HQS", "TPB", "ISBN", "TV", "ID", "MD", "BR", "SP", "RJ", "UK", "US")
+        val words = clean.split(' ')
+        val allCapsCount = words.count { w ->
+            val letters = w.filter(Char::isLetter)
+            letters.length >= 3 && letters.all(Char::isUpperCase) && letters !in allowedAcronyms
+        }
+
+        // Se mais de 50% das palavras forem ALL CAPS, formata o bloco todo em caixa de sentença
+        if (words.size >= 4 && allCapsCount.toFloat() / words.size > 0.5f) {
+            clean = clean.lowercase().replaceFirstChar { it.uppercase() }
+        } else {
+            clean = words.joinToString(" ") { word ->
+                val letters = word.filter(Char::isLetter)
+                if (letters.length >= 3 && letters.all(Char::isUpperCase) && letters !in allowedAcronyms) {
+                    val lower = word.lowercase()
+                    lower.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                } else {
+                    word
+                }
+            }
+        }
+
+        // Garante letra maiúscula após ponto final
+        clean = clean.replace(Regex("""(?<=\.\s)([a-zà-ú])""")) { it.value.uppercase() }
+        return clean.trim()
+    }
+
+    /**
      * Gera uma chave canônica de obra (independente de idioma ou tipo de edição como Deluxe/TPB/Definitiva)
      * para impedir que a mesma HQ apareça repetida (ex: "Batman: Ano Um", "Batman: Year One", "Batman: Ano Um - Edição Definitiva").
      */

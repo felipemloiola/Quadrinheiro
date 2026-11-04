@@ -52,47 +52,90 @@ object CharacterDirectory {
         }
     }
     internal fun match(list: List<CharacterResult>, query: String): List<CharacterResult> {
-        val q=normalized(query.substringBefore('('))
-        fun popularity(c:CharacterResult):Int = when {
-            c.originalName=="Batman" && c.name.contains("Bruce") -> 1000
-            c.originalName=="Hal Jordan" -> 980
-            c.originalName=="Superman" -> 960
-            c.originalName=="Spider-Man" && c.name.contains("Peter") -> 950
-            c.originalName in listOf("Wonder Woman","Storm","Swamp Thing","Clayface","Green Arrow","Daredevil") -> 900
+        val q = normalized(query.substringBefore('('))
+        fun popularity(c: CharacterResult): Int = when {
+            c.originalName == "Batman" && c.name.contains("Bruce") -> 1000
+            c.originalName == "Hal Jordan" -> 980
+            c.originalName == "Superman" -> 960
+            c.originalName == "Spider-Man" && c.name.contains("Peter") -> 950
+            c.originalName in listOf("Wonder Woman", "Storm", "Swamp Thing", "Clayface", "Green Arrow", "Daredevil", "Wolverine", "The Flash", "Joker", "Harley Quinn", "Iron Man", "Captain America") -> 900
             else -> 0
         }
-        return list.filter { q.isBlank() || (it.aliases+it.name).any { normalized(it).contains(q) } }
-            .distinctBy { normalized(it.originalName)+normalized(it.name) }
-            .sortedWith(compareByDescending<CharacterResult> { if(normalized(it.originalName)==q || normalized(portuguese[it.originalName] ?: "")==q) 2000 else 0 }.thenByDescending(::popularity).thenBy { it.name }).take(if(q.isBlank()) 16 else 32)
+        fun score(c: CharacterResult): Int {
+            if (q.isBlank()) return 100 + popularity(c)
+            val normName = normalized(c.name)
+            val normBase = normalized(c.name.substringBefore('('))
+            val normCivil = normalized(c.name.substringAfter('(', "").substringBefore(')'))
+            val normOrig = normalized(c.originalName)
+            val normPt = normalized(portuguese[c.originalName] ?: "")
+            val primaryFields = listOf(normBase, normOrig, normPt, normCivil).filter { it.isNotBlank() }
+            return when {
+                primaryFields.any { it == q } || normName == q -> 2000
+                primaryFields.any { it.startsWith(q) } -> 1500
+                primaryFields.any { " $it ".contains(" $q ") } || " $normName ".contains(" $q ") -> 1200
+                primaryFields.any { it.contains(q) } || normName.contains(q) -> 900
+                q.length >= 4 && c.aliases.any { normalized(it) == q } -> 600
+                else -> 0
+            }
+        }
+        return list
+            .filter { c ->
+                val img = c.image.lowercase()
+                img.startsWith("https://") && !img.contains("blank") && !img.contains("question_mark") && !img.contains("default")
+            }
+            .mapNotNull { c ->
+                val s = score(c)
+                if (s > 0) c to s else null
+            }
+            .distinctBy { normalized(it.first.originalName) + "|" + normalized(it.first.name) }
+            .sortedWith(
+                compareByDescending<Pair<CharacterResult, Int>> { it.second }
+                    .thenByDescending { popularity(it.first) }
+                    .thenBy { it.first.name }
+            )
+            .map { it.first }
+            .take(if (q.isBlank()) 16 else 24)
     }
-    private var complete=false
-    private fun local(context:Context):List<CharacterResult> {
+
+    internal fun searchLoaded(query: String): List<CharacterResult> = match(entries.orEmpty(), query)
+
+    private var complete = false
+    private fun local(context: Context): List<CharacterResult> {
         entries?.let { return it }
-        val file=File(context.cacheDir,"character_directory_v2.json")
-        val cached=if(file.exists() && file.length() < 2000000) runCatching { parse(file.readText()) }.getOrNull() else null
-        complete=cached!=null
-        return (cached ?: context.assets.open("character-seed.json").bufferedReader().use { parse(it.readText()) }).also { entries=it }
+        val file = File(context.cacheDir, "character_directory_v2.json")
+        val cached = if (file.exists() && file.length() < 2000000) runCatching { parse(file.readText()) }.getOrNull() else null
+        complete = cached != null
+        return (cached ?: context.assets.open("character-seed.json").bufferedReader().use { parse(it.readText()) }).also { entries = it }
     }
-    suspend fun preload(context:Context) = withContext(Dispatchers.IO) {
+    suspend fun preload(context: Context) = withContext(Dispatchers.IO) {
         local(context)
         mutex.withLock {
-            val file=File(context.cacheDir,"character_directory_v2.json")
-            if(complete && System.currentTimeMillis()-file.lastModified()<7*86400000L) return@withLock
+            val file = File(context.cacheDir, "character_directory_v2.json")
+            if (complete && System.currentTimeMillis() - file.lastModified() < 7 * 86400000L) return@withLock
             try {
-                val client=MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(4,java.util.concurrent.TimeUnit.SECONDS).build()
+                val client = MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(4, java.util.concurrent.TimeUnit.SECONDS).build()
                 client.newCall(Request.Builder().url("https://quadrinheiro-catalog.uadrinheiro.workers.dev/characters.json").build()).execute().use { r ->
-                    check(r.isSuccessful);val raw=r.body!!.string();require(raw.length<2000000)
-                    val parsed=parse(raw);entries=parsed;complete=true;file.writeText(raw)
+                    check(r.isSuccessful); val raw = r.body!!.string(); require(raw.length < 2000000)
+                    val parsed = parse(raw); entries = parsed; complete = true; file.writeText(raw)
                 }
-            } catch(cancel:kotlinx.coroutines.CancellationException){throw cancel} catch(_:Exception) { }
+            } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel } catch (_: Exception) { }
         }
     }
     suspend fun search(context: Context, query: String): List<CharacterResult> = withContext(Dispatchers.IO) {
-        val immediate=match(local(context),query)
-        if(immediate.isNotEmpty()) return@withContext immediate
-        if(!complete) preload(context)
-        val indexed=match(entries.orEmpty(),query)
-        if(indexed.isNotEmpty()) return@withContext indexed
-        try { ComicVineCatalog.characters(query).take(24) } catch(cancel:kotlinx.coroutines.CancellationException){throw cancel} catch(_:Exception){emptyList()}
+        val immediate = match(local(context), query)
+        if (immediate.isNotEmpty() && (query.isBlank() || immediate.size >= 2)) return@withContext immediate
+        if (!complete) preload(context)
+        val indexed = match(entries.orEmpty(), query)
+        if (indexed.isNotEmpty()) return@withContext indexed
+        val remote = try {
+            val cv = runCatching { ComicVineCatalog.characters(query) }.getOrDefault(emptyList())
+            val sh = runCatching { ComicVineCatalog.superheroCharacters(query) }.getOrDefault(emptyList())
+            match(cv + sh, query)
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            emptyList()
+        }
+        (immediate + remote).distinctBy { normalized(it.originalName) + "|" + normalized(it.name) }.take(24)
     }
 }

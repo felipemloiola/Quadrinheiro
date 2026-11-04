@@ -339,29 +339,22 @@ fun CatalogSheetModal(
                     indication = null
                 ) {}
         ) {
-            // 1. Camada de fundo Liquid Glass na GPU capturada exclusivamente no sheetBackdrop do próprio modal
+            // 1. Camada de fundo Liquid Glass fluida e otimizada
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    // SINGLE_PASS_SHEET_BACKDROP_V16: only this background capture, not controls.
-                    .layerBackdrop(sheetBackdrop, reuseRecordedContent = true)
+                modifier = Modifier.matchParentSize()
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
-                    scrollOffsetProvider = { sheetScrollState.firstVisibleItemScrollOffset.toFloat() },
-                    dragOffsetYProvider = { sheet.offset },
+                    scrollOffsetProvider = { 0f },
+                    dragOffsetYProvider = { 0f },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
             }
 
-            // 2. Controles que agora refratam a PRÓPRIA superfície do menu de edição (e não a tela atrás do modal)
-            CompositionLocalProvider(
-                LocalLiquidGlassBackdrop provides sheetBackdrop
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
                 // 1. Grabber superior arrastável (para cima = tela cheia, para baixo = fechar)
                 Box(
                     modifier = Modifier
@@ -414,27 +407,23 @@ fun CatalogSheetModal(
                                 draftComic = draftComic,
                                 onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
                             )
-                            HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-                            CatalogEditionMetadata(
-                                entryId = draftComic.id,
-                                synopsis = draftComic.synopsisPtBr.ifBlank { draftComic.synopsis },
-                                pages = totalPagesInput,
-                                metadataLoading = metadataLoading,
-                                pageEditorOpen = pageEditorOpen,
-                                pagesError = pagesError,
-                                onOpenPageEditor = { pageEditorOpen = true },
-                                onChangePages = { value ->
-                                    pagesEdited = true
-                                    totalPagesInput = value.filter(Char::isDigit).take(5)
-                                    CatalogPagePolicy.count(totalPagesInput)?.let { count ->
-                                        draftComic = CatalogPagePolicy.withCount(draftComic, count)
-                                        pagesError = false
-                                    }
-                                },
-                                translationLoading = translationLoading,
-                                translationFailed = translationFailed,
-                                onRetryTranslation = { translationRetryToken++ }
-                            )
+                            val resolvedSynopsis = PortugueseComicTranslator.formatCleanSynopsis(draftComic.synopsisPtBr.ifBlank { draftComic.synopsis })
+                            if (resolvedSynopsis.isNotBlank() || metadataLoading) {
+                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                CatalogEditionMetadata(
+                                    entryId = draftComic.id,
+                                    synopsis = resolvedSynopsis,
+                                    pages = totalPagesInput,
+                                    metadataLoading = metadataLoading,
+                                    pageEditorOpen = false,
+                                    pagesError = false,
+                                    onOpenPageEditor = {},
+                                    onChangePages = {},
+                                    translationLoading = translationLoading,
+                                    translationFailed = translationFailed,
+                                    onRetryTranslation = { translationRetryToken++ }
+                                )
+                            }
                             HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                             Row(
                                 modifier = Modifier
@@ -679,7 +668,6 @@ fun CatalogSheetModal(
             }
         }
     }
-}
 }
 
 /**

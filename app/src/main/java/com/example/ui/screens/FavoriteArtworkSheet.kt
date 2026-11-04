@@ -43,8 +43,17 @@ internal fun FavoriteArtworkSheet(
         images = listOf(current).filter { it.isNotBlank() }
         try {
             if (comic != null) {
-                val alternatives = ComicVineCatalog.coverChoices(comic)
-                images = FavoritePortraits.merge(current, alternatives)
+                val primary = runCatching { ComicVineCatalog.coverChoices(comic) }.getOrDefault(emptyList())
+                val extras = if (primary.size < 3) {
+                    val bySearch = runCatching {
+                        ComicVineCatalog.search(comic.displayTitle, 0).items.map { it.coverUrl }
+                    }.getOrDefault(emptyList())
+                    val byApple = runCatching {
+                        PortugueseBookSources.appleBrazil(comic.displayTitle, 0).map { it.coverUrl }
+                    }.getOrDefault(emptyList())
+                    bySearch + byApple
+                } else emptyList()
+                images = FavoritePortraits.merge(current, primary + extras)
             } else {
                 FavoritePortraits.observeChoices(character.orEmpty(), current, portrait).collect { next ->
                     images = next
@@ -53,7 +62,7 @@ internal fun FavoriteArtworkSheet(
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (_: Exception) {
-            failed = true
+            if (images.isEmpty()) failed = true
         } finally {
             loading = false
         }

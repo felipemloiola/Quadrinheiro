@@ -2206,6 +2206,7 @@ class QuadrinheiroViewModel(
                 }.onFailure {
                     QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
                 }
+                runCatching { com.example.data.CommunityAutoSync.flush(appContext, uid, storage) }
             }
         } else if (!isCurrentSessionGuest()) {
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)

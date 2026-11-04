@@ -228,7 +228,9 @@ class QuadrinheiroAuthManager(
                     context = hostContext,
                     request = primaryRequest
                 )
-            } catch (_: NoCredentialException) {
+            } catch (cancelErr: GetCredentialCancellationException) {
+                throw cancelErr
+            } catch (_: GetCredentialException) {
                 // Fallback para GetGoogleIdOption sem filtro de contas pré-autorizadas
                 val googleIdOption = GetGoogleIdOption.Builder()
                     .setFilterByAuthorizedAccounts(false)

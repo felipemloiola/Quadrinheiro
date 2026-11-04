@@ -59,32 +59,56 @@ object PersonalizedDiscovery {
     fun recommend(catalog: List<ComicEntry>, library: List<ComicEntry>, favoriteUniverse: String = "", settings: AppSettings = AppSettings()): List<ComicEntry> {
         val pool = catalog.takeLast(396)
         val snapshots = settings.profileFavoriteComicIds.mapNotNull { id -> settings.profileShowcaseDetails["comic:$id"]?.let(ProfileShowcase::restoreComic) }
-        val favorites = settings.profileFavoriteComicIds.take(4).mapNotNull { id ->
+        val explicitFavorites = settings.profileFavoriteComicIds.mapNotNull { id ->
             library.firstOrNull { it.id == id || it.externalId == id } ?: snapshots.firstOrNull { it.id == id } ?: pool.firstOrNull { it.id == id || it.externalId == id }
         }
-        val known = library + favorites
+        val libraryFavorites = library.filter { it.favorite }
+        val allFavorites = (explicitFavorites + libraryFavorites).distinctBy(::workKey)
+        val known = library + allFavorites
         val ownedIds = (known.flatMap { listOf(it.id, it.externalId) } + settings.profileFavoriteComicIds).filter { it.isNotBlank() }.toSet()
         val ownedWorks = known.mapTo(HashSet(), ::workKey)
+
+        val seeds = mutableListOf<Pair<Features, Float>>()
+
+        // 1. Favoritas (selecionadas no perfil ou marcadas com coração no acervo)
+        allFavorites.take(6).forEach { seeds.add(features(it) to 2.8f) }
+
+        // 2. Lendo agora (ReadingStatus.READING)
+        library.filter { it.status == ReadingStatus.READING }.take(6).forEach { seeds.add(features(it) to 2.0f) }
+
+        // 3. Quero ler (ReadingStatus.WANT_TO_READ)
+        library.filter { it.status == ReadingStatus.WANT_TO_READ }.take(8).forEach { seeds.add(features(it) to 1.4f) }
+
+        // 4. Lidas (ReadingStatus.READ) com ponderação de nota e data
         val history = library.filter { it.status == ReadingStatus.READ }
-            .sortedWith(compareByDescending<ComicEntry> { it.readDate.ifBlank { it.addedAt } }.thenByDescending { it.updatedAt }).take(12)
-        val seeds = favorites.map { features(it) to 3f }.toMutableList()
+            .sortedWith(compareByDescending<ComicEntry> { it.readDate.ifBlank { it.addedAt } }.thenByDescending { it.updatedAt }).take(14)
         history.forEachIndexed { index, read ->
             val weight = when {
-                read.favorite -> 1.8f
-                read.rating >= 4f -> 1.4f
+                read.favorite -> 2.0f
+                read.rating >= 4f -> 1.5f
                 read.rating > 0f && read.rating <= 2f -> -.7f
-                read.rating > 0f -> .7f
-                else -> .6f
-            } * (1f - index * .04f)
+                read.rating > 0f -> .8f
+                else -> .7f
+            } * (1f - index * .03f)
             seeds.add(features(read) to weight)
         }
-        library.filter { it.status == ReadingStatus.READING }.take(4).forEach { seeds.add(features(it) to .5f) }
-        val characters = settings.profileFavoriteCharacters.take(4).map(::aliases)
+
+        // 5. Personagens favoritos
+        val characters = settings.profileFavoriteCharacters.take(6).map(::aliases)
+
         val candidates = CatalogSearchPolicy.unique(pool).filter { c ->
             c.id !in ownedIds && (c.externalId.isBlank() || c.externalId !in ownedIds) && workKey(c) !in ownedWorks
         }.distinctBy(::workKey).map(::features)
+
         val ranked = candidates.mapIndexed { index, c ->
-            var score = if (preferred(c, favoriteUniverse)) 4f else 0f
+            // 6. Editora / Universo favorito
+            var score = if (preferred(c, favoriteUniverse)) 6f else 0f
+            if (favoriteUniverse.isNotBlank() && c.publisher.isNotBlank()) {
+                val normPref = normalized(favoriteUniverse)
+                if (c.publisher.contains(normPref) || normPref.contains(c.publisher)) {
+                    score += 4f
+                }
+            }
             for ((seed, weight) in seeds) score += affinity(c, seed) * weight
             for (names in characters) {
                 if (names.any { " ${c.title} ${c.series} ".contains(" $it ") }) score += 24f
@@ -93,9 +117,10 @@ object PersonalizedDiscovery {
             Triple(c.comic, score, index)
         }.sortedWith(compareByDescending<Triple<ComicEntry, Float, Int>> { it.second }
             .thenByDescending { it.first.coverUrl.isNotBlank() }.thenBy { it.third })
+
         val relevant = ranked.filter { it.second > 0f }
-        val hasSignals = favoriteUniverse.isNotBlank() || settings.profileFavoriteComicIds.isNotEmpty() || characters.isNotEmpty() || seeds.isNotEmpty()
+        val hasSignals = favoriteUniverse.isNotBlank() || allFavorites.isNotEmpty() || characters.isNotEmpty() || seeds.isNotEmpty()
         return if (relevant.isNotEmpty()) relevant.take(48).map { it.first }
-            else if (hasSignals) emptyList() else ranked.take(24).map { it.first }
+            else if (hasSignals) emptyList() else ranked.filter { it.second >= 0f }.take(24).map { it.first }
     }
 }

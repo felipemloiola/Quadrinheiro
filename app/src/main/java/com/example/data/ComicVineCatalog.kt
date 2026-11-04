@@ -114,6 +114,24 @@ object ComicVineCatalog {
         // Never attach credits from a guessed edition to a locally cataloged book.
         return id?.takeIf { it.all(Char::isDigit) }?.let { details("issue", it) }
     }
+    suspend fun autoResolve(comic: ComicEntry): CatalogDetails? {
+        val direct = resolve(comic)
+        if (direct != null) return direct
+        val searchTitle = (comic.seriesName.ifBlank { comic.displayTitle }).replace(Regex("#\\s*\\d+.*"), "").trim()
+        if (searchTitle.isBlank()) return null
+        return runCatching {
+            val results = search(searchTitle).items
+            if (results.isEmpty()) null
+            else {
+                val best = if (comic.issueNumber > 0) {
+                    results.firstOrNull { it.issueNumber == comic.issueNumber }
+                        ?: results.firstOrNull { it.displayTitle.contains("#${comic.issueNumber}") }
+                        ?: results.first()
+                } else results.first()
+                resolve(best)
+            }
+        }.getOrNull()
+    }
     suspend fun translated(details: CatalogDetails): CatalogDetails {
         if(details.description.isBlank()) return details
         val pt=request("translated",id=details.id,kind=details.type).optString("descriptionPt")
