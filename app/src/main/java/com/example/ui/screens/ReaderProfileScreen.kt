@@ -67,11 +67,40 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { }
     }
+    var comicLoading by remember { mutableStateOf(false) }
+    val multiSearchEngine = remember { com.example.data.MultiApiSearchEngine() }
     LaunchedEffect(editSlot, characters, query, slotMenu) {
         if (editSlot < 0 || slotMenu) return@LaunchedEffect
         if (!characters) {
-            if (query.length >= 2) try { kotlinx.coroutines.delay(300); remoteComics = com.example.data.ComicVineCatalog.search(query).items }
-            catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel } catch (_: Exception) { }
+            val trimmed = query.trim()
+            if (trimmed.length >= 2) {
+                comicLoading = true
+                try {
+                    kotlinx.coroutines.delay(240)
+                    val terms = com.example.data.CatalogSearchPolicy.searchTerms(trimmed)
+                    val fetched = mutableListOf<ComicEntry>()
+                    for (term in terms.take(2)) {
+                        runCatching { com.example.data.ComicVineCatalog.search(term).items }.getOrNull()?.let { fetched += it }
+                    }
+                    if (fetched.isEmpty()) {
+                        multiSearchEngine.searchOnlineProgressive(trimmed, settings.searchLanguage).collect { partial ->
+                            fetched += partial
+                        }
+                    }
+                    remoteComics = com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
+                        fetched,
+                        trimmed,
+                        if ("PT" in settings.searchLanguage) "PT" else "EN"
+                    )
+                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                    throw cancel
+                } catch (_: Exception) {
+                } finally {
+                    comicLoading = false
+                }
+            } else {
+                comicLoading = false
+            }
             return@LaunchedEffect
         }
         characterLoading = true; characterError = false
@@ -92,38 +121,90 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             Column {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val hasBanner = settings.profileBannerUrl.isNotBlank()
-                    val bannerHeight = if (hasBanner) maxWidth / 3f else 88.dp
+                    val bannerHeight = if (hasBanner) maxOf(maxWidth * 0.56f, 212.dp) else 116.dp
                     Box(Modifier.fillMaxWidth().height(bannerHeight)) {
                         if (hasBanner) {
-                            ProfileImage(settings.profileBannerUrl, "Banner de " + profile.name, Modifier.fillMaxSize().testTag("profile_banner"))
-                            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-                                0f to theme.bgPrimary.copy(alpha = .92f), .35f to theme.bgPrimary.copy(alpha = .25f),
-                                .55f to Color.Transparent, 1f to theme.bgPrimary)))
+                            ProfileImage(
+                                settings.profileBannerUrl,
+                                "Banner de " + profile.name,
+                                Modifier.fillMaxSize().testTag("profile_banner")
+                            )
+                            // Continuous multi-stop bottom fade with zero top dark rectangle and no visible hard line
+                            Box(
+                                Modifier.fillMaxSize().background(
+                                    Brush.verticalGradient(
+                                        0.00f to Color.Transparent,
+                                        0.46f to Color.Transparent,
+                                        0.66f to theme.bgPrimary.copy(alpha = 0.28f),
+                                        0.82f to theme.bgPrimary.copy(alpha = 0.68f),
+                                        0.93f to theme.bgPrimary.copy(alpha = 0.92f),
+                                        1.00f to theme.bgPrimary
+                                    )
+                                )
+                            )
                         }
-                        Row(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("Perfil", Modifier.weight(1f).testTag("profile_title"), color = theme.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                            IconButton(onClick = onSettings, modifier = Modifier.size(44.dp).testTag("profile_settings")
-                                .background(theme.bgPrimary.copy(alpha = .8f), CircleShape)) {
-                                Icon(LucideIcons.Settings, "Ajustes", tint = theme.textPrimary)
+                        IconButton(
+                            onClick = onSettings,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(horizontal = 18.dp, vertical = 10.dp)
+                                .size(40.dp)
+                                .testTag("profile_settings")
+                                .background(
+                                    if (hasBanner) Color.Black.copy(alpha = 0.42f) else theme.bgSecondary.copy(alpha = 0.85f),
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                LucideIcons.Settings,
+                                "Ajustes",
+                                tint = if (hasBanner) Color.White else theme.textPrimary
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(Modifier.size(80.dp).testTag("profile_avatar")) {
+                                UserAvatar(profile, sizeDp = 80)
                             }
-                        }
-                        Box(Modifier.align(Alignment.BottomStart).offset(x = 20.dp, y = 40.dp).size(80.dp)
-                            .testTag("profile_avatar").clip(CircleShape).background(theme.bgPrimary).padding(2.dp)) {
-                            UserAvatar(profile, sizeDp = 76)
-                        }
-                    }
-                }
-                Row(Modifier.fillMaxWidth().padding(start = 116.dp, end = 20.dp, top = 8.dp).heightIn(min = 80.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(profile.name, color = theme.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        if (profile.handle.isNotBlank()) Text(profile.handle, color = theme.textSecondary, fontSize = 14.sp)
-                        TextButton(onClick = { editorOpen = true }, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 44.dp)) {
-                            Text("Editar perfil", color = theme.accent, fontSize = 14.sp)
+                            Text(
+                                text = profile.name,
+                                color = theme.textPrimary,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(bottom = 6.dp)
+                            )
                         }
                     }
                 }
-                Column(Modifier.padding(horizontal = 20.dp).padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (profile.handle.isNotBlank()) {
+                        Text(profile.handle, color = theme.textSecondary, fontSize = 14.sp)
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+                    TextButton(
+                        onClick = { editorOpen = true },
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.heightIn(min = 44.dp)
+                    ) {
+                        Text("Editar perfil", color = theme.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Column(Modifier.padding(horizontal = 20.dp).padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     if (profile.bio.isNotBlank()) Text(profile.bio, color = theme.textSecondary, fontSize = 15.sp, lineHeight = 21.sp)
                     Row(Modifier.fillMaxWidth().clickable(onClick = onStatistics).padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceAround) {
                         ProfileMetric("$readCount", "Lidos", Modifier.weight(1f))
@@ -231,6 +312,19 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 }
                 if (editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size) TextButton(onClick = { select(null) }) { Text("Remover dos favoritos", color = theme.accent) }
                 val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).filterIndexed { index, _ -> index != editSlot }.toSet()
+                val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
+                val shownComics = remember(candidates, excluded, query, preferredLang) {
+                    val available = candidates.filter { it.id !in excluded }
+                    if (query.isBlank()) {
+                        available.take(80)
+                    } else {
+                        com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
+                            available,
+                            query,
+                            preferredLang
+                        ).take(80)
+                    }
+                }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
                     if (characters) {
                         if (characterLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
@@ -246,8 +340,8 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         }
                         if (!characterLoading && !characterError && characterResults.isEmpty()) item { Text("Nenhum personagem encontrado. Tente o nome em português ou inglês.", color = theme.textSecondary) }
                     } else {
-                        val shown = candidates.filter { it.id !in excluded && (it.displayTitle.contains(query, true) || it.authors.contains(query, true)) }.take(80)
-                        items(shown, key = { it.id }) { comic ->
+                        if (comicLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
+                        items(shownComics, key = { it.id }) { comic ->
                             Row(Modifier.fillMaxWidth().clickable { select(comic.id) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.size(40.dp, 60.dp))
                                 Column(Modifier.weight(1f)) {
@@ -256,7 +350,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                 }
                             }
                         }
-                        if (shown.isEmpty()) item { Text("Nenhuma HQ encontrada. Tente outro título.", color = theme.textSecondary) }
+                        if (!comicLoading && shownComics.isEmpty()) item { Text("Nenhuma HQ encontrada. Tente outro título.", color = theme.textSecondary) }
                     }
                 }
             }

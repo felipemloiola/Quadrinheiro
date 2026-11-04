@@ -47,7 +47,7 @@ export class CatalogStore extends DurableObject {
     body={descriptionPt:translated.join(' ')};
    }else{
     body=await upstream(input,{comicVine:this.env.COMIC_VINE_API_KEY,superhero:this.env.SUPERHERO_API_KEY,metron:this.env.METRON_API_KEY?.trim()},async(url,opts)=>{
-     const u=new URL(url);if(u.hostname==='metron.cloud')await this.permit('metron');if(u.hostname==='comicvine.gamespot.com')await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
+     const u=new URL(url);if(u.hostname==='metron.cloud'&&u.pathname.startsWith('/api/'))await this.permit('metron');if(u.hostname==='comicvine.gamespot.com'&&u.pathname.startsWith('/api/'))await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
      return fetch(url,opts);
     });
    }

@@ -75,28 +75,49 @@ class MultiApiSearchEngine {
         val key = cacheKey(literal, searchLanguage, provider, hdCovers)
         val saved = synchronized(cache) { cache[key] }
         if (saved != null) { send(saved); return@channelFlow }
-        val variants = CatalogSearchPolicy.variants(literal, ModernCatalog.current.map { it.displayTitle })
-        val mutex = Mutex(); val providers = Semaphore(3)
-        var merged = emptyList<ComicEntry>()
+        val variants = CatalogSearchPolicy.searchTerms(literal, ModernCatalog.current.map { it.displayTitle }).take(3)
+        val mutex = Mutex(); val providers = Semaphore(4)
+        var pool = emptyList<ComicEntry>()
+        var emitted = emptyList<ComicEntry>()
         suspend fun accept(batch: List<ComicEntry>) {
             if (batch.isEmpty()) return
             mutex.withLock {
-                merged = CatalogSearchPolicy.ranked(merged + batch.map(AdditionalCatalogSources::localize), variants).take(48)
-                ModernCatalog.accept(merged); send(merged)
+                pool = CatalogSearchPolicy.unique(pool + batch.map(AdditionalCatalogSources::localize)).take(120)
+                emitted = CatalogSearchPolicy.ranked(pool, variants, searchLanguage).take(60)
+                ModernCatalog.accept(emitted); send(emitted)
             }
         }
         supervisorScope {
             AdditionalCatalogSources.enabledSources(provider, searchLanguage).forEach { source -> launch(Dispatchers.IO) {
-                for (term in variants) providers.withPermit {
-                    try { withTimeoutOrNull(5000L) { AdditionalCatalogSources.load(source, term, searchLanguage) }?.let { accept(it) } }
+                val sourceTerms = if (source in setOf("apple-br", "google-pt")) variants.take(2) else variants
+                for (term in sourceTerms) providers.withPermit {
+                    try { withTimeoutOrNull(5500L) { AdditionalCatalogSources.load(source, term, searchLanguage, page = 0) }?.let { accept(it) } }
                     catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
                 }
             } }
         }
-        if (merged.isEmpty()) send(emptyList()) else synchronized(cache) { cache[key] = merged }
+        if (emitted.isEmpty()) send(emptyList()) else synchronized(cache) { cache[key] = emitted }
     }
     data class CatalogPage(val items: List<ComicEntry>, val hasMore: Boolean)
-    suspend fun fetchCatalogPage(page: Int, favoriteUniverse: String): CatalogPage = ComicVineCatalog.catalog(page).also { ModernCatalog.accept(it.items) }
+    suspend fun fetchCatalogPage(page: Int, favoriteUniverse: String): CatalogPage {
+        val primary = runCatching { ComicVineCatalog.catalog(page) }.getOrNull()
+        val extraTopic = when {
+            favoriteUniverse.contains("Marvel", ignoreCase = true) -> "Spider-Man"
+            favoriteUniverse.contains("Mangá", ignoreCase = true) -> "Manga"
+            favoriteUniverse.contains("Image", ignoreCase = true) -> "Invincible"
+            else -> "Batman"
+        }
+        val extra = if (page <= 2) {
+            runCatching {
+                withTimeoutOrNull(3500L) {
+                    PortugueseBookSources.googlePortuguese(extraTopic, page = page).map(AdditionalCatalogSources::localize)
+                }
+            }.getOrNull().orEmpty()
+        } else emptyList()
+        val combined = CatalogSearchPolicy.unique((primary?.items.orEmpty().map(AdditionalCatalogSources::localize)) + extra)
+        val hasMore = (primary?.hasMore == true) || extra.isNotEmpty()
+        return CatalogPage(combined, hasMore).also { ModernCatalog.accept(it.items) }
+    }
     suspend fun runOnlineApiDiagnostics(): ApiDiagnosticsReport {
         val start = System.currentTimeMillis()
         val ok = try { ComicVineCatalog.catalog(0); true } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { false }

@@ -158,7 +158,7 @@ data class CloudUserPreferences(
         autoFillReadDate = autoFillReadDate,
         showPagesInDiary = showPagesInDiary,
         shareStarsMatchTheme = shareStarsMatchTheme,
-        quickReviewTags = quickReviewTags.map { it.take(80) }.take(40)
+        quickReviewTags = quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
     )
 
     companion object {
@@ -205,7 +205,7 @@ data class CloudUserPreferences(
             autoFillReadDate = s.autoFillReadDate,
             showPagesInDiary = s.showPagesInDiary,
             shareStarsMatchTheme = s.shareStarsMatchTheme,
-            quickReviewTags = s.quickReviewTags.map { it.take(80) }.take(40)
+            quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
         )
     }
 }
@@ -370,38 +370,41 @@ data class CloudComicDocument(
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     fun resolvedUpdatedAtMillis(): Long {
-        return if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+        val ts = if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+        return if (ts > 0L) ts else (CatalogEpoch.RESET_AT + 1L)
     }
 
     fun toComicEntry(): ComicEntry {
         val docId = id.ifBlank { externalId.ifBlank { "hq-cloud" } }
+        val resolvedTitle = title.ifBlank { titlePtBr }.ifBlank { "Sem Título" }
         val resolvedTitlePtBr = titlePtBr.ifBlank { title }
         val resolvedSynopsisPtBr = synopsisPtBr.ifBlank {
             if (synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(synopsis)) synopsis else ""
         }
+        val safePages = pageCount.coerceIn(0, 20000)
         return ComicEntry(
             id = docId,
             externalId = externalId.ifBlank { docId },
-            title = resolvedTitlePtBr.ifBlank { "Sem Título" },
+            title = resolvedTitle,
             titlePtBr = resolvedTitlePtBr,
             authors = authors.ifBlank { "Autor Desconhecido" },
             publisher = publisher.ifBlank { "Editora" },
             genre = genre.ifBlank { "Graphic Novel" },
             format = format.ifBlank { "Encadernado (TPB)" },
             releaseYear = releaseYear.coerceIn(1800, 2100),
-            pageCount = pageCount.coerceIn(0, 20000),
-            currentPage = currentPage.coerceIn(0, 20000),
+            pageCount = safePages,
+            currentPage = currentPage.coerceIn(0, safePages),
             status = ReadingStatus.fromKey(status),
             rating = rating.toFloat().coerceIn(0f, 5f),
             favorite = favorite,
             rereadCount = rereadCount.coerceIn(0, 500),
-            tags = tags.take(30),
+            tags = tags.map { it.trim().take(60) }.filter { it.isNotEmpty() }.take(30),
             review = review,
             readDate = readDate,
             addedAt = addedAt,
             isbn = isbn,
             coverUrl = coverUrl,
-            synopsis = resolvedSynopsisPtBr.ifBlank { synopsis },
+            synopsis = synopsis.ifBlank { resolvedSynopsisPtBr },
             synopsisPtBr = resolvedSynopsisPtBr,
             sourceLabel = sourceLabel.ifBlank { "Catálogo Base" },
             isOnlineResult = false,
@@ -418,7 +421,8 @@ data class CloudComicDocument(
             val safeId = comic.id.ifBlank { comic.externalId.ifBlank { "hq-${System.currentTimeMillis()}" } }
                 .replace("/", "_")
             val safePages = comic.pageCount.coerceIn(0, 20000)
-            val resolvedTitle = comic.titlePtBr.ifBlank { comic.title }.trim().ifBlank { "Sem Título" }.take(300)
+            val resolvedOriginalTitle = comic.title.trim().ifBlank { comic.titlePtBr.trim() }.ifBlank { "Sem Título" }.take(300)
+            val resolvedTitlePtBr = comic.titlePtBr.trim().ifBlank { resolvedOriginalTitle }.take(300)
             val resolvedSynopsisPtBr = comic.synopsisPtBr.ifBlank {
                 if (comic.synopsis.isNotBlank() && PortugueseComicTranslator.isPortugueseText(comic.synopsis)) {
                     comic.synopsis
@@ -431,8 +435,8 @@ data class CloudComicDocument(
                 id = safeId,
                 ownerId = uid,
                 externalId = comic.externalId.ifBlank { safeId }.take(200),
-                title = resolvedTitle,
-                titlePtBr = resolvedTitle,
+                title = resolvedOriginalTitle,
+                titlePtBr = resolvedTitlePtBr,
                 authors = comic.authors.trim().take(300),
                 publisher = comic.publisher.trim().take(160),
                 genre = comic.genre.take(120),
@@ -444,13 +448,13 @@ data class CloudComicDocument(
                 rating = comic.rating.toDouble().coerceIn(0.0, 5.0),
                 favorite = comic.favorite,
                 rereadCount = comic.rereadCount.coerceIn(0, 500),
-                tags = comic.tags.map { it.take(60) }.take(30),
+                tags = comic.tags.map { it.trim().take(60) }.filter { it.isNotEmpty() }.take(30),
                 review = comic.review.take(5000),
                 readDate = comic.readDate.take(30),
                 addedAt = comic.addedAt.take(60),
                 isbn = comic.isbn.take(60),
                 coverUrl = comic.coverUrl.take(2000),
-                synopsis = resolvedSynopsisPtBr.ifBlank { comic.synopsis }.take(5000),
+                synopsis = comic.synopsis.ifBlank { resolvedSynopsisPtBr }.take(5000),
                 synopsisPtBr = resolvedSynopsisPtBr,
                 sourceLabel = comic.sourceLabel.take(120),
                 moments = comic.moments.map { CloudComicMoment.fromComicMoment(it) },
@@ -731,7 +735,7 @@ class QuadrinheiroCloudRepository(
     /**
      * Consulta inicial ultra-rápida diretamente do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede).
      */
-    suspend fun fetchComicsFromCache(userId: String, limit: Long = 40L): List<ComicEntry> {
+    suspend fun fetchComicsFromCache(userId: String, limit: Long = 100L): List<ComicEntry> {
         return try {
             val snapshot = db.collection("users").document(userId)
                 .collection("comics")
@@ -800,7 +804,7 @@ class QuadrinheiroCloudRepository(
      * Observa em tempo real os quadrinhos mais recentes do usuário com limite controlado (padrão 35).
      * Evita leitura irrestrita de coleções inteiras a cada mutação de documento.
      */
-    fun observeUserComics(userId: String, limit: Long = 35L): Flow<List<ComicEntry>> = callbackFlow {
+    fun observeUserComics(userId: String, limit: Long = 100L): Flow<List<ComicEntry>> = callbackFlow {
         val path = "users/$userId/comics"
         val registration = db.collection("users").document(userId)
             .collection("comics")

@@ -173,6 +173,11 @@ class QuadrinheiroViewModel(
     private val _isSyncingCloud = MutableStateFlow(false)
     val isSyncingCloud: StateFlow<Boolean> = _isSyncingCloud.asStateFlow()
 
+    private val _lastSyncError = MutableStateFlow<String?>(null)
+    val lastSyncError: StateFlow<String?> = _lastSyncError.asStateFlow()
+
+    private var authSessionGeneration: Long = 0L
+
     private var cloudProfileJob: Job? = null
     private var cloudComicsJob: Job? = null
 
@@ -659,7 +664,7 @@ class QuadrinheiroViewModel(
         cloudComicsJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 // 1. Carregamento imediato do CACHE LOCAL persistente do Firestore (0 leituras cobradas, 0 delay de rede)
-                val cachedComics = runCatching { repo.fetchComicsFromCache(user.uid, limit = 40L) }.getOrDefault(emptyList())
+                val cachedComics = runCatching { repo.fetchComicsFromCache(user.uid, limit = 100L) }.getOrDefault(emptyList())
                 if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
                     val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                         localComics = _comics.value,
@@ -667,20 +672,46 @@ class QuadrinheiroViewModel(
                     )
                     if (initialMerged != _comics.value) {
                         _comics.value = initialMerged
+                        storage.saveState(initialMerged, _profile.value, _appSettings.value, user.uid)
                     }
                 }
 
-                // 2. Estabelece o cursor da primeira página para controle de paginação
+                // 2. Busca imediata da primeira página do servidor e mescla no estado local
                 val firstPage = runCatching {
-                    repo.fetchComicsPage(user.uid, pageSize = 25L, startAfterDoc = null, preferCache = false).getOrNull()
+                    repo.fetchComicsPage(user.uid, pageSize = 50L, startAfterDoc = null, preferCache = false).getOrNull()
                 }.getOrNull()
-                if (firstPage != null) {
+                if (firstPage != null && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
                     lastComicsPageSnapshot = firstPage.lastSnapshot
                     _hasMoreCloudComics.value = firstPage.hasMore
+                    val pageComics = firstPage.items.filter(com.example.data.CatalogEpoch::afterReset)
+                    if (pageComics.isNotEmpty()) {
+                        PortugueseComicTranslator.seedPersistedTranslations(
+                            pageComics,
+                            storage.loadTranslationCache()
+                        )
+                        val (mergedFirstPage, dirtyFromFirstPage) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
+                            localComics = _comics.value,
+                            remoteComics = pageComics
+                        )
+                        if (mergedFirstPage != _comics.value) {
+                            _comics.value = mergedFirstPage
+                            persistAll(user.uid)
+                        }
+                        if (dirtyFromFirstPage.isNotEmpty()) {
+                            runCatching {
+                                repo.syncDirtyComicsBatch(user.uid, dirtyFromFirstPage)
+                            }.onSuccess { syncedIds ->
+                                markComicsCleanInMemoryAndStorage(syncedIds)
+                                _lastSyncError.value = null
+                            }.onFailure { err ->
+                                _lastSyncError.value = err.message ?: "Sincronização pendente"
+                            }
+                        }
+                    }
                 }
 
-                // 3. Listener em tempo real com limite para os 35 quadrinhos mais recentes (evita leituras excessivas)
-                repo.observeUserComics(user.uid, limit = 35L)
+                // 3. Listener em tempo real com limite para os 100 quadrinhos mais recentes
+                repo.observeUserComics(user.uid, limit = 100L)
                     .catch { }
                     .collectLatest { incomingComics ->
                         val remoteComics=incomingComics.filter(com.example.data.CatalogEpoch::afterReset)
@@ -916,20 +947,20 @@ class QuadrinheiroViewModel(
         wasGuestBefore: Boolean = false
     ) {
         val startedFromSettingsModal = _showAuthModalFromSettings.value
+        authSessionGeneration++
+        _isLoggingOut.value = false
         handleCheckJob?.cancel()
         cloudProfileJob?.cancel()
         cloudComicsJob?.cancel()
         cloudProfileSaveJob?.cancel()
         persistJob?.cancel()
 
-        // Se estava em modo convidado antes de entrar na conta, salva o estado do convidado em background na chave isolada dele
+        // Se estava em modo convidado antes de entrar na conta, salva o estado do convidado na chave isolada dele
         if (wasGuestBefore || isCurrentSessionGuest()) {
             val guestComicsSnap = _comics.value
             val guestProfileSnap = _profile.value
             val guestSettingsSnap = _appSettings.value
-            viewModelScope.launch(Dispatchers.IO) {
-                runCatching { storage.saveState(guestComicsSnap, guestProfileSnap, guestSettingsSnap, "guest_local") }
-            }
+            runCatching { storage.saveState(guestComicsSnap, guestProfileSnap, guestSettingsSnap, "guest_local") }
         }
 
         val savedAccount = runCatching { storage.loadAccountState(userProfile.uid) }.getOrNull()
@@ -1143,6 +1174,7 @@ class QuadrinheiroViewModel(
     }
 
     fun logout(activityContext: Context? = null) {
+        val logoutGeneration = ++authSessionGeneration
         _isLoggingOut.value = true
         handleCheckJob?.cancel()
         cloudProfileJob?.cancel()
@@ -1165,14 +1197,23 @@ class QuadrinheiroViewModel(
         val settingsSnapshot = _appSettings.value.copy(
             shelfLayout = _shelfLayout.value.ifBlank { _appSettings.value.shelfLayout }
         )
-        _profile.value = profileSnapshot
-        _appSettings.value = settingsSnapshot
 
-        // Encerra a sessão imediatamente na interface para que o usuário nunca fique preso
+        // Persiste de forma SÍNCRONA no SafeStorage antes de limpar a sessão para que um re-login imediato nunca leia estado desatualizado
+        if (!outgoingUid.isNullOrBlank()) {
+            runCatching {
+                storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, outgoingUid)
+                storage.saveShowcase(outgoingUid, settingsSnapshot)
+            }
+        }
+
+        // Encerra a sessão e limpa a memória ativa para impedir qualquer vazamento entre contas
         storage.clearAuthSession()
         QuadrinheiroWidgetsSync.refreshSessionWidgetsAsync(appContext)
         _cloudUser.value = null
         _currentUserProfile.value = null
+        _comics.value = emptyList()
+        _activeReadingComicId.value = null
+        runCatching { savedStateHandle["activeReadingComicId"] = null }
         startOrStopCloudListeners(null)
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
@@ -1184,27 +1225,27 @@ class QuadrinheiroViewModel(
         _isLoggingOut.value = false
         showNotice("Sessão encerrada com segurança")
 
-        // Persiste o estado final da conta que estava ativa (Convidado ou Conta) sem misturar
+        // Envia eventuais pendências da conta anterior para a nuvem e encerra o provedor apenas se nenhuma nova sessão iniciou
         viewModelScope.launch(Dispatchers.IO) {
-            if (outgoingUid != null) {
-                storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, outgoingUid)
-            }
             val repo = cloudRepo
             if (outgoingCloudUid != null && repo != null) {
-                kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                kotlinx.coroutines.withTimeoutOrNull(2500L) {
                     runCatching {
                         repo.saveUserProfile(outgoingCloudUid, profileSnapshot, settingsSnapshot)
                     }
                     val dirtyComics = comicsSnapshot.filter { it.isDirty }
                     if (dirtyComics.isNotEmpty()) {
                         runCatching {
-                            repo.syncDirtyComicsBatch(outgoingCloudUid, dirtyComics)
+                            val synced = repo.syncDirtyComicsBatch(outgoingCloudUid, dirtyComics)
+                            storage.markComicsSynced(synced, System.currentTimeMillis(), outgoingCloudUid)
                         }
                     }
                 }
             }
-            runCatching {
-                authManager.signOut(activityContext)
+            if (authSessionGeneration == logoutGeneration) {
+                runCatching {
+                    authManager.signOut(activityContext)
+                }
             }
         }
     }
@@ -2012,13 +2053,14 @@ class QuadrinheiroViewModel(
                     externalId = extId,
                     status = ReadingStatus.WANT_TO_READ,
                     pageCount = pageCount,
-                    currentPage = 0,
+                    currentPage = existing?.currentPage?.coerceIn(0, pageCount) ?: 0,
                     format = base.format.ifBlank { defaultFmt },
-                    rating = 0f,
-                    favorite = false,
-                    rereadCount = 0,
-                    review = "",
-                    readDate = ""
+                    rating = existing?.rating ?: 0f,
+                    favorite = existing?.favorite ?: false,
+                    rereadCount = existing?.rereadCount ?: 0,
+                    tags = existing?.tags ?: base.tags,
+                    review = existing?.review ?: "",
+                    readDate = existing?.readDate ?: ""
                 )
             )
             return
@@ -2117,8 +2159,8 @@ class QuadrinheiroViewModel(
         val entry = itemData.copy(
             id = uniqueId,
             externalId = extId,
-            title = normTitle,
-            titlePtBr = normTitle,
+            title = itemData.title.trim().ifBlank { normTitle },
+            titlePtBr = itemData.titlePtBr.trim().ifBlank { normTitle },
             authors = itemData.authors.trim().ifBlank { "Autor Desconhecido" },
             publisher = normPub,
             genre = normGenre,
@@ -2127,14 +2169,14 @@ class QuadrinheiroViewModel(
             pageCount = pageCount,
             currentPage = currentPage,
             status = status,
-            favorite = if (isRead) itemData.favorite else false,
-            rereadCount = if (isRead) itemData.rereadCount else 0,
-            rating = if (isRead) itemData.rating else 0f,
+            favorite = itemData.favorite,
+            rereadCount = itemData.rereadCount.coerceAtLeast(0),
+            rating = itemData.rating.coerceIn(0f, 5f),
             tags = itemData.tags,
-            review = if (isRead) itemData.review else "",
-            readDate = if (isRead) itemData.readDate.ifBlank { today } else "",
+            review = itemData.review,
+            readDate = if (isRead) itemData.readDate.ifBlank { today } else itemData.readDate,
             addedAt = itemData.addedAt.ifBlank { nowIso },
-            synopsis = resolvedSynopsisPtBr.ifBlank { itemData.synopsis },
+            synopsis = itemData.synopsis.ifBlank { resolvedSynopsisPtBr },
             synopsisPtBr = resolvedSynopsisPtBr,
             updatedAt = nowMs,
             isDirty = true

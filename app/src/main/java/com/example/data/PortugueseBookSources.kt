@@ -49,12 +49,17 @@ internal object PortugueseBookSources {
     private fun comicGenre(raw: String): Boolean = Regex("comic|graphic novel|manga|quadrinho", RegexOption.IGNORE_CASE).containsMatchIn(raw)
     private fun cover(raw: String) = raw.replace("http://", "https://").takeIf { it.startsWith("https://") && it.length <= 2000 }.orEmpty()
 
-    suspend fun appleBrazil(query: String): List<ComicEntry> = parseApple(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder()
-        .addQueryParameter("term", query.take(100)).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook")
-        .addQueryParameter("country", "BR").addQueryParameter("limit", "12").build()))
+    suspend fun appleBrazil(query: String, page: Int = 0): List<ComicEntry> {
+        if (page > 0) return emptyList()
+        return parseApple(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("term", query.take(100)).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook")
+            .addQueryParameter("country", "BR").addQueryParameter("limit", "16").build()))
+    }
 
-    suspend fun googlePortuguese(query: String): List<ComicEntry> = parseGoogle(fetch("https://www.googleapis.com/books/v1/volumes".toHttpUrl().newBuilder()
-        .addQueryParameter("q", query.take(100)).addQueryParameter("maxResults", "12").addQueryParameter("printType", "books")
+    suspend fun googlePortuguese(query: String, page: Int = 0): List<ComicEntry> = parseGoogle(fetch("https://www.googleapis.com/books/v1/volumes".toHttpUrl().newBuilder()
+        .addQueryParameter("q", query.take(100)).addQueryParameter("maxResults", "16")
+        .addQueryParameter("startIndex", (page.coerceAtLeast(0) * 16).toString())
+        .addQueryParameter("printType", "books")
         .addQueryParameter("langRestrict", "pt").build()))
 
     internal fun parseApple(root: JSONObject): List<ComicEntry> {
@@ -70,7 +75,7 @@ internal object PortugueseBookSources {
                 genre = "Quadrinhos", format = "Edição", releaseYear = text(j, "releaseDate").take(4).toIntOrNull() ?: 0,
                 pageCount = 0, currentPage = 0, coverUrl = cover(text(j, "artworkUrl100").replace("100x100bb", "600x600bb")),
                 synopsis = ComicVineCatalog.plain(text(j, "description")).take(8000), sourceLabel = "Catálogo online", isOnlineResult = true)
-        }.take(12)
+        }.take(16)
     }
 
     internal fun parseGoogle(root: JSONObject): List<ComicEntry> {
@@ -98,6 +103,6 @@ internal object PortugueseBookSources {
                 coverUrl = cover(v.optJSONObject("imageLinks")?.optString("thumbnail").orEmpty()),
                 synopsis = ComicVineCatalog.plain(text(v, "description")).take(8000), isbn = isbn,
                 sourceLabel = "Catálogo online", isOnlineResult = true)
-        }.take(12)
+        }.take(16)
     }
 }

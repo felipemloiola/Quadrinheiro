@@ -77,20 +77,24 @@ internal object AdditionalCatalogSources {
         if (provider != "BOOKS") books.addAll(listOf("kitsu", "mangadex"))
         return books
     }
-    suspend fun load(source: String, query: String, language: String): List<ComicEntry> = withContext(Dispatchers.IO) {
+    suspend fun load(source: String, query: String, language: String, page: Int = 0): List<ComicEntry> = withContext(Dispatchers.IO) {
         val q = query.trim().take(100)
+        val safePage = page.coerceIn(0, 50)
         when (source) {
-            "catalog" -> ComicVineCatalog.search(q).items
-            "apple-br" -> PortugueseBookSources.appleBrazil(q)
-            "google-pt" -> PortugueseBookSources.googlePortuguese(q)
-            "apple-us" -> parseAppleUs(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder().addQueryParameter("term", q).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook").addQueryParameter("country", "US").addQueryParameter("limit", "12").build()))
-            "kitsu" -> parseKitsu(fetch("https://kitsu.io/api/edge/manga".toHttpUrl().newBuilder().addQueryParameter("filter[text]", q).addQueryParameter("page[limit]", "8").build(), "application/vnd.api+json"))
-            "mangadex" -> parseMangaDex(fetch("https://api.mangadex.org/manga".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("limit", "8").addQueryParameter("includes[]", "cover_art").addQueryParameter("includes[]", "author").addQueryParameter("includes[]", "artist").addQueryParameter("contentRating[]", "safe").addQueryParameter("contentRating[]", "suggestive").build()))
+            "catalog" -> ComicVineCatalog.search(q, page = safePage).items
+            "apple-br" -> PortugueseBookSources.appleBrazil(q, page = safePage)
+            "google-pt" -> PortugueseBookSources.googlePortuguese(q, page = safePage)
+            "apple-us" -> if (safePage > 0) emptyList() else parseAppleUs(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder().addQueryParameter("term", q).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook").addQueryParameter("country", "US").addQueryParameter("limit", "16").build()))
+            "kitsu" -> parseKitsu(fetch("https://kitsu.io/api/edge/manga".toHttpUrl().newBuilder().addQueryParameter("filter[text]", q).addQueryParameter("page[limit]", "12").addQueryParameter("page[offset]", (safePage * 12).toString()).build(), "application/vnd.api+json"))
+            "mangadex" -> parseMangaDex(fetch("https://api.mangadex.org/manga".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("limit", "12").addQueryParameter("offset", (safePage * 12).toString()).addQueryParameter("includes[]", "cover_art").addQueryParameter("includes[]", "author").addQueryParameter("includes[]", "artist").addQueryParameter("contentRating[]", "safe").addQueryParameter("contentRating[]", "suggestive").build()))
             "open-library" -> {
-                val root = openLibraryFetch("https://openlibrary.org/search.json".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("lang", "pt").addQueryParameter("limit", "6").addQueryParameter("fields", "key,title,author_name,subject,editions,editions.key").build())
-                val selected = selectOpenLibrary(root)
-                if (selected == null) emptyList() else listOfNotNull(parseOpenLibrary(selected.first,
-                    openLibraryFetch("https://openlibrary.org/books/${selected.second}.json".toHttpUrl()), selected.second, language == "PT"))
+                val root = openLibraryFetch("https://openlibrary.org/search.json".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("lang", "pt").addQueryParameter("page", (safePage + 1).toString()).addQueryParameter("limit", "8").addQueryParameter("fields", "key,title,author_name,subject,editions,editions.key").build())
+                val selections = selectOpenLibraryEditions(root, maxEditions = 3)
+                selections.mapNotNull { (work, edId) ->
+                    runCatching {
+                        parseOpenLibrary(work, openLibraryFetch("https://openlibrary.org/books/$edId.json".toHttpUrl()), edId, language == "PT")
+                    }.getOrNull()
+                }
             }
             else -> error("Fonte desconhecida")
         }
@@ -100,7 +104,7 @@ internal object AdditionalCatalogSources {
     }
     internal fun parseKitsu(root: JSONObject): List<ComicEntry> {
         val data = root.optJSONArray("data") ?: return emptyList()
-        return (0 until minOf(data.length(), 8)).mapNotNull { i ->
+        return (0 until minOf(data.length(), 12)).mapNotNull { i ->
             val j = data.optJSONObject(i) ?: return@mapNotNull null
             val a = j.optJSONObject("attributes") ?: return@mapNotNull null
             val id = text(j, "id"); val titles = a.optJSONObject("titles")
@@ -115,7 +119,7 @@ internal object AdditionalCatalogSources {
     }
     internal fun parseMangaDex(root: JSONObject): List<ComicEntry> {
         val data = root.optJSONArray("data") ?: return emptyList()
-        return (0 until minOf(data.length(), 8)).mapNotNull { i ->
+        return (0 until minOf(data.length(), 12)).mapNotNull { i ->
             val j = data.optJSONObject(i) ?: return@mapNotNull null
             val a = j.optJSONObject("attributes") ?: return@mapNotNull null
             val id = text(j, "id"); val titles = a.optJSONObject("title"); val title = localized(titles)
@@ -132,20 +136,27 @@ internal object AdditionalCatalogSources {
                 sourceLabel = "Catálogo online", isOnlineResult = true)
         }
     }
-    internal fun selectOpenLibrary(root: JSONObject): Pair<JSONObject, String>? {
-        val docs = root.optJSONArray("docs") ?: return null
-        for (i in 0 until minOf(docs.length(), 6)) {
+    internal fun selectOpenLibraryEditions(root: JSONObject, maxEditions: Int = 3): List<Pair<JSONObject, String>> {
+        val docs = root.optJSONArray("docs") ?: return emptyList()
+        val out = mutableListOf<Pair<JSONObject, String>>()
+        val seenIds = HashSet<String>()
+        for (i in 0 until minOf(docs.length(), 8)) {
             val work = docs.optJSONObject(i) ?: continue
             if (!text(work, "key").removePrefix("/works/").matches(Regex("OL[0-9]+W"))) continue
             if (!strings(work, "subject").any { Regex("comic|graphic novel|manga|quadrinho", RegexOption.IGNORE_CASE).containsMatchIn(it.replace('_', ' ')) }) continue
             val editions = work.optJSONObject("editions")?.optJSONArray("docs") ?: continue
             for (n in 0 until editions.length()) {
                 val id = text(editions.optJSONObject(n), "key").removePrefix("/books/")
-                if (editionId.matches(id)) return work to id
+                if (editionId.matches(id) && seenIds.add(id)) {
+                    out.add(work to id)
+                    break
+                }
             }
+            if (out.size >= maxEditions) break
         }
-        return null
+        return out
     }
+    internal fun selectOpenLibrary(root: JSONObject): Pair<JSONObject, String>? = selectOpenLibraryEditions(root, maxEditions = 1).firstOrNull()
     internal fun parseOpenLibrary(work: JSONObject, edition: JSONObject, requested: String, ptOnly: Boolean): ComicEntry? {
         if (!editionId.matches(requested) || text(edition, "key").removePrefix("/books/") != requested) return null
         val works = edition.optJSONArray("works")

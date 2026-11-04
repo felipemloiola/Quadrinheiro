@@ -34,17 +34,22 @@ object StorageMaintenance {
 
     private fun largestFiles(roots: List<File>, limit: Int = 20): List<StorageItem> {
         val top = java.util.PriorityQueue<StorageItem>(compareBy { it.bytes })
+        val seenCanonical = HashSet<String>()
         var visited = 0
         val stack = ArrayDeque<Pair<File, Int>>()
-        roots.forEach { root -> if (root.exists()) stack.add(root to 0) }
+        roots.distinctBy { file -> runCatching { file.canonicalPath }.getOrElse { file.absolutePath } }.forEach { root ->
+            if (root.exists()) stack.add(root to 0)
+        }
         while (stack.isNotEmpty() && visited < MAX_DIAGNOSTIC_ENTRIES) {
             val (file, depth) = stack.removeLast()
+            val canonicalPath = runCatching { file.canonicalPath }.getOrNull() ?: continue
+            if (!seenCanonical.add(canonicalPath)) continue
             visited++
             if (file.isFile) {
                 val size = runCatching { file.length() }.getOrDefault(0L)
                 if (size > 0L && (top.size < limit || size > top.peek().bytes)) {
                     if (top.size == limit) top.poll()
-                    top.add(StorageItem(runCatching { file.canonicalPath }.getOrElse { file.name }.takeLast(220), size))
+                    top.add(StorageItem(canonicalPath.takeLast(220), size))
                 }
             } else if (file.isDirectory && depth < MAX_DIAGNOSTIC_DEPTH) {
                 runCatching { file.listFiles().orEmpty() }.getOrDefault(emptyArray()).forEach { child ->
@@ -68,12 +73,13 @@ object StorageMaintenance {
         val cachePaths = listOfNotNull(cacheInternalPath, cacheExternalPath)
         val externalPaths = listOfNotNull(externalPath)
         fun inRoots(path: String, roots: List<String>) = roots.any { path == it.removeSuffix(File.separator) || path.startsWith(it) }
+        val visitedLocalFiles = HashSet<String>()
         val dataBytes = data.walkTopDown().onEnter { file ->
             val path = runCatching { file.canonicalPath }.getOrNull() ?: return@onEnter false
             (path == data.path || path.startsWith(data.path + File.separator)) && !inRoots(path, cachePaths + externalPaths)
-        }.filter { it.isFile }.sumOf { it.length() }
+        }.filter { it.isFile && runCatching { visitedLocalFiles.add(it.canonicalPath) }.getOrDefault(false) }.sumOf { it.length() }
         val externalBytes = external?.let(::bytes) ?: 0L
-        val cacheBytes = bytes(cache) + (externalCache?.let(::bytes) ?: 0L)
+        val cacheBytes = bytes(cache) + (externalCache?.takeIf { it != cache }?.let(::bytes) ?: 0L)
         val localBytes = dataBytes + externalBytes
         fun safeSize(file: File?): Long = file?.let { runCatching { bytes(it) }.getOrDefault(0L) } ?: 0L
         fun under(root: File, relative: String) = safeSize(root.resolve(relative))
@@ -81,7 +87,7 @@ object StorageMaintenance {
         val sharedPreferences = under(data, "shared_prefs")
         val databases = under(data, "databases")
         val files = under(data, "files")
-        val noBackup = context.noBackupFilesDir.canonicalFile.takeIf { it != data }?.let(::safeSize) ?: 0L
+        val noBackup = context.noBackupFilesDir.canonicalFile.takeIf { it != data && !it.path.startsWith(data.resolve("files").path + File.separator) }?.let(::safeSize) ?: 0L
         val cacheCovers = under(cache, "quadrinheiro_covers_disk_cache")
         val httpCache = under(cache, "quadrinheiro_http_cache")
         val sharedCards = under(cache, "shared_cards")
@@ -101,7 +107,7 @@ object StorageMaintenance {
             "Arquivos externos do app" to (externalBytes - externalUpdates).coerceAtLeast(0L),
             "Atualizações baixadas" to externalUpdates
         )
-        val largest = largestFiles(listOf(data, cache) + listOfNotNull(external))
+        val largest = largestFiles(listOf(data, cache) + listOfNotNull(externalCache, external))
         return StorageUsage(cacheBytes, localBytes, categories, largest)
     }
 
@@ -112,7 +118,7 @@ object StorageMaintenance {
         loader.diskCache?.clear()
         MultiApiSearchEngine.sharedHttpClient.cache?.evictAll()
         SafeStorage(context).removeItem(SafeStorage.TRANSLATION_CACHE_KEY)
-        CacheMaintenance.prune(context)
+        CacheMaintenance.prune(context, maxOrphans = 0, maxOrphanBytes = 0L)
     }
 
     fun formatBytes(bytes: Long): String = when {

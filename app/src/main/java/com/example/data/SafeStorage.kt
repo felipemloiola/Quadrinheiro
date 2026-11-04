@@ -393,39 +393,46 @@ class SafeStorage(context: Context) {
         } catch (_: Throwable) {
         }
 
-        // 2. Se o quadrinho já estiver salvo no estado principal do SafeStorage, atualiza diretamente o objeto
-        try {
-            val rawState = getItem(STORAGE_KEY) ?: return
-            val root = JSONObject(rawState)
-            val comicsArr = root.optJSONArray("comics") ?: return
-            var updatedAny = false
-            for (i in 0 until comicsArr.length()) {
-                val obj = comicsArr.optJSONObject(i) ?: continue
-                val idVal = obj.optString("id", "")
-                val extIdVal = obj.optString("externalId", "")
-                val isMatch = (translated.id.isNotBlank() && idVal == translated.id) ||
-                    (translated.externalId.isNotBlank() && extIdVal == translated.externalId)
-                if (isMatch) {
-                    if (sPt.isNotBlank() && obj.optString("synopsisPtBr", "") != sPt) {
-                        obj.put("synopsisPtBr", sPt)
-                        obj.put("synopsis", sPt)
-                        obj.put("updatedAt", System.currentTimeMillis())
-                        obj.put("isDirty", true)
-                        updatedAny = true
-                    }
-                    if (tPt.isNotBlank() && obj.optString("titlePtBr", "") != tPt) {
-                        obj.put("titlePtBr", tPt)
-                        obj.put("title", tPt)
-                        obj.put("updatedAt", System.currentTimeMillis())
-                        obj.put("isDirty", true)
-                        updatedAny = true
+        // 2. Se o quadrinho já estiver salvo no estado da conta ativa ou no espelho local, atualiza ambos
+        val targetKeys = syncStateKeys(null).ifEmpty { listOf(STORAGE_KEY) }
+        for (targetKey in targetKeys) {
+            try {
+                val rawState = getItem(targetKey) ?: continue
+                val root = JSONObject(rawState)
+                val comicsArr = root.optJSONArray("comics") ?: continue
+                var updatedAny = false
+                for (i in 0 until comicsArr.length()) {
+                    val obj = comicsArr.optJSONObject(i) ?: continue
+                    val idVal = obj.optString("id", "")
+                    val extIdVal = obj.optString("externalId", "")
+                    val isMatch = (translated.id.isNotBlank() && idVal == translated.id) ||
+                        (translated.externalId.isNotBlank() && extIdVal == translated.externalId)
+                    if (isMatch) {
+                        if (sPt.isNotBlank() && obj.optString("synopsisPtBr", "") != sPt) {
+                            obj.put("synopsisPtBr", sPt)
+                            if (obj.optString("synopsis", "").isBlank()) {
+                                obj.put("synopsis", sPt)
+                            }
+                            obj.put("updatedAt", System.currentTimeMillis())
+                            obj.put("isDirty", true)
+                            updatedAny = true
+                        }
+                        if (tPt.isNotBlank() && obj.optString("titlePtBr", "") != tPt) {
+                            obj.put("titlePtBr", tPt)
+                            if (obj.optString("title", "").isBlank()) {
+                                obj.put("title", tPt)
+                            }
+                            obj.put("updatedAt", System.currentTimeMillis())
+                            obj.put("isDirty", true)
+                            updatedAny = true
+                        }
                     }
                 }
+                if (updatedAny) {
+                    setItem(targetKey, root.toString())
+                }
+            } catch (_: Throwable) {
             }
-            if (updatedAny) {
-                setItem(STORAGE_KEY, root.toString())
-            }
-        } catch (_: Throwable) {
         }
     }
 
@@ -885,7 +892,7 @@ class SafeStorage(context: Context) {
             obj.put("id", c.id)
             obj.put("externalId", c.externalId)
             obj.put("title", c.title)
-            obj.put("titlePtBr", c.titlePtBr.ifBlank { c.title })
+            obj.put("titlePtBr", c.titlePtBr)
             obj.put("authors", c.authors)
             obj.put("publisher", c.publisher)
             obj.put("genre", c.genre)
@@ -905,7 +912,7 @@ class SafeStorage(context: Context) {
             obj.put("addedAt", c.addedAt)
             obj.put("isbn", c.isbn)
             obj.put("coverUrl", c.coverUrl)
-            obj.put("synopsis", c.synopsisPtBr.ifBlank { c.synopsis })
+            obj.put("synopsis", c.synopsis)
             obj.put("synopsisPtBr", c.synopsisPtBr)
             obj.put("sourceLabel", c.sourceLabel)
             val momentsArr = JSONArray()
@@ -1000,7 +1007,7 @@ class SafeStorage(context: Context) {
                 ComicEntry(
                     id = idVal,
                     externalId = extIdVal,
-                    title = savedTitlePtBr.ifBlank { titleVal },
+                    title = titleVal.ifBlank { savedTitlePtBr },
                     titlePtBr = savedTitlePtBr,
                     authors = obj.optString("authors", "Autor Desconhecido"),
                     publisher = obj.optString("publisher", "Editora"),
@@ -1019,7 +1026,7 @@ class SafeStorage(context: Context) {
                     addedAt = obj.optString("addedAt", ""),
                     isbn = isbnVal,
                     coverUrl = resolvedCover,
-                    synopsis = savedSynopsisPtBr.ifBlank { savedSynopsis },
+                    synopsis = savedSynopsis.ifBlank { savedSynopsisPtBr },
                     synopsisPtBr = savedSynopsisPtBr,
                     sourceLabel = obj.optString("sourceLabel", "Catálogo Base"),
                     moments = momentsList,

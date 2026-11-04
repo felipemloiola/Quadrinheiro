@@ -63,30 +63,71 @@ internal object ComicBannerResolver {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         return landscape(bounds.outWidth, bounds.outHeight)
     }
-    private suspend fun prefix(url: String): ByteArray = suspendCancellableCoroutine { continuation ->
+    private suspend fun prefix(url: String, redirectsLeft: Int = 1): ByteArray = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(Request.Builder().url(url).header("Range", "bytes=0-65535").header("Accept", "image/*").build())
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { if (continuation.isActive) continuation.resumeWithException(e) }
             override fun onResponse(call: Call, response: Response) {
                 try {
-                    val bytes = response.use {
-                        val body = it.body
-                        if (!it.isSuccessful || body == null || !it.header("Content-Type").orEmpty().startsWith("image/", true)) ByteArray(0)
-                        else {
-                            val source = body.source(); val buffer = Buffer()
-                            while (buffer.size < 65536L) {
-                                val count = source.read(buffer, minOf(8192L, 65536L - buffer.size))
-                                if (count < 0L) break
-                                check(count > 0L)
+                    val redirectUrl = if (response.code in listOf(301, 302, 307, 308) && redirectsLeft > 0) {
+                        response.header("Location")?.let { loc ->
+                            response.request.url.resolve(loc)?.toString()
+                        }?.takeIf(::allowed)
+                    } else null
+                    if (redirectUrl != null) {
+                        response.close()
+                        val nextCall = client.newCall(Request.Builder().url(redirectUrl).header("Range", "bytes=0-65535").header("Accept", "image/*").build())
+                        continuation.invokeOnCancellation { nextCall.cancel() }
+                        nextCall.enqueue(object : Callback {
+                            override fun onFailure(call: Call, e: IOException) { if (continuation.isActive) continuation.resumeWithException(e) }
+                            override fun onResponse(call: Call, redirected: Response) {
+                                try {
+                                    val bytes = readPrefixBody(redirected)
+                                    if (continuation.isActive) continuation.resume(bytes)
+                                } catch (e: Exception) {
+                                    if (continuation.isActive) continuation.resumeWithException(e)
+                                }
                             }
-                            buffer.readByteArray()
-                        }
+                        })
+                        return
                     }
+                    val bytes = readPrefixBody(response)
                     if (continuation.isActive) continuation.resume(bytes)
                 } catch (e: Exception) { if (continuation.isActive) continuation.resumeWithException(e) }
             }
         })
+    }
+    private fun readPrefixBody(response: Response): ByteArray = response.use {
+        val body = it.body
+        if (!it.isSuccessful || body == null || !it.header("Content-Type").orEmpty().startsWith("image/", true)) ByteArray(0)
+        else {
+            val source = body.source(); val buffer = Buffer()
+            while (buffer.size < 65536L) {
+                val count = source.read(buffer, minOf(8192L, 65536L - buffer.size))
+                if (count < 0L) break
+                check(count > 0L)
+            }
+            buffer.readByteArray()
+        }
+    }
+    internal suspend fun probeLandscapeArtwork(url: String, title: String): BannerArtwork? {
+        if (!allowed(url)) return null
+        return probes.withPermit {
+            try {
+                val bytes = prefix(url)
+                if (bytes.isEmpty() || bytes.size > 65536) return@withPermit null
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (landscape(bounds.outWidth, bounds.outHeight)) {
+                    BannerArtwork(url, bounds.outWidth, bounds.outHeight, title.take(300))
+                } else null
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
     private suspend fun first(detail: CatalogDetails): String? = coroutineScope {
         for (batch in candidates(detail).chunked(2)) {

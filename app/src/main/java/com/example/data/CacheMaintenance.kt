@@ -12,16 +12,26 @@ object CacheMaintenance {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     fun schedule(context: Context) { scope.launch { runCatching { prune(context.applicationContext) } } }
 
-    internal fun prune(context: Context, now: Long = System.currentTimeMillis()) {
+    internal fun prune(
+        context: Context,
+        now: Long = System.currentTimeMillis(),
+        maxOrphans: Int = 2,
+        maxOrphanBytes: Long = 64L * 1024 * 1024
+    ) {
         val active = InAppUpdateDownload.load(context)
         if (active != null && active.update.code <= BuildConfig.VERSION_CODE) InAppUpdateDownload.cancel(context, active)
         val activeCode = active?.update?.code?.takeIf { it > BuildConfig.VERSION_CODE }
         RecoverableFilePolicy.pruneUpdates(
             roots = listOfNotNull(
                 File(context.cacheDir, "updates"),
+                File(context.filesDir, "updates"),
                 context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
             ),
-            installedCode = BuildConfig.VERSION_CODE.toLong(), activeCode = activeCode, now = now
+            installedCode = BuildConfig.VERSION_CODE.toLong(),
+            activeCode = activeCode,
+            now = now,
+            maxOrphans = maxOrphans,
+            maxOrphanBytes = maxOrphanBytes
         )
         pruneSharedCards(context, now)
         SafeStorage(context).trimTranslationCache()

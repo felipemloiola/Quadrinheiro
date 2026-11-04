@@ -99,8 +99,9 @@ object ComicVineCatalog {
         }
         fun credits(key: String) = j.objects(key).map { CatalogCredit(it.optString("id"), it.optString("name"), it.optString("role")) }
         fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+        val combinedCovers = (strings("covers") + strings("portraits") + strings("artwork")).filter { it.isNotBlank() }.distinct().take(12)
         return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
-            plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), strings("covers").distinct().take(6),
+            plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), combinedCovers,
             credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"))
             .also { synchronized(memory) { memory[key] = it } }
     }

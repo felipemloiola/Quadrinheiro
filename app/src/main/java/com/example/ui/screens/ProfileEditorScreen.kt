@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -94,31 +95,121 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeading("Aparência do perfil")
-                Box(Modifier.fillMaxWidth().height(154.dp).clip(RoundedCornerShape(20.dp)).background(theme.bgSecondary)) {
-                    if (banner.isNotBlank()) ProfileImage(banner, "Banner do perfil", Modifier.fillMaxSize())
-                    Box(Modifier.align(Alignment.TopEnd).padding(10.dp).size(44.dp).clip(CircleShape).background(theme.bgSecondary.copy(alpha = .9f))
-                        .clickable(enabled = !imageBusy) { bannerSearchOpen = true }, contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.AddPhotoAlternate, "Escolher banner", tint = theme.textPrimary)
+                SectionHeading("Aparência do perfil", "Personalize o banner e a foto do seu perfil.")
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(176.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(theme.bgSecondary)
+                ) {
+                    if (banner.isNotBlank()) {
+                        ProfileImage(banner, "Banner do perfil", Modifier.fillMaxSize())
+                    } else {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AddPhotoAlternate,
+                                contentDescription = null,
+                                tint = theme.textTertiary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Text("Sem banner selecionado", color = theme.textTertiary, fontSize = 12.5.sp)
+                        }
                     }
-                    Box(Modifier.align(Alignment.BottomStart).padding(12.dp).clip(CircleShape)
-                        .clickable(enabled = !imageBusy) { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        UserAvatar(profile.copy(avatarUrl = avatar, avatarPreset = preset), sizeDp = 68)
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(14.dp)
+                            .clip(CircleShape)
+                            .clickable(enabled = !imageBusy) {
+                                avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
+                    ) {
+                        UserAvatar(profile.copy(avatarUrl = avatar, avatarPreset = preset), sizeDp = 72)
                     }
-                    if (imageBusy) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp), color = theme.accent)
+                    if (imageBusy) {
+                        CircularProgressIndicator(
+                            Modifier.align(Alignment.Center).size(24.dp),
+                            color = theme.accent
+                        )
+                    }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { bannerSearchOpen = true }, enabled = !imageBusy, modifier = Modifier.heightIn(min = 44.dp).testTag("search_profile_banner")) { Text("Buscar arte", color = theme.accent) }
-                    TextButton(onClick = { bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !imageBusy, modifier = Modifier.heightIn(min = 44.dp)) { Text("Galeria", color = theme.accent) }
-                }
-                if (banner.isNotBlank()) Row {
-                    TextButton(enabled = !imageBusy, onClick = { scope.launch {
-                        pendingBanner = withContext(Dispatchers.Default) { runCatching {
-                            val bytes = android.util.Base64.decode(banner.substringAfter("base64,"), android.util.Base64.DEFAULT)
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        }.getOrNull() }
-                    } }) { Text("Reenquadrar", color = theme.accent) }
-                    TextButton(onClick = { banner = "" }, enabled = !imageBusy) { Text("Remover banner", color = theme.accent) }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .contentMaterialSurface(RoundedCornerShape(18.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { bannerSearchOpen = true },
+                            enabled = !imageBusy,
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp).testTag("search_profile_banner")
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = theme.accent, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Buscar arte", color = theme.accent)
+                        }
+                        TextButton(
+                            onClick = { bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                            enabled = !imageBusy,
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp).testTag("gallery_profile_banner")
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = theme.accent, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Galeria", color = theme.accent)
+                        }
+                    }
+                    if (banner.isNotBlank()) {
+                        HorizontalDivider(color = theme.divider, thickness = 0.5.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                enabled = !imageBusy,
+                                modifier = Modifier.heightIn(min = 44.dp).testTag("reframe_profile_banner"),
+                                onClick = {
+                                    scope.launch {
+                                        imageBusy = true
+                                        imageError = null
+                                        try {
+                                            pendingBanner = com.example.data.CatalogBanners.bitmapFromBannerValue(banner)
+                                        } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                            throw cancel
+                                        } catch (_: Exception) {
+                                            imageError = "Não foi possível reenquadrar este banner. Escolha outra arte ou foto."
+                                        } finally {
+                                            imageBusy = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.Crop, contentDescription = null, tint = theme.accent, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Reenquadrar", color = theme.accent)
+                            }
+                            TextButton(
+                                onClick = { banner = "" },
+                                enabled = !imageBusy,
+                                modifier = Modifier.heightIn(min = 44.dp).testTag("remove_profile_banner")
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFF43F5E), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Remover banner", color = Color(0xFFF43F5E))
+                            }
+                        }
+                    }
                 }
                 if (avatar.isBlank()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     com.example.model.AppleAvatarPreset.entries.forEach { choice ->

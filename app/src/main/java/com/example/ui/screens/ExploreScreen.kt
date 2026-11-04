@@ -33,6 +33,7 @@ import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalAppMotion
 import com.example.viewmodel.QuadrinheiroViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -101,6 +102,36 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                         }
                     }
                     if (entries.isEmpty()) item { Text("Ainda não há sugestões compatíveis no catálogo carregado.", color = theme.textSecondary) }
+                    item(key = "explore_load_more") {
+                        val scope = rememberCoroutineScope()
+                        var loadingMore by remember { mutableStateOf(false) }
+                        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            if (loadingMore) {
+                                CircularProgressIndicator(Modifier.size(22.dp), color = theme.accent, strokeWidth = 2.dp)
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        loadingMore = true
+                                        scope.launch {
+                                            try {
+                                                val univ = when (selected) {
+                                                    "Universo DC" -> "DC / Vertigo"
+                                                    "Universo Marvel" -> "Marvel"
+                                                    else -> profile.favoriteUniverse
+                                                }
+                                                com.example.data.ModernCatalog.loadMore(univ)
+                                            } finally {
+                                                loadingMore = false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.heightIn(min = 44.dp).testTag("explore_load_more_button")
+                                ) {
+                                    Text("Carregar mais edições", color = theme.accent)
+                                }
+                            }
+                        }
+                    }
                 } else {
                     collections.forEach { (title, entries) ->
                         if (entries.isNotEmpty()) item(key = title) {
