@@ -145,7 +145,8 @@ class ReaderNavigationTest {
     }
     @Test fun registrationLoadsTheActualPageCountForTheSelectedEdition() {
         compose.runOnIdle { vm.selectComicForSheet(ComicEntry("mt-184296", "mt-184296", "Batman: Ano Um", authors = "", publisher = "", pageCount = 0, status = ReadingStatus.READ, sourceLabel = "Metron")) }
-        compose.waitUntil(25000) { compose.onAllNodes(hasText("144") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(25000) { compose.onAllNodes(hasTestTag("edition_page_count") and hasText("144 páginas")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("edition_page_count_input").assertDoesNotExist()
         screenshot("registration")
         compose.onNodeWithTag("modal_header_save_button").performClick()
         compose.runOnIdle { assertEquals(144, vm.comics.value.first { it.id == "mt-184296" }.pageCount) }
