@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import catalog from './catalog.cjs';
-const {validate,upstream,keyFor}=catalog;
+const {validate,upstream,keyFor,requestInput}=catalog;
 export const json=(body,status=200)=>Response.json(body,{status,headers:{'X-Content-Type-Options':'nosniff','Cache-Control':status===200?'public, max-age=600':'no-store'}});
 export class CatalogStore extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.pending=new Map();}
@@ -56,7 +56,7 @@ export class CatalogStore extends DurableObject {
   this.pending.set(key,work);return work;
  }
  async fetch(req){
-  try{return json(await this.load(validate(Object.fromEntries(new URL(req.url).searchParams))));}
+  try{return json(await this.load(validate(requestInput(req.url))));}
   catch(e){const status=e.message==='invalid-input'?400:e.message==='provider-limit'?429:503;return json({error:status===400?'invalid-input':status===429?'provider-limit':'catalog-unavailable'},status);}
  }
 }

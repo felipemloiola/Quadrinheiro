@@ -16,14 +16,13 @@ object CacheMaintenance {
         val active = InAppUpdateDownload.load(context)
         if (active != null && active.update.code <= BuildConfig.VERSION_CODE) InAppUpdateDownload.cancel(context, active)
         val activeCode = active?.update?.code?.takeIf { it > BuildConfig.VERSION_CODE }
-        val apkName = Regex("quadrinheiro-(\\d+)\\.apk")
-        val roots = listOfNotNull(File(context.cacheDir, "updates"), context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates"))
-        roots.forEach { root ->
-            root.listFiles().orEmpty().filter { it.isFile && it.canonicalFile.parentFile == root.canonicalFile }.forEach fileLoop@ { file ->
-                val code = apkName.matchEntire(file.name)?.groupValues?.get(1)?.toLongOrNull() ?: return@fileLoop
-                if (code <= BuildConfig.VERSION_CODE || (code != activeCode && now - file.lastModified() > 7L * 24 * 60 * 60 * 1000)) file.delete()
-            }
-        }
+        RecoverableFilePolicy.pruneUpdates(
+            roots = listOfNotNull(
+                File(context.cacheDir, "updates"),
+                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
+            ),
+            installedCode = BuildConfig.VERSION_CODE.toLong(), activeCode = activeCode, now = now
+        )
         pruneSharedCards(context, now)
         SafeStorage(context).trimTranslationCache()
     }
@@ -31,10 +30,17 @@ object CacheMaintenance {
     internal fun pruneSharedCards(context: Context, now: Long = System.currentTimeMillis()) {
         val root = context.cacheDir.resolve("shared_cards")
         var keptBytes = 0L
-        root.listFiles().orEmpty().filter { it.isFile && it.extension == "png" && it.canonicalFile.parentFile == root.canonicalFile }
-            .sortedByDescending { it.lastModified() }.forEachIndexed { index, file ->
-                keptBytes += file.length()
-                if (index >= 8 || keptBytes > 32L * 1024 * 1024 || now - file.lastModified() > 3L * 24 * 60 * 60 * 1000) file.delete()
+        var keptCount = 0
+        root.listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "png" && it.canonicalFile.parentFile == root.canonicalFile }
+            .sortedByDescending { it.lastModified() }.forEach { file ->
+                val size = file.length()
+                if (keptCount >= 8 || size > 32L * 1024 * 1024 - keptBytes || now - file.lastModified() > 3L * 24 * 60 * 60 * 1000) {
+                    file.delete()
+                } else {
+                    keptCount++
+                    keptBytes += size
+                }
             }
     }
 }
