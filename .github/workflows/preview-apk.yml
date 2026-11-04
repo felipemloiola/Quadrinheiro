@@ -80,13 +80,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p dist
+          trap 'echo "::error::Preview verification or publication failed at line $LINENO (exit $?)."' ERR
+          mkdir -p dist ci-reports
           cp app/build/outputs/apk/release/app-release.apk dist/quadrinheiro.apk
           signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$signer" verify --verbose --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-verification.txt"
-          test "$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' "$RUNNER_TEMP/apk-verification.txt")" = 1
-          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-verification.txt" | tr 'A-F' 'a-f')
-          test "$actual" = "$(tr -d '\r\n ' < docs/release-signing-sha256.txt)"
+          test -n "$signer" || { echo '::error::apksigner not found'; exit 1; }
+          "$signer" verify --verbose --print-certs dist/quadrinheiro.apk 2>&1 | tee ci-reports/apk-verification.txt
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          report = Path('ci-reports/apk-verification.txt').read_text()
+          expected = Path('docs/release-signing-sha256.txt').read_text().strip().lower()
+          def fail(message):
+              raise SystemExit('::error::' + message)
+          if not re.fullmatch(r'[a-f0-9]{64}', expected):
+              fail('Invalid pinned signing certificate fingerprint')
+          counts = re.findall(r'^Number of signers:\s*(\d+)\s*$', report, re.M)
+          if counts != ['1']:
+              fail('APK must have exactly one verified signer; found ' + repr(counts))
+          fingerprints = {value.lower() for value in re.findall(r'^(?:Signer #\d+|V\d+(?:\.\d+)* Signer): certificate SHA-256 digest:\s*([0-9a-fA-F]{64})\s*$', report, re.M)}
+          if fingerprints != {expected}:
+              fail('APK certificate missing, unrecognized, or different from the permanent signing key')
+          print('Verified APK signature and permanent signing certificate.')
+          PY
           (cd dist && sha256sum quadrinheiro.apk > SHA256SUMS.txt)
           printf 'Versão para teste no aparelho. Commit: %s\nTestes automatizados executados antes da publicação. Testes instrumentados/Samsung e implantação Cloudflare não confirmados. Não é a versão estável. Sem manifesto de atualização automática.\n' "$GITHUB_SHA" > dist/NOTES.txt
           gh release create "$RELEASE_TAG" dist/quadrinheiro.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Quadrinheiro $VERSION_NAME - teste" --prerelease --latest=false --notes-file dist/NOTES.txt
@@ -95,6 +111,7 @@ jobs:
         with:
           name: preview-diagnostics-${{ github.run_number }}
           path: |
+            ci-reports/
             app/build/reports/tests/
             app/build/test-results/
           if-no-files-found: ignore
