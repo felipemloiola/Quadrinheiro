@@ -61,6 +61,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     var retry by remember(comic.id, comic.externalId, entity) { mutableIntStateOf(0) }
     var tab by remember(comic.id, comic.externalId, entity) { mutableIntStateOf(0) }
     var expandedDescription by remember(comic.id, comic.externalId, entity) { mutableStateOf(false) }
+    var fallbackBanner by remember(comic.id, comic.externalId, entity) { mutableStateOf("") }
     var editionPicker by remember { mutableStateOf(false) }
     var rating by remember(comic.id, comic.externalId) { mutableStateOf<CommunityRating?>(null) }
     val repository = remember { CommunityRepository(context) }
@@ -73,6 +74,16 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { failed = true }
         finally { loading = false }
+    }
+    LaunchedEffect(detail?.id, detail?.type, comic.id, comic.externalId, entity, retry) {
+        fallbackBanner = ""
+        val resource = detail ?: return@LaunchedEffect
+        if (resource.banner.isNotBlank()) return@LaunchedEffect
+        try {
+            val banner = ComicBannerResolver.resolve(resource, if (entity == null) comic.displayTitle else resource.title, force = retry > 0)
+            if (detail?.id == resource.id && detail?.type == resource.type) fallbackBanner = banner
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (_: Exception) { }
     }
     LaunchedEffect(detail?.id, detail?.type) {
         val original = detail ?: return@LaunchedEffect
@@ -103,7 +114,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         } else LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             item(key = "detail_header") {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val banner = detail?.banner.orEmpty()
+                    val banner = detail?.banner.orEmpty().ifBlank { fallbackBanner }
                     val heroHeight = maxWidth / 1.9f
                     if (banner.isNotBlank()) Box(Modifier.fillMaxWidth().height(heroHeight).testTag("comic_detail_banner")) {
                         ProfileImage(banner, null, Modifier.fillMaxSize())
