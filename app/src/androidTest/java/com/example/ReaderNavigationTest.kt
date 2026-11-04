@@ -1,7 +1,6 @@
 package com.example
 
 import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -35,7 +34,7 @@ class ReaderNavigationTest {
         compose.waitForIdle()
         android.os.SystemClock.sleep(80)
         val bmp = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
-        File(compose.activity.getExternalFilesDir(null), "revision48-$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        File(compose.activity.getExternalFilesDir(null), "profile-revision-$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
     @Test fun profileOpensLibraryAndSettingsAndKeepsItsFourFavorites() {
         compose.runOnIdle { vm.switchMainTab("profile") }
@@ -62,23 +61,21 @@ class ReaderNavigationTest {
         compose.onNodeWithTag("settings_back_button").performClick()
         compose.onNodeWithTag("reader_profile").assertExists()
     }
-    @Test fun exploreHasExpandedCollectionsAndSearchDoesNotDuplicateDiscovery() {
+    @Test fun profileKeepsOnlyLibraryAndSearchDoesNotDuplicateDiscovery() {
         compose.runOnIdle { vm.switchMainTab("explore") }
         compose.onNodeWithText("Catálogo").assertDoesNotExist()
-        compose.runOnIdle {vm.switchMainTab("profile")}
-        compose.onNodeWithTag("reader_profile").performScrollToNode(hasText("Catálogo"))
-        compose.onNodeWithTag("reader_profile").performTouchInput {swipeUp()}
-        compose.onNodeWithText("Catálogo").performClick()
-        compose.onNodeWithTag("catalog_browser").assertExists()
-        screenshot("catalog-profile")
-        compose.onNodeWithTag("settings_back_button").performClick()
+        compose.runOnIdle { vm.switchMainTab("profile") }
+        compose.onNodeWithTag("reader_profile").performScrollToNode(hasText("Biblioteca"))
+        compose.onNodeWithText("Biblioteca").assertExists()
+        compose.onNodeWithText("Catálogo").assertDoesNotExist()
+        screenshot("library-profile")
         compose.runOnIdle { vm.setSearchQuery(""); vm.switchMainTab("search") }
         compose.onNodeWithText("Qual será sua próxima leitura?").assertExists()
         compose.onNodeWithText("Destaques do catálogo").assertDoesNotExist()
         compose.onNodeWithText("Para você").assertDoesNotExist()
         screenshot("search")
     }
-    @Test fun editingProfileReturnsToProfileAndBannerStaysCompact() {
+    @Test fun editingProfileReturnsToProfileAndHeaderSharesTheBanner() {
         compose.runOnIdle {
             vm.updateSettings { it.copy(profileBannerUrl = "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/9911623-wwww.jpg") }
             vm.switchMainTab("profile")
@@ -89,17 +86,21 @@ class ReaderNavigationTest {
         compose.onNodeWithTag("reader_profile").assertExists()
         compose.runOnIdle { assertEquals("profile", vm.activeTab.value) }
         val banner = compose.onNodeWithTag("profile_banner").getUnclippedBoundsInRoot()
-        val avatar=compose.onNodeWithTag("profile_avatar").getUnclippedBoundsInRoot()
-        assertTrue((banner.right-banner.left).value/(banner.bottom-banner.top).value>1.7f)
-        assertTrue(avatar.top<banner.bottom && avatar.bottom>banner.bottom)
+        val avatar = compose.onNodeWithTag("profile_avatar").getUnclippedBoundsInRoot()
+        val title = compose.onNodeWithTag("profile_title").getUnclippedBoundsInRoot()
+        val settings = compose.onNodeWithTag("profile_settings").getUnclippedBoundsInRoot()
+        assertEquals(3f, (banner.right - banner.left).value / (banner.bottom - banner.top).value, .05f)
+        assertTrue(avatar.top < banner.bottom && avatar.bottom > banner.bottom)
+        assertTrue(title.top >= banner.top && title.bottom <= banner.bottom)
+        assertTrue(settings.top >= banner.top && settings.bottom <= banner.bottom)
         screenshot("banner-profile")
     }
     @Test fun exploreSelectorDoesNotJumpWhenOpeningCommunity() {
-        compose.runOnIdle {vm.switchMainTab("explore")}
-        val before=compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
+        compose.runOnIdle { vm.switchMainTab("explore") }
+        val before = compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
         compose.onNodeWithText("Comunidade").performClick()
-        val after=compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
-        assertEquals(before.top.value,after.top.value,.5f)
+        val after = compose.onNodeWithText("Descobrir").getUnclippedBoundsInRoot()
+        assertEquals(before.top.value, after.top.value, .5f)
         compose.onNodeWithText("Publicar").assertDoesNotExist()
         compose.onNodeWithText("Atualizar").assertDoesNotExist()
     }
@@ -132,46 +133,41 @@ class ReaderNavigationTest {
         }
     }
     @Test fun confirmSavesEveryStatusWhenTheSourceDoesNotKnowThePageCount() {
-        listOf(ReadingStatus.READ,ReadingStatus.READING,ReadingStatus.WANT_TO_READ).forEachIndexed {index,status->
-            val comic=ComicEntry("unknown-$index","","Sem paginação $index",authors="Autora",publisher="Editora",pageCount=0,status=status,sourceLabel="Metron")
-            compose.runOnIdle {vm.selectComicForSheet(comic)}
+        listOf(ReadingStatus.READ, ReadingStatus.READING, ReadingStatus.WANT_TO_READ).forEachIndexed { index, status ->
+            val comic = ComicEntry("unknown-$index", "", "Sem paginação $index", authors = "Autora", publisher = "Editora", pageCount = 0, status = status, sourceLabel = "Metron")
+            compose.runOnIdle { vm.selectComicForSheet(comic) }
             compose.onNodeWithTag("modal_header_save_button").performClick()
             compose.runOnIdle {
-                val saved=vm.comics.value.first {it.id==comic.id}
-                assertEquals(status,saved.status);assertEquals(0,saved.pageCount);assertNull(vm.selectedComic.value)
+                val saved = vm.comics.value.first { it.id == comic.id }
+                assertEquals(status, saved.status); assertEquals(0, saved.pageCount); assertNull(vm.selectedComic.value)
             }
         }
     }
     @Test fun registrationLoadsTheActualPageCountForTheSelectedEdition() {
-        compose.runOnIdle {vm.selectComicForSheet(ComicEntry("mt-184296","mt-184296","Batman: Ano Um",authors="",publisher="",pageCount=0,status=ReadingStatus.READ,sourceLabel="Metron"))}
-        compose.waitUntil(25000){compose.onAllNodes(hasText("144") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()}
-        screenshot("registration52")
+        compose.runOnIdle { vm.selectComicForSheet(ComicEntry("mt-184296", "mt-184296", "Batman: Ano Um", authors = "", publisher = "", pageCount = 0, status = ReadingStatus.READ, sourceLabel = "Metron")) }
+        compose.waitUntil(25000) { compose.onAllNodes(hasText("144") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+        screenshot("registration")
         compose.onNodeWithTag("modal_header_save_button").performClick()
-        compose.runOnIdle {assertEquals(144,vm.comics.value.first{it.id=="mt-184296"}.pageCount)}
+        compose.runOnIdle { assertEquals(144, vm.comics.value.first { it.id == "mt-184296" }.pageCount) }
     }
-
-    @Test fun iconMenuFitsItsLabelsAndProfileEditorUsesSharedGoalControls(){
-        compose.runOnIdle {vm.switchMainTab("settings");vm.openSettingsCategory("appearance")}
+    @Test fun iconMenuFitsAndProfileDoesNotOfferGoalVisibility() {
+        compose.runOnIdle { vm.switchMainTab("settings"); vm.openSettingsCategory("appearance") }
         compose.onNodeWithTag("launcher_icon_style").performScrollTo().performClick()
-        val menu=compose.onNodeWithTag("retained_glass_menu").getUnclippedBoundsInRoot()
-        assertTrue((menu.right-menu.left).value<180f)
-        screenshot("icon-menu52")
+        val menu = compose.onNodeWithTag("retained_glass_menu").getUnclippedBoundsInRoot()
+        assertTrue((menu.right - menu.left).value < 180f)
+        screenshot("icon-menu")
         compose.onNode(hasText("Original") and hasAnyAncestor(hasTestTag("retained_glass_menu"))).performClick()
-        compose.runOnIdle {vm.switchMainTab("profile")}
+        compose.runOnIdle { vm.updateProfile { it.copy(showGoalOnHome = false) }; vm.switchMainTab("profile") }
         compose.onNodeWithText("Editar perfil").performClick()
-        compose.onNodeWithTag("profile_editor").performScrollToNode(hasTestTag("profile_goal_toggle"))
-        compose.onNodeWithTag("profile_editor").performScrollToIndex(8)
-        val toggle=compose.onNodeWithTag("profile_goal_toggle")
-        val expectedGoal=toggle.fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.ToggleableState]!=androidx.compose.ui.state.ToggleableState.On
-        toggle.performClick()
-        if(expectedGoal)toggle.assertIsOn() else toggle.assertIsOff()
-        screenshot("profile-editor52")
+        compose.onNodeWithTag("profile_editor").performScrollToNode(hasTestTag("favorite_universe_picker"))
+        compose.onNodeWithTag("favorite_universe_picker").assertIsDisplayed()
+        compose.onNodeWithTag("profile_editor").performScrollToNode(hasText("Meta diária"))
+        compose.onNodeWithTag("profile_goal_toggle").assertDoesNotExist()
+        compose.onNodeWithText("Meta no Início").assertDoesNotExist()
+        screenshot("profile-editor")
         compose.onNodeWithTag("profile_editor").performScrollToNode(hasTestTag("save_profile"))
         compose.onNodeWithTag("save_profile").performClick()
         compose.onNodeWithTag("profile_editor").assertDoesNotExist()
-        compose.runOnIdle {assertEquals(expectedGoal,vm.profile.value.showGoalOnHome)}
+        compose.runOnIdle { assertFalse(vm.profile.value.showGoalOnHome) }
     }
-
 }
-
-

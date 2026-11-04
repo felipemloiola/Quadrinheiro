@@ -35,19 +35,18 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
     onBack: () -> Unit, onSave: (ReaderProfile, String) -> Unit,
-    onHandleChange:(String)->Unit = {}, handleFeedback:String="",
-    onEditFavorite:(Boolean,Int)->Unit = {_,_->}) {
+    onHandleChange: (String) -> Unit = {}, handleFeedback: String = "",
+    onEditFavorite: (Boolean, Int) -> Unit = { _, _ -> }) {
     val theme = LocalIOS27Theme.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by rememberSaveable { mutableStateOf(profile.name) }
     var bio by rememberSaveable { mutableStateOf(profile.bio) }
     var universe by rememberSaveable { mutableStateOf(profile.favoriteUniverse) }
-    var preset by rememberSaveable {mutableStateOf(profile.avatarPreset)}
+    var preset by rememberSaveable { mutableStateOf(profile.avatarPreset) }
     var handle by rememberSaveable { mutableStateOf(profile.handle) }
     var yearly by rememberSaveable { mutableStateOf(profile.yearlyGoal.toString()) }
     var daily by rememberSaveable { mutableStateOf(profile.dailyPagesGoal.toString()) }
-    var showGoal by rememberSaveable { mutableStateOf(profile.showGoalOnHome) }
     var avatar by rememberSaveable { mutableStateOf(profile.avatarUrl) }
     var banner by rememberSaveable { mutableStateOf(settings.profileBannerUrl) }
     var imageBusy by remember { mutableStateOf(false) }
@@ -59,7 +58,7 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             imageBusy = true; imageError = null
             try { pendingBanner = withContext(Dispatchers.IO) { decodeAvatarBitmapFromUri(context, uri, 2400) } }
             catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-            catch (e: Exception) { imageError = "Não foi possível preparar essa imagem. Escolha outra." }
+            catch (_: Exception) { imageError = "Não foi possível preparar essa imagem. Escolha outra." }
             finally { imageBusy = false }
         }
     }
@@ -72,21 +71,22 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                 var sample = 1; while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1400) sample *= 2
                 context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
             } }
-            catch (e: Exception) { imageError = "Não foi possível abrir a foto." }
+            catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+            catch (_: Exception) { imageError = "Não foi possível abrir a foto." }
             finally { imageBusy = false }
         }
     }
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().testTag("profile_editor"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 200.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().testTag("profile_editor"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 200.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 SettingsBackButton(onBack, label = "Perfil")
                 Text("Editar perfil", color = theme.textPrimary, fontSize = 18.sp)
                 TextButton(enabled = name.isNotBlank() && !imageBusy, onClick = {
-                    onSave(profile.copy(name = name.trim().take(80), bio = bio.trim().take(400), avatarUrl = avatar, favoriteUniverse = universe,avatarPreset=preset,
-                        yearlyGoal=yearly.toIntOrNull()?.coerceIn(1,1000) ?: profile.yearlyGoal,
-                        dailyPagesGoal=daily.toIntOrNull()?.coerceIn(1,2000) ?: profile.dailyPagesGoal,showGoalOnHome=showGoal), banner)
+                    onSave(profile.copy(name = name.trim().take(80), bio = bio.trim().take(400), avatarUrl = avatar,
+                        favoriteUniverse = universe, avatarPreset = preset,
+                        yearlyGoal = yearly.toIntOrNull()?.coerceIn(1, 1000) ?: profile.yearlyGoal,
+                        dailyPagesGoal = daily.toIntOrNull()?.coerceIn(1, 2000) ?: profile.dailyPagesGoal), banner)
                     onBack()
                 }, modifier = Modifier.testTag("save_profile")) { Text("Salvar", color = theme.accent) }
             }
@@ -102,22 +102,24 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                     }
                     Box(Modifier.align(Alignment.BottomStart).padding(12.dp).clip(CircleShape)
                         .clickable(enabled = !imageBusy) { avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        UserAvatar(profile.copy(avatarUrl = avatar,avatarPreset=preset), sizeDp = 68)
+                        UserAvatar(profile.copy(avatarUrl = avatar, avatarPreset = preset), sizeDp = 68)
                     }
                     if (imageBusy) CircularProgressIndicator(Modifier.align(Alignment.Center).size(24.dp), color = theme.accent)
                 }
                 if (banner.isNotBlank()) Row {
                     TextButton(onClick = { scope.launch {
-                        pendingBanner=withContext(Dispatchers.Default){runCatching {
-                            val bytes=android.util.Base64.decode(banner.substringAfter("base64,"),android.util.Base64.DEFAULT)
-                            BitmapFactory.decodeByteArray(bytes,0,bytes.size)
-                        }.getOrNull()}
-                    } }) { Text("Reenquadrar",color=theme.accent) }
+                        pendingBanner = withContext(Dispatchers.Default) { runCatching {
+                            val bytes = android.util.Base64.decode(banner.substringAfter("base64,"), android.util.Base64.DEFAULT)
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }.getOrNull() }
+                    } }) { Text("Reenquadrar", color = theme.accent) }
                     TextButton(onClick = { banner = "" }) { Text("Remover banner", color = theme.accent) }
                 }
-                if(avatar.isBlank())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                if (avatar.isBlank()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     com.example.model.AppleAvatarPreset.entries.forEach { choice ->
-                        Box(Modifier.size(44.dp).clip(CircleShape).clickable{preset=choice.id},contentAlignment=Alignment.Center){UserAvatar(profile.copy(avatarUrl="",avatarPreset=choice.id),sizeDp=36)}
+                        Box(Modifier.size(44.dp).clip(CircleShape).clickable { preset = choice.id }, contentAlignment = Alignment.Center) {
+                            UserAvatar(profile.copy(avatarUrl = "", avatarPreset = choice.id), sizeDp = 36)
+                        }
                     }
                 }
                 if (imageError != null) Text(imageError!!, color = theme.textSecondary, fontSize = 13.sp)
@@ -125,10 +127,10 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         }
         item { SectionHeading("Informações") }
         item {
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text("Nome de usuário",color=theme.textSecondary,fontSize=13.sp)
-                AppleTextField(handle,{handle=it.take(60);onHandleChange(handle)},"@usuário",useContentMaterial=true)
-                if(handleFeedback.isNotBlank())Text(handleFeedback,color=theme.textSecondary,fontSize=12.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Nome de usuário", color = theme.textSecondary, fontSize = 13.sp)
+                AppleTextField(handle, { handle = it.take(60); onHandleChange(handle) }, "@usuário", useContentMaterial = true)
+                if (handleFeedback.isNotBlank()) Text(handleFeedback, color = theme.textSecondary, fontSize = 12.sp)
             }
         }
         item {
@@ -144,45 +146,47 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Editora ou universo favorito", color = theme.textPrimary, fontSize = 15.sp)
-                AppleMenuPicker(value = universe, onChange = { universe = it }, options = listOf("DC / Vertigo", "Marvel", "Image", "Dark Horse", "Mangás", "Quadrinhos nacionais", "Independentes").map { SegmentOption(it, it) })
-                Text("Também ajuda nas suas recomendações.", color = theme.textSecondary, fontSize = 12.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeading("Recomendações")
+                Row(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Editora ou universo", Modifier.weight(1f), color = theme.textPrimary, fontSize = 15.sp)
+                    Box(Modifier.widthIn(max = 190.dp).heightIn(min = 44.dp).testTag("favorite_universe_picker"), contentAlignment = Alignment.CenterEnd) {
+                        AppleMenuPicker(value = universe, onChange = { universe = it }, options = listOf("DC / Vertigo", "Marvel", "Image", "Dark Horse", "Mangás", "Quadrinhos nacionais", "Independentes").map { SegmentOption(it, it) })
+                    }
+                }
+                Text("Sua preferência ajuda nas sugestões.", Modifier.padding(horizontal = 16.dp), color = theme.textSecondary, fontSize = 12.sp)
             }
         }
         item {
-            Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Favoritos")
-                listOf(false to "HQs favoritas",true to "Personagens favoritos").forEach { (characters,label)->
-                    Text(label,color=theme.textPrimary)
-                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) { repeat(4){slot->
-                        val name=if(characters)settings.profileFavoriteCharacters.getOrNull(slot) else settings.profileFavoriteComicIds.getOrNull(slot)
-                        val source=if(characters)settings.profileShowcaseDetails["character:$name"].orEmpty() else settings.profileShowcaseDetails["comic:$name"]?.let(com.example.data.ProfileShowcase::restoreComic)?.coverUrl.orEmpty()
-                        Box(Modifier.weight(1f).aspectRatio(if(characters)1f else 2f/3f).clip(RoundedCornerShape(12.dp)).background(theme.bgSecondary).clickable{onEditFavorite(characters,slot)},contentAlignment=Alignment.Center){
-                            if(source.isNotBlank())ProfileImage(source,name,Modifier.fillMaxSize(),face=characters)
-                            else Icon(Icons.Default.Add,"Escolher ${slot+1}",tint=theme.textSecondary)
+                listOf(false to "HQs favoritas", true to "Personagens favoritos").forEach { (characters, label) ->
+                    Text(label, color = theme.textPrimary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { repeat(4) { slot ->
+                        val name = if (characters) settings.profileFavoriteCharacters.getOrNull(slot) else settings.profileFavoriteComicIds.getOrNull(slot)
+                        val source = if (characters) settings.profileShowcaseDetails["character:$name"].orEmpty() else settings.profileShowcaseDetails["comic:$name"]?.let(com.example.data.ProfileShowcase::restoreComic)?.coverUrl.orEmpty()
+                        Box(Modifier.weight(1f).aspectRatio(if (characters) 1f else 2f / 3f).clip(RoundedCornerShape(12.dp)).background(theme.bgSecondary).clickable { onEditFavorite(characters, slot) }, contentAlignment = Alignment.Center) {
+                            if (source.isNotBlank()) ProfileImage(source, name, Modifier.fillMaxSize(), face = characters)
+                            else Icon(Icons.Default.Add, "Escolher ${slot + 1}", tint = theme.textSecondary)
                         }
                     } }
                 }
             }
         }
         item {
-            Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Leitura")
-                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                        Column(Modifier.weight(1f)){Text("Meta anual",color=theme.textPrimary,fontSize=15.sp);Text("$yearly HQs",color=theme.textSecondary,fontSize=13.sp)}
-                        AppleStepper(yearly.toIntOrNull() ?: 1,min=1,max=1000,onChange={yearly=it.toString()})
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("Meta anual", color = theme.textPrimary, fontSize = 15.sp); Text("$yearly HQs", color = theme.textSecondary, fontSize = 13.sp) }
+                        AppleStepper(yearly.toIntOrNull() ?: 1, min = 1, max = 1000, onChange = { yearly = it.toString() })
                     }
-                    HorizontalDivider(color=theme.divider)
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                        Column(Modifier.weight(1f)){Text("Meta diária",color=theme.textPrimary,fontSize=15.sp);Text("$daily páginas",color=theme.textSecondary,fontSize=13.sp)}
-                        AppleStepper(daily.toIntOrNull() ?: 1,min=1,max=2000,onChange={daily=it.toString()})
+                    HorizontalDivider(color = theme.divider)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("Meta diária", color = theme.textPrimary, fontSize = 15.sp); Text("$daily páginas", color = theme.textSecondary, fontSize = 13.sp) }
+                        AppleStepper(daily.toIntOrNull() ?: 1, min = 1, max = 2000, onChange = { daily = it.toString() })
                     }
-                }
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                    Text("Meta no Início",Modifier.weight(1f),color=theme.textPrimary)
-                    AppleToggleSwitch(showGoal,{showGoal=it},Modifier.testTag("profile_goal_toggle"))
                 }
             }
         }
