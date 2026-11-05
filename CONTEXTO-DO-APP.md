@@ -442,7 +442,7 @@ Segundo lote (também local, não commitado):
 - `LiquidSlider.kt`: semântica de acessibilidade (`progressBarRangeInfo` + ação `setProgress`) para TalkBack ajustar o valor sem gesto.
 - `LiquidGlassSegmentedControl`: itens usam `Modifier.selectable` (estado "selecionado" anunciado) e a linha usa `selectableGroup()`.
 
-Fora do escopo aplicado, aguardando decisão: política de migração do epoch (`CatalogEpoch.RESET_AT = 1793736512503L` local), conflito de sync (`localWins` em `QuadrinheiroCloudRepository`), retry terminal do `QuadrinheiroSyncWorker`, sync de contas por e-mail. `searchLanguage`/`provider`/`hdCovers` não alteram a busca real por limite do backend (detalhado no fim da seção). `API_TIMEOUT_MS` em `MultiApiSearchEngine` segue sem uso — pode indicar timeout nunca implementado, não remover sem investigar.
+Fora do escopo aplicado, aguardando decisão: política de migração do epoch (`CatalogEpoch.RESET_AT = 1793736512503L` local), conflito de sync (`localWins` em `QuadrinheiroCloudRepository`), retry terminal do `QuadrinheiroSyncWorker`, sync de contas por e-mail. `searchLanguage`/`provider`/`hdCovers` não alteram a busca real por limite do backend (detalhado no fim da seção). `API_TIMEOUT_MS` foi investigado e **removido** (declaração morta): os clientes OkHttp já aplicam connect/read/call timeout.
 
 ### Diagnóstico de sync/epoch (somente leitura, sem alterar dados)
 
