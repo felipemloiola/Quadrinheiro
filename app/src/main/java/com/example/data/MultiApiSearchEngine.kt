@@ -64,8 +64,8 @@ class MultiApiSearchEngine {
         return "$provider:$countryCode:hd$hdCovers:${query.trim()}".lowercase()
     }
     fun getCached(key: String): List<ComicEntry>? {
-        val match = Regex("^(MULTI|BOOKS|MANGA):(BR|US):hd(true|false):(.*)$").matchEntire(key)
-        val resolved = if (match == null) searchCacheKey(key, "ALL", "MULTI", true) else "${match.groupValues[1]}:${match.groupValues[2]}:hd${match.groupValues[3]}:${CatalogSearchPolicy.normalize(match.groupValues[4])}"
+        val match = Regex("^(multi|books|manga):(br|us):hd(true|false):(.*)$", RegexOption.IGNORE_CASE).matchEntire(key.trim())
+        val resolved = if (match == null) searchCacheKey(key, "ALL", "MULTI", true) else "${match.groupValues[1].lowercase()}:${match.groupValues[2].lowercase()}:hd${match.groupValues[3].lowercase()}:${match.groupValues[4].trim().lowercase()}"
         return synchronized(cache) { cache[resolved] }
     }
     fun updateCachedComicTranslation(comic: ComicEntry) { synchronized(cache) { cache.keys.toList().forEach { key -> cache[key] = cache[key].orEmpty().map { if (it.id == comic.id) comic else it } } } }

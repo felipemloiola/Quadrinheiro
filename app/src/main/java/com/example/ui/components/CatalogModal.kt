@@ -341,7 +341,9 @@ fun CatalogSheetModal(
         ) {
             // 1. Camada de fundo Liquid Glass fluida e otimizada
             Box(
-                modifier = Modifier.matchParentSize()
+                modifier = Modifier
+                    .matchParentSize()
+                    .layerBackdrop(sheetBackdrop, reuseRecordedContent = true)
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
@@ -352,6 +354,7 @@ fun CatalogSheetModal(
                 )
             }
 
+            CompositionLocalProvider(LocalLiquidGlassBackdrop provides sheetBackdrop) {
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -665,6 +668,7 @@ fun CatalogSheetModal(
                     }
 
                 }
+            }
             }
         }
     }
