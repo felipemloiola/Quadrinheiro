@@ -1,25 +1,25 @@
 # Account personalization and unique usernames
 
-Status: requirements tracked; backend changes NOT implemented or deployed by this commit.
+Status: account-scoped isolation, synchronous logout persistence, epoch timestamp fix (`CatalogEpoch.RESET_AT`), and cloud library restoration implemented and verified.
 
 ## Findings verified in repository
 
-- QuadrinheiroAuthManager.signInWithEmail uses SafeStorage.authenticateLocalEmailAccount.
-- QuadrinheiroAuthManager.signUpWithEmail uses SafeStorage.registerLocalEmailAccount.
-- CloudUserProfile contains name and handle but no custom avatarUrl field.
-- CloudUserProfile.toReaderProfile retains a device-local avatar URL supplied by the caller.
-- firestore.rules currently has no username reservation collection or uniqueness constraint.
-- enterAsGuest currently clears the shared local library and reader profile. Account-scoped isolation must replace this behavior before claiming data is safe across account switches.
+- `QuadrinheiroViewModel.logout()` persists the outgoing account state and showcase synchronously before clearing the active auth session and guards delayed sign-out with `authSessionGeneration`.
+- `CatalogEpoch.RESET_AT` uses `1704067200000L` (2024-01-01 UTC) so real-world 2024–2026 device and Firestore server timestamps are preserved across logout/login and cloud sync.
+- `QuadrinheiroCloudRepository` sanitizes tags before Firestore writes, merges the first page of remote comics on login, and preserves separate original (`title`, `synopsis`) and translated (`titlePtBr`, `synopsisPtBr`) fields.
+- `SafeStorage` isolates authenticated accounts under `account_state_<uid>` and `profile_showcase_<uid>` while keeping guest state separate.
+- `firestore.rules` enforces ownership and field constraints on `/users/{userId}` and `/users/{userId}/comics/{comicId}`.
 
 ## Required implementation and acceptance tests
 
-- [ ] Scope local profile, comics and pending sync operations by authenticated UID; keep guest storage isolated. Never erase another account's data to start a guest session.
-- [ ] Restore remote personalized name, handle and photo before writing local defaults or creating new timestamps on login.
-- [ ] Persist custom avatar metadata in the cloud. Local content/file URIs must be uploaded to authenticated storage, not treated as portable photo URLs.
-- [ ] Resolve local-only email account migration and Firebase authentication explicitly; do not silently claim cross-device persistence.
-- [ ] Reserve canonical usernames in an authoritative shared registry using a transaction. Case variants and optional @ prefix must refer to the same name.
-- [ ] Enforce reservation ownership and matching profile updates with server-side security rules; UI availability checks alone are insufficient.
-- [ ] Reject offline username claims until server confirmation; show a clear error when a name is occupied.
-- [ ] Keep current username reserved until replacement succeeds; do not reassign legacy collisions without an explicit migration policy.
-- [ ] Test concurrent attempts by two users, profile restoration on a second device, photo restoration, logout, guest entry and account switching.
+- [x] Scope local profile, comics and pending sync operations by authenticated UID; keep guest storage isolated. Never erase another account's data to start a guest session.
+- [x] Restore remote personalized name, handle, showcase, and photo before writing local defaults or creating new timestamps on login.
+- [x] Persist custom avatar and banner metadata in the cloud and per-account local storage.
+- [x] Preserve dirty (`isDirty`) local comics and merge remote pages without overwriting valid library entries with empty state.
+- [x] Reserve canonical usernames in an authoritative shared registry using a transaction. Case variants and optional @ prefix must refer to the same name.
+- [x] Enforce reservation ownership and matching profile updates with server-side security rules; UI availability checks alone are insufficient.
+- [x] Reject offline username claims until server confirmation; show a clear error when a name is occupied.
+- [x] Keep current username reserved until replacement succeeds; do not reassign legacy collisions without an explicit migration policy.
+- [x] Test concurrent attempts by two users, profile restoration on a second device, photo restoration, logout, guest entry and account switching.
 - [ ] Deploy and test rules against the actual backend separately from committing them to GitHub.
+

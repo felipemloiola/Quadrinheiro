@@ -13,7 +13,7 @@ object LauncherAppearance {
     internal const val DAY = "com.example.LauncherDay"
     internal const val NIGHT = "com.example.LauncherNight"
     private const val PREFS = "launcher_appearance"
-    fun followsApp(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("follow_app", true)
+    fun followsApp(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("follow_app", false)
     fun selected(context: Context): LauncherIconStyle {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return if (followsApp(context)) LauncherIconStyle.fromId(prefs.getString("accent", "black")) else LauncherIconStyle.DEFAULT

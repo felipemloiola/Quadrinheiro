@@ -113,6 +113,7 @@ import com.example.data.PortugueseComicTranslator
 import com.example.data.SeriesSequenceEngine
 import com.example.model.AppSettings
 import com.example.model.ComicEntry
+import com.example.model.CatalogPagePolicy
 import com.example.model.ComicMoment
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
@@ -161,9 +162,12 @@ fun CatalogSheetModal(
     val editorScope=androidx.compose.runtime.rememberCoroutineScope()
     var pagesEdited by remember(selectedComic.id){mutableStateOf(false)}
     var remoteInfo by remember(selectedComic.id){mutableStateOf<com.example.data.CatalogDetails?>(null)}
-    var synopsisExpanded by remember(selectedComic.id){mutableStateOf(false)}
+    var pageEditorOpen by remember(selectedComic.id) { mutableStateOf(false) }
     var metadataLoading by remember(selectedComic.id){mutableStateOf(false)}
     var pagesError by remember(selectedComic.id) { mutableStateOf(false) }
+    var translationLoading by remember(selectedComic.id) { mutableStateOf(false) }
+    var translationFailed by remember(selectedComic.id) { mutableStateOf(false) }
+    var translationRetryToken by remember(selectedComic.id) { mutableIntStateOf(0) }
 
     if (fullPage) com.example.ui.screens.ComicDetailDialog(draftComic, readerProfile, allUserComics,
         onClose = { fullPage = false }, onRegister = { next -> fullPage=false;if(onRegisterFromPage!=null)onRegisterFromPage(next) else draftComic=next },
@@ -179,8 +183,8 @@ fun CatalogSheetModal(
     var selectedMomentTag by remember(selectedComic.id) { mutableStateOf("⚡ Momento Épico") }
 
     fun buildFinalComicForSave(): ComicEntry {
-        val count=totalPagesInput.toIntOrNull()?.coerceIn(1,20000) ?: 0
-        var finalComic = draftComic.copy(pageCount=count,currentPage=if(draftComic.status==ReadingStatus.READ)count else draftComic.currentPage.coerceIn(0,count))
+        val count = CatalogPagePolicy.count(totalPagesInput) ?: 0
+        var finalComic = CatalogPagePolicy.withCount(draftComic, count)
         val pendingTag = comicTagInput.trim().replace(",", "")
         if (pendingTag.isNotEmpty() && !finalComic.tags.contains(pendingTag)) {
             finalComic = finalComic.copy(tags = finalComic.tags + pendingTag)
@@ -205,31 +209,81 @@ fun CatalogSheetModal(
     val sheetScrollState = rememberLazyListState()
     val context = LocalContext.current
     val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = { onSetExpanded(true) })
-    LaunchedEffect(selectedComic.externalId) {
-        metadataLoading=true
+    fun saveDraft() {
+        if (totalPagesInput.isNotBlank() && CatalogPagePolicy.count(totalPagesInput) == null) {
+            pagesError = true
+            pageEditorOpen = true
+            editorScope.launch { sheetScrollState.animateScrollToItem(0) }
+        } else onSave(buildFinalComicForSave())
+    }
+    LaunchedEffect(draftComic.id, draftComic.externalId) {
+        val requested = draftComic
+        remoteInfo = null
+        metadataLoading = true
         try {
-            val details = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.example.data.ComicVineCatalog.resolve(selectedComic) }
-            if (details != null) {
-              remoteInfo=details;
-              if(!pagesEdited && details.pageCount>1 && (!isExistingInShelf || draftComic.pageCount<=1)){totalPagesInput=details.pageCount.toString();draftComic=draftComic.copy(pageCount=details.pageCount)}
-              draftComic = draftComic.copy(
-                publisher = draftComic.publisher.ifBlank { details.publisher },
-                authors = draftComic.authors.ifBlank { details.creators.filter { it.role.contains("writer", true) || it.role.contains("artist", true) }.take(4).joinToString(", ") { it.name } },
-                isbn=draftComic.isbn.ifBlank {details.isbn},synopsis=details.description,
-                coverUrl=draftComic.coverUrl.ifBlank {details.image},
-                releaseYear=if(!isExistingInShelf) details.date.take(4).toIntOrNull() ?: draftComic.releaseYear else draftComic.releaseYear
-              )
+            val details = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.example.data.ComicVineCatalog.resolve(requested)
+            }
+            if (details != null && draftComic.id == requested.id && draftComic.externalId == requested.externalId) {
+                remoteInfo = details
+                CatalogPagePolicy.remoteCount(draftComic.pageCount, isExistingInShelf, pagesEdited, details.pageCount)?.let { count ->
+                    totalPagesInput = count.toString()
+                    draftComic = CatalogPagePolicy.withCount(draftComic, count)
+                    pagesError = false
+                }
+                val localPtSynopsis = if (details.description.isNotBlank() && !PortugueseComicTranslator.isPortugueseText(details.description)) {
+                    PortugueseComicTranslator.translateSynopsisToPtBr(
+                        rawSynopsis = details.description,
+                        translatedTitle = draftComic.displayTitle,
+                        authors = draftComic.authors,
+                        publisher = draftComic.publisher.ifBlank { details.publisher },
+                        releaseYear = draftComic.releaseYear,
+                        pageCount = draftComic.pageCount
+                    )
+                } else ""
+                draftComic = draftComic.copy(
+                    publisher = draftComic.publisher.ifBlank { details.publisher },
+                    authors = draftComic.authors.ifBlank { details.creators.filter { it.role.contains("writer", true) || it.role.contains("artist", true) }.take(4).joinToString(", ") { it.name } },
+                    isbn = draftComic.isbn.ifBlank { details.isbn },
+                    synopsis = draftComic.synopsis.ifBlank { details.description },
+                    synopsisPtBr = draftComic.synopsisPtBr.ifBlank { localPtSynopsis },
+                    coverUrl = draftComic.coverUrl.ifBlank { details.image },
+                    releaseYear = if (!isExistingInShelf) details.date.take(4).toIntOrNull() ?: draftComic.releaseYear else draftComic.releaseYear
+                )
             }
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
-        catch (_: Exception) { }finally{metadataLoading=false}
+        catch (_: Exception) { }
+        finally { metadataLoading = false }
     }
-
-    LaunchedEffect(remoteInfo?.id,remoteInfo?.type){
-        val info=remoteInfo ?: return@LaunchedEffect
-        if(info.description.isNotBlank())try{
-            val translated=com.example.data.ComicVineCatalog.translated(info)
-            draftComic=draftComic.copy(synopsis=translated.description,synopsisPtBr=translated.description)
-        }catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}catch(_:Exception){}
+    LaunchedEffect(remoteInfo?.id, remoteInfo?.type, translationRetryToken) {
+        val info = remoteInfo ?: return@LaunchedEffect
+        val requestedId = draftComic.id
+        val requestedExternalId = draftComic.externalId
+        if (info.description.isNotBlank() && !PortugueseComicTranslator.isPortugueseText(info.description)) {
+            translationLoading = true
+            translationFailed = false
+            try {
+                val translated = com.example.data.ComicVineCatalog.translated(info)
+                if (remoteInfo?.id == info.id && remoteInfo?.type == info.type && draftComic.id == requestedId &&
+                    draftComic.externalId == requestedExternalId) {
+                    if (translated.description.isNotBlank()) {
+                        draftComic = draftComic.copy(
+                            synopsis = draftComic.synopsis.ifBlank { info.description },
+                            synopsisPtBr = translated.description
+                        )
+                        translationFailed = false
+                    } else if (draftComic.synopsisPtBr.isBlank()) {
+                        translationFailed = true
+                    }
+                }
+            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                if (draftComic.synopsisPtBr.isBlank()) translationFailed = true
+            } finally {
+                translationLoading = false
+            }
+        }
     }
     // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
     LaunchedEffect(draftComic.coverUrl) {
@@ -285,29 +339,22 @@ fun CatalogSheetModal(
                     indication = null
                 ) {}
         ) {
-            // 1. Camada de fundo Liquid Glass na GPU capturada exclusivamente no sheetBackdrop do próprio modal
+            // 1. Camada de fundo Liquid Glass fluida e otimizada
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    // SINGLE_PASS_SHEET_BACKDROP_V16: only this background capture, not controls.
-                    .layerBackdrop(sheetBackdrop, reuseRecordedContent = true)
+                modifier = Modifier.matchParentSize()
             ) {
                 LiquidGlassSheetRefractiveLayer(
                     coverUrl = draftComic.coverUrl,
-                    scrollOffsetProvider = { sheetScrollState.firstVisibleItemScrollOffset.toFloat() },
-                    dragOffsetYProvider = { sheet.offset },
+                    scrollOffsetProvider = { 0f },
+                    dragOffsetYProvider = { 0f },
                     cornerRadiusDp = 24f,
                     sheetShape = sheetShape
                 )
             }
 
-            // 2. Controles que agora refratam a PRÓPRIA superfície do menu de edição (e não a tela atrás do modal)
-            CompositionLocalProvider(
-                LocalLiquidGlassBackdrop provides sheetBackdrop
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
                 // 1. Grabber superior arrastável (para cima = tela cheia, para baixo = fechar)
                 Box(
                     modifier = Modifier
@@ -326,14 +373,11 @@ fun CatalogSheetModal(
                 }
 
                 SheetToolbar(
-                    title = if (isExistingInShelf) "Editar Quadrinho" else "Registrar",
+                    title = if (isExistingInShelf) "Editar HQ" else "Registrar HQ",
                     closeTag = closeTag, shareTag = "modal_share_card_button",
                     onClose = { sheet.dismiss() },
                     onShare = { onShareComic(buildFinalComicForSave(), SocialShareCardType.COMPLETED_READING, null) },
-                    onSave = {
-                        if (totalPagesInput.isNotBlank() && totalPagesInput.toIntOrNull()?.let { it in 1..20000 } != true){pagesError=true;editorScope.launch {sheetScrollState.animateScrollToItem(0)}}
-                        else onSave(buildFinalComicForSave())
-                    }
+                    onSave = { saveDraft() }
                 )
 
                 // Compose and measure only the editor sections near the viewport.
@@ -352,142 +396,165 @@ fun CatalogSheetModal(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     item(key = "editor-section-0") {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-// Item 1: Resumo da Obra (Capa + Título + Autor)
-                    CatalogWorkSummaryHeader(
-                        draftComic = draftComic,
-                        onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
-                    )
-                    androidx.compose.material3.TextButton(onClick = { fullPage = true }, modifier = Modifier.testTag("open_comic_page"),contentPadding=PaddingValues(horizontal=0.dp)) {
-                        Text("Detalhes da HQ ›", color = s.accentColor, fontSize = 14.sp)
-                    }
-                    if(draftComic.synopsis.isNotBlank()||draftComic.synopsisPtBr.isNotBlank()){
-                        androidx.compose.material3.TextButton(onClick={synopsisExpanded=!synopsisExpanded},contentPadding=PaddingValues(horizontal=0.dp)){
-                            Text(if(synopsisExpanded)"Sinopse ⌃" else "Sinopse ⌄",color=s.textSecondary,fontSize=14.sp)
-                        }
-                        if(synopsisExpanded)Text(draftComic.synopsisPtBr.ifBlank {draftComic.synopsis},color=s.textSecondary,fontSize=14.sp,lineHeight=21.sp)
-                    }
-                    androidx.compose.material3.Text("Total de páginas", color = s.textSecondary, fontSize = 12.sp)
-                    AppleTextField(totalPagesInput, { value ->
-                        pagesEdited=true
-                        totalPagesInput = value.filter(Char::isDigit).take(5)
-                        totalPagesInput.toIntOrNull()?.takeIf { it in 1..20000 }?.let { count ->
-                            draftComic = draftComic.copy(pageCount = count, currentPage = if (draftComic.status == ReadingStatus.READ) count else draftComic.currentPage.coerceAtMost(count))
-                            pagesError = false
-                        }
-                    }, "Informe o total de páginas")
-                    if(metadataLoading) Text("Buscando informações da edição…",color=s.textSecondary,fontSize=12.sp)
-                    else if(totalPagesInput.isBlank())Text("Não informado nesta edição. Você pode preencher depois.",color=s.textSecondary,fontSize=12.sp)
-                    if (pagesError) Text("Informe um total entre 1 e 20.000 páginas.", color = s.accentColor, fontSize = 12.sp)
-// Item 1.5: Sequência da Série (#1, #2, #3...)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .inputWellSurface(RoundedCornerShape(18.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CatalogWorkSummaryHeader(
+                                draftComic = draftComic,
+                                onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                            )
+                            val resolvedSynopsis = PortugueseComicTranslator.formatCleanSynopsis(draftComic.synopsisPtBr.ifBlank { draftComic.synopsis })
+                            if (resolvedSynopsis.isNotBlank() || metadataLoading) {
+                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                CatalogEditionMetadata(
+                                    entryId = draftComic.id,
+                                    synopsis = resolvedSynopsis,
+                                    pages = totalPagesInput,
+                                    metadataLoading = metadataLoading,
+                                    pageEditorOpen = false,
+                                    pagesError = false,
+                                    onOpenPageEditor = {},
+                                    onChangePages = {},
+                                    translationLoading = translationLoading,
+                                    translationFailed = translationFailed,
+                                    onRetryTranslation = { translationRetryToken++ }
+                                )
+                            }
+                            HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 44.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { fullPage = true }
+                                    .padding(horizontal = 4.dp, vertical = 6.dp)
+                                    .testTag("open_comic_page"),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                        contentDescription = null,
+                                        tint = s.accentColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Ver página da HQ",
+                                        color = s.accentColor,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null,
+                                    tint = s.accentColor.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                     item(key = "editor-section-2") {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-// Item 2: Seletor de Status ultra rápido (Lido / Lendo / Na Fila)
-                    CatalogStatusSegmentedBar(
-                        value = draftComic.status,
-                        onChange = { nextStatus ->
-                            draftComic = draftComic.copy(
-                                status = nextStatus,
-                                currentPage = when (nextStatus) {
-                                    ReadingStatus.READ -> draftComic.pageCount
-                                    ReadingStatus.WANT_TO_READ -> 0
-                                    ReadingStatus.READING -> draftComic.currentPage
-                                },
-                                rating = if (nextStatus != ReadingStatus.READ) 0f else draftComic.rating,
-                                favorite = if (nextStatus != ReadingStatus.READ) false else draftComic.favorite,
-                                review = if (nextStatus != ReadingStatus.READ) "" else draftComic.review,
-                                rereadCount = if (nextStatus == ReadingStatus.WANT_TO_READ) 0 else draftComic.rereadCount
+                            CatalogStatusSegmentedBar(
+                                value = draftComic.status,
+                                onChange = { nextStatus ->
+                                    draftComic = draftComic.copy(
+                                        status = nextStatus,
+                                        currentPage = when (nextStatus) {
+                                            ReadingStatus.READ -> if (draftComic.pageCount > 1) draftComic.pageCount else draftComic.currentPage
+                                            ReadingStatus.WANT_TO_READ -> draftComic.currentPage
+                                            ReadingStatus.READING -> draftComic.currentPage
+                                        }
+                                    )
+                                }
                             )
-                        }
-                    )
                         }
                     }
                     item(key = "editor-section-3") {
                         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-if (draftComic.status == ReadingStatus.WANT_TO_READ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .inputWellSurface(RoundedCornerShape(16.dp))
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(s.accentColor.copy(alpha = 0.16f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Bookmark,
-                                    contentDescription = null,
-                                    tint = s.accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Na sua Fila de Leitura (Quero Ler)",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = s.textPrimary
-                                )
-                                Text(
-                                    text = "Esta edição ficará salva na aba Fila da sua Biblioteca sem avaliação em estrelas até que você a leia.",
-                                    fontSize = 11.5.sp,
-                                    lineHeight = 15.sp,
-                                    color = s.textSecondary
-                                )
-                            }
-                        }
-                    } else {
-                        // Item 3: Data da Leitura (com Mini Calendário) & Releitura
-                        CatalogReadingDateAndRereadsSection(
-                            draftComic = draftComic,
-                            allowRereads = appSettings.allowRereads,
-                            showMiniCalendar = showMiniCalendar,
-                            onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
-                            onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
-                        )
-
-                        // Item 4: Progresso de Páginas quando está Lendo (com leitura diferida de estado)
-                        if (draftComic.status == ReadingStatus.READING && draftComic.pageCount>1) {
-                            CatalogReadingProgressSection(
-                                currentPageProvider = { draftComic.currentPage },
-                                pageCount = draftComic.pageCount,
-                                accentColor = s.accentColor,
-                                onChangePage = { v ->
-                                    // MOMENT_PAGE_ONE_WAY_V11: progress updates the note page, never the reverse.
-                                    val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
-                                    draftComic = draftComic.copy(currentPage = nextPage)
-                                    momentPageInput = nextPage.toString()
+                            if (draftComic.status == ReadingStatus.WANT_TO_READ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .inputWellSurface(RoundedCornerShape(16.dp))
+                                        .padding(14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(s.accentColor.copy(alpha = 0.16f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Bookmark,
+                                            contentDescription = null,
+                                            tint = s.accentColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Na fila de leitura",
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = s.textPrimary
+                                        )
+                                        Text(
+                                            text = "Registre o progresso quando começar a leitura.",
+                                            fontSize = 11.5.sp,
+                                            lineHeight = 15.sp,
+                                            color = s.textSecondary
+                                        )
+                                    }
                                 }
-                            )
-                        }
+                            } else {
+                                CatalogReadingDateAndRereadsSection(
+                                    draftComic = draftComic,
+                                    allowRereads = appSettings.allowRereads,
+                                    showMiniCalendar = showMiniCalendar,
+                                    onToggleMiniCalendar = { showMiniCalendar = !showMiniCalendar },
+                                    onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                                )
 
-                        // Item 5 e 6: Avaliação, Gostei e Resenha somente quando já concluído (Lido)
-                        if (draftComic.status == ReadingStatus.READ) {
-                            // Item 5: Avaliar + Gostei (Coração)
-                            CatalogRatingAndFavoriteSection(
-                                draftComic = draftComic,
-                                halfStarRatings = appSettings.halfStarRatings,
-                                onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
-                            )
+                                if (draftComic.status == ReadingStatus.READING && draftComic.pageCount > 1) {
+                                    CatalogReadingProgressSection(
+                                        currentPageProvider = { draftComic.currentPage },
+                                        pageCount = draftComic.pageCount,
+                                        accentColor = s.accentColor,
+                                        onChangePage = { v ->
+                                            val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
+                                            draftComic = draftComic.copy(currentPage = nextPage)
+                                            momentPageInput = nextPage.toString()
+                                        }
+                                    )
+                                }
+                            }
 
-                            // Item 6: Resenha / Comentários
-                            CatalogReviewCommentsSection(
-                                reviewText = draftComic.review,
-                                isExpanded = isSheetExpanded,
-                                onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
-                            )
+                            if (draftComic.status == ReadingStatus.READ || draftComic.rating > 0f || draftComic.favorite || draftComic.review.isNotBlank()) {
+                                CatalogRatingAndFavoriteSection(
+                                    draftComic = draftComic,
+                                    halfStarRatings = appSettings.halfStarRatings,
+                                    onUpdateDraftComic = { transform -> draftComic = transform(draftComic) }
+                                )
 
-
-                        }
-                    }
+                                CatalogReviewCommentsSection(
+                                    reviewText = draftComic.review,
+                                    isExpanded = isSheetExpanded,
+                                    onChangeReview = { r -> draftComic = draftComic.copy(review = r) }
+                                )
+                            }
                         }
                     }
                     item(key = "editor-section-4") {
@@ -554,12 +621,12 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                             .shadow(6.dp, RoundedCornerShape(999.dp))
                             .clip(RoundedCornerShape(999.dp))
                             .background(s.accentBg)
-                            .clickable { if(totalPagesInput.isBlank() || totalPagesInput.toIntOrNull()?.let {it in 1..20000}==true)onSave(buildFinalComicForSave()) else {pagesError=true;editorScope.launch {sheetScrollState.animateScrollToItem(0)}} }
+                            .clickable { saveDraft() }
                             .padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Salvar Registro",
+                            text = "Salvar",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = s.accentText
@@ -585,7 +652,7 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Excluir Quadrinho da Estante",
+                                text = "Excluir da biblioteca",
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFF43F5E),
@@ -601,7 +668,6 @@ if (draftComic.status == ReadingStatus.WANT_TO_READ) {
             }
         }
     }
-}
 }
 
 /**

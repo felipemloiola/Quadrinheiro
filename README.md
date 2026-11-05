@@ -9,17 +9,17 @@ Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a 
 ## Recursos
 
 - **Início:** leitura atual, progresso e metas, com acesso rápido às suas histórias.
-- **Explorar:** recomendações baseadas nas leituras, avaliações e editora favorita; catálogo com carregamento por páginas e remoção de duplicatas. A aba Comunidade reúne publicações, avaliações, resenhas e comentários dos leitores.
-- **Perfil:** banner panorâmico com recorte, zoom e fade, foto, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos pesquisáveis em português e inglês. Biblioteca e catálogo ficam abaixo dos personagens; edição retorna ao Perfil. Favoritos e banner são preservados por conta e sincronizados.
+- **Explorar:** recomendações baseadas nas leituras, avaliações e editora favorita; catálogo com carregamento por páginas sob demanda e remoção inteligente de duplicatas preservando edições distintas. A aba Comunidade reúne publicações, avaliações, resenhas e comentários dos leitores.
+- **Perfil:** banner panorâmico com maior área visível, esmaecimento contínuo, recorte, zoom, reenquadramento e busca de artes horizontais com diagnóstico claro; foto de perfil com contorno preto único, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos alternativos verificados e busca tolerante a hífens, acentos, aliases bilíngues e pequenos erros de digitação. Favoritos e banner são preservados por conta e sincronizados.
 - **Biblioteca:** estante em grade ou lista, filtros de status, diário, tags, notas, resenhas e cadastro manual.
-- **Busca e catálogo:** Metron para edições, paginação, créditos e capas, com Comic Vine como complemento e Superhero API para personagens. Cada HQ tem um formulário único de prévia e registro e uma página completa com sinopse, dados editoriais, equipe, personagens, edições relacionadas e Comunidade. Os favoritos do perfil podem usar até seis imagens reais da fonte, incluindo capas da coleção e retratos alternativos; a disponibilidade depende da obra e do personagem.
+- **Busca e catálogo:** Metron para edições, paginação, créditos e capas, com Comic Vine, Open Library, Google Books e Mercado Livre como complemento e Superhero API para personagens. Cada HQ tem um formulário organizado de registro/edição com sinopse expansível integrada, ação secundária associada à obra ("Ver página da HQ") e preservação integral de notas, resenhas, tags e progresso ao alternar status. O idioma original da edição é mantido separado da tradução dos metadados, sem sinopses ou editoras inventadas.
 - **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
-- **Conta:** acesso com Google, sincronização pelo Firebase e modo convidado com armazenamento separado.
+- **Conta:** acesso com Google, isolamento rigoroso por conta (`account_state_<uid>`), proteção contra corrida assíncrona no logout/login e sincronização pelo Firebase sem descarte por relógio local/servidor.
 - **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o tema escolhido no app. A leitura atual acompanha a HQ selecionada no aplicativo.
 - **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca**.
 - **Compartilhamento:** cartões verticais de leitura concluída, momento e metas, com prévia, salvamento e compartilhamento pelo Android.
 - **Personalização e acessibilidade:** cores de destaque e do Q do ícone, fundo neutro claro/escuro, tamanho do texto, contraste, transparência e movimento reduzido. O ícone é aplicado após sair do app, preservando a tela em uso.
-- **Armazenamento:** medição dos dados locais e limpeza de cache em Ajustes, preservando biblioteca, contas e backups. Capas e respostas HTTP têm limites separados de 64 e 16 MiB.
+- **Armazenamento:** medição exata sem contagem duplicada de diretórios sobrepostos (`dataDir`/`cacheDir`) e limpeza de arquivos recuperáveis em Ajustes (incluindo APKs antigos em `cacheDir/updates` e `filesDir/updates`), preservando integralmente biblioteca, contas e backups. Capas e respostas HTTP têm limites separados de 64 e 16 MiB.
 - **Atualizações:** download dentro do aplicativo, verificação do pacote e abertura do instalador do Android.
 
 ## Instalação e compatibilidade

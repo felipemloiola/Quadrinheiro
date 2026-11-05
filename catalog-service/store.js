@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import catalog from './catalog.cjs';
-const {validate,upstream,keyFor}=catalog;
+const {validate,upstream,keyFor,requestInput}=catalog;
 export const json=(body,status=200)=>Response.json(body,{status,headers:{'X-Content-Type-Options':'nosniff','Cache-Control':status===200?'public, max-age=600':'no-store'}});
 export class CatalogStore extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.pending=new Map();}
@@ -47,7 +47,7 @@ export class CatalogStore extends DurableObject {
     body={descriptionPt:translated.join(' ')};
    }else{
     body=await upstream(input,{comicVine:this.env.COMIC_VINE_API_KEY,superhero:this.env.SUPERHERO_API_KEY,metron:this.env.METRON_API_KEY?.trim()},async(url,opts)=>{
-     const u=new URL(url);if(u.hostname==='metron.cloud')await this.permit('metron');if(u.hostname==='comicvine.gamespot.com')await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
+     const u=new URL(url);if(u.hostname==='metron.cloud'&&u.pathname.startsWith('/api/'))await this.permit('metron');if(u.hostname==='comicvine.gamespot.com'&&u.pathname.startsWith('/api/'))await this.permit(u.pathname.split('/').filter(Boolean)[1]||'search');
      return fetch(url,opts);
     });
    }
@@ -56,7 +56,7 @@ export class CatalogStore extends DurableObject {
   this.pending.set(key,work);return work;
  }
  async fetch(req){
-  try{return json(await this.load(validate(Object.fromEntries(new URL(req.url).searchParams))));}
+  try{return json(await this.load(validate(requestInput(req.url))));}
   catch(e){const status=e.message==='invalid-input'?400:e.message==='provider-limit'?429:503;return json({error:status===400?'invalid-input':status===429?'provider-limit':'catalog-unavailable'},status);}
  }
 }

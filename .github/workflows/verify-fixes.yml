@@ -1,0 +1,95 @@
+name: Verify fixes without publishing
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/storage-discovery-profile]
+    paths:
+      - 'app/**'
+      - 'catalog-service/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'firebase.ci.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - '.github/actions/setup-firebase/**'
+      - '.github/workflows/verify-fixes.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-fixes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/storage-discovery-profile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FIRESTORE_EMULATOR_HOST: 127.0.0.1:8085
+      FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+      GCLOUD_PROJECT: demo-no-project
+      GOOGLE_CLOUD_PROJECT: demo-no-project
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Install verified Firebase CLI
+        uses: ./.github/actions/setup-firebase
+      - name: Prepare temporary debug signing only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e debug.keystore
+          keytool -genkeypair -keystore debug.keystore -storetype JKS -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 2 -dname 'CN=Android Debug,O=Android,C=US'
+      - name: Verify protected catalog service
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test catalog-service/test/*.test.cjs
+      - name: Discover debug test task
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-reports
+          gradle :app:tasks --all --no-daemon --console=plain | tee ci-reports/app-tasks.txt
+          task=$(awk '$1 ~ /^testDebug(UnitTest|HostTest)$/ {print $1; exit}' ci-reports/app-tasks.txt)
+          test -n "$task" || { echo '::error::No compatible debug unit test task found.'; exit 1; }
+          echo "TEST_TASK=$task" >> "$GITHUB_ENV"
+          printf 'Debug test task: :app:%s\n' "$task" > ci-reports/selected-tests.txt
+      - name: Run unit and rules tests and compile Android test APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$TEST_TASK :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain"
+      - name: Upload test diagnostics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixes-test-diagnostics-${{ github.run_number }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ci-reports/
+            app/build/reports/tests/
+            app/build/test-results/
+            firebase-debug.log
+            firestore-debug.log
+      - name: Remove temporary debug key
+        if: always()
+        shell: bash
+        run: rm -f debug.keystore

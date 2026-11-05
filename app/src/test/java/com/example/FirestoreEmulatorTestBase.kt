@@ -65,10 +65,15 @@ abstract class FirestoreEmulatorTestBase {
         }
 
         // Reset test state, not FirebaseApp: Auth internals can retain app references.
+        org.junit.Assume.assumeTrue(isEmulatorRunning())
         auth.signOut()
         resetEmulator("http://$EMULATOR_HOST:$FIRESTORE_PORT/emulator/v1/projects/$PROJECT_ID/databases/$databaseId/documents")
         resetEmulator("http://$EMULATOR_HOST:$AUTH_PORT/emulator/v1/projects/$PROJECT_ID/accounts")
     }
+
+    private fun isEmulatorRunning(): Boolean = runCatching {
+        java.net.Socket().use { it.connect(java.net.InetSocketAddress(EMULATOR_HOST, FIRESTORE_PORT), 500); true }
+    }.getOrDefault(false)
 
     @After
     open fun tearDown() {

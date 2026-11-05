@@ -99,8 +99,9 @@ object ComicVineCatalog {
         }
         fun credits(key: String) = j.objects(key).map { CatalogCredit(it.optString("id"), it.optString("name"), it.optString("role")) }
         fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+        val combinedCovers = (strings("covers") + strings("portraits") + strings("artwork")).filter { it.isNotBlank() }.distinct().take(12)
         return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
-            plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), strings("covers").distinct().take(6),
+            plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), combinedCovers,
             credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"))
             .also { synchronized(memory) { memory[key] = it } }
     }
@@ -112,6 +113,24 @@ object ComicVineCatalog {
             ?: comic.id.removePrefix("cv-").takeIf { comic.id.startsWith("cv-") }
         // Never attach credits from a guessed edition to a locally cataloged book.
         return id?.takeIf { it.all(Char::isDigit) }?.let { details("issue", it) }
+    }
+    suspend fun autoResolve(comic: ComicEntry): CatalogDetails? {
+        val direct = resolve(comic)
+        if (direct != null) return direct
+        val searchTitle = (comic.seriesName.ifBlank { comic.displayTitle }).replace(Regex("#\\s*\\d+.*"), "").trim()
+        if (searchTitle.isBlank()) return null
+        return runCatching {
+            val results = search(searchTitle).items
+            if (results.isEmpty()) null
+            else {
+                val best = if (comic.issueNumber > 0) {
+                    results.firstOrNull { it.issueNumber == comic.issueNumber }
+                        ?: results.firstOrNull { it.displayTitle.contains("#${comic.issueNumber}") }
+                        ?: results.first()
+                } else results.first()
+                resolve(best)
+            }
+        }.getOrNull()
     }
     suspend fun translated(details: CatalogDetails): CatalogDetails {
         if(details.description.isBlank()) return details

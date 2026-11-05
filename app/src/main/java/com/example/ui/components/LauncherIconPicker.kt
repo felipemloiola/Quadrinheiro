@@ -33,7 +33,7 @@ fun LauncherIconPicker() {
         }
         AppleMenuPicker(value = if (follow) "accent" else "original", onChange = {
             follow = it == "accent"; LauncherAppearance.setFollowsApp(context, follow)
-        }, options = listOf(SegmentOption("accent", "Tema"), SegmentOption("original", "Original")),
+        }, options = listOf(SegmentOption("original", "Original"), SegmentOption("accent", "Tema")),
             modifier = Modifier.widthIn(max = 108.dp).testTag("launcher_icon_style"))
     }
 }

@@ -618,7 +618,7 @@ data class AppSettings(
     val backgroundExtension: Boolean = true,
     val showBottomAccessory: Boolean = true,
     val showReadingNowBar: Boolean = false,
-    val showFloatingMenu: Boolean = true,
+    val showFloatingMenu: Boolean = false,
     val minimizeTabBarOnScroll: Boolean = true,
     val reduceTransparency: Boolean = false,
     val increaseContrast: Boolean = false,

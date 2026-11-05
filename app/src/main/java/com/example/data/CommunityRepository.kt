@@ -33,7 +33,10 @@ fun communityComicKey(comic: ComicEntry): String {
 class CommunityRepository(context: Context,
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id)),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()) {
+    private val appContext = context.applicationContext
     fun currentUid(): String? = auth.currentUser?.uid
+    fun activeAccountUid(): String? = auth.currentUser?.uid
+        ?: SafeStorage(appContext).loadAuthSession()?.takeIf { !it.isGuest && it.uid.isNotBlank() && it.uid != "guest_local" }?.uid
     private fun requireOwner(expectedUid: String): String {
         val uid = auth.currentUser?.uid ?: error("Entre na sua conta para participar.")
         check(uid == expectedUid) { "A conta foi alterada. Abra a Comunidade novamente." }; return uid

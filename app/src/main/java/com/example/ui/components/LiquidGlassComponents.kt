@@ -1153,7 +1153,7 @@ fun UserAvatar(
     } else {
         androidx.compose.ui.graphics.lerp(Color.White, startColor, 0.14f)
     }
-    val borderColor = Color.Black.copy(alpha = 0.18f)
+    val borderColor = Color.Black.copy(alpha = 0.85f)
 
     Box(
         modifier = modifier
@@ -1165,7 +1165,7 @@ fun UserAvatar(
                     colors = listOf(startColor, endColor)
                 )
             )
-            .border(1.dp, borderColor, CircleShape),
+            .border(1.5.dp, borderColor, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         if (decodedBitmap != null) {
