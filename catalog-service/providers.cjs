@@ -27,11 +27,16 @@ function detail(item,type) {
 const allowed=['search','catalog','issue','character','person','volume','characters','superhero','portraits','translated','covers','metron-issue','metron-character','metron-person'];
 function validate(query) {
  const op=String(query.op||'search'),q=String(query.q||'').trim().slice(0,100),id=String(query.id||''),page=Number(query.page||0),kind=String(query.kind||'issue');
+  const lang=String(query.lang||'').trim().slice(0,8).toUpperCase();
+  const provider=String(query.provider||'').trim().slice(0,20).toUpperCase();
+  const hd=query.hd===true||['true','1','yes'].includes(String(query.hd||'').toLowerCase());
  if(!allowed.includes(op)||!Number.isInteger(page)||page<0||page>1000)throw Error('invalid-input');
  if(['issue','character','person','volume','translated','covers','metron-issue','metron-character','metron-person'].includes(op)&&!/^\d{1,12}$/.test(id))throw Error('invalid-input');
  if(['search','characters','superhero','portraits'].includes(op)&&q.length<2)throw Error('invalid-input');
  if(!['issue','volume','character','person','metron-issue','metron-character','metron-person'].includes(kind))throw Error('invalid-input');
- return {op,q,id,page,kind};
+ if(lang&&!['PT','EN','ALL'].includes(lang))throw Error('invalid-input');
+ if(provider&&!['MULTI','COMIC_VINE','METRO'].includes(provider))throw Error('invalid-input');
+ return {op,q,id,page,kind,lang,provider,hd};
 }
 const keyFor=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 async function upstream(input,secrets,fetcher=fetch) {
