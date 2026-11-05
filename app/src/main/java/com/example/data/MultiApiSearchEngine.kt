@@ -35,8 +35,6 @@ import java.util.concurrent.TimeUnit
 class MultiApiSearchEngine {
 
     companion object {
-        private const val API_TIMEOUT_MS = 3500L
-
         val ipv4FirstDns = object : Dns {
             override fun lookup(hostname: String): List<InetAddress> {
                 return try {
