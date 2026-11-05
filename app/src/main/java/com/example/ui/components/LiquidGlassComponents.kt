@@ -261,6 +261,28 @@ object LiquidGlassBackdropScope {
     fun isRecordingAny(): Boolean = activeRecordingDepth > 0
 }
 
+/**
+ * Feedback tátil suave no pointer-down (fase Draw/Composite) para cards e slots secundários.
+ * Não altera a área de toque, detector de gestos ou controles centrais (Tab Bar, Sliders, Toggles).
+ */
+@Composable
+fun Modifier.pressScaleFeedback(
+    interactionSource: MutableInteractionSource,
+    targetScale: Float = 0.97f
+): Modifier {
+    val motion = com.example.ui.theme.LocalAppMotion.current
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val animatedScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed && !motion.reduced) targetScale else 1f,
+        animationSpec = motion.spring(dampingRatio = 1.0f, stiffness = 600f),
+        label = "pressScaleFeedback"
+    )
+    return this.graphicsLayer {
+        scaleX = animatedScale
+        scaleY = animatedScale
+    }
+}
+
 
 /**
  * Resolve o `Backdrop` ativo na árvore Compose (`LocalLiquidGlassBackdrop` ou fallback seguro `EmptyBackdrop`).
@@ -1877,7 +1899,9 @@ fun LiquidGlassModeSwitcher(
 
         Box(
             modifier = Modifier
-                .offset(x = thumbOffset)
+                .offset {
+                    androidx.compose.ui.unit.IntOffset((optionW.toPx() * slideProgress).roundToInt(), 0)
+                }
                 .width(optionW)
                 .fillMaxHeight()
                 .graphicsLayer {

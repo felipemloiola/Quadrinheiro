@@ -117,6 +117,7 @@ import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.inputWellSurface
 import com.example.ui.components.liquidGlass
 import com.example.ui.components.liquidGlassNavSurface
+import com.example.ui.components.pressScaleFeedback
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalAppleMaterials
 import com.example.ui.theme.LocalIOS27Theme
@@ -652,8 +653,11 @@ private fun ComicGridCard(
         .roundToInt()
         .coerceIn(0, 100)
 
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(
-        modifier = modifier.clickable { onClick() },
+        modifier = modifier
+            .pressScaleFeedback(interactionSource, targetScale = 0.965f)
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() },
         verticalArrangement = Arrangement.spacedBy(if (isCompact4Col) 4.dp else 6.dp)
     ) {
         Box(

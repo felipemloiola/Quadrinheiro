@@ -55,12 +55,13 @@ class FluidSheetState internal constructor(
 
     private fun settle(target: Float, velocity: Float, dismiss: Boolean = false) {
         val current = offset
+        val carryVelocity = if (abs(velocity) > 1f) velocity else animation.velocity
         job?.cancel()
         job = scope.launch {
             animation.snapTo(current)
             held = null
             if (reduced()) animation.snapTo(target)
-            else animation.animateTo(target, spring(if (abs(velocity) > 1f) 0.8f else 1f, 500f), initialVelocity = velocity)
+            else animation.animateTo(target, spring(if (abs(carryVelocity) > 1f) 0.8f else 1f, 500f), initialVelocity = carryVelocity)
             if (dismiss) onDismiss()
         }
     }

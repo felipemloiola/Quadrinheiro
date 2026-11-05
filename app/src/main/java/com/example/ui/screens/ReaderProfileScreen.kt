@@ -228,12 +228,17 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).padding(end = 10.dp)
                         )
+                        val editProfileInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                         Box(
                             modifier = Modifier
                                 .heightIn(min = 32.dp)
+                                .pressScaleFeedback(editProfileInteraction, targetScale = 0.96f)
                                 .clip(CircleShape)
                                 .background(theme.textPrimary.copy(alpha = if (theme.isDark) 0.10f else 0.07f))
-                                .clickable { editorOpen = true }
+                                .clickable(
+                                    interactionSource = editProfileInteraction,
+                                    indication = null
+                                ) { editorOpen = true }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -443,7 +448,16 @@ internal fun SectionHeading(title: String, subtitle: String? = null) {
 @Composable
 private fun ProfileLink(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     val t = LocalIOS27Theme.current
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScaleFeedback(interactionSource, targetScale = 0.985f)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         Icon(icon, null, tint = t.accent)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, color = t.textPrimary, fontWeight = FontWeight.SemiBold)
