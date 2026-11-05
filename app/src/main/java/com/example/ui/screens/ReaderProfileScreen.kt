@@ -81,7 +81,12 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                     kotlinx.coroutines.delay(180)
                     val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "ALL"
                     val collected = mutableListOf<ComicEntry>()
-                    multiSearchEngine.searchOnlineProgressive(trimmed, settings.searchLanguage).collect { partial ->
+                    multiSearchEngine.searchOnlineProgressive(
+                        query = trimmed,
+                        searchLanguage = settings.searchLanguage,
+                        provider = settings.searchProvider,
+                        hdCovers = settings.hdCovers
+                    ).collect { partial ->
                         collected.clear()
                         collected.addAll(partial)
                         remoteComics = com.example.data.CatalogSearchPolicy.filterAndRankForQuery(

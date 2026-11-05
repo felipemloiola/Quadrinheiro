@@ -159,6 +159,51 @@ internal object CatalogSearchPolicy {
         return result.values.toList()
     }
 
+    private fun isCollectedFormat(c: ComicEntry): Boolean {
+        val titleNorm = normalize("${c.title} ${c.displayTitle}")
+        val formatNorm = normalize(c.format)
+        val hasMarker = Regex("""\b(vol 1|volume 1|livro 1|book 1|tpb|encadernado|graphic novel|coletanea|omnibus|edicao definitiva|deluxe)\b""").containsMatchIn("$titleNorm $formatNorm")
+        return hasMarker || (c.format in listOf("Coleção", "Graphic Novel", "Encadernado (TPB)", "Capa dura")) || c.pageCount >= 90
+    }
+
+    internal fun shouldMergeEntries(a: ComicEntry, b: ComicEntry): Boolean {
+        // 1. Never merge if both have valid, different ISBNs
+        val isbnA = canonicalIsbn(a.isbn)
+        val isbnB = canonicalIsbn(b.isbn)
+        if (isbnA != null && isbnB != null && isbnA != isbnB) return false
+
+        // 2. Never merge if page counts differ by more than 60 pages (e.g. 800-page omnibus vs 140-page trade)
+        if (a.pageCount > 0 && b.pageCount > 0 && kotlin.math.abs(a.pageCount - b.pageCount) > 60) return false
+
+        // 3. Never merge different non-zero issue numbers (e.g. #1 vs #2, #2 vs #3)
+        if (a.issueNumber > 0 && b.issueNumber > 0 && a.issueNumber != b.issueNumber) return false
+
+        // 4. Never merge proven distinct languages when both have full localized titles that differ
+        if (isPortugueseEdition(a) && !isPortugueseEdition(b) && b.sourceLabel.contains("US", true) && a.title.isNotBlank() && b.title.isNotBlank() && !a.title.equals(b.title, true) && a.releaseYear > 0 && b.releaseYear > 0 && kotlin.math.abs(a.releaseYear - b.releaseYear) > 10) return false
+
+        // 5. Canonical work key base comparison
+        val rawTitleA = a.titlePtBr.ifBlank { PortugueseComicTranslator.translateTitleToPtBr(a.displayTitle.ifBlank { a.title }).ifBlank { a.displayTitle.ifBlank { a.title } } }
+        val rawTitleB = b.titlePtBr.ifBlank { PortugueseComicTranslator.translateTitleToPtBr(b.displayTitle.ifBlank { b.title }).ifBlank { b.displayTitle.ifBlank { b.title } } }
+        val baseKeyA = PortugueseComicTranslator.canonicalWorkKey(rawTitleA).replace(Regex("""\b(vol 1|volume 1|livro 1)\b"""), "").trim()
+        val baseKeyB = PortugueseComicTranslator.canonicalWorkKey(rawTitleB).replace(Regex("""\b(vol 1|volume 1|livro 1)\b"""), "").trim()
+        if (baseKeyA.isBlank() || baseKeyA != baseKeyB) return false
+
+        // 6. Same base key. Check if one is unnumbered (0) and other is volume 1 (1)
+        val oneIsZeroOtherIsOne = (a.issueNumber == 0 && b.issueNumber == 1) || (a.issueNumber == 1 && b.issueNumber == 0)
+        if (oneIsZeroOtherIsOne) {
+            // Only merge if at least one is clearly a collection/volume and not a single monthly magazine issue of ~24-32 pages
+            val aIsCollected = isCollectedFormat(a)
+            val bIsCollected = isCollectedFormat(b)
+            val aIsMonthlySingle = a.issueNumber == 1 && a.pageCount in 18..44 && !aIsCollected
+            val bIsMonthlySingle = b.issueNumber == 1 && b.pageCount in 18..44 && !bIsCollected
+            if (aIsMonthlySingle || bIsMonthlySingle) return false
+            return aIsCollected || bIsCollected
+        }
+
+        // If issue numbers are identical
+        return a.issueNumber == b.issueNumber
+    }
+
     private fun workDeduplicationKey(c: ComicEntry): String {
         val rawTitle = c.titlePtBr.ifBlank {
             PortugueseComicTranslator.translateTitleToPtBr(c.displayTitle.ifBlank { c.title })
@@ -188,30 +233,31 @@ internal object CatalogSearchPolicy {
             pageCount = if (primary.pageCount > 0) primary.pageCount else secondary.pageCount,
             releaseYear = if (primary.releaseYear > 0) primary.releaseYear else secondary.releaseYear,
             isbn = primary.isbn.ifBlank { secondary.isbn },
-            coverUrl = primary.coverUrl.ifBlank { secondary.coverUrl }
+            coverUrl = if (primary.coverUrl.isNotBlank() && !primary.coverUrl.contains("placeholder", true)) primary.coverUrl else secondary.coverUrl
         )
     }
 
     internal fun deduplicateByCanonicalWork(items: List<ComicEntry>, language: String = "ALL"): List<ComicEntry> {
         val uniqueItems = unique(items)
-        val grouped = LinkedHashMap<String, ComicEntry>()
+        val result = mutableListOf<ComicEntry>()
+
         for (item in uniqueItems) {
-            val key = workDeduplicationKey(item)
-            if (key.isBlank()) continue
-            val existing = grouped[key]
-            if (existing == null) {
-                grouped[key] = item
+            val matchIndex = result.indexOfFirst { existing -> shouldMergeEntries(existing, item) }
+            if (matchIndex < 0) {
+                result.add(item)
             } else {
+                val existing = result[matchIndex]
                 val existingScore = quality(existing) + (if (isPortugueseEdition(existing)) (if (language == "PT") 8 else 4) else 0)
                 val candidateScore = quality(item) + (if (isPortugueseEdition(item)) (if (language == "PT") 8 else 4) else 0)
-                if (candidateScore > existingScore) {
-                    grouped[key] = mergeComplementaryEditionData(item, existing)
+                val merged = if (candidateScore > existingScore) {
+                    mergeComplementaryEditionData(item, existing)
                 } else {
-                    grouped[key] = mergeComplementaryEditionData(existing, item)
+                    mergeComplementaryEditionData(existing, item)
                 }
+                result[matchIndex] = merged
             }
         }
-        return grouped.values.toList()
+        return result
     }
 
     fun ranked(items: List<ComicEntry>, queries: List<String>, language: String = "ALL"): List<ComicEntry> {

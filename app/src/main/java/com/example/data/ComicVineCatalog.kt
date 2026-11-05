@@ -29,9 +29,18 @@ object ComicVineCatalog {
     private val memory = object : LinkedHashMap<String, CatalogDetails>(24, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CatalogDetails>?) = size > 24
     }
-    private suspend fun request(op: String, q: String = "", id: String = "", page: Int = 0, kind: String = "issue"): JSONObject = withContext(Dispatchers.IO) {
-        val url = ENDPOINT.toHttpUrl().newBuilder().addQueryParameter("op", op).addQueryParameter("q", q.take(100))
-            .addQueryParameter("id", id).addQueryParameter("page", page.toString()).addQueryParameter("kind",kind).addQueryParameter("v","52").build()
+    private suspend fun request(op: String, q: String = "", id: String = "", page: Int = 0, kind: String = "issue", lang: String = "", provider: String = "", hd: Boolean = false): JSONObject = withContext(Dispatchers.IO) {
+        val urlBuilder = ENDPOINT.toHttpUrl().newBuilder()
+            .addQueryParameter("op", op)
+            .addQueryParameter("q", q.take(100))
+            .addQueryParameter("id", id)
+            .addQueryParameter("page", page.toString())
+            .addQueryParameter("kind", kind)
+            .addQueryParameter("v", "52")
+        if (lang.isNotBlank()) urlBuilder.addQueryParameter("lang", lang)
+        if (provider.isNotBlank()) urlBuilder.addQueryParameter("provider", provider)
+        if (hd) urlBuilder.addQueryParameter("hd", "true")
+        val url = urlBuilder.build()
         val body = suspendCancellableCoroutine<String> { continuation ->
             val call = client.newCall(Request.Builder().url(url).get().build())
             continuation.invokeOnCancellation { call.cancel() }
@@ -60,8 +69,17 @@ object ComicVineCatalog {
         val title = if (volume.isNotBlank() && name.isNotBlank() && !volume.equals(name, true)) "$volume: $name" else volume.ifBlank { name.ifBlank { "HQ" } }
         val volumeEntry=j.optString("type")=="volume"
         val key=if(j.optString("type")=="metron-issue") "mt-$id" else if(volumeEntry) "cv-volume-$id" else "cv-$id"
-        return ComicEntry(id = key, externalId = key, title = if(j.optString("type")=="metron-issue" && issue>0 && j.optString("format")=="Edição") "$title #$issue" else title, authors = "", publisher = j.optString("publisher"),
-            coverUrl = j.optString("image"), releaseYear = j.optString("date").take(4).toIntOrNull() ?: 2026,
+        val rawAuthors = j.optString("authors").ifBlank {
+            val creators = j.optJSONArray("creators") ?: j.optJSONArray("person_credits")
+            if (creators != null) {
+                (0 until creators.length()).mapNotNull { i -> creators.optJSONObject(i)?.optString("name") }.filter { it.isNotBlank() }.take(4).joinToString(", ")
+            } else ""
+        }
+        val rawDate = j.optString("date").take(4).toIntOrNull() ?: 0
+        val year = if (rawDate in 1900..2100) rawDate else 0
+        return ComicEntry(id = key, externalId = key, title = if(j.optString("type")=="metron-issue" && issue>0 && j.optString("format")=="Edição") "$title #$issue" else title,
+            authors = rawAuthors, publisher = j.optString("publisher"),
+            coverUrl = j.optString("image"), releaseYear = year,
             synopsis = plain(j.optString("description")), sourceLabel = if(key.startsWith("mt-")) "Metron" else "Comic Vine", isOnlineResult=true, seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
             format = j.optString("format").ifBlank {if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição"}, pageCount = j.optInt("pageCount",0),isbn=j.optString("isbn"))
     }

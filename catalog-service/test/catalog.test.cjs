@@ -31,3 +31,19 @@ test('collection art stays scoped to the selected volume',async()=>{
  const r=await upstream(validate({op:'covers',kind:'volume',id:'3622'}),{comicVine:'secret'},mock);
  assert.ok(called.includes('volume%3A3622'));assert.equal(r.scope,'collection');assert.equal(r.items.length,1);
 });
+
+test('brief preserves authors and isbn when present without fabricating data',()=>{
+ const { brief } = require('../providers.cjs');
+ const card = brief({id:1,name:'Watchmen',person_credits:[{name:'Alan Moore'},{name:'Dave Gibbons'}],isbn:'9788573516883'});
+ assert.equal(card.authors,'Alan Moore, Dave Gibbons');
+ assert.equal(card.isbn,'9788573516883');
+ const emptyCard = brief({id:2,name:'Simple Issue'});
+ assert.equal(emptyCard.authors,'');
+ assert.equal(emptyCard.isbn,'');
+});
+
+test('validation accepts METRON and METRO provider values', ()=>{
+ assert.equal(validate({op:'search',q:'Batman',provider:'METRON'}).provider,'METRON');
+ assert.equal(validate({op:'search',q:'Batman',provider:'METRO'}).provider,'METRO');
+});
+

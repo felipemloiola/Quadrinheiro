@@ -17,27 +17,53 @@ object CharacterDirectory {
     private val mutex = Mutex()
     @Volatile private var entries: List<CharacterResult>? = null
     internal val portuguese = mapOf(
-        "Hal Jordan" to "Lanterna Verde", "John Stewart" to "Lanterna Verde", "Raven" to "Ravena", "Starfire" to "Estelar", "Beast Boy" to "Mutano",
+        "Hal Jordan" to "Lanterna Verde", "John Stewart" to "Lanterna Verde", "Kyle Rayner" to "Lanterna Verde", "Guy Gardner" to "Lanterna Verde",
+        "Raven" to "Ravena", "Starfire" to "Estelar", "Beast Boy" to "Mutano",
         "Swamp Thing" to "Monstro do Pântano", "Clayface" to "Cara-de-Barro", "Green Lantern" to "Lanterna Verde",
         "Wonder Woman" to "Mulher-Maravilha", "Spider-Man" to "Homem-Aranha", "Daredevil" to "Demolidor",
         "Storm" to "Tempestade", "Black Panther" to "Pantera Negra", "Captain America" to "Capitão América",
         "Iron Man" to "Homem de Ferro", "Black Widow" to "Viúva Negra", "Scarlet Witch" to "Feiticeira Escarlate",
         "Doctor Strange" to "Doutor Estranho", "Doctor Fate" to "Senhor Destino", "Martian Manhunter" to "Caçador de Marte",
         "Green Arrow" to "Arqueiro Verde", "Hawkeye" to "Gavião Arqueiro", "Black Canary" to "Canário Negro",
-        "The Flash" to "Flash", "Nightwing" to "Asa Noturna", "Red Hood" to "Capuz Vermelho", "Joker" to "Coringa",
+        "The Flash" to "Flash", "Flash" to "Flash", "Nightwing" to "Asa Noturna", "Red Hood" to "Capuz Vermelho", "Red Robin" to "Robin Vermelho", "Joker" to "Coringa",
         "Harley Quinn" to "Arlequina", "Catwoman" to "Mulher-Gato", "Poison Ivy" to "Hera Venenosa",
         "Two-Face" to "Duas-Caras", "Riddler" to "Charada", "Penguin" to "Pinguim", "Scarecrow" to "Espantalho",
         "Deadshot" to "Pistoleiro", "Deathstroke" to "Exterminador", "Silver Surfer" to "Surfista Prateado",
         "Human Torch" to "Tocha Humana", "Invisible Woman" to "Mulher Invisível", "Thing" to "Coisa",
         "Beast" to "Fera", "Cyclops" to "Ciclope", "Nightcrawler" to "Noturno", "Rogue" to "Vampira",
         "Colossus" to "Colossus", "Iceman" to "Homem de Gelo", "Luke Cage" to "Luke Cage", "Iron Fist" to "Punho de Ferro",
-        "Sandman" to "Homem-Areia", "Black Bolt" to "Raio Negro", "Aquaman" to "Aquaman", "Supergirl" to "Supergirl")
+        "Sandman" to "Sandman", "Dream" to "Sandman", "Morpheus" to "Sandman", "Sandman (Marvel)" to "Homem-Areia", "Flint Marko" to "Homem-Areia",
+        "Punisher" to "Justiceiro", "Wolverine" to "Wolverine", "Deadpool" to "Deadpool", "Constantine" to "Constantine", "John Constantine" to "Constantine",
+        "Black Bolt" to "Raio Negro", "Aquaman" to "Aquaman", "Supergirl" to "Supergirl", "Superboy" to "Superboy")
     internal fun normalized(s: String) = Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
-    internal fun display(name: String, real: String): String {
-        val pt = portuguese[name] ?: name
-        val civil = when { name == "Batman" && real.contains("Bruce", true) -> "Bruce Wayne"; name == "Hal Jordan" -> "Hal Jordan"; else -> real }
-        return if (civil.isNotBlank() && civil != pt) "$pt ($civil)" else pt
+    internal fun display(name: String, real: String, publisher: String = ""): String {
+        val pt = when {
+            name.equals("Sandman", true) && (publisher.contains("Marvel", true) || real.contains("Marko", true) || real.contains("Baker", true)) -> "Homem-Areia"
+            name.equals("Sandman", true) -> "Sandman"
+            else -> portuguese[name] ?: name
+        }
+        val cleanReal = real.trim()
+        val civil = when {
+            name.equals("Batman", true) && (cleanReal.contains("Bruce", true) || cleanReal.isBlank()) -> "Bruce Wayne"
+            name.equals("Hal Jordan", true) -> "Hal Jordan"
+            name.equals("John Stewart", true) -> "John Stewart"
+            name.equals("Kyle Rayner", true) -> "Kyle Rayner"
+            name.equals("Guy Gardner", true) -> "Guy Gardner"
+            name.equals("Barry Allen", true) -> "Barry Allen"
+            name.equals("Wally West", true) -> "Wally West"
+            name.equals("Peter Parker", true) -> "Peter Parker"
+            name.equals("Miles Morales", true) -> "Miles Morales"
+            name.equals("Dick Grayson", true) -> "Dick Grayson"
+            name.equals("Jason Todd", true) -> "Jason Todd"
+            name.equals("Tim Drake", true) -> "Tim Drake"
+            name.equals("Damian Wayne", true) -> "Damian Wayne"
+            name.equals("Sandman", true) && pt == "Homem-Areia" -> if (cleanReal.isNotBlank()) cleanReal else "Flint Marko"
+            name.equals("Sandman", true) && (cleanReal.contains("Morpheus", true) || cleanReal.contains("Dream", true) || cleanReal.contains("Sonho", true)) -> "Morpheus"
+            cleanReal.isNotBlank() && !cleanReal.equals(pt, true) && !cleanReal.equals(name, true) -> cleanReal
+            else -> ""
+        }
+        return if (civil.isNotBlank() && !pt.contains(civil, true)) "$pt ($civil)" else pt
     }
     internal fun parse(raw: String): List<CharacterResult> {
         val array = if(raw.trimStart().startsWith("{")) org.json.JSONObject(raw).getJSONArray("items") else JSONArray(raw)
@@ -48,7 +74,8 @@ object CharacterDirectory {
             if(name.isBlank() || !image.startsWith("https://")) return@mapNotNull null
             val a=j.optJSONArray("aliases") ?: bio?.optJSONArray("aliases")
             val aliases=(0 until (a?.length() ?: 0)).map { a!!.optString(it) } + listOf(name, portuguese[name] ?: name, real)
-            CharacterResult(j.optString("id"),display(name,real),name,image,aliases,j.optString("publisher").ifBlank { bio?.optString("publisher").orEmpty() })
+            val pub = j.optString("publisher").ifBlank { bio?.optString("publisher").orEmpty() }
+            CharacterResult(j.optString("id"),display(name,real,pub),name,image,aliases,pub)
         }
     }
     internal fun match(list: List<CharacterResult>, query: String): List<CharacterResult> {
@@ -58,7 +85,7 @@ object CharacterDirectory {
             c.originalName == "Hal Jordan" -> 980
             c.originalName == "Superman" -> 960
             c.originalName == "Spider-Man" && c.name.contains("Peter") -> 950
-            c.originalName in listOf("Wonder Woman", "Storm", "Swamp Thing", "Clayface", "Green Arrow", "Daredevil", "Wolverine", "The Flash", "Joker", "Harley Quinn", "Iron Man", "Captain America") -> 900
+            c.originalName in listOf("Wonder Woman", "Storm", "Swamp Thing", "Clayface", "Green Arrow", "Daredevil", "Wolverine", "The Flash", "Joker", "Harley Quinn", "Iron Man", "Captain America", "Deadpool", "Punisher", "Sandman") -> 900
             else -> 0
         }
         fun score(c: CharacterResult): Int {
@@ -122,20 +149,20 @@ object CharacterDirectory {
         }
     }
     suspend fun search(context: Context, query: String): List<CharacterResult> = withContext(Dispatchers.IO) {
-        val immediate = match(local(context), query)
-        if (immediate.isNotEmpty() && (query.isBlank() || immediate.size >= 2)) return@withContext immediate
+        val trimmed = query.trim()
+        val immediate = match(local(context), trimmed)
+        if (trimmed.isBlank()) return@withContext immediate
         if (!complete) preload(context)
-        val indexed = match(entries.orEmpty(), query)
-        if (indexed.isNotEmpty()) return@withContext indexed
+        val indexed = match(entries.orEmpty(), trimmed)
         val remote = try {
-            val cv = runCatching { ComicVineCatalog.characters(query) }.getOrDefault(emptyList())
-            val sh = runCatching { ComicVineCatalog.superheroCharacters(query) }.getOrDefault(emptyList())
-            match(cv + sh, query)
+            val cv = runCatching { ComicVineCatalog.characters(trimmed) }.getOrDefault(emptyList())
+            val sh = runCatching { ComicVineCatalog.superheroCharacters(trimmed) }.getOrDefault(emptyList())
+            match(cv + sh, trimmed)
         } catch (cancel: kotlinx.coroutines.CancellationException) {
             throw cancel
         } catch (_: Exception) {
             emptyList()
         }
-        (immediate + remote).distinctBy { normalized(it.originalName) + "|" + normalized(it.name) }.take(24)
+        (immediate + indexed + remote).distinctBy { normalized(it.originalName) + "|" + normalized(it.name) }.take(24)
     }
 }

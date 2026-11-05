@@ -10,9 +10,15 @@ function embeddedImages(html) {
     .map(m=>m[1].replaceAll('&amp;','&')).filter(u=>/^https:\/\/(comicvine\.gamespot\.com|www\.comicvine\.com|comicvine1\.cbsistatic\.com|static\.comicvine\.com)\/a\/uploads\//.test(u));
 }
 function brief(item,type='issue') {
+  const authorsList = item.person_credits || item.creators || item.people || [];
+  const authorsStr = text(Array.isArray(authorsList) ? authorsList.map(c=>c?.name||'').filter(Boolean).slice(0,4).join(', ') : '', 200);
+  const authors = text(item.authors || authorsStr, 200);
+  const isbn = text(item.isbn || '', 40);
+  const pageCount = Number(item.pageCount || item.page || item.number_of_pages || 0);
  return {id:String(item.id||''),type,name:text(item.name,300),issue:String(item.issue_number||''),volume:text(item.volume?.name,300),volumeId:String(item.volume?.id||''),
- image:image(item.image?.medium_url||item.image?.super_url),banner:'',publisher:text(item.publisher?.name,160),date:text(item.cover_date||item.start_year,30),
- description:text(item.description||item.deck),realName:text(item.real_name,200),url:image(item.site_detail_url),covers:pictures(item),appearances:Number(item.count_of_issue_appearances||0)};
+  image:image(item.image?.medium_url||item.image?.super_url),banner:'',publisher:text(item.publisher?.name,160),date:text(item.cover_date||item.start_year,30),
+  description:text(item.description||item.deck),realName:text(item.real_name,200),url:image(item.site_detail_url),covers:pictures(item),appearances:Number(item.count_of_issue_appearances||0),
+  authors,isbn,pageCount};
 }
 function detail(item,type) {
  const artwork=uniqueImages(embeddedImages(item.description).filter(u=>!pictures(item).some(p=>imageKey(p)===imageKey(u))));
@@ -35,7 +41,7 @@ function validate(query) {
  if(['search','characters','superhero','portraits'].includes(op)&&q.length<2)throw Error('invalid-input');
  if(!['issue','volume','character','person','metron-issue','metron-character','metron-person'].includes(kind))throw Error('invalid-input');
  if(lang&&!['PT','EN','ALL'].includes(lang))throw Error('invalid-input');
- if(provider&&!['MULTI','COMIC_VINE','METRO'].includes(provider))throw Error('invalid-input');
+ if(provider&&!['MULTI','COMIC_VINE','METRO','METRON'].includes(provider))throw Error('invalid-input');
  return {op,q,id,page,kind,lang,provider,hd};
 }
 const keyFor=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -78,9 +84,8 @@ async function upstream(input,secrets,fetcher=fetch) {
   if(!found)return {items:[]};const d=detail((await cv(`character/4005-${found}/`)).results||{},'character');return {items:d.portraits};
  }
  const params={limit:24,offset:page*24,field_list:'id,name,issue_number,volume,image,associated_images,cover_date,deck,publisher,real_name,aliases,count_of_issue_appearances,site_detail_url'};
- if(op==='catalog'){params.sort='cover_date:desc';params.filter=`cover_date:1900-01-01|${new Date().toISOString().slice(0,10)}`;}
- else {params.query=q;params.resources=op==='characters'?'character':'issue';}
  if(op==='catalog'){params.sort='start_year:desc';params.filter='count_of_issues:1|10000';params.field_list+=',start_year,count_of_issues';}
+ else {params.query=q;params.resources=op==='characters'?'character':'issue';}
  if(op==='search'){
   const volumes=await cv('search/',{...params,resources:'volume',limit:12,offset:page*12,field_list:params.field_list+',start_year,count_of_issues'});
   const editions=await cv('search/',{...params,limit:12,offset:page*12});
