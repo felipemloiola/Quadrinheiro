@@ -241,7 +241,10 @@ data class CloudUserProfile(
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     fun resolvedUpdatedAtMillis(): Long {
-        return if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+        // O timestamp gravado pelo servidor e a fonte de verdade (monotonico e imune a relogio
+        // do aparelho); o valor do cliente so e usado como fallback para documentos locais.
+        val serverMillis = updatedAt?.toDate()?.time ?: 0L
+        return if (serverMillis > 0L) serverMillis else updatedAtMillis
     }
 
     fun toReaderProfile(existingAvatarUrl: String = ""): ReaderProfile {
@@ -370,7 +373,10 @@ data class CloudComicDocument(
     @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
     fun resolvedUpdatedAtMillis(): Long {
-        return if (updatedAtMillis > 0L) updatedAtMillis else (updatedAt?.toDate()?.time ?: 0L)
+        // O timestamp gravado pelo servidor e a fonte de verdade (monotonico e imune a relogio
+        // do aparelho); o valor do cliente so e usado como fallback para documentos locais.
+        val serverMillis = updatedAt?.toDate()?.time ?: 0L
+        return if (serverMillis > 0L) serverMillis else updatedAtMillis
     }
 
     fun toComicEntry(): ComicEntry {

@@ -1,11 +1,15 @@
 package com.example
 
+import com.example.data.CloudComicDocument
+import com.example.data.CloudUserProfile
 import com.example.data.QuadrinheiroCloudRepository
 import com.example.model.ComicEntry
+import com.google.firebase.Timestamp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Date
 
 /**
  * Trava o comportamento do merge local/nuvem: nada de HQ sumir, tradução local preservada e
@@ -108,5 +112,27 @@ class SyncMergeTest {
 
         assertEquals(2_000L, merged.first().updatedAt)
         assertTrue(toUpload.isEmpty())
+    }
+
+    @Test
+    fun userProfileResolvesServerTimestampAsSourceOfTruth() {
+        val server = Timestamp(1700000000, 0)
+        val profile = CloudUserProfile(id = "u1", updatedAtMillis = 1_600_000_000_000L, updatedAt = server)
+
+        assertEquals(1_700_000_000_000L, profile.resolvedUpdatedAtMillis())
+    }
+
+    @Test
+    fun comicResolvesServerTimestampAboveClientEditTime() {
+        val server = Timestamp(1700000000, 0)
+        val doc = CloudComicDocument(id = "hq-1", updatedAtMillis = 1_600_000_000_000L, updatedAt = server)
+
+        assertEquals(1_700_000_000_000L, doc.resolvedUpdatedAtMillis())
+    }
+
+    @Test
+    fun resolverFallsBackToClientTimestampWhenServerTimestampIsNull() {
+        assertEquals(1_500L, CloudComicDocument(updatedAtMillis = 1_500L).resolvedUpdatedAtMillis())
+        assertEquals(1_500L, CloudUserProfile(updatedAtMillis = 1_500L).resolvedUpdatedAtMillis())
     }
 }
