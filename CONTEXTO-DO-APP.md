@@ -487,7 +487,8 @@ As mudanças de código foram commitadas localmente na `main` em três commits t
 - `service.cjs`: combina o suporte a banners vindo do remoto com o roteamento Metron por provider.
 - Validação pós-merge: `:app:compileDebugKotlin` **BUILD SUCCESSFUL**; `:app:testDebugUnitTest` (init script excluindo `CommunityRuleTest` e `QuadrinheiroRepositoryRuleTest`) → **187 PASSED / 0 FAILED**; backend `node --test catalog-service/test/catalog.test.cjs catalog-service/test/metron.test.cjs` → **13/13**.
 - Merge commitado como `45ff3a7` e enviado (`git push origin main`, `0c6f73d..45ff3a7`). O push disparou `release-apk.yml` run **#57** (SHA `45ff3a7`, evento push), que publica o APK assinado como `v1.0.<run_number>`.
-- `AGENTS.md` e este contexto continuam locais (fora do commit).
+- Release **v1.0.57 publicada com sucesso** (run #57, todos os passos `success`, incluindo testes e verificação da assinatura). Manifesto `update.json` confirmou `versionCode 1057`, `versionName 1.0.57`, `sourceCommit 45ff3a7a8576132bab984af38de8ccc3e794bee5`, certificado permanente `ec5ec885…a761f` e SHA-256 do APK `798c4d42934ae1cabc94000001d40f9a1f44808493c36d44418eae821ccf4524`; assets `quadrinheiro.apk` (22.399.670 bytes), `SHA256SUMS.txt` e `update.json`.
+- `AGENTS.md` e este contexto continuam locais (fora do commit); a atualização deste contexto foi commitada como `60b3ac4`.
 
 ## Outras referências e manutenção desta memória
 
