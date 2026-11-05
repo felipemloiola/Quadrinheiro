@@ -478,7 +478,16 @@ Limites do backend do catálogo (verificado em `catalog-service/providers.cjs`, 
 
 Validação: os patches foram revisados por `git diff`; `:app:compileDebugKotlin` passou (6 execuções + execuções finais a partir dos lotes); Suíte unitária completa com os dois testes de emulador excluídos por init script (`CommunityRuleTest`, `QuadrinheiroRepositoryRuleTest`): **27 classes, 114 testes, 0 falhas, 0 puladas** — inclui os 9 testes novos/relacionados do lote de sync (`SyncMergeTest`). Sem a exclusão, `failFast = true` interrompe a execução no primeiro teste que precisa dos emuladores Firebase (hoje `CommunityRuleTest.publicationCommentsAndWithdrawalRespectOwnershipAndPrivacy` com `java.net.ConnectException`) — falha ambiental, não relacionada aos patches; `firebase` CLI e `adb` não estão disponíveis nesta máquina. `:app:assembleDebugAndroidTest` compila os 18 arquivos de teste instrumentado (execução ainda pendente de aparelho/emulador) e `:app:assembleDebug` gerou o APK em `app/build/outputs/apk/debug/app-debug.apk` para validação manual no Samsung.
 
-As mudanças de código foram commitadas localmente na `main` em três commits temáticos (`fix(sync)`, `perf(dados)`, `fix(a11y)`), mais este contexto. Nada foi enviado ao GitHub.
+As mudanças de código foram commitadas localmente na `main` em três commits temáticos (`fix(sync)`, `perf(dados)`, `fix(a11y)`), mais este contexto. Nada foi enviado ao GitHub naquele momento; o envio e a publicação estão registrados na seção seguinte.
+
+### Integração com o remoto e publicação (05/11/2026)
+
+- `origin/main` estava à frente (`0c6f73d`). Merge manual resolvido em 9 arquivos, todos sem marcadores: `CommunityAutoSync.kt`, `ModernCatalog.kt`, `MultiApiSearchEngine.kt`, `PortugueseComicTranslator.kt`, `QuadrinheiroCloudRepository.kt`, `LiquidGlassComponents.kt`, `ProfileEditorScreen.kt`, `ReaderProfileScreen.kt`, `catalog-service/service.cjs`.
+- Preservadas as correções locais: fila durável com `PendingAction` + posts/comentários locais compartilhados; catálogo com `preferred(existing, incoming)` e `loadMore`; busca multi-fonte com `CatalogSearchPolicy` e `searchCacheKey` público (restaurado no merge — `QuadrinheiroViewModel` e `SearchCacheKeyTest` dependem dele); `resolvedUpdatedAtMillis()` com `@ServerTimestamp` como fonte de verdade, fallback do cliente e fallback final `RESET_AT + 1`; tradução com `isFinal` baseado em catálogo/rede/cache; anel do avatar `Black @ 0.85`.
+- `service.cjs`: combina o suporte a banners vindo do remoto com o roteamento Metron por provider.
+- Validação pós-merge: `:app:compileDebugKotlin` **BUILD SUCCESSFUL**; `:app:testDebugUnitTest` (init script excluindo `CommunityRuleTest` e `QuadrinheiroRepositoryRuleTest`) → **187 PASSED / 0 FAILED**; backend `node --test catalog-service/test/catalog.test.cjs catalog-service/test/metron.test.cjs` → **13/13**.
+- Merge commitado como `45ff3a7` e enviado (`git push origin main`, `0c6f73d..45ff3a7`). O push disparou `release-apk.yml` run **#57** (SHA `45ff3a7`, evento push), que publica o APK assinado como `v1.0.<run_number>`.
+- `AGENTS.md` e este contexto continuam locais (fora do commit).
 
 ## Outras referências e manutenção desta memória
 
