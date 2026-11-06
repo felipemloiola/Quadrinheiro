@@ -139,7 +139,7 @@ object StorageMaintenance {
     fun autoCompactIfNeeded(context: Context): Boolean {
         val storage = SafeStorage(context)
         var compacted = storage.compactStorageIfNeeded()
-        CacheMaintenance.prune(context, maxOrphans = 0, maxOrphanBytes = 0L)
+        CacheMaintenance.prune(context)
         runCatching { android.database.sqlite.SQLiteDatabase.releaseMemory() }
         val cacheRoot = context.cacheDir
         val externalUpdateDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
