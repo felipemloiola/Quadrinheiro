@@ -12,7 +12,7 @@ internal object ComicDetailPresentation {
                 (candidate.externalId.isBlank() || candidate.externalId !in current)
         }
         if (direct.isNotEmpty()) {
-            return direct.distinctBy { it.externalId.ifBlank { it.id } }.take(10)
+            return direct.distinctBy { it.externalId.ifBlank { it.id } }.take(8)
         }
 
         if (catalogPool.isEmpty()) return emptyList()
@@ -46,7 +46,7 @@ internal object ComicDetailPresentation {
 
         val primaryMatches = (sameSeries + sameAuthor).distinctBy { it.externalId.ifBlank { it.id } }
         if (primaryMatches.isNotEmpty()) {
-            return primaryMatches.take(10)
+            return primaryMatches.take(8)
         }
 
         // Tier 3: Same publisher / universe only if no series or author matches exist
@@ -57,7 +57,7 @@ internal object ComicDetailPresentation {
             }
         } else emptyList()
 
-        return samePublisher.distinctBy { it.externalId.ifBlank { it.id } }.take(10)
+        return samePublisher.distinctBy { it.externalId.ifBlank { it.id } }.take(8)
     }
 
     fun creditRole(raw: String): String {
