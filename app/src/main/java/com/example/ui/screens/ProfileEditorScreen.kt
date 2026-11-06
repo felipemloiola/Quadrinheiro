@@ -69,9 +69,10 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             imageBusy = true; imageError = null
             try { pendingAvatar = withContext(Dispatchers.IO) {
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+                context.contentResolver.openInputStream(uri)?.use { com.example.data.SafeImageFormats.decodeStreamSafely(it, bounds) }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) error("Imagem inválida")
                 var sample = 1; while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1400) sample *= 2
-                context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+                context.contentResolver.openInputStream(uri)?.use { com.example.data.SafeImageFormats.decodeStreamSafely(it, BitmapFactory.Options().apply { inSampleSize = sample }) }
             } }
             catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
             catch (_: Exception) { imageError = "Não foi possível abrir a foto." }

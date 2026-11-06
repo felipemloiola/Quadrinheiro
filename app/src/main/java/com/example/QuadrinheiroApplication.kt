@@ -6,11 +6,21 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.MultiApiSearchEngine
+import com.example.data.RejectHeifAvifDecoderFactory
+import com.example.data.SafeStorage
 
 /** One lazy loader/cache for activities and widgets, including a cold widget process. */
 class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        runCatching {
+            val storage = SafeStorage(this)
+            if (storage.getItem("quadrinheiro_heif_cache_purged_v1") != "true") {
+                this.cacheDir.resolve("quadrinheiro_covers_disk_cache").deleteRecursively()
+                this.cacheDir.resolve("quadrinheiro_http_cache").deleteRecursively()
+                storage.setItem("quadrinheiro_heif_cache_purged_v1", "true")
+            }
+        }
         com.example.data.CacheMaintenance.schedule(this)
         runCatching { LauncherAppearance.schedule(this) }
     }
@@ -21,26 +31,29 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     }
 
     override fun newImageLoader(): ImageLoader =
-                ImageLoader.Builder(this)
-                    .okHttpClient {
-                        MultiApiSearchEngine.initHttpCache(this)
-                        MultiApiSearchEngine.sharedHttpClient
-                    }
-                    .memoryCache {
-                        MemoryCache.Builder(this)
-                            .maxSizePercent(0.18)
-                            .strongReferencesEnabled(false)
-                            .build()
-                    }
-                    .diskCache {
-                        DiskCache.Builder()
-                            .directory(this.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                            .maxSizeBytes(64L * 1024L * 1024L)
-                            .build()
-                    }
-                    .crossfade(50)
-                    .allowHardware(true)
-                    .allowRgb565(true)
-                    .respectCacheHeaders(false)
+        ImageLoader.Builder(this)
+            .components {
+                add(RejectHeifAvifDecoderFactory())
+            }
+            .okHttpClient {
+                MultiApiSearchEngine.initHttpCache(this)
+                MultiApiSearchEngine.sharedHttpClient
+            }
+            .memoryCache {
+                MemoryCache.Builder(this)
+                    .maxSizePercent(0.18)
+                    .strongReferencesEnabled(false)
                     .build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(this.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
+                    .maxSizeBytes(64L * 1024L * 1024L)
+                    .build()
+            }
+            .crossfade(50)
+            .allowHardware(true)
+            .allowRgb565(true)
+            .respectCacheHeaders(false)
+            .build()
 }

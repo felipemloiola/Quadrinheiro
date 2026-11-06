@@ -99,7 +99,7 @@ fun decodeAvatarBitmapFromUri(
             inJustDecodeBounds = true
         }
         context.contentResolver.openInputStream(uri)?.use { stream ->
-            BitmapFactory.decodeStream(stream, null, boundsOptions)
+            com.example.data.SafeImageFormats.decodeStreamSafely(stream, boundsOptions)
         }
         val rawW = boundsOptions.outWidth
         val rawH = boundsOptions.outHeight
@@ -115,7 +115,7 @@ fun decodeAvatarBitmapFromUri(
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         context.contentResolver.openInputStream(uri)?.use { stream ->
-            BitmapFactory.decodeStream(stream, null, decodeOptions)
+            com.example.data.SafeImageFormats.decodeStreamSafely(stream, decodeOptions)
         }
     } catch (_: Throwable) {
         null

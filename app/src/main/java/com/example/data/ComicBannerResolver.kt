@@ -59,12 +59,11 @@ internal object ComicBannerResolver {
     internal fun landscape(width: Int, height: Int): Boolean = width in 480..32768 && height in 200..32768 && width.toDouble() / height in 1.6..4.0
     internal fun landscape(bytes: ByteArray): Boolean {
         if (bytes.isEmpty() || bytes.size > 65536) return false
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val bounds = SafeImageFormats.decodeBoundsSafely(bytes)
         return landscape(bounds.outWidth, bounds.outHeight)
     }
     private suspend fun prefix(url: String, redirectsLeft: Int = 1): ByteArray = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(Request.Builder().url(url).header("Range", "bytes=0-65535").header("Accept", "image/*").build())
+        val call = client.newCall(Request.Builder().url(url).header("Range", "bytes=0-65535").header("Accept", SafeImageFormats.ACCEPT_RASTER_HEADER).build())
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { if (continuation.isActive) continuation.resumeWithException(e) }
@@ -77,13 +76,13 @@ internal object ComicBannerResolver {
                     } else null
                     if (redirectUrl != null) {
                         response.close()
-                        val nextCall = client.newCall(Request.Builder().url(redirectUrl).header("Range", "bytes=0-65535").header("Accept", "image/*").build())
+                        val nextCall = client.newCall(Request.Builder().url(redirectUrl).header("Range", "bytes=0-65535").header("Accept", SafeImageFormats.ACCEPT_RASTER_HEADER).build())
                         continuation.invokeOnCancellation { nextCall.cancel() }
                         nextCall.enqueue(object : Callback {
                             override fun onFailure(call: Call, e: IOException) { if (continuation.isActive) continuation.resumeWithException(e) }
-                            override fun onResponse(call: Call, redirected: Response) {
+                            override fun onResponse(call: Call, response: Response) {
                                 try {
-                                    val bytes = readPrefixBody(redirected)
+                                    val bytes = readPrefixBody(response)
                                     if (continuation.isActive) continuation.resume(bytes)
                                 } catch (e: Exception) {
                                     if (continuation.isActive) continuation.resumeWithException(e)
@@ -117,8 +116,7 @@ internal object ComicBannerResolver {
             try {
                 val bytes = prefix(url)
                 if (bytes.isEmpty() || bytes.size > 65536) return@withPermit null
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val bounds = SafeImageFormats.decodeBoundsSafely(bytes)
                 if (landscape(bounds.outWidth, bounds.outHeight)) {
                     BannerArtwork(url, bounds.outWidth, bounds.outHeight, title.take(300))
                 } else null

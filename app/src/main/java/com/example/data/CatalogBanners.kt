@@ -344,22 +344,20 @@ internal object CatalogBanners {
 
     internal fun decode(bytes: ByteArray): Bitmap {
         require(bytes.isNotEmpty() && bytes.size <= 6 * 1024 * 1024)
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val bounds = SafeImageFormats.decodeBoundsSafely(bytes)
         require(bounds.outWidth in 480..32768 && bounds.outHeight in 200..32768 && bounds.outWidth.toDouble() / bounds.outHeight in 1.6..4.0) { "A imagem não é horizontal." }
         var sample = 1
         while (bounds.outWidth / sample > 1800 || bounds.outHeight / sample > 1800) sample *= 2
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }) ?: error("Imagem inválida")
+        return SafeImageFormats.decodeByteArraySafely(bytes, BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }) ?: error("Imagem inválida")
     }
 
     private fun decodeForBannerCrop(bytes: ByteArray): Bitmap {
         require(bytes.isNotEmpty() && bytes.size <= 6 * 1024 * 1024) { "Imagem inválida." }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val bounds = SafeImageFormats.decodeBoundsSafely(bytes)
         require(bounds.outWidth in 180..32768 && bounds.outHeight in 120..32768) { "Imagem inválida." }
         var sample = 1
         while (bounds.outWidth / sample > 1800 || bounds.outHeight / sample > 1800) sample *= 2
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply {
+        return SafeImageFormats.decodeByteArraySafely(bytes, BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }) ?: error("Imagem inválida.")

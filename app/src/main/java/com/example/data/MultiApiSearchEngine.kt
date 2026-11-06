@@ -34,8 +34,15 @@ class MultiApiSearchEngine {
         private val defaultHttpClient: OkHttpClient by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
             OkHttpClient.Builder().dns(ipv4FirstDns).dispatcher(fastImageAndApiDispatcher).addInterceptor { chain ->
                 val original = chain.request()
-                val request = if (original.header("User-Agent") == null) original.newBuilder().header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15").build() else original
-                chain.proceed(request)
+                val builder = original.newBuilder()
+                if (original.header("User-Agent") == null) {
+                    builder.header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                }
+                val accept = original.header("Accept")
+                if (accept == null || accept == "*/*" || accept == "image/*") {
+                    builder.header("Accept", SafeImageFormats.ACCEPT_RASTER_HEADER)
+                }
+                chain.proceed(builder.build())
             }.connectTimeout(6000, TimeUnit.MILLISECONDS).readTimeout(8000, TimeUnit.MILLISECONDS).build()
         }
         @Volatile private var customHttpClient: OkHttpClient? = null

@@ -278,4 +278,40 @@ class ExplorePerformanceAndAuditTest {
         assertNotNull(usage)
         assertTrue(usage.totalBytes >= 0L)
     }
+
+    @Test
+    fun heifAndAvifStreamsAreRejectedBeforeBitmapFactory() {
+        val fakeHeic = byteArrayOf(
+            0x00, 0x00, 0x00, 0x18,
+            0x66, 0x74, 0x79, 0x70, // 'ftyp'
+            0x68, 0x65, 0x69, 0x63, // 'heic'
+            0x00, 0x00, 0x00, 0x00
+        )
+        val fakeAvif = byteArrayOf(
+            0x00, 0x00, 0x00, 0x1C,
+            0x66, 0x74, 0x79, 0x70, // 'ftyp'
+            0x61, 0x76, 0x69, 0x66, // 'avif'
+            0x00, 0x00, 0x00, 0x00
+        )
+        val validPngHeader = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47,
+            0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D
+        )
+        val validJpegHeader = byteArrayOf(
+            0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(),
+            0x00, 0x10, 0x4A, 0x46,
+            0x49, 0x46, 0x00, 0x01
+        )
+
+        assertTrue(com.example.data.SafeImageFormats.isHeifOrAvifHeader(fakeHeic))
+        assertTrue(com.example.data.SafeImageFormats.isHeifOrAvifHeader(fakeAvif))
+        assertFalse(com.example.data.SafeImageFormats.isSupportedRasterHeader(fakeHeic))
+        assertFalse(com.example.data.SafeImageFormats.isSupportedRasterHeader(fakeAvif))
+        assertFalse(com.example.data.ComicBannerResolver.landscape(fakeHeic))
+        assertFalse(com.example.data.ComicBannerResolver.landscape(fakeAvif))
+
+        assertTrue(com.example.data.SafeImageFormats.isSupportedRasterHeader(validPngHeader))
+        assertTrue(com.example.data.SafeImageFormats.isSupportedRasterHeader(validJpegHeader))
+    }
 }

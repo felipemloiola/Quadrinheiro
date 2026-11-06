@@ -29,10 +29,10 @@ internal fun ProfileImage(source: String, description: String?, modifier: Modifi
 /** Bounds decoding, EXIF rotation and 3:1 center crop happen off the UI thread. */
 internal suspend fun prepareProfileBanner(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, bounds) }
+    context.contentResolver.openInputStream(uri)?.use { com.example.data.SafeImageFormats.decodeStreamSafely(it, bounds) }
     require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Imagem inválida" }
     val options = BitmapFactory.Options().apply { var sample = 1; while (bounds.outWidth / sample > 2400 || bounds.outHeight / sample > 2400) sample *= 2; inSampleSize = sample }
-    val decoded = context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, options) } ?: error("Não foi possível abrir a imagem")
+    val decoded = context.contentResolver.openInputStream(uri)?.use { com.example.data.SafeImageFormats.decodeStreamSafely(it, options) } ?: error("Não foi possível abrir a imagem")
     val rotation = runCatching { context.contentResolver.openInputStream(uri).use { input ->
         when (android.media.ExifInterface(input!!).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) { 3 -> 180f; 6 -> 90f; 8 -> 270f; else -> 0f }
     } }.getOrDefault(0f)
