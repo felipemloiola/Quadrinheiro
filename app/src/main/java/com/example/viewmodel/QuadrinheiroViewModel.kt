@@ -176,6 +176,9 @@ class QuadrinheiroViewModel(
     private val _lastSyncError = MutableStateFlow<String?>(null)
     val lastSyncError: StateFlow<String?> = _lastSyncError.asStateFlow()
 
+    private val _isInitialBootAndSyncReady = MutableStateFlow(false)
+    val isInitialBootAndSyncReady: StateFlow<Boolean> = _isInitialBootAndSyncReady.asStateFlow()
+
     private var authSessionGeneration: Long = 0L
 
     private var cloudProfileJob: Job? = null
@@ -399,13 +402,17 @@ class QuadrinheiroViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
+            runCatching { com.example.data.ModernCatalog.restoreFromDiskCache(storage) }
             // Defer non-critical background work until after initial Activity SurfaceSyncGroup transaction completes
             delay(600)
             // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
             if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
                 QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
             }
-            cloudRepo?.let { repo ->
+            val repo = cloudRepo
+            if (repo == null) {
+                _isInitialBootAndSyncReady.value = true
+            } else {
                 val activeFbUser = repo.currentAuthUser()
                 val initialSession = storage.loadAuthSession()
                 if (activeFbUser != null &&
@@ -427,6 +434,8 @@ class QuadrinheiroViewModel(
                     storage.saveAuthSession(syncedProfile)
                     _currentUserProfile.value = syncedProfile
                     _authUiState.value = AuthUiState.Authenticated
+                } else {
+                    _isInitialBootAndSyncReady.value = true
                 }
                 repo.observeAuthState().collectLatest { user ->
                     if (_isLoggingOut.value) return@collectLatest
@@ -455,6 +464,7 @@ class QuadrinheiroViewModel(
                     } else {
                         _cloudUser.value = null
                         startOrStopCloudListeners(null)
+                        _isInitialBootAndSyncReady.value = true
                     }
                 }
             }
@@ -520,12 +530,24 @@ class QuadrinheiroViewModel(
             val initialCoversToWarm = _comics.value.filter { it.status == ReadingStatus.READING }.ifEmpty { _comics.value.take(4) }
             prefetchCovers(initialCoversToWarm.take(4))
 
-            // Catálogo curado pré-aquecido apenas sob demanda e com limite de 4 itens após 3 segundos
-            delay(3000)
-            if (_comics.value.isEmpty()) {
-                prefetchCovers(CuratedCatalog.curatedComicsCatalog.take(4))
+            // Aguarda conclusão da inicialização crítica, restauração de login/estado e sincronização inicial
+            kotlinx.coroutines.withTimeoutOrNull(4_500L) {
+                _isInitialBootAndSyncReady.collect { ready ->
+                    if (ready) throw kotlinx.coroutines.CancellationException("BOOT_SYNC_READY")
+                }
             }
-            searchEngine.prewarmPopularSearches()
+
+            // Pré-aquecimento do ModernCatalog em baixa prioridade em Dispatchers.IO somente se cache ausente ou expirado (TTL)
+            val prevPriority = Thread.currentThread().priority
+            try {
+                runCatching { Thread.currentThread().priority = Thread.MIN_PRIORITY }
+                searchEngine.prewarmPopularSearches(appContext)
+                if (_comics.value.isEmpty()) {
+                    prefetchCovers(CuratedCatalog.curatedComicsCatalog.take(4))
+                }
+            } finally {
+                runCatching { Thread.currentThread().priority = prevPriority }
+            }
             if (_searchQuery.value.isNotBlank()) {
                 triggerOnlineSearchIfNeeded()
             }
@@ -709,6 +731,7 @@ class QuadrinheiroViewModel(
                         }
                     }
                 }
+                _isInitialBootAndSyncReady.value = true
 
                 // 3. Listener em tempo real com limite para os 100 quadrinhos mais recentes
                 repo.observeUserComics(user.uid, limit = 100L)

@@ -38,6 +38,7 @@ class SafeStorage(context: Context) {
         const val LOCAL_HANDLES_KEY = "quadrinheiro_local_handles_registry_v1"
         const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
         const val GUEST_STATE_KEY = "quadrinheiro_guest_isolated_state_v1"
+        const val MODERN_CATALOG_SNAPSHOT_KEY = "quadrinheiro_modern_catalog_snapshot_v1"
         private val memoryFallback = java.util.concurrent.ConcurrentHashMap<String, String>()
         private val catalogMatchIndex by lazy(LazyThreadSafetyMode.PUBLICATION) {
             CatalogMatchIndex(CuratedCatalog.curatedComicsCatalog)
@@ -1080,6 +1081,53 @@ class SafeStorage(context: Context) {
     @Synchronized
     fun saveShowcase(ownerUid: String, settings: AppSettings) {
         if (ownerUid.isNotBlank()) setItem("profile_showcase_$ownerUid", ProfileShowcase.encode(settings))
+    }
+
+    data class ModernCatalogCacheSnapshot(
+        val savedAtEpochMs: Long,
+        val entries: List<ComicEntry>
+    )
+
+    @Synchronized
+    fun saveModernCatalogSnapshot(
+        entries: List<ComicEntry>,
+        savedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
+        val bounded = entries
+            .filter { it.id.isNotBlank() && it.title.isNotBlank() }
+            .distinctBy { it.id }
+            .take(48)
+        if (bounded.isEmpty()) return
+        try {
+            val root = JSONObject().apply {
+                put("savedAtEpochMs", savedAtEpochMs)
+                put("items", serializeComics(bounded))
+            }
+            setItem(MODERN_CATALOG_SNAPSHOT_KEY, root.toString())
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun loadModernCatalogSnapshot(): ModernCatalogCacheSnapshot? {
+        val raw = getItem(MODERN_CATALOG_SNAPSHOT_KEY) ?: return null
+        if (raw.isBlank()) return null
+        return try {
+            val root = JSONObject(raw)
+            val savedAt = root.optLong("savedAtEpochMs", 0L)
+            val itemsArr = root.optJSONArray("items") ?: return null
+            val parsed = parseComics(itemsArr)
+                .filter { it.id.isNotBlank() && it.title.isNotBlank() }
+                .distinctBy { it.id }
+                .take(48)
+            if (parsed.isEmpty()) null else ModernCatalogCacheSnapshot(savedAt, parsed)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    @Synchronized
+    fun clearModernCatalogSnapshot() {
+        removeItem(MODERN_CATALOG_SNAPSHOT_KEY)
     }
 
     private fun serializeSettings(s: AppSettings): JSONObject = JSONObject().apply {

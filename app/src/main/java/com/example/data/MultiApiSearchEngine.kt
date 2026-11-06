@@ -76,7 +76,14 @@ class MultiApiSearchEngine {
     }
     suspend fun fetchSequenceIssuesOnline(comic: ComicEntry, hdCovers: Boolean = true): List<ComicEntry> = try { ComicVineCatalog.resolve(comic)?.issues.orEmpty() }
         catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { emptyList() }
-    suspend fun prewarmPopularSearches() { try { ModernCatalog.load() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { } }
+    suspend fun prewarmPopularSearches(context: android.content.Context? = null) {
+        try {
+            ModernCatalog.load(context = context)
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+        }
+    }
     fun searchOnlineProgressive(query: String, searchLanguage: String = "ALL", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
         val literal = query.trim().take(100)
         if (literal.length < 2) { send(emptyList()); return@channelFlow }

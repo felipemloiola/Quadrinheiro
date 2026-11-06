@@ -47,7 +47,8 @@ object StorageMaintenance {
             visited++
             if (file.isFile) {
                 val size = runCatching { file.length() }.getOrDefault(0L)
-                if (size > 0L && (top.size < limit || size > top.peek().bytes)) {
+                val smallestTopBytes = top.peek()?.bytes ?: Long.MAX_VALUE
+                if (size > 0L && (top.size < limit || size > smallestTopBytes)) {
                     if (top.size == limit) top.poll()
                     top.add(StorageItem(canonicalPath.takeLast(220), size))
                 }
@@ -112,6 +113,7 @@ object StorageMaintenance {
     }
 
     /** SDK cache APIs preserve open stores and never touch the library or offline pending writes. */
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
     fun clearRecoverable(context: Context) {
         val loader = Coil.imageLoader(context)
         loader.memoryCache?.clear()
