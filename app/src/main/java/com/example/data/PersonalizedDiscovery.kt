@@ -70,7 +70,10 @@ object PersonalizedDiscovery {
             .map { SeriesSequenceEngine.inferBaseSeriesTitle(it) to SeriesSequenceEngine.inferIssueNumber(it) }
             .filter { it.first.isNotBlank() }
 
-        val topAuthors = library.filter { (it.rating >= 4.0f || it.rereadCount > 0 || it.favorite) && it.authors.isNotBlank() }
+        val topAuthors = library.filter {
+            (it.rating == 0f || it.rating >= 3.5f || it.rereadCount > 0 || it.favorite || it.status == ReadingStatus.READING) &&
+                it.authors.isNotBlank()
+        }
             .map { SeriesSequenceEngine.extractPrimaryAuthor(it.authors) }
             .filter { it.isNotBlank() && it !in setOf("autor", "unknown", "varios") }
             .distinct()
@@ -112,17 +115,19 @@ object PersonalizedDiscovery {
         settings: AppSettings = AppSettings()
     ): List<RecommendedComic> {
         val taste = extractTasteProfile(library, settings, favoriteUniverse)
-        val pool = (CuratedCatalog.curatedComicsCatalog + RecommendationCandidateRetriever.getCachedPool() + catalog.takeLast(396)).distinctBy(::workKey)
+        val pool = catalog.ifEmpty { CuratedCatalog.curatedComicsCatalog }.takeLast(396)
 
         val known = library + taste.favoriteComics
         val ownedIds = (known.flatMap { listOf(it.id, it.externalId) } + settings.profileFavoriteComicIds).filter { it.isNotBlank() }.toSet()
+        val ownedIsbns = known.mapNotNull { it.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }.takeIf { s -> s.length >= 10 } }.toSet()
         val ownedWorks = known.mapTo(HashSet(), ::workKey)
 
         val candidates = CatalogSearchPolicy.unique(pool).filter { c ->
+            val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
                 (c.externalId.isBlank() || c.externalId !in ownedIds) &&
-                workKey(c) !in ownedWorks &&
-                known.none { lib -> CatalogSearchPolicy.shouldMergeEntries(c, lib) }
+                (isbn.length < 10 || isbn !in ownedIsbns) &&
+                workKey(c) !in ownedWorks
         }.distinctBy(::workKey)
 
         val scored = candidates.mapNotNull { candidate ->
@@ -168,7 +173,7 @@ object PersonalizedDiscovery {
                     val isCanonical = CatalogSearchPolicy.verifiedCanonicalWorks.entries.any { (k, works) ->
                         aliases.any { it.contains(k) || k.contains(it) } && works.any { feat.title.contains(it) }
                     }
-                    if (aliases.any { " ${feat.title} ${feat.series} ".contains(" $it ") }) {
+                    if (aliases.any { feat.text.contains(" $it ") }) {
                         score += if (isCanonical) 155 else 110
                         val charDisplay = char.substringBefore('(').trim()
                         reason = if (isCanonical) "Clássico de $charDisplay" else "Com seu favorito: $charDisplay"
@@ -224,12 +229,11 @@ object PersonalizedDiscovery {
                 signal = "FAVORITE_UNIVERSE"
             }
 
-            // Metadados reais
-            if (candidate.coverUrl.isNotBlank()) score += 10
-            if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
-            if (candidate.releaseYear > 0) score += 2
-
             if (score > 0) {
+                // Desempate por metadados reais apenas quando há sinal real de afinidade
+                if (candidate.coverUrl.isNotBlank()) score += 10
+                if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
+                if (candidate.releaseYear > 0) score += 2
                 RecommendedComic(candidate, reason.ifBlank { "Sugerido para você" }.take(42), score, signal)
             } else null
         }.sortedByDescending { it.score }
@@ -265,9 +269,7 @@ object PersonalizedDiscovery {
         favoriteUniverse: String = "",
         settings: AppSettings = AppSettings()
     ): List<ComicEntry> {
-        val withReasons = recommendWithReasons(catalog, library, favoriteUniverse, settings)
-        if (withReasons.isNotEmpty()) return withReasons.map { it.comic }
-        return catalog.take(24)
+        return recommendWithReasons(catalog, library, favoriteUniverse, settings).map { it.comic }
     }
 
     /**

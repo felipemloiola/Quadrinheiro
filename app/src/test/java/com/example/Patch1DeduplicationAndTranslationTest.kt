@@ -110,7 +110,7 @@ class Patch1DeduplicationAndTranslationTest {
 
         assertTrue(formatted.contains("Reúne as edições #1-6"))
         assertTrue(formatted.contains("Originalmente publicado em 1986"))
-        assertTrue(formatted.contains("Roteiro de Alan Moore"))
+        assertTrue(formatted.contains("Escrito por Alan Moore"))
         assertTrue(formatted.contains("Ilustrado por Dave Gibbons"))
     }
 }

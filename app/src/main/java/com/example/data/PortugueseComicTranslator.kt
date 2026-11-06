@@ -654,7 +654,7 @@ object PortugueseComicTranslator {
             Regex("""(?i)\bCollects\b""") to "Reúne",
             Regex("""(?i)\bCollecting\b""") to "Reúne",
             Regex("""(?i)\bOriginally\s+published\s+in\b""") to "Originalmente publicado em",
-            Regex("""(?i)\bWritten\s+by\b""") to "Roteiro de",
+            Regex("""(?i)\bWritten\s+by\b""") to "Escrito por",
             Regex("""(?i)\bArt\s+by\b""") to "Arte de",
             Regex("""(?i)\bIllustrated\s+by\b""") to "Ilustrado por",
             Regex("""(?i)\bPencils?\s+by\b""") to "Desenhos de",
