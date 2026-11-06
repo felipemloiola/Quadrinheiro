@@ -14,10 +14,16 @@ object ProfileShowcase {
         val legacyLocal = local.profileShowcaseUpdatedAt == 0L && incoming.profileShowcaseUpdatedAt == 0L &&
             (local.profileFavoriteComicIds.isNotEmpty() || local.profileFavoriteCharacters.isNotEmpty()) &&
             incoming.profileFavoriteComicIds.isEmpty() && incoming.profileFavoriteCharacters.isEmpty()
-        return if (local.profileShowcaseUpdatedAt > incoming.profileShowcaseUpdatedAt || legacyLocal) incoming.copy(
+        val baseMerged = if (local.profileShowcaseUpdatedAt > incoming.profileShowcaseUpdatedAt || legacyLocal) incoming.copy(
             profileFavoriteComicIds = local.profileFavoriteComicIds, profileFavoriteCharacters = local.profileFavoriteCharacters,
             profileShowcaseDetails = local.profileShowcaseDetails, profileBannerUrl = local.profileBannerUrl,
             profileShowcaseUpdatedAt = local.profileShowcaseUpdatedAt) else incoming
+        return if (baseMerged.cachedRecommendationsJson.isBlank() && local.cachedRecommendationsJson.isNotBlank()) {
+            baseMerged.copy(
+                cachedRecommendationsJson = local.cachedRecommendationsJson,
+                recommendationTasteHash = local.recommendationTasteHash
+            )
+        } else baseMerged
     }
     fun comicSnapshot(comic: ComicEntry): String = JSONObject().put("id", comic.id).put("title", comic.displayTitle.take(300))
         .put("externalId",comic.externalId.take(100)).put("pages",comic.pageCount).put("format",comic.format).put("year",comic.releaseYear).put("source",comic.sourceLabel)

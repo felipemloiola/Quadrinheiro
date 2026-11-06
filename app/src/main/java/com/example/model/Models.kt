@@ -642,6 +642,8 @@ data class AppSettings(
     val autoFillReadDate: Boolean = true,
     val showPagesInDiary: Boolean = true,
     val shareStarsMatchTheme: Boolean = true,
+    val cachedRecommendationsJson: String = "",
+    val recommendationTasteHash: String = "",
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",

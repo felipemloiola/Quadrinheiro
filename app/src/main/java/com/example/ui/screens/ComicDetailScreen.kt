@@ -146,9 +146,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val isComic = entity == null
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
-    val related = remember(comic.id, comic.externalId, detail?.issues, library) {
-        val pool = library + CuratedCatalog.curatedComicsCatalog
-        ComicDetailPresentation.relatedEditions(comic, detail, pool)
+    val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
+    val related = remember(comic.id, comic.externalId, detail?.issues, detail?.characters, detail?.creators, library, catalogEntries) {
+        val pool = library + catalogEntries + CuratedCatalog.curatedComicsCatalog
+        ComicDetailPresentation.relatedEditionsWithReasons(comic, detail, pool)
     }
     Box(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
         if (effectiveCover.isNotBlank()) {
@@ -252,9 +253,13 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 if (related.isNotEmpty()) item {
                     DetailSection(if (isComic) "Edições relacionadas" else "Aparições em quadrinhos") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(related, key = { it.externalId.ifBlank { it.id } }) { issue ->
-                                Column(Modifier.width(104.dp).clickable { openComic(issue) }) {
+                            items(related, key = { it.comic.externalId.ifBlank { it.comic.id } }) { rec ->
+                                val issue = rec.comic
+                                Column(Modifier.width(104.dp).clickable { openComic(issue) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     BookCover(issue.coverUrl, issue.displayTitle, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                                    if (isComic && rec.reasonLabel.isNotBlank()) {
+                                        Text(rec.reasonLabel, color = t.accent, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                    }
                                     Text(issue.displayTitle, color = t.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
                                 }
                             }

@@ -1125,6 +1125,8 @@ class SafeStorage(context: Context) {
         put("autoFillReadDate", s.autoFillReadDate)
         put("showPagesInDiary", s.showPagesInDiary)
         put("shareStarsMatchTheme", s.shareStarsMatchTheme)
+        put("cachedRecommendationsJson", s.cachedRecommendationsJson.take(12288))
+        put("recommendationTasteHash", s.recommendationTasteHash.take(64))
         val tagsArr = JSONArray()
         s.quickReviewTags.forEach { tagsArr.put(it) }
         put("quickReviewTags", tagsArr)
@@ -1183,6 +1185,8 @@ class SafeStorage(context: Context) {
             autoFillReadDate = obj.optBoolean("autoFillReadDate", def.autoFillReadDate),
             showPagesInDiary = obj.optBoolean("showPagesInDiary", def.showPagesInDiary),
             shareStarsMatchTheme = obj.optBoolean("shareStarsMatchTheme", def.shareStarsMatchTheme),
+            cachedRecommendationsJson = obj.optString("cachedRecommendationsJson", def.cachedRecommendationsJson).take(12288),
+            recommendationTasteHash = obj.optString("recommendationTasteHash", def.recommendationTasteHash).take(64),
             quickReviewTags = if (tagsArr != null) tagsList else def.quickReviewTags
         )
     }

@@ -108,6 +108,8 @@ data class CloudUserPreferences(
     val autoFillReadDate: Boolean = true,
     val showPagesInDiary: Boolean = true,
     val shareStarsMatchTheme: Boolean = true,
+    val cachedRecommendationsJson: String = "",
+    val recommendationTasteHash: String = "",
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
@@ -158,6 +160,8 @@ data class CloudUserPreferences(
         autoFillReadDate = autoFillReadDate,
         showPagesInDiary = showPagesInDiary,
         shareStarsMatchTheme = shareStarsMatchTheme,
+        cachedRecommendationsJson = cachedRecommendationsJson.take(12288),
+        recommendationTasteHash = recommendationTasteHash.take(64),
         quickReviewTags = quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
     )
 
@@ -205,6 +209,8 @@ data class CloudUserPreferences(
             autoFillReadDate = s.autoFillReadDate,
             showPagesInDiary = s.showPagesInDiary,
             shareStarsMatchTheme = s.shareStarsMatchTheme,
+            cachedRecommendationsJson = s.cachedRecommendationsJson.take(12288),
+            recommendationTasteHash = s.recommendationTasteHash.take(64),
             quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
         )
     }

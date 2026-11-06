@@ -24,7 +24,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.FirebaseAiRecommendationEnhancer
+import com.example.data.MultiApiSearchEngine
 import com.example.data.PersonalizedDiscovery
+import com.example.data.RecommendationCandidateRetriever
+import com.example.data.RecommendedComic
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.ui.components.AppleSegmentedPicker
@@ -35,6 +39,8 @@ import com.example.viewmodel.QuadrinheiroViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val PERSISTED_CACHE_TTL_MS = 12L * 60L * 60L * 1000L
 
 @Composable
 fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
@@ -51,17 +57,83 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
     val catalog by com.example.data.ModernCatalog.entries.collectAsState()
     LaunchedEffect(listState) { listState.scrollToItem(0) }
     LaunchedEffect(Unit) { com.example.data.ModernCatalog.load() }
-    val recommendationState = remember(comics, profile.favoriteUniverse, settings.profileFavoriteComicIds,
-        settings.profileFavoriteCharacters, settings.profileShowcaseDetails) { mutableStateOf(emptyList<ComicEntry>()) }
+    val recommendationState = remember {
+        val restored = PersonalizedDiscovery.decodeCachedRecommendations(settings.cachedRecommendationsJson)
+            .filter { rec ->
+                comics.none { lib ->
+                    lib.id == rec.comic.id ||
+                        (lib.externalId.isNotBlank() && lib.externalId == rec.comic.externalId)
+                }
+            }
+        mutableStateOf(
+            restored.ifEmpty {
+                PersonalizedDiscovery.recommendWithReasons(catalog, comics, profile.favoriteUniverse, settings)
+            }
+        )
+    }
     val recommendations by recommendationState
-    LaunchedEffect(recommendationState, catalog) {
-        val preferences = settings
-        recommendationState.value = withContext(Dispatchers.Default) {
-            PersonalizedDiscovery.recommend(catalog, comics, profile.favoriteUniverse, preferences)
+    val recommendationMap = remember(recommendations) {
+        recommendations.associate { it.comic.id to it.reasonLabel }
+    }
+
+    LaunchedEffect(comics, profile.favoriteUniverse, settings.profileFavoriteComicIds, settings.profileFavoriteCharacters, catalog) {
+        val taste = PersonalizedDiscovery.extractTasteProfile(comics, settings, profile.favoriteUniverse)
+        val storedParts = settings.recommendationTasteHash.split(":")
+        val storedHash = storedParts.firstOrNull().orEmpty()
+        val storedTimeMs = storedParts.getOrNull(1)?.toLongOrNull() ?: 0L
+        val nowMs = System.currentTimeMillis()
+        val persistedValid = storedHash == taste.tasteHash &&
+            storedTimeMs > 0L &&
+            (nowMs - storedTimeMs) < PERSISTED_CACHE_TTL_MS &&
+            settings.cachedRecommendationsJson.isNotBlank()
+
+        // First compute fast local recommendations if nothing cached or if taste changed
+        val localFast = withContext(Dispatchers.Default) {
+            PersonalizedDiscovery.recommendWithReasons(
+                catalog + RecommendationCandidateRetriever.getCachedPool(),
+                comics,
+                profile.favoriteUniverse,
+                settings
+            )
+        }
+        if (localFast.isNotEmpty() && (!persistedValid || recommendationState.value.isEmpty())) {
+            recommendationState.value = localFast
+        }
+
+        val needsActiveRefresh = !persistedValid || !RecommendationCandidateRetriever.isCacheValid(taste.tasteHash)
+        if (!needsActiveRefresh) return@LaunchedEffect
+
+        val computed = withContext(Dispatchers.Default) {
+            val retrieved = RecommendationCandidateRetriever.retrieveCandidates(taste, MultiApiSearchEngine())
+            val ranked = PersonalizedDiscovery.recommendWithReasons(
+                catalog + retrieved,
+                comics,
+                profile.favoriteUniverse,
+                settings
+            )
+            FirebaseAiRecommendationEnhancer.enhanceOrFallback(
+                taste = taste,
+                candidates = ranked
+            )
+        }
+        if (computed.isNotEmpty()) {
+            recommendationState.value = computed
+            val encodedJson = PersonalizedDiscovery.encodeCachedRecommendations(computed)
+            val newHashStamp = "${taste.tasteHash}:${System.currentTimeMillis()}"
+            if (encodedJson.isNotBlank() && (encodedJson != settings.cachedRecommendationsJson || storedHash != taste.tasteHash)) {
+                viewModel.updateSettings { current ->
+                    current.copy(
+                        cachedRecommendationsJson = encodedJson,
+                        recommendationTasteHash = newHashStamp
+                    )
+                }
+            }
         }
     }
-    val collections = remember(catalog, recommendations) { linkedMapOf(
-        "Para você" to (if (recommendations.isNotEmpty()) recommendations else catalog.take(12)),
+
+    val recommendationComics = remember(recommendations) { recommendations.map { it.comic } }
+    val collections = remember(catalog, recommendationComics) { linkedMapOf(
+        "Para você" to (if (recommendationComics.isNotEmpty()) recommendationComics else catalog.take(12)),
         "Para começar" to catalog.filter { it.displayTitle.contains("Ano Um", true) || it.displayTitle.contains("Watchmen", true) || it.displayTitle.contains("Maus", true) || it.displayTitle.contains("Sandman", true) }.ifEmpty { catalog.take(12) },
         "Universo DC" to catalog.filter { it.publisher.contains("DC", true) || it.publisher.contains("Vertigo", true) || it.displayTitle.contains("Batman", true) },
         "Universo Marvel" to catalog.filter { it.publisher.contains("Marvel", true) || it.displayTitle.contains("Aranha", true) || it.displayTitle.contains("Demolidor", true) }
@@ -97,7 +169,10 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                     val entries = collections[selected].orEmpty()
                     items(entries.chunked(3), key = { it.first().id }) { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            row.forEach { comic -> ExplorePoster(comic, Modifier.weight(1f), onComic) }
+                            row.forEach { comic ->
+                                val reason = if (selected == "Para você") recommendationMap[comic.id] else null
+                                ExplorePoster(comic, Modifier.weight(1f), onComic, reason)
+                            }
                             repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
@@ -142,7 +217,10 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
                                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Ver seleção $title", tint = theme.textSecondary)
                                 }
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(entries.take(8), key = { it.id }) { comic -> ExplorePoster(comic, Modifier.width(112.dp), onComic) }
+                                    items(entries.take(8), key = { it.id }) { comic ->
+                                        val reason = if (title == "Para você") recommendationMap[comic.id] else null
+                                        ExplorePoster(comic, Modifier.width(112.dp), onComic, reason)
+                                    }
                                 }
                             }
                         } else if (title == "Para você") item(key = "discovery_empty") {
@@ -159,10 +237,13 @@ fun ExploreScreen(comics: List<ComicEntry>, listState: LazyListState,
 }
 
 @Composable
-private fun ExplorePoster(comic: ComicEntry, modifier: Modifier, onComic: (ComicEntry) -> Unit) {
+private fun ExplorePoster(comic: ComicEntry, modifier: Modifier, onComic: (ComicEntry) -> Unit, reasonLabel: String? = null) {
     val t = LocalIOS27Theme.current
-    Column(modifier.clickable { onComic(comic) }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.clickable { onComic(comic) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+        if (!reasonLabel.isNullOrBlank()) {
+            Text(reasonLabel, color = t.accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         Text(comic.displayTitle, color = t.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(comic.authors, color = t.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

@@ -50,16 +50,30 @@ object CharacterDirectory {
             name.equals("John Stewart", true) -> "John Stewart"
             name.equals("Kyle Rayner", true) -> "Kyle Rayner"
             name.equals("Guy Gardner", true) -> "Guy Gardner"
+            name.equals("The Flash", true) || name.equals("Flash", true) -> when {
+                cleanReal.contains("Wally", true) -> "Wally West"
+                cleanReal.contains("Barry", true) || cleanReal.isBlank() -> "Barry Allen"
+                else -> cleanReal
+            }
             name.equals("Barry Allen", true) -> "Barry Allen"
             name.equals("Wally West", true) -> "Wally West"
+            name.equals("Spider-Man", true) || name.equals("Homem-Aranha", true) -> when {
+                cleanReal.contains("Miles", true) -> "Miles Morales"
+                cleanReal.contains("Peter", true) || cleanReal.isBlank() -> "Peter Parker"
+                else -> cleanReal
+            }
             name.equals("Peter Parker", true) -> "Peter Parker"
             name.equals("Miles Morales", true) -> "Miles Morales"
+            name.equals("Daredevil", true) || name.equals("Demolidor", true) -> "Matt Murdock"
+            name.equals("Swamp Thing", true) || name.equals("Monstro do Pântano", true) -> "Alec Holland"
+            name.equals("Constantine", true) || name.equals("John Constantine", true) -> "John Constantine"
+            name.equals("Punisher", true) || name.equals("Justiceiro", true) -> "Frank Castle"
             name.equals("Dick Grayson", true) -> "Dick Grayson"
             name.equals("Jason Todd", true) -> "Jason Todd"
             name.equals("Tim Drake", true) -> "Tim Drake"
             name.equals("Damian Wayne", true) -> "Damian Wayne"
             name.equals("Sandman", true) && pt == "Homem-Areia" -> if (cleanReal.isNotBlank()) cleanReal else "Flint Marko"
-            name.equals("Sandman", true) && (cleanReal.contains("Morpheus", true) || cleanReal.contains("Dream", true) || cleanReal.contains("Sonho", true)) -> "Morpheus"
+            name.equals("Sandman", true) && (cleanReal.contains("Morpheus", true) || cleanReal.contains("Dream", true) || cleanReal.contains("Sonho", true) || cleanReal.isBlank()) -> "Morpheus"
             cleanReal.isNotBlank() && !cleanReal.equals(pt, true) && !cleanReal.equals(name, true) -> cleanReal
             else -> ""
         }

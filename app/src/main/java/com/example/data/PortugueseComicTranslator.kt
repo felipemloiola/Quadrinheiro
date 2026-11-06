@@ -607,7 +607,11 @@ object PortugueseComicTranslator {
      */
     fun formatCleanSynopsis(rawText: String): String {
         if (rawText.isBlank()) return ""
-        val unescaped = android.text.Html.fromHtml(rawText, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+        val unescaped = try {
+            android.text.Html.fromHtml(rawText, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+        } catch (_: Throwable) {
+            rawText
+        }
         var clean = unescaped
             .replace(htmlTagRegex, " ")
             .replace("&nbsp;", " ")
@@ -649,9 +653,13 @@ object PortugueseComicTranslator {
             Regex("""(?i)\bCollecting\s+issues?\b""") to "Reúne as edições",
             Regex("""(?i)\bCollects\b""") to "Reúne",
             Regex("""(?i)\bCollecting\b""") to "Reúne",
-            Regex("""(?i)\bWritten\s+by\b""") to "Escrito por",
+            Regex("""(?i)\bOriginally\s+published\s+in\b""") to "Originalmente publicado em",
+            Regex("""(?i)\bWritten\s+by\b""") to "Roteiro de",
             Regex("""(?i)\bArt\s+by\b""") to "Arte de",
+            Regex("""(?i)\bIllustrated\s+by\b""") to "Ilustrado por",
             Regex("""(?i)\bPencils?\s+by\b""") to "Desenhos de",
+            Regex("""(?i)\bColors?\s+by\b""") to "Cores de",
+            Regex("""(?i)\bLetters?\s+by\b""") to "Letras de",
             Regex("""(?i)\bCover\s+by\b""") to "Capa de",
             Regex("""(?i)\bFirst\s+appearance\s+of\b""") to "Primeira aparição de",
             Regex("""(?i)\bOne[- ]shot\b""") to "Edição especial",
