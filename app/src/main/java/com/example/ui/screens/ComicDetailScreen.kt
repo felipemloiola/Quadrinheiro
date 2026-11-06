@@ -146,7 +146,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val isComic = entity == null
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
-    val related = remember(comic.id, comic.externalId, detail?.issues) { ComicDetailPresentation.relatedEditions(comic, detail) }
+    val related = remember(comic.id, comic.externalId, detail?.issues, library) {
+        val pool = library + CuratedCatalog.curatedComicsCatalog
+        ComicDetailPresentation.relatedEditions(comic, detail, pool)
+    }
     Box(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
         if (effectiveCover.isNotBlank()) {
             ReadingCoverAtmosphere(effectiveCover, t.bgPrimary, fraction = .55f)

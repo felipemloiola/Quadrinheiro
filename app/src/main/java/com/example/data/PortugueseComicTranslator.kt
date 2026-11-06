@@ -5,6 +5,7 @@ import okhttp3.Request
 import org.json.JSONArray
 import java.net.URLEncoder
 import java.text.Normalizer
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -641,7 +642,49 @@ object PortugueseComicTranslator {
 
         // Garante letra maiúscula após ponto final
         clean = clean.replace(Regex("""(?<=\.\s)([a-zà-ú])""")) { it.value.uppercase() }
+
+        // Tradução de termos e jargões editoriais recorrentes em sinopses
+        val editorialPhrases = listOf(
+            Regex("""(?i)\bCollects\s+issues?\b""") to "Reúne as edições",
+            Regex("""(?i)\bCollecting\s+issues?\b""") to "Reúne as edições",
+            Regex("""(?i)\bCollects\b""") to "Reúne",
+            Regex("""(?i)\bCollecting\b""") to "Reúne",
+            Regex("""(?i)\bWritten\s+by\b""") to "Escrito por",
+            Regex("""(?i)\bArt\s+by\b""") to "Arte de",
+            Regex("""(?i)\bPencils?\s+by\b""") to "Desenhos de",
+            Regex("""(?i)\bCover\s+by\b""") to "Capa de",
+            Regex("""(?i)\bFirst\s+appearance\s+of\b""") to "Primeira aparição de",
+            Regex("""(?i)\bOne[- ]shot\b""") to "Edição especial",
+            Regex("""(?i)\bMiniseries\b""") to "Minissérie",
+            Regex("""(?i)\bGraphic\s+novel\b""") to "Graphic novel"
+        )
+        for ((regex, replacement) in editorialPhrases) {
+            clean = regex.replace(clean, replacement)
+        }
+
         return clean.trim()
+    }
+
+    /**
+     * Traduz papéis de equipe criativa (Writer, Penciler, Inker, Colorist, etc.)
+     * preservando a integridade das funções originais para exibição na ficha técnica.
+     */
+    fun translateRole(rawRole: String): String {
+        val trimmed = rawRole.trim()
+        if (trimmed.isBlank()) return ""
+        val lower = trimmed.lowercase(Locale.ROOT)
+        return when {
+            lower.contains("writer") || lower.contains("script") || lower.contains("roteiro") -> "Roteiro"
+            lower.contains("penciler") || lower.contains("penciller") || lower.contains("desenho") -> "Desenho"
+            lower.contains("inker") || lower.contains("arte-final") || lower.contains("arte final") -> "Arte-final"
+            lower.contains("colorist") || lower.contains("colourist") || lower.contains("cores") || lower.contains("color") -> "Cores"
+            lower.contains("cover") || lower.contains("capa") -> "Capa"
+            lower.contains("letterer") || lower.contains("letras") || lower.contains("lettering") -> "Letras"
+            lower.contains("editor") || lower.contains("edição") -> "Edição"
+            lower.contains("artist") || lower.contains("arte") -> "Arte"
+            lower.contains("creator") || lower.contains("criador") -> "Criador"
+            else -> trimmed.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+        }
     }
 
     /**

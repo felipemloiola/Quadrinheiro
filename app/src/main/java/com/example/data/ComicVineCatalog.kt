@@ -115,7 +115,11 @@ object ComicVineCatalog {
         val publisher = j.optString("publisher").ifBlank {
             if (type == "issue" && j.optString("volumeId").isNotBlank()) runCatching { request("volume", id = j.optString("volumeId")).optString("publisher") }.getOrDefault("") else ""
         }
-        fun credits(key: String) = j.objects(key).map { CatalogCredit(it.optString("id"), it.optString("name"), it.optString("role")) }
+        fun credits(key: String) = j.objects(key).map {
+            val role = it.optString("role")
+            val translatedRole = if (key == "creators") PortugueseComicTranslator.translateRole(role) else role
+            CatalogCredit(it.optString("id"), it.optString("name"), translatedRole)
+        }
         fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
         val combinedCovers = (strings("covers") + strings("portraits") + strings("artwork")).filter { it.isNotBlank() }.distinct().take(12)
         return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),

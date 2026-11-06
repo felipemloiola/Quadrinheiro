@@ -57,7 +57,7 @@ object PersonalizedDiscovery {
     }
 
     fun recommend(catalog: List<ComicEntry>, library: List<ComicEntry>, favoriteUniverse: String = "", settings: AppSettings = AppSettings()): List<ComicEntry> {
-        val pool = catalog.takeLast(396)
+        val pool = (CuratedCatalog.curatedComicsCatalog + catalog.takeLast(396)).distinctBy(::workKey)
         val snapshots = settings.profileFavoriteComicIds.mapNotNull { id -> settings.profileShowcaseDetails["comic:$id"]?.let(ProfileShowcase::restoreComic) }
         val explicitFavorites = settings.profileFavoriteComicIds.mapNotNull { id ->
             library.firstOrNull { it.id == id || it.externalId == id } ?: snapshots.firstOrNull { it.id == id } ?: pool.firstOrNull { it.id == id || it.externalId == id }

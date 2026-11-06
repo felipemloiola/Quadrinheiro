@@ -88,6 +88,35 @@ internal object CatalogSearchPolicy {
         "last man" to listOf("Y: The Last Man", "Y: O Último Homem")
     )
 
+    /**
+     * Índice verificado e restrito de obras e fases canônicas e aclamadas associadas a conceitos/personagens frequentes.
+     * Serve exclusivamente para priorizar a ordem de ranqueamento, sem inventar dados nem suprimir os demais resultados reais.
+     */
+    internal val verifiedCanonicalWorks: Map<String, List<String>> = mapOf(
+        "monstro do pantano" to listOf("a saga do monstro do pantano", "saga of the swamp thing", "monstro do pantano"),
+        "swamp thing" to listOf("a saga do monstro do pantano", "saga of the swamp thing", "swamp thing"),
+        "watchmen" to listOf("watchmen"),
+        "sandman" to listOf("sandman preludios e noturnos", "sandman preludes and nocturnes", "sandman estacao das brumas", "sandman"),
+        "demolidor" to listOf("demolidor a queda de murdock", "daredevil born again", "demolidor o homem sem medo", "daredevil the man without fear"),
+        "daredevil" to listOf("demolidor a queda de murdock", "daredevil born again", "demolidor o homem sem medo", "daredevil the man without fear"),
+        "batman" to listOf("batman ano um", "batman year one", "batman o cavaleiro das trevas", "batman the dark knight returns", "batman a piada mortal", "batman the killing joke", "batman o longo dia das bruxas", "batman the long halloween"),
+        "ano um" to listOf("batman ano um", "batman year one"),
+        "year one" to listOf("batman ano um", "batman year one"),
+        "cavaleiro das trevas" to listOf("batman o cavaleiro das trevas", "batman the dark knight returns"),
+        "piada mortal" to listOf("batman a piada mortal", "batman the killing joke"),
+        "longo dia das bruxas" to listOf("batman o longo dia das bruxas", "batman the long halloween"),
+        "v de vinganca" to listOf("v de vinganca", "v for vendetta"),
+        "homem aranha" to listOf("a ultima cacada de kraven", "kravens last hunt", "homem aranha historia de vida", "spider man life story", "homem aranha azul"),
+        "spider man" to listOf("a ultima cacada de kraven", "kravens last hunt", "spider man life story", "spider man blue"),
+        "x men" to listOf("a saga da fenix negra", "dark phoenix saga", "dias de um futuro esquecido", "days of future past", "deus ama o homem mata", "surpreendentes x men", "astonishing x men"),
+        "reino do amanha" to listOf("reino do amanha", "kingdom come"),
+        "all star superman" to listOf("grandes astros superman", "all star superman"),
+        "grandes astros superman" to listOf("grandes astros superman", "all star superman"),
+        "crise nas infinitas terras" to listOf("crise nas infinitas terras", "crisis on infinite earths"),
+        "ponto de ignicao" to listOf("ponto de ignicao", "flashpoint"),
+        "flashpoint" to listOf("ponto de ignicao", "flashpoint")
+    )
+
     fun variants(query: String, knownTitles: List<String> = emptyList()): List<String> {
         val literal = query.trim().take(100); val q = normalize(literal)
         if (q.length < 4) return listOf(literal)
@@ -286,7 +315,9 @@ internal object CatalogSearchPolicy {
             val langBonus = if (isPortugueseEdition(c)) (if (language == "PT") 36 else 16) else 0
             val pageBonus = if (c.pageCount > 0) 28 else -18
             val metadataBonus = (if (c.authors.isNotBlank()) 10 else 0) + (if (c.synopsis.isNotBlank() || c.synopsisPtBr.isNotBlank()) 8 else 0)
-            relevance + langBonus + pageBonus + metadataBonus + quality(c) * 2
+            val canonicalMatches = primaryTerms.flatMap { verifiedCanonicalWorks[it].orEmpty() }
+            val canonicalBonus = if (canonicalMatches.any { can -> titles.any { it.contains(can) } }) 120 else 0
+            relevance + canonicalBonus + langBonus + pageBonus + metadataBonus + quality(c) * 2
         }
     }
 
@@ -367,7 +398,9 @@ internal object CatalogSearchPolicy {
                 val langBonus = if (isPortugueseEdition(c)) (if (language == "PT") 32 else 18) else 0
                 val pageBonus = if (c.pageCount > 0) 26 else -14
                 val metaBonus = (if (c.authors.isNotBlank()) 8 else 0) + (if (c.synopsis.isNotBlank() || c.synopsisPtBr.isNotBlank()) 6 else 0)
-                val totalScore = matchScore + langBonus + pageBonus + metaBonus + quality(c) * 2
+                val canonicalTargets = (listOf(q) + expandedTerms).flatMap { verifiedCanonicalWorks[it].orEmpty() }.distinct()
+                val canonicalBonus = if (canonicalTargets.any { can -> titleVariants.any { it.contains(can) } }) 140 else 0
+                val totalScore = matchScore + canonicalBonus + langBonus + pageBonus + metaBonus + quality(c) * 2
                 scored.add(c to totalScore)
             }
         }
