@@ -1,6 +1,6 @@
 # Quadrinheiro — contexto atualizado para próximas sessões
 
-Atualização: 04/11/2026, consulta ao GitHub por volta de 16h11–16h15 (UTC−03).
+Atualização: 06/11/2026 (sessão AI Studio Build — correção definitiva do crescimento de armazenamento e loops de sincronização).
 
 ## Como interpretar este documento
 
@@ -8,7 +8,29 @@ Esta seção atual tem precedência sobre o histórico anexado ao final. O hist�
 
 Este contexto permanece um arquivo local para transferência entre sessões/IAs, conforme preferência registrada anteriormente. Sua atualização não publica código, não altera a main e não implanta serviços.
 
-## 1. Estado atual confirmado no GitHub
+## 0. Correção definitiva de armazenamento e sincronização (06/11/2026)
+
+Foram diagnosticadas no código real e corrigidas as causas do crescimento acelerado de dados locais (0,5–2 GB em ~1 minuto de uso e até 9,11 GB em instalações acumuladas), preservando 100% da biblioteca, contas, modo convidado, vitrine de favoritos, filas pendentes, modo offline, recomendações e animações Liquid Glass:
+
+- **Eliminação dos 3 loops de escrita em `databases/` (Firestore SQLite/WAL) e `shared_prefs/`**:
+  1. **Idempotência de `ProfileShowcase` ↔ `CloudUserPreferences`**: `ProfileShowcase.sanitizeDetails` unificou a priorização dos detalhes das 4 HQs e 4 personagens favoritos (`MAX_SHOWCASE_DETAILS = 8`). `CloudUserPreferences.fromAppSettings(s).toAppSettings()` agora é idempotente com `ProfileShowcase.merge`, e `QuadrinheiroViewModel` guarda `lastPushedProfileSignature`, encerrando o loop infinito `observeUserProfile` ↔ `saveUserProfile`.
+  2. **Janela parcial remota segura (`isPartialRemoteWindow = true`)**: consultas paginadas/limitadas (`fetchComicsFromCache(100)`, `fetchComicsPage(50)`, `observeUserComics(100)`, `loadMoreCloudComics(20)`) não marcam mais HQs locais limpas (`isDirty = false`) fora da janela remota como `isDirty = true`, eliminando o ping-pong de `syncAllComicsBatch` em bibliotecas com >50–100 HQs.
+  3. **Assinatura de publicação na Comunidade (`CommunityAutoSync`)**: `community_published_rev_<uid>` evita republicar em todo `flush` todas as HQs já avaliadas cuja nota/resenha/perfil não mudou.
+- **Desacoplamento e compactação de `SharedPreferences` (`SafeStorage`)**:
+  - `TRANSLATION_CACHE_KEY` (teto reduzido de 4 MB para **512 KB** / 600 entradas) e `MODERN_CATALOG_SNAPSHOT_KEY` foram externalizados do XML `shared_prefs/quadrinheiro_apple_hig_liquid_v10.xml` para arquivos JSON atômicos em `cacheDir/quadrinheiro_snapshots/`.
+  - `saveComicTranslationCacheOnly` atualiza apenas o cache de traduções quando uma HQ traduzida pertence somente ao Explorar/Catálogo e não está na estante do usuário (0 escritas em `SharedPreferences`).
+  - `STORAGE_KEY` passou a gravar um ponteiro leve `@ref:quadrinheiro_account_state_v1_<uid>` no XML quando há conta ativa (resolvido transparentemente por `getItem(STORAGE_KEY)`), eliminando a duplicação de 100% do JSON da biblioteca ativa em `shared_prefs`.
+- **Orçamento rígido de disco (~80 MB recuperáveis / ~25 MB banco offline)**:
+  - Firestore `PersistentCacheSettings`: reduzido de 100 MB para **25 MB** por instância.
+  - Coil disk cache (`quadrinheiro_covers_disk_cache`): reduzido de 64 MB para **48 MB**, com `.cache(null)` no `OkHttpClient` do Coil para eliminar dupla gravação binária de imagens no cache HTTP.
+  - OkHttp cache (`quadrinheiro_http_cache`): reduzido de 16 MB para **12 MB**.
+  - `RecoverableFilePolicy` e `CacheMaintenance`: poda de APKs renomeados por colisão do `DownloadManager` (`quadrinheiro-<ver>-1.apk`, `.tmp`, `.part`), limite de `shared_cards` (8 MB / 6 arquivos / 24h) e `WorkManager.pruneWork()`.
+  - `StorageMaintenance.autoCompactIfNeeded`: migra e compacta instalações já inchadas no boot sem tocar em `account_state_<uid>`, `guest_local` ou filas dirty.
+- **Diagnóstico técnico sanitizado em `Ajustes > Armazenamento`**:
+  - Separação de `"Cache do sistema (code_cache)"` e `"Snapshots e traduções em cache"`, telemetria em memória (`StorageWriteTelemetry`) e botão **"Copiar diagnóstico técnico"** com comparação `StorageStatsManager` vs árvore interna e caminhos sanitizados sem dados pessoais.
+- **Validação automatizada**: 41 testes unitários/Robolectric executados e aprovados (`StorageGrowthAndMigrationTest`, `StorageRevisionTest`, `AppearanceStorageTest`, `AccountPersistenceRegressionTest`, `SyncMergeTest`, `CommunityAutoSyncTest`, `ExplorePerformanceAndAuditTest`) + `compile_applet` concluído com sucesso.
+
+## 1. Estado anterior confirmado no GitHub
 
 - Repositório: https://github.com/felipemloiola/Quadrinheiro
 - Branch main consultada: `0c6f73d29de2ff6827761482b8242bcc80aee099`.

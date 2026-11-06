@@ -39,6 +39,10 @@ class SafeStorage(context: Context) {
         const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
         const val GUEST_STATE_KEY = "quadrinheiro_guest_isolated_state_v1"
         const val MODERN_CATALOG_SNAPSHOT_KEY = "quadrinheiro_modern_catalog_snapshot_v1"
+        const val MAX_TRANSLATION_CACHE_ENTRIES = 600
+        const val MAX_TRANSLATION_CACHE_BYTES = 512 * 1024
+        private const val ACCOUNT_REF_PREFIX = "@ref:"
+        private val EXTERNAL_SNAPSHOT_KEYS = setOf(TRANSLATION_CACHE_KEY, MODERN_CATALOG_SNAPSHOT_KEY)
         private val memoryFallback = java.util.concurrent.ConcurrentHashMap<String, String>()
         private val catalogMatchIndex by lazy(LazyThreadSafetyMode.PUBLICATION) {
             CatalogMatchIndex(CuratedCatalog.curatedComicsCatalog)
@@ -50,32 +54,108 @@ class SafeStorage(context: Context) {
         return "$ACCOUNT_STATE_PREFIX$clean"
     }
 
+    private fun snapshotDir(): java.io.File =
+        java.io.File(appContext.cacheDir, "quadrinheiro_snapshots").apply { mkdirs() }
+
+    internal fun snapshotFile(key: String): java.io.File {
+        val safeName = key.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+        return java.io.File(snapshotDir(), "$safeName.json")
+    }
+
+    private fun resolvePointerIfNeeded(key: String, rawValue: String?): String? {
+        if (rawValue == null) return null
+        if (key == STORAGE_KEY && rawValue.startsWith(ACCOUNT_REF_PREFIX)) {
+            val targetKey = rawValue.removePrefix(ACCOUNT_REF_PREFIX).trim()
+            if (targetKey.isNotEmpty() && targetKey != STORAGE_KEY) {
+                return getItem(targetKey)
+            }
+        }
+        return rawValue
+    }
+
     fun getItem(key: String = STORAGE_KEY): String? {
-        memoryFallback[key]?.let { return it }
+        memoryFallback[key]?.let { cached ->
+            return resolvePointerIfNeeded(key, cached)
+        }
+        if (key in EXTERNAL_SNAPSHOT_KEYS) {
+            return try {
+                val file = snapshotFile(key)
+                if (file.isFile && file.exists()) {
+                    val content = file.readText(Charsets.UTF_8)
+                    memoryFallback[key] = content
+                    content
+                } else {
+                    val legacyFromPrefs = prefs?.getString(key, null)
+                    if (legacyFromPrefs != null) {
+                        memoryFallback[key] = legacyFromPrefs
+                        writeSnapshotFileAtomically(file, legacyFromPrefs)
+                        runCatching { prefs?.edit()?.remove(key)?.apply() }
+                    }
+                    legacyFromPrefs
+                }
+            } catch (_: Throwable) {
+                memoryFallback[key]
+            }
+        }
         return try {
             val fromDisk = prefs?.getString(key, null)
             if (fromDisk != null) {
                 memoryFallback[key] = fromDisk
             }
-            fromDisk
+            resolvePointerIfNeeded(key, fromDisk)
         } catch (_: Throwable) {
-            memoryFallback[key]
+            resolvePointerIfNeeded(key, memoryFallback[key])
+        }
+    }
+
+    private fun writeSnapshotFileAtomically(target: java.io.File, content: String) {
+        try {
+            target.parentFile?.mkdirs()
+            val tmp = java.io.File(target.parentFile, "${target.name}.tmp")
+            tmp.writeText(content, Charsets.UTF_8)
+            if (!tmp.renameTo(target)) {
+                target.writeText(content, Charsets.UTF_8)
+                tmp.delete()
+            }
+        } catch (_: Throwable) {
+            runCatching { target.writeText(content, Charsets.UTF_8) }
         }
     }
 
     fun setItem(key: String = STORAGE_KEY, value: String) {
-        memoryFallback[key] = value
+        if (key in EXTERNAL_SNAPSHOT_KEYS) {
+            val file = snapshotFile(key)
+            if (memoryFallback[key] == value && file.isFile) return
+            memoryFallback[key] = value
+            writeSnapshotFileAtomically(file, value)
+            runCatching {
+                if (prefs?.contains(key) == true) {
+                    prefs?.edit()?.remove(key)?.apply()
+                }
+            }
+            StorageWriteTelemetry.recordSnapshotCacheWrite(key, value.toByteArray(Charsets.UTF_8).size)
+            return
+        }
+        val previousMem = memoryFallback.put(key, value)
         try {
-            if (prefs?.getString(key, null) == value) return
+            val currentDisk = prefs?.getString(key, null)
+            if (previousMem == value && currentDisk == value) return
             prefs?.edit()?.putString(key, value)?.apply()
+            StorageWriteTelemetry.recordPrefsWrite(key, value.toByteArray(Charsets.UTF_8).size)
         } catch (_: Throwable) {
         }
     }
 
     fun removeItem(key: String) {
         memoryFallback.remove(key)
+        if (key in EXTERNAL_SNAPSHOT_KEYS) {
+            runCatching { snapshotFile(key).delete() }
+            runCatching { java.io.File(snapshotDir(), "${snapshotFile(key).name}.tmp").delete() }
+        }
         try {
-            prefs?.edit()?.remove(key)?.apply()
+            if (prefs?.contains(key) == true) {
+                prefs?.edit()?.remove(key)?.apply()
+            }
         } catch (_: Throwable) {
         }
     }
@@ -359,13 +439,49 @@ class SafeStorage(context: Context) {
         val result = JSONObject()
         var bytes = 0
         val retained = mutableListOf<Pair<String, JSONObject>>()
-        source.keys().asSequence().toList().takeLast(1024).asReversed().forEach { key ->
+        source.keys().asSequence().toList().takeLast(MAX_TRANSLATION_CACHE_ENTRIES).asReversed().forEach { key ->
             val value = source.optJSONObject(key) ?: return@forEach
             val size = key.toByteArray(Charsets.UTF_8).size + value.toString().toByteArray(Charsets.UTF_8).size
-            if (bytes + size <= 4 * 1024 * 1024) { retained.add(key to value); bytes += size }
+            if (bytes + size <= MAX_TRANSLATION_CACHE_BYTES) { retained.add(key to value); bytes += size }
         }
         retained.asReversed().forEach { (key, value) -> result.put(key, value) }
         return result
+    }
+
+    @Synchronized
+    fun saveComicTranslationCacheOnly(translated: ComicEntry) {
+        val tPt = translated.titlePtBr.ifBlank { translated.title }
+        val sPt = translated.synopsisPtBr.ifBlank { translated.synopsis }
+        if (sPt.isBlank() && tPt.isBlank()) return
+        try {
+            val rawCache = getItem(TRANSLATION_CACHE_KEY)
+            val cacheRoot = if (!rawCache.isNullOrBlank()) JSONObject(rawCache) else JSONObject()
+            var changed = false
+            val entryObj = JSONObject().apply {
+                put("titlePtBr", tPt.take(300))
+                put("synopsisPtBr", sPt.take(5000))
+            }
+            if (translated.id.isNotBlank()) {
+                val existing = cacheRoot.optJSONObject(translated.id)
+                if (existing == null || existing.optString("titlePtBr") != tPt.take(300) || existing.optString("synopsisPtBr") != sPt.take(5000)) {
+                    cacheRoot.remove(translated.id)
+                    cacheRoot.put(translated.id, entryObj)
+                    changed = true
+                }
+            }
+            if (translated.externalId.isNotBlank() && translated.externalId != translated.id) {
+                val existing = cacheRoot.optJSONObject(translated.externalId)
+                if (existing == null || existing.optString("titlePtBr") != tPt.take(300) || existing.optString("synopsisPtBr") != sPt.take(5000)) {
+                    cacheRoot.remove(translated.externalId)
+                    cacheRoot.put(translated.externalId, entryObj)
+                    changed = true
+                }
+            }
+            if (changed) {
+                setItem(TRANSLATION_CACHE_KEY, boundedTranslationCache(cacheRoot).toString())
+            }
+        } catch (_: Throwable) {
+        }
     }
 
     @Synchronized
@@ -374,30 +490,17 @@ class SafeStorage(context: Context) {
         val sPt = translated.synopsisPtBr.ifBlank { translated.synopsis }
         if (sPt.isBlank() && tPt.isBlank()) return
 
-        // 1. Salva no mapa de cache persistente por comicId / externalId
-        try {
-            val rawCache = getItem(TRANSLATION_CACHE_KEY)
-            val cacheRoot = if (!rawCache.isNullOrBlank()) JSONObject(rawCache) else JSONObject()
-            val entryObj = JSONObject().apply {
-                put("titlePtBr", tPt)
-                put("synopsisPtBr", sPt)
-            }
-            if (translated.id.isNotBlank()) {
-                cacheRoot.remove(translated.id)
-                cacheRoot.put(translated.id, entryObj)
-            }
-            if (translated.externalId.isNotBlank()) {
-                cacheRoot.remove(translated.externalId)
-                cacheRoot.put(translated.externalId, entryObj)
-            }
-            setItem(TRANSLATION_CACHE_KEY, boundedTranslationCache(cacheRoot).toString())
-        } catch (_: Throwable) {
-        }
+        // 1. Salva no arquivo de cache de traduções (isolado de SharedPreferences, máx. 512 KB)
+        saveComicTranslationCacheOnly(translated)
 
-        // 2. Se o quadrinho já estiver salvo no estado da conta ativa ou no espelho local, atualiza ambos
+        // 2. Se o quadrinho já estiver salvo no estado da conta ativa ou no espelho local, atualiza
         val targetKeys = syncStateKeys(null).ifEmpty { listOf(STORAGE_KEY) }
         for (targetKey in targetKeys) {
             try {
+                if (targetKey == STORAGE_KEY) {
+                    val rawPtr = memoryFallback[STORAGE_KEY] ?: prefs?.getString(STORAGE_KEY, null)
+                    if (rawPtr != null && rawPtr.startsWith(ACCOUNT_REF_PREFIX)) continue
+                }
                 val rawState = getItem(targetKey) ?: continue
                 val root = JSONObject(rawState)
                 val comicsArr = root.optJSONArray("comics") ?: continue
@@ -449,7 +552,9 @@ class SafeStorage(context: Context) {
         return buildList {
             if (!resolvedUid.isNullOrBlank()) add(accountStateKey(resolvedUid))
             val isActiveOwner = session != null && !session.isGuest && session.uid == resolvedUid
-            if (isActiveOwner || (ownerUid == null && resolvedUid.isNullOrBlank())) {
+            val rawStorageValue = memoryFallback[STORAGE_KEY] ?: prefs?.getString(STORAGE_KEY, null)
+            val isPointerMirror = rawStorageValue != null && rawStorageValue.startsWith(ACCOUNT_REF_PREFIX)
+            if (!isPointerMirror && (isActiveOwner || (ownerUid == null && resolvedUid.isNullOrBlank()))) {
                 add(STORAGE_KEY)
             }
         }
@@ -660,9 +765,10 @@ class SafeStorage(context: Context) {
             ?: activeSession?.takeIf { !it.isGuest }?.uid
 
         if (!resolvedUid.isNullOrBlank()) {
-            setItem(accountStateKey(resolvedUid), json)
+            val targetKey = accountStateKey(resolvedUid)
+            setItem(targetKey, json)
             if (ownerUid == null || (activeSession != null && !activeSession.isGuest && activeSession.uid == resolvedUid)) {
-                setItem(STORAGE_KEY, json)
+                setItem(STORAGE_KEY, "$ACCOUNT_REF_PREFIX$targetKey")
             }
             syncAccountMetadata(
                 uid = resolvedUid,
@@ -674,6 +780,52 @@ class SafeStorage(context: Context) {
             // Preserve legacy/local persistence when no account was selected.
             setItem(STORAGE_KEY, json)
         }
+    }
+
+    /**
+     * Auto-compacta de forma 100% segura instalações existentes que acumulavam caches
+     * (`TRANSLATION_CACHE_KEY`, `MODERN_CATALOG_SNAPSHOT_KEY`) ou duplicação de biblioteca
+     * dentro do arquivo XML de `SharedPreferences`, preservando integralmente todas as contas,
+     * modo convidado, vitrines e filas de sincronização.
+     */
+    @Synchronized
+    fun compactStorageIfNeeded(): Boolean {
+        var compacted = false
+        try {
+            val p = prefs ?: return false
+            for (extKey in EXTERNAL_SNAPSHOT_KEYS) {
+                if (p.contains(extKey)) {
+                    val raw = p.getString(extKey, null)
+                    if (!raw.isNullOrBlank()) {
+                        val file = snapshotFile(extKey)
+                        if (!file.exists()) {
+                            writeSnapshotFileAtomically(file, raw)
+                        }
+                        memoryFallback[extKey] = raw
+                    }
+                    p.edit().remove(extKey).apply()
+                    compacted = true
+                }
+            }
+            trimTranslationCache()
+            val activeSession = loadAuthSession()
+            if (activeSession != null && !activeSession.isGuest && activeSession.uid.isNotBlank()) {
+                val targetKey = accountStateKey(activeSession.uid)
+                val hasAccountState = p.contains(targetKey) || memoryFallback.containsKey(targetKey)
+                val rawMain = p.getString(STORAGE_KEY, null)
+                if (hasAccountState && !rawMain.isNullOrBlank() && !rawMain.startsWith(ACCOUNT_REF_PREFIX)) {
+                    val refValue = "$ACCOUNT_REF_PREFIX$targetKey"
+                    memoryFallback[STORAGE_KEY] = refValue
+                    p.edit().putString(STORAGE_KEY, refValue).apply()
+                    compacted = true
+                }
+            }
+            if (compacted) {
+                StorageWriteTelemetry.recordAutoCompaction()
+            }
+        } catch (_: Throwable) {
+        }
+        return compacted
     }
 
     fun buildBackupJsonString(
@@ -1131,11 +1283,14 @@ class SafeStorage(context: Context) {
     }
 
     private fun serializeSettings(s: AppSettings): JSONObject = JSONObject().apply {
+        val cleanFavComics = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
+        val cleanFavChars = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4)
+        val cleanDetails = ProfileShowcase.sanitizeDetails(s.profileShowcaseDetails, cleanFavComics, cleanFavChars)
         put("profileBannerUrl", s.profileBannerUrl.take(200000))
-        put("profileShowcaseDetails", JSONObject(s.profileShowcaseDetails))
+        put("profileShowcaseDetails", JSONObject(cleanDetails))
         put("profileShowcaseUpdatedAt", s.profileShowcaseUpdatedAt)
-        put("profileFavoriteComicIds", JSONArray(s.profileFavoriteComicIds.distinct().take(4)))
-        put("profileFavoriteCharacters", JSONArray(s.profileFavoriteCharacters.map { it.take(60) }.distinct().take(4)))
+        put("profileFavoriteComicIds", JSONArray(cleanFavComics))
+        put("profileFavoriteCharacters", JSONArray(cleanFavChars))
         put("themeId", s.themeId)
         put("colorScheme", s.colorScheme)
         put("glassLevel", s.glassLevel)

@@ -26,14 +26,21 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun StorageSettingsCard() {
     val context = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val theme = LocalIOS27Theme.current
     val scope = rememberCoroutineScope()
     var usage by remember { mutableStateOf<StorageUsage?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var diagnosticCopied by remember { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(context) {
-        try { usage = withContext(Dispatchers.IO) { StorageMaintenance.usage(context) } }
+        try {
+            usage = withContext(Dispatchers.IO) {
+                StorageMaintenance.autoCompactIfNeeded(context)
+                StorageMaintenance.usage(context)
+            }
+        }
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { error = "Não foi possível medir o armazenamento." }
     }
@@ -61,6 +68,26 @@ internal fun StorageSettingsCard() {
                         }
                     }
                     Text("A lista contém apenas caminhos e tamanhos; nenhum arquivo foi aberto ou enviado.", color = theme.textSecondary, fontSize = 11.sp)
+                }
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val current = usage ?: return@launch
+                            val report = withContext(Dispatchers.IO) {
+                                StorageMaintenance.buildSanitizedDiagnosticReport(context, current)
+                            }
+                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(report))
+                            diagnosticCopied = true
+                        }
+                    },
+                    modifier = Modifier.heightIn(min = 44.dp).testTag("copy_storage_diagnostic"),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        if (diagnosticCopied) "Diagnóstico copiado (sem dados pessoais)" else "Copiar diagnóstico técnico",
+                        color = theme.accent,
+                        fontSize = 13.sp
+                    )
                 }
                 Text("Os valores podem mudar durante a sincronização. O aplicativo instalado não está incluído.", color = theme.textSecondary, fontSize = 12.sp)
             }

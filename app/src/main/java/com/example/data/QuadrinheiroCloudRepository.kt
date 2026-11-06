@@ -123,12 +123,15 @@ data class CloudUserPreferences(
     val cachedRecommendationsJson: String
         get() = if ('\n' in cachedRecommendationsPayload) cachedRecommendationsPayload.substringAfter('\n').take(12288) else ""
 
-    fun toAppSettings(): AppSettings = AppSettings(
-        profileBannerUrl = profileBannerUrl.take(200000),
-        profileShowcaseDetails = profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
-        profileShowcaseUpdatedAt = profileShowcaseUpdatedAt.coerceAtLeast(0L),
-        profileFavoriteComicIds = profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
-        profileFavoriteCharacters = profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
+    fun toAppSettings(): AppSettings {
+        val cleanFavComics = profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
+        val cleanFavChars = profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4)
+        return AppSettings(
+            profileBannerUrl = profileBannerUrl.take(200000),
+            profileShowcaseDetails = ProfileShowcase.sanitizeDetails(profileShowcaseDetails, cleanFavComics, cleanFavChars),
+            profileShowcaseUpdatedAt = profileShowcaseUpdatedAt.coerceAtLeast(0L),
+            profileFavoriteComicIds = cleanFavComics,
+            profileFavoriteCharacters = cleanFavChars,
         themeId = themeId.ifBlank { "SYSTEM_MONO" },
         colorScheme = colorScheme.ifBlank { "system" },
         glassLevel = glassLevel.coerceIn(0, 100),
@@ -169,19 +172,22 @@ data class CloudUserPreferences(
         cachedRecommendationsJson = cachedRecommendationsJson,
         recommendationTasteHash = recommendationTasteHash,
         quickReviewTags = quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
-    )
+        )
+    }
 
     companion object {
         fun fromAppSettings(s: AppSettings): CloudUserPreferences {
             val cleanHash = s.recommendationTasteHash.replace("\n", "").take(64)
             val cleanJson = s.cachedRecommendationsJson.take(12288)
             val payload = if (cleanHash.isEmpty() && cleanJson.isEmpty()) "" else "$cleanHash\n$cleanJson"
+            val cleanFavComics = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
+            val cleanFavChars = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4)
             return CloudUserPreferences(
                 profileBannerUrl = s.profileBannerUrl.take(200000),
-                profileShowcaseDetails = s.profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
+                profileShowcaseDetails = ProfileShowcase.sanitizeDetails(s.profileShowcaseDetails, cleanFavComics, cleanFavChars),
                 profileShowcaseUpdatedAt = s.profileShowcaseUpdatedAt.coerceAtLeast(0L),
-                profileFavoriteComicIds = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
-                profileFavoriteCharacters = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
+                profileFavoriteComicIds = cleanFavComics,
+                profileFavoriteCharacters = cleanFavChars,
                 themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),
                 colorScheme = s.colorScheme.ifBlank { "system" }.take(30),
                 glassLevel = s.glassLevel.coerceIn(0, 100),
@@ -544,16 +550,20 @@ class QuadrinheiroCloudRepository(
     private val appContext = context.applicationContext
 
     init {
-        // Habilita Offline Persistence do Firestore (PersistentCacheSettings) para que leituras repetidas
-        // venham do cache local sem custo de rede ou consumo desnecessário da cota diária.
-        if(db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings) runCatching {
-            val cacheSettings = PersistentCacheSettings.newBuilder()
-                .setSizeBytes(100L * 1024L * 1024L) // 100 MB de cache persistente local
-                .build()
-            val settings = FirebaseFirestoreSettings.Builder(db.firestoreSettings)
-                .setLocalCacheSettings(cacheSettings)
-                .build()
-            db.firestoreSettings = settings
+        // Habilita Offline Persistence do Firestore com orçamento rígido de 25 MB
+        val dbKey = System.identityHashCode(db)
+        if (configuredDatabases.add(dbKey) &&
+            db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings
+        ) {
+            runCatching {
+                val cacheSettings = PersistentCacheSettings.newBuilder()
+                    .setSizeBytes(FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES)
+                    .build()
+                val settings = FirebaseFirestoreSettings.Builder(db.firestoreSettings)
+                    .setLocalCacheSettings(cacheSettings)
+                    .build()
+                db.firestoreSettings = settings
+            }
         }
     }
 
@@ -1023,10 +1033,12 @@ class QuadrinheiroCloudRepository(
                         batch.set(userDocRef, docData)
                     }.await()
                 }
+                StorageWriteTelemetry.recordFirestoreProfileWrite()
             } else {
                 kotlinx.coroutines.withTimeout(3500L) {
                     db.collection("users").document(userId).set(docData).await()
                 }
+                StorageWriteTelemetry.recordFirestoreProfileWrite()
             }
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
@@ -1053,6 +1065,7 @@ class QuadrinheiroCloudRepository(
                 .document(cloudDoc.id)
                 .set(cloudDoc)
                 .await()
+            StorageWriteTelemetry.recordFirestoreComicWrite(1)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
         }
@@ -1125,6 +1138,7 @@ class QuadrinheiroCloudRepository(
                         syncedIds.add(cloudDoc.id)
                     }
                 }.await()
+                StorageWriteTelemetry.recordFirestoreComicBatchWrite(chunk.size)
             }
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
@@ -1142,17 +1156,27 @@ class QuadrinheiroCloudRepository(
     }
 
     companion object {
+        const val FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES = 25L * 1024L * 1024L
+        private val configuredDatabases = java.util.Collections.synchronizedSet(HashSet<Int>())
+
         /**
          * Resolve conflitos entre a lista local (`SafeStorage`) e a lista remota (`Firestore`)
          * mantendo sempre o registro com o maior `updatedAt` (timestamp).
+         * Quando `isPartialRemoteWindow = true` (ex.: consulta paginada de 50 itens ou listener
+         * com `limit = 100`), itens locais já limpos (`!local.isDirty`) que estão fora da janela
+         * remota são preservados em `mergedList`, mas NÃO são marcados como `isDirty = true` nem
+         * reenviados em loop para o Firestore.
          * Retorna `Pair(mergedList, dirtyWinnersToPushToCloud)`.
          */
         fun mergeLocalAndRemoteComics(
             localComics: List<ComicEntry>,
-            remoteComics: List<ComicEntry>
+            remoteComics: List<ComicEntry>,
+            isPartialRemoteWindow: Boolean = false
         ): Pair<List<ComicEntry>, List<ComicEntry>> {
             if (remoteComics.isEmpty()) {
-                val dirtyOrAll = localComics.filter { it.isDirty }.ifEmpty { localComics }
+                val dirtyOrAll = localComics.filter { it.isDirty }.ifEmpty {
+                    if (isPartialRemoteWindow) emptyList() else localComics
+                }
                 return localComics to dirtyOrAll
             }
 
@@ -1176,11 +1200,17 @@ class QuadrinheiroCloudRepository(
                     ?: (if (local.externalId.isNotBlank()) remoteByExtId[local.externalId] else null)
 
                 if (remoteMatch == null) {
-                    // Item existe apenas localmente (ex: criado no Modo Convidado ou offline):
-                    // preserva integralmente no merge e agenda upload para o Firestore
-                    val localToSync = if (local.isDirty) local else local.copy(isDirty = true)
-                    mergedById[local.id] = localToSync
-                    dirtyWinners.add(localToSync)
+                    if (isPartialRemoteWindow && !local.isDirty) {
+                        // A janela remota é parcial (ex.: top 50 ou top 100) e este item local já foi
+                        // sincronizado antes: preserva na estante sem forçar re-upload em loop.
+                        mergedById[local.id] = local
+                    } else {
+                        // Item existe apenas localmente (ou foi editado offline com isDirty = true):
+                        // preserva integralmente no merge e agenda upload para o Firestore
+                        val localToSync = if (local.isDirty) local else local.copy(isDirty = true)
+                        mergedById[local.id] = localToSync
+                        dirtyWinners.add(localToSync)
+                    }
                 } else {
                     // Conflito entre versão local e versão remota: vence o maior updatedAt
                     val localWins = local.isDirty && local.updatedAt >= remoteMatch.updatedAt

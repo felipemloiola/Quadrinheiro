@@ -5,7 +5,7 @@ import java.io.File
 /** Only recognizes updater-owned files; never traverses collection or backup storage. */
 internal object RecoverableFilePolicy {
     private const val DAY = 24L * 60 * 60 * 1000
-    private val apkName = Regex("quadrinheiro-(\\d+)\\.apk")
+    private val apkName = Regex("quadrinheiro-(\\d+)(?:-(\\d+))?\\.apk(?:\\.tmp|\\.part)?")
 
     fun pruneUpdates(
         roots: List<File>, installedCode: Long, activeCode: Long?, now: Long,
@@ -19,12 +19,20 @@ internal object RecoverableFilePolicy {
         }.sortedWith(compareByDescending<File> { it.lastModified() }.thenBy { it.absolutePath })
         var retained = 0
         var retainedBytes = 0L
+        var activeRetained = false
         for (file in files) {
-            val code = apkName.matchEntire(file.name)?.groupValues?.get(1)?.toLongOrNull() ?: continue
-            if (code == activeCode && code > installedCode) continue
+            val match = apkName.matchEntire(file.name) ?: continue
+            val code = match.groupValues[1].toLongOrNull() ?: continue
+            val isCollisionOrTemp = match.groupValues[2].isNotEmpty() ||
+                file.name.endsWith(".tmp") ||
+                file.name.endsWith(".part")
+            if (code == activeCode && code > installedCode && !isCollisionOrTemp && !activeRetained) {
+                activeRetained = true
+                continue
+            }
             val expired = now - file.lastModified() > DAY
             val size = file.length()
-            if (code <= installedCode || expired || retained >= maxOrphans || size > maxOrphanBytes - retainedBytes) {
+            if (isCollisionOrTemp || code <= installedCode || expired || retained >= maxOrphans || size > maxOrphanBytes - retainedBytes) {
                 file.delete()
             } else {
                 retained++

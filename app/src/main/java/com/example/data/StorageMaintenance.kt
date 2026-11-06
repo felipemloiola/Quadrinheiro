@@ -16,8 +16,19 @@ data class StorageUsage(
 }
 
 object StorageMaintenance {
+    const val RECOVERABLE_CACHE_BUDGET_BYTES = 80L * 1024 * 1024
+    const val OFFLINE_DB_BUDGET_BYTES = 25L * 1024 * 1024
     private const val MAX_DIAGNOSTIC_ENTRIES = 20000
     private const val MAX_DIAGNOSTIC_DEPTH = 8
+    private val uidSegmentRegex = Regex("(account_state_v1_|profile_showcase_|community_pending_|community_published_rev_)([A-Za-z0-9_.-]+)")
+    private val emailSegmentRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+
+    internal fun sanitizeDiagnosticPath(rawPath: String): String {
+        return rawPath
+            .replace(uidSegmentRegex, "$1<uid>")
+            .replace(emailSegmentRegex, "<email>")
+            .takeLast(220)
+    }
 
     internal fun bytes(root: File): Long {
         if (!root.exists()) return 0L
@@ -50,7 +61,7 @@ object StorageMaintenance {
                 val smallestTopBytes = top.peek()?.bytes ?: Long.MAX_VALUE
                 if (size > 0L && (top.size < limit || size > smallestTopBytes)) {
                     if (top.size == limit) top.poll()
-                    top.add(StorageItem(canonicalPath.takeLast(220), size))
+                    top.add(StorageItem(sanitizeDiagnosticPath(canonicalPath), size))
                 }
             } else if (file.isDirectory && depth < MAX_DIAGNOSTIC_DEPTH) {
                 runCatching { file.listFiles().orEmpty() }.getOrDefault(emptyArray()).forEach { child ->
@@ -88,9 +99,15 @@ object StorageMaintenance {
         val sharedPreferences = under(data, "shared_prefs")
         val databases = under(data, "databases")
         val files = under(data, "files")
-        val noBackup = context.noBackupFilesDir.canonicalFile.takeIf { it != data && !it.path.startsWith(data.resolve("files").path + File.separator) }?.let(::safeSize) ?: 0L
+        val noBackup = context.noBackupFilesDir.canonicalFile.takeIf {
+            it != data && !it.path.startsWith(data.resolve("files").path + File.separator)
+        }?.let(::safeSize) ?: 0L
+        val codeCache = runCatching { context.codeCacheDir.canonicalFile }.getOrNull()?.takeIf {
+            it != data && it != cache && !it.path.startsWith(cache.path + File.separator)
+        }?.let(::safeSize) ?: 0L
         val cacheCovers = under(cache, "quadrinheiro_covers_disk_cache")
         val httpCache = under(cache, "quadrinheiro_http_cache")
+        val snapshotsCache = under(cache, "quadrinheiro_snapshots")
         val sharedCards = under(cache, "shared_cards")
         val updateCache = under(cache, "updates")
         val externalUpdates = safeSize(downloads)
@@ -99,17 +116,110 @@ object StorageMaintenance {
             "Bancos e sincronização offline" to databases,
             "Arquivos do app" to files,
             "Backups locais" to noBackup,
-            "Outros dados locais" to (dataBytes - sharedPreferences - databases - files - noBackup).coerceAtLeast(0L),
+            "Cache do sistema (code_cache)" to codeCache,
+            "Outros dados locais" to (dataBytes - sharedPreferences - databases - files - noBackup - codeCache).coerceAtLeast(0L),
             "Capas em cache" to cacheCovers,
             "Respostas de rede" to httpCache,
+            "Snapshots e traduções em cache" to snapshotsCache,
             "Cartões compartilhados" to sharedCards,
             "Atualizações em cache" to updateCache,
-            "Outros caches" to (cacheBytes - cacheCovers - httpCache - sharedCards - updateCache).coerceAtLeast(0L),
+            "Outros caches" to (cacheBytes - cacheCovers - httpCache - snapshotsCache - sharedCards - updateCache).coerceAtLeast(0L),
             "Arquivos externos do app" to (externalBytes - externalUpdates).coerceAtLeast(0L),
             "Atualizações baixadas" to externalUpdates
         )
         val largest = largestFiles(listOf(data, cache) + listOfNotNull(externalCache, external))
         return StorageUsage(cacheBytes, localBytes, categories, largest)
+    }
+
+    /**
+     * Auto-compacta instalações já inchadas no boot sem jamais tocar na biblioteca, contas,
+     * modo convidado, vitrines, favoritos ou sincronizações pendentes.
+     */
+    @OptIn(coil.annotation.ExperimentalCoilApi::class)
+    fun autoCompactIfNeeded(context: Context): Boolean {
+        val storage = SafeStorage(context)
+        var compacted = storage.compactStorageIfNeeded()
+        CacheMaintenance.prune(context, maxOrphans = 0, maxOrphanBytes = 0L)
+        runCatching { android.database.sqlite.SQLiteDatabase.releaseMemory() }
+        val cacheRoot = context.cacheDir
+        val externalUpdateDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
+        val currentCacheBytes = bytes(cacheRoot) + (externalUpdateDir?.let(::bytes) ?: 0L)
+        if (currentCacheBytes > RECOVERABLE_CACHE_BUDGET_BYTES) {
+            // Se ainda exceder o teto rígido de 80 MB, limpa cartões compartilhados e reduz caches recuperáveis
+            runCatching { cacheRoot.resolve("shared_cards").deleteRecursively() }
+            if (bytes(cacheRoot) > RECOVERABLE_CACHE_BUDGET_BYTES) {
+                runCatching { MultiApiSearchEngine.sharedHttpClient.cache?.evictAll() }
+            }
+            if (bytes(cacheRoot) > RECOVERABLE_CACHE_BUDGET_BYTES) {
+                runCatching { Coil.imageLoader(context).diskCache?.clear() }
+            }
+            compacted = true
+            StorageWriteTelemetry.recordAutoCompaction()
+        }
+        return compacted
+    }
+
+    /**
+     * Gera relatório técnico de diagnóstico 100% sanitizado (sem dados pessoais, sem conteúdo de arquivos,
+     * com UIDs e e-mails mascarados) comparando a medição interna com o StorageStatsManager do Android.
+     */
+    fun buildSanitizedDiagnosticReport(
+        context: Context,
+        currentUsage: StorageUsage = usage(context)
+    ): String {
+        val sb = StringBuilder()
+        val telemetry = StorageWriteTelemetry.snapshot()
+        sb.appendLine("=== Diagnóstico de Armazenamento — Quadrinheiro ===")
+        sb.appendLine("SDK Android: ${android.os.Build.VERSION.SDK_INT}")
+        sb.appendLine("Tempo de sessão ativa: ${telemetry.sessionUptimeMs / 1000}s")
+        sb.appendLine("Orçamento de caches recuperáveis: ${formatBytes(RECOVERABLE_CACHE_BUDGET_BYTES)}")
+        sb.appendLine("Orçamento de banco offline: ${formatBytes(OFFLINE_DB_BUDGET_BYTES)}")
+        sb.appendLine()
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            runCatching {
+                val ssm = context.getSystemService(android.app.usage.StorageStatsManager::class.java)
+                val sm = context.getSystemService(android.os.storage.StorageManager::class.java)
+                if (ssm != null && sm != null) {
+                    val uuid = sm.getUuidForPath(context.filesDir)
+                    val stats = ssm.queryStatsForPackage(uuid, context.packageName, android.os.Process.myUserHandle())
+                    sb.appendLine("[Sistema Android - StorageStatsManager]")
+                    sb.appendLine("Dados líquidos do app (data - cache): ${formatBytes((stats.dataBytes - stats.cacheBytes).coerceAtLeast(0L))}")
+                    sb.appendLine("Cache segundo o Android (inclui code_cache): ${formatBytes(stats.cacheBytes)}")
+                    sb.appendLine("APK e código compilado (appBytes): ${formatBytes(stats.appBytes)}")
+                    sb.appendLine()
+                }
+            }
+        }
+
+        sb.appendLine("[Medição Interna Auditada]")
+        sb.appendLine("Dados locais: ${formatBytes(currentUsage.localBytes)}")
+        sb.appendLine("Cache recuperável: ${formatBytes(currentUsage.cacheBytes)}")
+        sb.appendLine("Total medido: ${formatBytes(currentUsage.totalBytes)}")
+        sb.appendLine()
+        sb.appendLine("[Categorias]")
+        currentUsage.categories.forEach { (label, size) ->
+            sb.appendLine("- $label: ${formatBytes(size)} ($size B)")
+        }
+        sb.appendLine()
+        sb.appendLine("[Telemetria de Escrita da Sessão]")
+        sb.appendLine("- SharedPreferences escritas: ${telemetry.prefsWrites} (${formatBytes(telemetry.prefsBytesWritten)})")
+        sb.appendLine("- Snapshots em cache escritas: ${telemetry.snapshotCacheWrites} (${formatBytes(telemetry.snapshotCacheBytesWritten)})")
+        sb.appendLine("- Firestore Perfil escritas: ${telemetry.firestoreProfileWrites}")
+        sb.appendLine("- Firestore HQs escritas: ${telemetry.firestoreComicWrites} (lotes: ${telemetry.firestoreComicBatchWrites})")
+        sb.appendLine("- Comunidade publicações: ${telemetry.communityPublishWrites}")
+        sb.appendLine("- Auto-compactações executadas: ${telemetry.autoCompactions}")
+        if (telemetry.perKeyWrites.isNotEmpty()) {
+            sb.appendLine("- Chaves mais gravadas: ${telemetry.perKeyWrites.entries.joinToString { "${it.key}=${it.value}" }}")
+        }
+        if (currentUsage.largestItems.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("[Maiores Arquivos (Caminhos Sanitizados)]")
+            currentUsage.largestItems.take(15).forEach { item ->
+                sb.appendLine("- ${formatBytes(item.bytes)} (${item.bytes} B): ${sanitizeDiagnosticPath(item.path)}")
+            }
+        }
+        return sb.toString().trim()
     }
 
     /** SDK cache APIs preserve open stores and never touch the library or offline pending writes. */
@@ -119,7 +229,10 @@ object StorageMaintenance {
         loader.memoryCache?.clear()
         loader.diskCache?.clear()
         MultiApiSearchEngine.sharedHttpClient.cache?.evictAll()
-        SafeStorage(context).removeItem(SafeStorage.TRANSLATION_CACHE_KEY)
+        val storage = SafeStorage(context)
+        storage.removeItem(SafeStorage.TRANSLATION_CACHE_KEY)
+        storage.removeItem(SafeStorage.MODERN_CATALOG_SNAPSHOT_KEY)
+        storage.compactStorageIfNeeded()
         CacheMaintenance.prune(context, maxOrphans = 0, maxOrphanBytes = 0L)
     }
 

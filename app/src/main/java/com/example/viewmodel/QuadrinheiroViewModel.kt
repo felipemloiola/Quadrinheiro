@@ -587,6 +587,35 @@ class QuadrinheiroViewModel(
         storage.markProfileSynced(syncedAtMillis, ownerUid)
     }
 
+    @Volatile
+    private var lastPushedProfileSignature: String = ""
+    @Volatile
+    private var lastPushedDirtyBatchSignature: String = ""
+
+    private fun computeProfilePushSignature(uid: String, profile: ReaderProfile, settings: AppSettings): String {
+        val cleanComics = settings.profileFavoriteComicIds.take(4)
+        val cleanChars = settings.profileFavoriteCharacters.take(4)
+        val cleanDetails = com.example.data.ProfileShowcase.sanitizeDetails(settings.profileShowcaseDetails, cleanComics, cleanChars)
+        return listOf(
+            uid,
+            profile.name,
+            profile.handle,
+            profile.bio,
+            profile.favoriteUniverse,
+            profile.avatarUrl.hashCode(),
+            profile.avatarPreset,
+            profile.yearlyGoal,
+            profile.dailyPagesGoal,
+            profile.showGoalOnHome,
+            profile.activeReadingComicId,
+            settings.profileBannerUrl.hashCode(),
+            settings.profileShowcaseUpdatedAt,
+            cleanComics.hashCode(),
+            cleanChars.hashCode(),
+            cleanDetails.hashCode()
+        ).joinToString("|")
+    }
+
     private fun startOrStopCloudListeners(user: CloudAuthUser?) {
         cloudProfileJob?.cancel()
         cloudComicsJob?.cancel()
@@ -607,7 +636,9 @@ class QuadrinheiroViewModel(
                                 )
                                 val incomingSettings = remoteProfile.preferences?.toAppSettings()
                                 val remoteSettings = incomingSettings?.let { com.example.data.ProfileShowcase.merge(_appSettings.value, it) }
-                                val showcaseNeedsPush = incomingSettings != null && remoteSettings != incomingSettings
+                                val showcaseNeedsPush = incomingSettings != null &&
+                                    remoteSettings != null &&
+                                    com.example.data.ProfileShowcase.differs(remoteSettings, incomingSettings)
                                 var changedAny = false
                                 if (resolvedProfile != _profile.value) {
                                     _profile.value = resolvedProfile
@@ -662,14 +693,26 @@ class QuadrinheiroViewModel(
                                     persistAll(user.uid)
                                 }
                                 if (shouldPushLocal || showcaseNeedsPush) {
-                                    runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
-                                        markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt, user.uid)
+                                    val sig = computeProfilePushSignature(user.uid, resolvedProfile, _appSettings.value)
+                                    if (sig != lastPushedProfileSignature) {
+                                        lastPushedProfileSignature = sig
+                                        runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
+                                            markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt, user.uid)
+                                        }.onFailure {
+                                            lastPushedProfileSignature = ""
+                                        }
                                     }
                                 }
                             } else {
                                 val localProf = _profile.value
-                                runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
-                                    markProfileCleanInMemoryAndStorage(localProf.updatedAt, user.uid)
+                                val sig = computeProfilePushSignature(user.uid, localProf, _appSettings.value)
+                                if (sig != lastPushedProfileSignature) {
+                                    lastPushedProfileSignature = sig
+                                    runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
+                                        markProfileCleanInMemoryAndStorage(localProf.updatedAt, user.uid)
+                                    }.onFailure {
+                                        lastPushedProfileSignature = ""
+                                    }
                                 }
                             }
                         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -690,7 +733,8 @@ class QuadrinheiroViewModel(
                 if (cachedComics.isNotEmpty() && !isCurrentSessionGuest() && activeCloudUid() == user.uid) {
                     val (initialMerged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                         localComics = _comics.value,
-                        remoteComics = cachedComics.filter(com.example.data.CatalogEpoch::afterReset)
+                        remoteComics = cachedComics.filter(com.example.data.CatalogEpoch::afterReset),
+                        isPartialRemoteWindow = cachedComics.size >= 100
                     )
                     if (initialMerged != _comics.value) {
                         _comics.value = initialMerged
@@ -713,20 +757,26 @@ class QuadrinheiroViewModel(
                         )
                         val (mergedFirstPage, dirtyFromFirstPage) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                             localComics = _comics.value,
-                            remoteComics = pageComics
+                            remoteComics = pageComics,
+                            isPartialRemoteWindow = firstPage.hasMore || firstPage.items.size >= 50
                         )
                         if (mergedFirstPage != _comics.value) {
                             _comics.value = mergedFirstPage
                             persistAll(user.uid)
                         }
                         if (dirtyFromFirstPage.isNotEmpty()) {
-                            runCatching {
-                                repo.syncDirtyComicsBatch(user.uid, dirtyFromFirstPage)
-                            }.onSuccess { syncedIds ->
-                                markComicsCleanInMemoryAndStorage(syncedIds)
-                                _lastSyncError.value = null
-                            }.onFailure { err ->
-                                _lastSyncError.value = err.message ?: "Sincronização pendente"
+                            val batchSig = dirtyFromFirstPage.joinToString(",") { "${it.id}:${it.updatedAt}" }
+                            if (batchSig != lastPushedDirtyBatchSignature) {
+                                lastPushedDirtyBatchSignature = batchSig
+                                runCatching {
+                                    repo.syncDirtyComicsBatch(user.uid, dirtyFromFirstPage)
+                                }.onSuccess { syncedIds ->
+                                    markComicsCleanInMemoryAndStorage(syncedIds)
+                                    _lastSyncError.value = null
+                                }.onFailure { err ->
+                                    lastPushedDirtyBatchSignature = ""
+                                    _lastSyncError.value = err.message ?: "Sincronização pendente"
+                                }
                             }
                         }
                     }
@@ -737,7 +787,7 @@ class QuadrinheiroViewModel(
                 repo.observeUserComics(user.uid, limit = 100L)
                     .catch { }
                     .collectLatest { incomingComics ->
-                        val remoteComics=incomingComics.filter(com.example.data.CatalogEpoch::afterReset)
+                        val remoteComics = incomingComics.filter(com.example.data.CatalogEpoch::afterReset)
                         try {
                             if (isCurrentSessionGuest() || activeCloudUid() != user.uid) return@collectLatest
                             if (remoteComics.isNotEmpty()) {
@@ -747,26 +797,39 @@ class QuadrinheiroViewModel(
                                 )
                                 val (mergedList, dirtyWinners) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                                     localComics = _comics.value,
-                                    remoteComics = remoteComics
+                                    remoteComics = remoteComics,
+                                    isPartialRemoteWindow = incomingComics.size >= 100 || _hasMoreCloudComics.value
                                 )
                                 if (mergedList != _comics.value) {
                                     _comics.value = mergedList
                                     persistAll(user.uid)
                                 }
                                 if (dirtyWinners.isNotEmpty()) {
-                                    runCatching {
-                                        repo.syncDirtyComicsBatch(user.uid, dirtyWinners)
-                                    }.onSuccess { syncedIds ->
-                                        markComicsCleanInMemoryAndStorage(syncedIds)
+                                    val batchSig = dirtyWinners.joinToString(",") { "${it.id}:${it.updatedAt}" }
+                                    if (batchSig != lastPushedDirtyBatchSignature) {
+                                        lastPushedDirtyBatchSignature = batchSig
+                                        runCatching {
+                                            repo.syncDirtyComicsBatch(user.uid, dirtyWinners)
+                                        }.onSuccess { syncedIds ->
+                                            markComicsCleanInMemoryAndStorage(syncedIds)
+                                        }.onFailure {
+                                            lastPushedDirtyBatchSignature = ""
+                                        }
                                     }
                                 }
                             } else if (_comics.value.isNotEmpty()) {
                                 val dirtyOnly = _comics.value.filter { it.isDirty }
                                 val batchToPush = dirtyOnly.ifEmpty { _comics.value }
-                                runCatching {
-                                    repo.syncAllComicsBatch(user.uid, batchToPush)
-                                }.onSuccess { syncedIds ->
-                                    markComicsCleanInMemoryAndStorage(syncedIds)
+                                val batchSig = "initial:" + batchToPush.joinToString(",") { "${it.id}:${it.updatedAt}" }
+                                if (batchSig != lastPushedDirtyBatchSignature) {
+                                    lastPushedDirtyBatchSignature = batchSig
+                                    runCatching {
+                                        repo.syncAllComicsBatch(user.uid, batchToPush)
+                                    }.onSuccess { syncedIds ->
+                                        markComicsCleanInMemoryAndStorage(syncedIds)
+                                    }.onFailure {
+                                        lastPushedDirtyBatchSignature = ""
+                                    }
                                 }
                             }
                         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -806,7 +869,8 @@ class QuadrinheiroViewModel(
                     if (result.items.isNotEmpty()) {
                         val (merged, _) = QuadrinheiroCloudRepository.mergeLocalAndRemoteComics(
                             localComics = _comics.value,
-                            remoteComics = result.items.filter(com.example.data.CatalogEpoch::afterReset)
+                            remoteComics = result.items.filter(com.example.data.CatalogEpoch::afterReset),
+                            isPartialRemoteWindow = true
                         )
                         if (merged != _comics.value) {
                             _comics.value = merged
@@ -826,10 +890,7 @@ class QuadrinheiroViewModel(
         if (sPt.isEmpty() && tPt.isEmpty()) return
 
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. Persiste imediatamente no SafeStorage
-            storage.saveComicTranslation(translated)
-
-            // 2. Atualiza o cache em memória do MultiApiSearchEngine e a lista atual de resultados
+            // 1. Atualiza o cache em memória do MultiApiSearchEngine e a lista atual de resultados
             searchEngine.updateCachedComicTranslation(translated)
             val currentRemote = _remoteResults.value
             if (currentRemote.isNotEmpty()) {
@@ -858,7 +919,7 @@ class QuadrinheiroViewModel(
                 }
             }
 
-            // 3. Se o quadrinho pertence à estante do usuário, atualiza o objeto em _comics, SafeStorage e Firestore
+            // 2. Verifica se o quadrinho pertence à estante do usuário
             var matchedShelfComic: ComicEntry? = null
             val nowMs = System.currentTimeMillis()
             val currentShelf = _comics.value
@@ -880,6 +941,7 @@ class QuadrinheiroViewModel(
             }
             val updatedShelfItem = matchedShelfComic
             if (updatedShelfItem != null) {
+                storage.saveComicTranslation(translated)
                 _comics.value = nextShelf
                 persistAll()
                 val uid = activeCloudUid()
@@ -892,6 +954,10 @@ class QuadrinheiroViewModel(
                         )
                     }
                 }
+            } else {
+                // Item é apenas de busca/Explorar: atualiza somente o arquivo de cache de traduções (em cacheDir),
+                // sem fazer parse nem regravar o estado da conta em SharedPreferences.
+                storage.saveComicTranslationCacheOnly(translated)
             }
         }
     }

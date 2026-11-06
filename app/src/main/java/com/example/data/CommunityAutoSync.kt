@@ -82,31 +82,55 @@ object CommunityAutoSync {
         }
     }
 
+    private fun publishedRevKey(uid: String) = "community_published_rev_$uid"
+
+    private fun comicPublishSignature(profile: ReaderProfile, comic: ComicEntry): String =
+        "${comic.rating}:${comic.review.trim().hashCode()}:${profile.name.hashCode()}:${profile.handle.hashCode()}"
+
     suspend fun flush(context: Context, uid: String, storage: SafeStorage): Boolean {
         val state = storage.loadAccountState(uid) ?: return false
         val repo = CommunityRepository(context)
         if (repo.currentUid() != uid) return false
         val queue = JSONObject(storage.getItem(key(uid)) ?: "{}")
+        val publishedRevs = runCatching { JSONObject(storage.getItem(publishedRevKey(uid)) ?: "{}") }.getOrDefault(JSONObject())
+        var publishedRevsChanged = false
+
         for (id in queue.keys().asSequence().take(20).toList()) {
             val item = queue.getJSONObject(id)
             val rev = item.optLong("rev")
             val comic = state.comics.firstOrNull { it.id == id }
             when (pendingAction(item.optBoolean("deleted"), comic, rev)) {
                 PendingAction.SKIP -> continue
-                PendingAction.WITHDRAW -> repo.withdrawKey(uid, item.getString("key"))
+                PendingAction.WITHDRAW -> {
+                    repo.withdrawKey(uid, item.getString("key"))
+                    publishedRevs.remove(id)
+                    publishedRevsChanged = true
+                    StorageWriteTelemetry.recordCommunityPublishWrite()
+                }
                 PendingAction.PUBLISH -> {
                     val target = comic ?: continue
                     repo.publish(uid, state.profile, target, target.review, target.rating.toDouble())
+                    publishedRevs.put(id, comicPublishSignature(state.profile, target))
+                    publishedRevsChanged = true
+                    StorageWriteTelemetry.recordCommunityPublishWrite()
                 }
             }
             acknowledge(storage, uid, id, rev)
             change.value = System.currentTimeMillis()
         }
-        // Also ensure any existing rated/reviewed comics in the active user's library are published
+        // Ensure existing rated/reviewed comics in the active user's library are published once per actual rating/review revision
         for (comic in state.comics.filter { it.rating > 0f || it.review.isNotBlank() }.take(20)) {
+            val sig = comicPublishSignature(state.profile, comic)
+            if (publishedRevs.optString(comic.id, "") == sig) continue
             runCatching {
                 repo.publish(uid, state.profile, comic, comic.review, comic.rating.toDouble())
+                publishedRevs.put(comic.id, sig)
+                publishedRevsChanged = true
+                StorageWriteTelemetry.recordCommunityPublishWrite()
             }
+        }
+        if (publishedRevsChanged) {
+            storage.setItem(publishedRevKey(uid), publishedRevs.toString())
         }
         return !hasPending(storage, uid)
     }

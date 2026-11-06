@@ -30,6 +30,10 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
         runCatching { LauncherAppearance.sync(this); com.example.widget.QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(this) }
     }
 
+    companion object {
+        const val COIL_DISK_CACHE_BUDGET_BYTES = 48L * 1024L * 1024L
+    }
+
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .components {
@@ -37,7 +41,8 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
             }
             .okHttpClient {
                 MultiApiSearchEngine.initHttpCache(this)
-                MultiApiSearchEngine.sharedHttpClient
+                // Evita duplicar binários de imagem no cache HTTP do OkHttp, mantendo-os apenas no DiskCache do Coil
+                MultiApiSearchEngine.sharedHttpClient.newBuilder().cache(null).build()
             }
             .memoryCache {
                 MemoryCache.Builder(this)
@@ -48,7 +53,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(this.cacheDir.resolve("quadrinheiro_covers_disk_cache"))
-                    .maxSizeBytes(64L * 1024L * 1024L)
+                    .maxSizeBytes(COIL_DISK_CACHE_BUDGET_BYTES)
                     .build()
             }
             .crossfade(50)

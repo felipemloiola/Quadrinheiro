@@ -49,11 +49,12 @@ class MultiApiSearchEngine {
         var sharedHttpClient: OkHttpClient
             get() = customHttpClient ?: defaultHttpClient
             set(value) { customHttpClient = value }
+        const val HTTP_CACHE_BUDGET_BYTES = 12L * 1024 * 1024
         @Volatile private var isCacheInitialized = false
         @Synchronized fun initHttpCache(context: android.content.Context) {
             if (isCacheInitialized) return
             try {
-                val cache = okhttp3.Cache(java.io.File(context.cacheDir, "quadrinheiro_http_cache"), 16L * 1024 * 1024)
+                val cache = okhttp3.Cache(java.io.File(context.cacheDir, "quadrinheiro_http_cache"), HTTP_CACHE_BUDGET_BYTES)
                 sharedHttpClient = sharedHttpClient.newBuilder().cache(cache).build(); isCacheInitialized = true
             } catch (_: Throwable) { }
         }

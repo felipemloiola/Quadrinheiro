@@ -9,8 +9,17 @@ import kotlinx.coroutines.*
 
 /** Only app-owned, recoverable files. Never traverses collection/profile storage. */
 object CacheMaintenance {
+    const val SHARED_CARDS_BUDGET_BYTES = 8L * 1024 * 1024
+    const val MAX_SHARED_CARD_FILES = 6
+    private const val SHARED_CARDS_TTL_MS = 24L * 60 * 60 * 1000
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    fun schedule(context: Context) { scope.launch { runCatching { prune(context.applicationContext) } } }
+
+    fun schedule(context: Context) {
+        val appCtx = context.applicationContext
+        scope.launch {
+            runCatching { StorageMaintenance.autoCompactIfNeeded(appCtx) }
+        }
+    }
 
     internal fun prune(
         context: Context,
@@ -34,7 +43,10 @@ object CacheMaintenance {
             maxOrphanBytes = maxOrphanBytes
         )
         pruneSharedCards(context, now)
-        SafeStorage(context).trimTranslationCache()
+        val storage = SafeStorage(context)
+        storage.compactStorageIfNeeded()
+        storage.trimTranslationCache()
+        runCatching { androidx.work.WorkManager.getInstance(context).pruneWork() }
     }
 
     internal fun pruneSharedCards(context: Context, now: Long = System.currentTimeMillis()) {
@@ -45,7 +57,10 @@ object CacheMaintenance {
             .filter { it.isFile && it.extension == "png" && it.canonicalFile.parentFile == root.canonicalFile }
             .sortedByDescending { it.lastModified() }.forEach { file ->
                 val size = file.length()
-                if (keptCount >= 8 || size > 32L * 1024 * 1024 - keptBytes || now - file.lastModified() > 3L * 24 * 60 * 60 * 1000) {
+                if (keptCount >= MAX_SHARED_CARD_FILES ||
+                    size > SHARED_CARDS_BUDGET_BYTES - keptBytes ||
+                    now - file.lastModified() > SHARED_CARDS_TTL_MS
+                ) {
                     file.delete()
                 } else {
                     keptCount++
