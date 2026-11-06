@@ -64,7 +64,6 @@ data class CloudAuthUser(
 )
 
 @IgnoreExtraProperties
-@Immutable
 data class CloudUserPreferences(
     val profileBannerUrl: String = "",
     val profileShowcaseDetails: Map<String, String> = emptyMap(),
@@ -108,8 +107,7 @@ data class CloudUserPreferences(
     val autoFillReadDate: Boolean = true,
     val showPagesInDiary: Boolean = true,
     val shareStarsMatchTheme: Boolean = true,
-    val cachedRecommendationsJson: String = "",
-    val recommendationTasteHash: String = "",
+    val cachedRecommendationsPayload: String = "",
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
@@ -117,6 +115,14 @@ data class CloudUserPreferences(
         "Final surpreendente"
     )
 ) {
+    @get:com.google.firebase.firestore.Exclude
+    val recommendationTasteHash: String
+        get() = cachedRecommendationsPayload.substringBefore('\n', "").take(64)
+
+    @get:com.google.firebase.firestore.Exclude
+    val cachedRecommendationsJson: String
+        get() = if ('\n' in cachedRecommendationsPayload) cachedRecommendationsPayload.substringAfter('\n').take(12288) else ""
+
     fun toAppSettings(): AppSettings = AppSettings(
         profileBannerUrl = profileBannerUrl.take(200000),
         profileShowcaseDetails = profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
@@ -160,59 +166,63 @@ data class CloudUserPreferences(
         autoFillReadDate = autoFillReadDate,
         showPagesInDiary = showPagesInDiary,
         shareStarsMatchTheme = shareStarsMatchTheme,
-        cachedRecommendationsJson = cachedRecommendationsJson.take(12288),
-        recommendationTasteHash = recommendationTasteHash.take(64),
+        cachedRecommendationsJson = cachedRecommendationsJson,
+        recommendationTasteHash = recommendationTasteHash,
         quickReviewTags = quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
     )
 
     companion object {
-        fun fromAppSettings(s: AppSettings): CloudUserPreferences = CloudUserPreferences(
-            profileBannerUrl = s.profileBannerUrl.take(200000),
-            profileShowcaseDetails = s.profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
-            profileShowcaseUpdatedAt = s.profileShowcaseUpdatedAt.coerceAtLeast(0L),
-            profileFavoriteComicIds = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
-            profileFavoriteCharacters = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
-            themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),
-            colorScheme = s.colorScheme.ifBlank { "system" }.take(30),
-            glassLevel = s.glassLevel.coerceIn(0, 100),
-            glassVariant = s.glassVariant.ifBlank { "regular" }.take(30),
-            edgeRefraction = s.edgeRefraction,
-            glassIntensity = s.glassIntensity.toDouble().coerceIn(0.0, 5.0),
-            glassBlurIntensity = s.glassBlurIntensity.toDouble().coerceIn(0.0, 5.0),
-            enableLensRefraction = s.enableLensRefraction,
-            enableChromaticAberration = s.enableChromaticAberration,
-            glassOpacity = s.glassOpacity.toDouble().coerceIn(0.0, 5.0),
-            backgroundExtension = s.backgroundExtension,
-            showBottomAccessory = s.showBottomAccessory,
-            showReadingNowBar = s.showReadingNowBar,
-            showFloatingMenu = s.showFloatingMenu,
-            minimizeTabBarOnScroll = s.minimizeTabBarOnScroll,
-            reduceTransparency = s.reduceTransparency,
-            increaseContrast = s.increaseContrast,
-            boldText = s.boldText,
-            dynamicTypeScale = s.dynamicTypeScale.coerceIn(70, 140),
-            reduceMotion = s.reduceMotion,
-            onOffLabels = s.onOffLabels,
-            shelfColumns = s.shelfColumns.coerceIn(2, 6),
-            showProgressOnCovers = s.showProgressOnCovers,
-            showRatingsOnGrid = s.showRatingsOnGrid,
-            spine3dEffect = s.spine3dEffect,
-            defaultShelfSort = s.defaultShelfSort.ifBlank { "RECENT" }.take(40),
-            shelfLayout = s.shelfLayout.ifBlank { "grid" }.take(30),
-            defaultFormat = s.defaultFormat.ifBlank { "Encadernado (TPB)" }.take(80),
-            searchLanguage = s.searchLanguage.ifBlank { "ALL" }.take(20),
-            searchProvider = s.searchProvider.ifBlank { "MULTI" }.take(30),
-            hdCovers = s.hdCovers,
-            spoilerProtection = s.spoilerProtection,
-            halfStarRatings = s.halfStarRatings,
-            allowRereads = s.allowRereads,
-            autoFillReadDate = s.autoFillReadDate,
-            showPagesInDiary = s.showPagesInDiary,
-            shareStarsMatchTheme = s.shareStarsMatchTheme,
-            cachedRecommendationsJson = s.cachedRecommendationsJson.take(12288),
-            recommendationTasteHash = s.recommendationTasteHash.take(64),
-            quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
-        )
+        fun fromAppSettings(s: AppSettings): CloudUserPreferences {
+            val cleanHash = s.recommendationTasteHash.replace("\n", "").take(64)
+            val cleanJson = s.cachedRecommendationsJson.take(12288)
+            val payload = if (cleanHash.isEmpty() && cleanJson.isEmpty()) "" else "$cleanHash\n$cleanJson"
+            return CloudUserPreferences(
+                profileBannerUrl = s.profileBannerUrl.take(200000),
+                profileShowcaseDetails = s.profileShowcaseDetails.entries.take(8).associate { it.key.take(240) to it.value.take(5000) },
+                profileShowcaseUpdatedAt = s.profileShowcaseUpdatedAt.coerceAtLeast(0L),
+                profileFavoriteComicIds = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4),
+                profileFavoriteCharacters = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4),
+                themeId = s.themeId.ifBlank { "SYSTEM_MONO" }.take(60),
+                colorScheme = s.colorScheme.ifBlank { "system" }.take(30),
+                glassLevel = s.glassLevel.coerceIn(0, 100),
+                glassVariant = s.glassVariant.ifBlank { "regular" }.take(30),
+                edgeRefraction = s.edgeRefraction,
+                glassIntensity = s.glassIntensity.toDouble().coerceIn(0.0, 5.0),
+                glassBlurIntensity = s.glassBlurIntensity.toDouble().coerceIn(0.0, 5.0),
+                enableLensRefraction = s.enableLensRefraction,
+                enableChromaticAberration = s.enableChromaticAberration,
+                glassOpacity = s.glassOpacity.toDouble().coerceIn(0.0, 5.0),
+                backgroundExtension = s.backgroundExtension,
+                showBottomAccessory = s.showBottomAccessory,
+                showReadingNowBar = s.showReadingNowBar,
+                showFloatingMenu = s.showFloatingMenu,
+                minimizeTabBarOnScroll = s.minimizeTabBarOnScroll,
+                reduceTransparency = s.reduceTransparency,
+                increaseContrast = s.increaseContrast,
+                boldText = s.boldText,
+                dynamicTypeScale = s.dynamicTypeScale.coerceIn(70, 140),
+                reduceMotion = s.reduceMotion,
+                onOffLabels = s.onOffLabels,
+                shelfColumns = s.shelfColumns.coerceIn(2, 6),
+                showProgressOnCovers = s.showProgressOnCovers,
+                showRatingsOnGrid = s.showRatingsOnGrid,
+                spine3dEffect = s.spine3dEffect,
+                defaultShelfSort = s.defaultShelfSort.ifBlank { "RECENT" }.take(40),
+                shelfLayout = s.shelfLayout.ifBlank { "grid" }.take(30),
+                defaultFormat = s.defaultFormat.ifBlank { "Encadernado (TPB)" }.take(80),
+                searchLanguage = s.searchLanguage.ifBlank { "ALL" }.take(20),
+                searchProvider = s.searchProvider.ifBlank { "MULTI" }.take(30),
+                hdCovers = s.hdCovers,
+                spoilerProtection = s.spoilerProtection,
+                halfStarRatings = s.halfStarRatings,
+                allowRereads = s.allowRereads,
+                autoFillReadDate = s.autoFillReadDate,
+                showPagesInDiary = s.showPagesInDiary,
+                shareStarsMatchTheme = s.shareStarsMatchTheme,
+                cachedRecommendationsPayload = payload,
+                quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
+            )
+        }
     }
 }
 
