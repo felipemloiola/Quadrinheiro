@@ -15,8 +15,6 @@ on:
       - 'firestore.indexes.json'
       - '.github/actions/setup-firebase/**'
       - '.github/workflows/ci-pr.yml'
-  push:
-    branches: [feat/apple-design-prismal-audit-2026-11]
   workflow_dispatch:
 
 permissions:
@@ -76,6 +74,18 @@ jobs:
         run: |
           set -euo pipefail
           firebase emulators:exec --project demo-no-project --config firebase.ci.json --only auth,firestore --non-interactive "gradle :app:$TEST_TASK :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --console=plain"
+      - name: Enable Android emulator acceleration
+        shell: bash
+        run: sudo chmod 666 /dev/kvm
+      - name: Validate actual AGSL compilation and glass interactions on Android 14
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.LiquidGlassRuntimeShaderDeviceTest --no-daemon --console=plain
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
