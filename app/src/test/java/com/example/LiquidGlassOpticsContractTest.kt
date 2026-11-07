@@ -14,13 +14,18 @@ class LiquidGlassOpticsContractTest {
 
     @Test
     fun testStandardizedSegmentedControlLupaOverhangAcrossAllTabCounts() {
+        // Resting pill must be 100% concentric with the outer track on all 4 sides (iOS HIG)
+        assertTrue(SegmentedControlGeometry.isConcentricAtRest())
+        assertEquals(2f, SegmentedControlGeometry.TRACK_INSET_DP, 0.001f)
+
         val density = 2f // 1.dp = 2px (same density as the 736x156 Day/Week/Month reference)
         val trackWidthPx = 320f * density
         val trackHeightPx = SegmentedControlGeometry.TRACK_HEIGHT_DP * density // 40.dp = 80px
-        val insetPx = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP * density // 4.dp = 8px
+        val indicatorRestHeightPx = SegmentedControlGeometry.INDICATOR_REST_HEIGHT_DP * density // 36.dp = 72px
+        val insetPx = SegmentedControlGeometry.TRACK_INSET_DP * density // 2.dp = 4px
         val trackExpandPx = SegmentedControlGeometry.TRACK_PRESS_EXPAND_DP * density // 2.dp = 4px
-        val lupaExpandWidthPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_WIDTH_DP * density // 28.dp = 56px
-        val lupaExpandHeightPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_HEIGHT_DP * density // 16.dp = 32px
+        val lupaExpandWidthPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_WIDTH_DP * density // 24.dp = 48px
+        val lupaExpandHeightPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_HEIGHT_DP * density // 20.dp = 40px
 
         val trackScaleX = SegmentedControlGeometry.computeTrackScaleX(trackWidthPx, trackExpandPx, pressProgress = 1f)
         val trackScaleY = SegmentedControlGeometry.computeTrackScaleY(trackHeightPx, trackExpandPx, pressProgress = 1f)
@@ -41,24 +46,24 @@ class LiquidGlassOpticsContractTest {
                 velocity = 0f
             )
             val lupaScaleY = SegmentedControlGeometry.computeLupaScaleY(
-                indicatorHeightPx = trackHeightPx,
+                indicatorHeightPx = indicatorRestHeightPx,
                 expandHeightPx = lupaExpandHeightPx,
                 dampedScaleY = SegmentedControlGeometry.PRESSED_SCALE_TARGET,
                 velocity = 0f
             )
 
             val lupaHalfHorizontalGrowthPx = (indicatorWidthPx * (lupaScaleX - 1f)) / 2f
-            val lupaHalfVerticalGrowthPx = (trackHeightPx * (lupaScaleY - 1f)) / 2f
+            val lupaHalfVerticalGrowthPx = (indicatorRestHeightPx * (lupaScaleY - 1f)) / 2f
 
-            // Lupa always grows by +14.dp (28px) on each side and +8.dp (16px) on top/bottom
-            assertEquals(14f * density, lupaHalfHorizontalGrowthPx, 0.01f)
-            assertEquals(8f * density, lupaHalfVerticalGrowthPx, 0.01f)
+            // Lupa grows by +12.dp (24px) on each side and +10.dp (20px) on top/bottom (from 36.dp to 56.dp)
+            assertEquals(12f * density, lupaHalfHorizontalGrowthPx, 0.01f)
+            assertEquals(10f * density, lupaHalfVerticalGrowthPx, 0.01f)
 
             // Net overhang beyond the pressed Track outer border:
-            // Horizontal: 14.dp (lupa growth) - 4.dp (track inset) - 1.dp (track growth) = 9.dp (18px)
-            // Vertical: 8.dp (lupa growth) - 1.dp (track growth) = 7.dp (14px)
+            // Horizontal: 12.dp (lupa growth) - 2.dp (concentric inset) - 1.dp (track growth) = 9.dp (18px)
+            // Vertical: 10.dp (lupa growth) - 2.dp (concentric inset) - 1.dp (track growth) = 7.dp (14px)
             val netOuterSideOverhangPx = lupaHalfHorizontalGrowthPx - insetPx - trackHalfHorizontalGrowthPx
-            val netVerticalOverhangPx = lupaHalfVerticalGrowthPx - trackHalfVerticalGrowthPx
+            val netVerticalOverhangPx = lupaHalfVerticalGrowthPx - insetPx - trackHalfVerticalGrowthPx
             assertEquals(9f * density, netOuterSideOverhangPx, 0.01f)
             assertEquals(7f * density, netVerticalOverhangPx, 0.01f)
         }

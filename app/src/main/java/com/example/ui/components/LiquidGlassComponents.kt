@@ -1514,13 +1514,24 @@ data class SegmentOption<T>(
  */
 internal object SegmentedControlGeometry {
     const val TRACK_HEIGHT_DP = 40f
+    const val INDICATOR_REST_HEIGHT_DP = 36f
     const val MIN_TOUCH_HEIGHT_DP = 48f
-    const val TRACK_HORIZONTAL_INSET_DP = 4f
+    // Concentric iOS HIG inset: (TRACK_HEIGHT_DP - INDICATOR_REST_HEIGHT_DP) / 2 == 2.dp on all 4 sides
+    const val TRACK_INSET_DP = (TRACK_HEIGHT_DP - INDICATOR_REST_HEIGHT_DP) / 2f // 2.dp
     const val TRACK_PRESS_EXPAND_DP = 2f
-    const val LUPA_PRESS_EXPAND_WIDTH_DP = 28f
-    const val LUPA_PRESS_EXPAND_HEIGHT_DP = 16f
+    const val LUPA_PRESS_EXPAND_WIDTH_DP = 24f // +12.dp per side -> 9.dp net overhang outside track
+    const val LUPA_PRESS_EXPAND_HEIGHT_DP = 20f // 36.dp + 20.dp = 56.dp (+10.dp per side -> 7.dp net overhang)
     const val PRESSED_SCALE_TARGET =
-        (TRACK_HEIGHT_DP + LUPA_PRESS_EXPAND_HEIGHT_DP) / TRACK_HEIGHT_DP // 56f / 40f = 1.4f
+        (INDICATOR_REST_HEIGHT_DP + LUPA_PRESS_EXPAND_HEIGHT_DP) / INDICATOR_REST_HEIGHT_DP // 56f / 36f
+
+    fun isConcentricAtRest(): Boolean {
+        val trackRadiusDp = TRACK_HEIGHT_DP / 2f
+        val indicatorRadiusDp = INDICATOR_REST_HEIGHT_DP / 2f
+        val verticalInsetDp = (TRACK_HEIGHT_DP - INDICATOR_REST_HEIGHT_DP) / 2f
+        val horizontalInsetDp = TRACK_INSET_DP
+        return verticalInsetDp == horizontalInsetDp &&
+            (trackRadiusDp - indicatorRadiusDp) == horizontalInsetDp
+    }
 
     fun computeTrackScaleX(trackWidthPx: Float, expandPx: Float, pressProgress: Float): Float {
         if (!trackWidthPx.isFinite() || trackWidthPx <= 0f) return 1f
@@ -1588,7 +1599,7 @@ fun LiquidGlassSegmentedControl(
     ) {
         val density = LocalDensity.current
         val tabWidth = with(density) {
-            ((constraints.maxWidth.toFloat() - (SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP * 2f).dp.toPx()) / tabsCount)
+            ((constraints.maxWidth.toFloat() - (SegmentedControlGeometry.TRACK_INSET_DP * 2f).dp.toPx()) / tabsCount)
                 .coerceAtLeast(1f)
         }
 
@@ -1761,7 +1772,7 @@ fun LiquidGlassSegmentedControl(
                     .then(interactiveHighlight.modifier)
                     .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp)
+                    .padding(SegmentedControlGeometry.TRACK_INSET_DP.dp)
                     .selectableGroup(),
                 verticalAlignment = Alignment.CenterVertically,
                 content = rowContent
@@ -1784,7 +1795,7 @@ fun LiquidGlassSegmentedControl(
                         shape = { ContinuousCapsule },
                         highlight = {
                             val progress = dampedDragAnimation.pressProgress
-                            Highlight.Default.copy(alpha = lerp(trackBaseHighlightAlpha, 1f, progress))
+                            Highlight.Default.copy(alpha = progress)
                         },
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
@@ -1803,7 +1814,7 @@ fun LiquidGlassSegmentedControl(
                     .then(interactiveHighlight.modifier)
                     .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp),
+                    .padding(SegmentedControlGeometry.TRACK_INSET_DP.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 content = rowContent
             )
@@ -1811,7 +1822,7 @@ fun LiquidGlassSegmentedControl(
 
         Box(
             Modifier
-                .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp)
+                .padding(horizontal = SegmentedControlGeometry.TRACK_INSET_DP.dp)
                 .graphicsLayer {
                     translationX =
                         if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
@@ -1870,7 +1881,7 @@ fun LiquidGlassSegmentedControl(
                         )
                     }
                 )
-                .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
+                .height(SegmentedControlGeometry.INDICATOR_REST_HEIGHT_DP.dp)
                 .fillMaxWidth(1f / tabsCount)
         )
     }
