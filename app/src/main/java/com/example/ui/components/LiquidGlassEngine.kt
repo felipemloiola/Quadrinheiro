@@ -118,26 +118,34 @@ object SdfShader {
             float2 displaceVec = combinedNormal * (meniscusFactor * (-refractionAmount));
             float2 chromaShift = combinedNormal * (meniscusFactor * chromaticAberration * 1.6);
 
-            float2 posR = clamp(fragCoord + displaceVec * 0.95 - chromaShift, float2(0.0), safeSize);
             float2 posG = clamp(fragCoord + displaceVec, float2(0.0), safeSize);
-            float2 posB = clamp(fragCoord + displaceVec * 1.05 + chromaShift, float2(0.0), safeSize);
-
-            half4 colorR = content.eval(posR);
-            half4 colorG = content.eval(posG);
-            half4 colorB = content.eval(posB);
-
-            half4 refracted = half4(
-                colorR.r,
-                mix(colorG.g, colorB.g, half(meniscusFactor * 0.12)),
-                colorB.b,
-                colorG.a
-            );
+            half4 refracted;
+            // Single texture lookup when the user disables chromatic aberration.
+            // This is also the cheaper optical path for the frosted material.
+            if (abs(chromaticAberration) < 0.001) {
+                refracted = content.eval(posG);
+            } else {
+                float2 posR = clamp(fragCoord + displaceVec * 0.95 - chromaShift, float2(0.0), safeSize);
+                float2 posB = clamp(fragCoord + displaceVec * 1.05 + chromaShift, float2(0.0), safeSize);
+                half4 colorR = content.eval(posR);
+                half4 colorG = content.eval(posG);
+                half4 colorB = content.eval(posB);
+                refracted = half4(
+                    colorR.r,
+                    mix(colorG.g, colorB.g, half(meniscusFactor * 0.12)),
+                    colorB.b,
+                    colorG.a
+                );
+            }
 
             float2 lightDir = float2(cos(lightAngle), sin(lightAngle));
             float dirAlignment = max(0.0, dot(grad, lightDir));
             float oppositeAlignment = max(0.0, dot(grad, -lightDir)) * 0.45;
             float rimEdgeMask = smoothstep(-safeRefractionH * 0.65, 0.0, sd);
-            float bevelSpec = (dirAlignment * dirAlignment + oppositeAlignment * oppositeAlignment) * rimEdgeMask * highlightStrength;
+            // Prismal-inspired Fresnel contribution, implemented in the existing
+            // Compose/AGSL pipeline instead of adding another View capture layer.
+            float fresnel = pow(clamp(meniscusFactor, 0.0, 1.0), 5.0);
+            float bevelSpec = (dirAlignment * dirAlignment + oppositeAlignment * oppositeAlignment + 0.18 * fresnel) * rimEdgeMask * highlightStrength;
 
             half totalHighlight = half(clamp(bevelSpec, 0.0, 0.42));
             refracted.rgb = clamp(refracted.rgb + half3(totalHighlight), half3(0.0), half3(1.0));
