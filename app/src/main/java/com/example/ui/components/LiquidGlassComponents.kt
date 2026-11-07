@@ -1512,6 +1512,55 @@ data class SegmentOption<T>(
 /**
  * 5.4 LiquidGlassSegmentedControl (Autêntico Liquid Glass, idêntico à arquitetura do LiquidBottomTabs com SNAP incondicional).
  */
+internal object SegmentedControlGeometry {
+    const val TRACK_HEIGHT_DP = 40f
+    const val MIN_TOUCH_HEIGHT_DP = 48f
+    const val TRACK_HORIZONTAL_INSET_DP = 4f
+    const val TRACK_PRESS_EXPAND_DP = 2f
+    const val LUPA_PRESS_EXPAND_WIDTH_DP = 28f
+    const val LUPA_PRESS_EXPAND_HEIGHT_DP = 16f
+    const val PRESSED_SCALE_TARGET =
+        (TRACK_HEIGHT_DP + LUPA_PRESS_EXPAND_HEIGHT_DP) / TRACK_HEIGHT_DP // 56f / 40f = 1.4f
+
+    fun computeTrackScaleX(trackWidthPx: Float, expandPx: Float, pressProgress: Float): Float {
+        if (!trackWidthPx.isFinite() || trackWidthPx <= 0f) return 1f
+        val p = pressProgress.fastCoerceIn(0f, 1f)
+        return lerp(1f, 1f + expandPx / trackWidthPx.coerceAtLeast(1f), p)
+    }
+
+    fun computeTrackScaleY(trackHeightPx: Float, expandPx: Float, pressProgress: Float): Float {
+        if (!trackHeightPx.isFinite() || trackHeightPx <= 0f) return 1f
+        val p = pressProgress.fastCoerceIn(0f, 1f)
+        return lerp(1f, 1f + expandPx / trackHeightPx.coerceAtLeast(1f), p)
+    }
+
+    fun computeLupaScaleX(
+        indicatorWidthPx: Float,
+        expandWidthPx: Float,
+        dampedScaleX: Float,
+        velocity: Float = 0f
+    ): Float {
+        if (!indicatorWidthPx.isFinite() || indicatorWidthPx <= 0f) return 1f
+        val springFractionX = ((dampedScaleX - 1f) / (PRESSED_SCALE_TARGET - 1f)).coerceAtLeast(0f)
+        val baseScaleX = 1f + (expandWidthPx / indicatorWidthPx.coerceAtLeast(1f)) * springFractionX
+        val velocityDeform = ((velocity / 10f) * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+        return baseScaleX / (1f - velocityDeform)
+    }
+
+    fun computeLupaScaleY(
+        indicatorHeightPx: Float,
+        expandHeightPx: Float,
+        dampedScaleY: Float,
+        velocity: Float = 0f
+    ): Float {
+        if (!indicatorHeightPx.isFinite() || indicatorHeightPx <= 0f) return 1f
+        val springFractionY = ((dampedScaleY - 1f) / (PRESSED_SCALE_TARGET - 1f)).coerceAtLeast(0f)
+        val baseScaleY = 1f + (expandHeightPx / indicatorHeightPx.coerceAtLeast(1f)) * springFractionY
+        val velocityDeform = ((velocity / 10f) * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+        return baseScaleY * (1f - velocityDeform)
+    }
+}
+
 @Composable
 fun LiquidGlassSegmentedControl(
     tabs: List<String>,
@@ -1522,11 +1571,9 @@ fun LiquidGlassSegmentedControl(
     tabIcons: List<ImageVector?>? = null
 ) {
     val isLightTheme = !LocalIsDarkTheme.current
-    val themeColors = LocalIOS27Theme.current
-    val accentColor = themeColors.accent
     val containerColor =
-        if (isLightTheme) Color(0xFFFAFAFA).copy(0.4f)
-        else Color(0xFF121212).copy(0.4f)
+        if (isLightTheme) Color(0xFFEAEAEF).copy(alpha = 0.72f)
+        else Color(0xFF2B2B30).copy(alpha = 0.62f)
     val contentColor = if (isLightTheme) Color.Black else Color.White
     val currentSelectedIndex by rememberUpdatedState(selectedIndex)
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)
@@ -1534,12 +1581,15 @@ fun LiquidGlassSegmentedControl(
     val tabsBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = SegmentedControlGeometry.MIN_TOUCH_HEIGHT_DP.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         val density = LocalDensity.current
         val tabWidth = with(density) {
-            (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
+            ((constraints.maxWidth.toFloat() - (SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP * 2f).dp.toPx()) / tabsCount)
+                .coerceAtLeast(1f)
         }
 
         val offsetAnimation = remember { Animatable(0f) }
@@ -1564,7 +1614,7 @@ fun LiquidGlassSegmentedControl(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 56f / 40f,
+                pressedScale = SegmentedControlGeometry.PRESSED_SCALE_TARGET,
                 onDragStarted = {},
                 onDragStopped = {
                     // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
@@ -1627,6 +1677,16 @@ fun LiquidGlassSegmentedControl(
                 Column(
                     modifier = Modifier
                         .clip(ContinuousCapsule)
+                        .pointerInput(dampedDragAnimation, index) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                dampedDragAnimation.press()
+                                val up = waitForUpOrCancellation()
+                                if (up == null || currentSelectedIndex == index) {
+                                    dampedDragAnimation.release()
+                                }
+                            }
+                        }
                         .selectable(
                             selected = currentSelectedIndex == index,
                             interactionSource = null,
@@ -1671,6 +1731,8 @@ fun LiquidGlassSegmentedControl(
             }
         }
 
+        val trackBaseHighlightAlpha = if (isLightTheme) 0.55f else 0.42f
+
         CompositionLocalProvider(
             androidx.compose.material3.LocalContentColor provides contentColor
         ) {
@@ -1680,6 +1742,9 @@ fun LiquidGlassSegmentedControl(
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { ContinuousCapsule },
+                        highlight = {
+                            Highlight.Default.copy(alpha = trackBaseHighlightAlpha)
+                        },
                         effects = {
                             vibrancy()
                             blur(8f.dp.toPx())
@@ -1687,16 +1752,16 @@ fun LiquidGlassSegmentedControl(
                         },
                         layerBlock = {
                             val progress = dampedDragAnimation.pressProgress
-                            val scale = lerp(1f, 1f + 4f.dp.toPx() / size.height, progress)
-                            scaleX = scale
-                            scaleY = scale
+                            val expandPx = SegmentedControlGeometry.TRACK_PRESS_EXPAND_DP.dp.toPx()
+                            scaleX = SegmentedControlGeometry.computeTrackScaleX(size.width, expandPx, progress)
+                            scaleY = SegmentedControlGeometry.computeTrackScaleY(size.height, expandPx, progress)
                         },
                         onDrawSurface = { drawRect(containerColor) }
                     )
                     .then(interactiveHighlight.modifier)
-                    .height(48.dp)
+                    .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
                     .fillMaxWidth()
-                    .padding(4.dp)
+                    .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp)
                     .selectableGroup(),
                 verticalAlignment = Alignment.CenterVertically,
                 content = rowContent
@@ -1704,7 +1769,7 @@ fun LiquidGlassSegmentedControl(
         }
 
         CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides accentColor
+            androidx.compose.material3.LocalContentColor provides contentColor
         ) {
             Row(
                 Modifier
@@ -1713,17 +1778,13 @@ fun LiquidGlassSegmentedControl(
                     .layerBackdrop(tabsBackdrop)
                     .graphicsLayer {
                         translationX = panelOffset
-                        val progress = dampedDragAnimation.pressProgress
-                        val scale = lerp(1f, 1f + 4f.dp.toPx() / size.height, progress)
-                        scaleX = scale
-                        scaleY = scale
                     }
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { ContinuousCapsule },
                         highlight = {
                             val progress = dampedDragAnimation.pressProgress
-                            Highlight.Default.copy(alpha = progress)
+                            Highlight.Default.copy(alpha = lerp(trackBaseHighlightAlpha, 1f, progress))
                         },
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
@@ -1731,12 +1792,18 @@ fun LiquidGlassSegmentedControl(
                             blur(8f.dp.toPx())
                             lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
                         },
+                        layerBlock = {
+                            val progress = dampedDragAnimation.pressProgress
+                            val expandPx = SegmentedControlGeometry.TRACK_PRESS_EXPAND_DP.dp.toPx()
+                            scaleX = SegmentedControlGeometry.computeTrackScaleX(size.width, expandPx, progress)
+                            scaleY = SegmentedControlGeometry.computeTrackScaleY(size.height, expandPx, progress)
+                        },
                         onDrawSurface = { drawRect(containerColor) }
                     )
                     .then(interactiveHighlight.modifier)
-                    .height(40.dp)
+                    .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 content = rowContent
             )
@@ -1744,7 +1811,7 @@ fun LiquidGlassSegmentedControl(
 
         Box(
             Modifier
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = SegmentedControlGeometry.TRACK_HORIZONTAL_INSET_DP.dp)
                 .graphicsLayer {
                     translationX =
                         if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
@@ -1757,7 +1824,7 @@ fun LiquidGlassSegmentedControl(
                     shape = { ContinuousCapsule },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
-                        Highlight.Default.copy(alpha = progress)
+                        Highlight.Default.copy(alpha = lerp(0.28f, 1f, progress))
                     },
                     shadow = {
                         val progress = dampedDragAnimation.pressProgress
@@ -1777,22 +1844,33 @@ fun LiquidGlassSegmentedControl(
                         )
                     },
                     layerBlock = {
-                        val progress = dampedDragAnimation.pressProgress
-                        val scale = lerp(1f, 1f + 12f.dp.toPx() / size.height, progress)
-                        scaleX = scale
-                        scaleY = scale
+                        scaleX = SegmentedControlGeometry.computeLupaScaleX(
+                            indicatorWidthPx = size.width,
+                            expandWidthPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_WIDTH_DP.dp.toPx(),
+                            dampedScaleX = dampedDragAnimation.scaleX,
+                            velocity = dampedDragAnimation.velocity
+                        )
+                        scaleY = SegmentedControlGeometry.computeLupaScaleY(
+                            indicatorHeightPx = size.height,
+                            expandHeightPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_HEIGHT_DP.dp.toPx(),
+                            dampedScaleY = dampedDragAnimation.scaleY,
+                            velocity = dampedDragAnimation.velocity
+                        )
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress
                         drawRect(
-                            if (isLightTheme) Color.Black.copy(0.1f)
-                            else Color.White.copy(0.1f),
+                            if (isLightTheme) Color.Black.copy(alpha = 0.09f)
+                            else Color.White.copy(alpha = 0.14f),
                             alpha = 1f - progress
                         )
-                        drawRect(color = accentColor.copy(alpha = 0.1f * progress))
+                        drawRect(
+                            color = if (isLightTheme) Color.White.copy(alpha = 0.12f * progress)
+                            else Color.White.copy(alpha = 0.06f * progress)
+                        )
                     }
                 )
-                .height(40.dp)
+                .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
                 .fillMaxWidth(1f / tabsCount)
         )
     }
@@ -1845,8 +1923,7 @@ fun <T> AppleSegmentedPicker(
 }
 
 /**
- * 5.4b LiquidGlassModeSwitcher (Baseado diretamente no código JS `trackPrevious(switcher)` e CSS `.switcher`
- * com camada de fundo `Modifier.liquidGlass()` isolada para manter o texto nítido).
+ * 5.4b LiquidGlassModeSwitcher padronizado sobre o motor LiquidGlassSegmentedControl.
  */
 @Composable
 fun LiquidGlassModeSwitcher(
@@ -1854,110 +1931,12 @@ fun LiquidGlassModeSwitcher(
     onSelectMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val mat = LocalAppleMaterials.current
-    val selectedIdx = if (isLightMode) 0 else 1
-    var previousIdx by remember { mutableIntStateOf(selectedIdx) }
-    val scaleToggle = remember { Animatable(1f) }
-    var originX by remember { mutableFloatStateOf(0.5f) }
-
-    LaunchedEffect(selectedIdx) {
-        if (selectedIdx != previousIdx) {
-            originX = if (previousIdx < selectedIdx) 0f else 1f
-            previousIdx = selectedIdx
-            scaleToggle.snapTo(1f)
-            val scaleAnimationSpec = if (motion.reduced) androidx.compose.animation.core.snap<Float>() else keyframes {
-                durationMillis = 440
-                1.0f at 0
-                1.16f at 220
-                1.0f at 440
-            }
-            scaleToggle.animateTo(
-                targetValue = 1f,
-                animationSpec = scaleAnimationSpec
-            )
-        }
-    }
-
-    val slideProgress by animateFloatAsState(
-        targetValue = selectedIdx.toFloat(),
-        animationSpec = motion.spring(dampingRatio = 0.78f, stiffness = 240f),
-        label = "switcherSlide"
+    AppleSegmentedPicker(
+        options = listOf("Claro", "Escuro"),
+        selectedIndex = if (isLightMode) 0 else 1,
+        onSelect = { idx -> onSelectMode(idx == 0) },
+        modifier = modifier.width(220.dp)
     )
-
-    BoxWithConstraints(
-        modifier = modifier
-            .width(220.dp)
-            .height(54.dp)
-            .shadow(10.dp, RoundedCornerShape(999.dp), spotColor = mat.scheme.accentColor.copy(alpha = 0.16f))
-            .liquidGlass(shape = RoundedCornerShape(999.dp), elevation = 10.dp)
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        val optionW = maxWidth / 2f
-        val thumbOffset = optionW * slideProgress
-
-        Box(
-            modifier = Modifier
-                .offset {
-                    androidx.compose.ui.unit.IntOffset((optionW.toPx() * slideProgress).roundToInt(), 0)
-                }
-                .width(optionW)
-                .fillMaxHeight()
-                .graphicsLayer {
-                    scaleX = scaleToggle.value
-                    transformOrigin = TransformOrigin(originX, 0.5f)
-                }
-                .shadow(4.dp, RoundedCornerShape(999.dp))
-                .clip(RoundedCornerShape(999.dp))
-                .background(
-                    if (mat.scheme.isLight) Color.White.copy(alpha = 0.72f)
-                    else mat.scheme.pillActiveBg
-                )
-                .drawWithContent {
-                    drawContent()
-                    drawOpticalGlassMeniscus(
-                        cornerRadiusPx = size.height / 2f,
-                        isLight = mat.scheme.isLight,
-                        edgeRefraction = true,
-                        cyanDispersionStrength = 0.42f
-                    )
-                }
-        )
-
-        Row(modifier = Modifier.fillMaxSize()) {
-            val modes = listOf(true to "Claro", false to "Escuro")
-            modes.forEach { (lightVal, label) ->
-                val active = isLightMode == lightVal
-                val iconScale by animateFloatAsState(
-                    targetValue = if (active) 1.0f else 1.06f,
-                    animationSpec = motion.spring(dampingRatio = 0.78f, stiffness = 260f),
-                    label = "switcherIconScale"
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(999.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            onSelectMode(lightVal)
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 13.sp,
-                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                        color = if (active) mat.scheme.textPrimary else mat.scheme.textSecondary,
-                        modifier = Modifier.scale(iconScale)
-                    )
-                }
-            }
-        }
-    }
 }
 
 /**

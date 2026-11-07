@@ -1644,7 +1644,8 @@ fun SocialShareCardSheetModal(
                         options = listOf(
                             SegmentOption("ANNUAL", "Meta Anual 2026"),
                             SegmentOption("MONTHLY", "Resumo do Mês")
-                        )
+                        ),
+                        modifier = Modifier.padding(horizontal = 10.dp)
                     )
                 }
 
