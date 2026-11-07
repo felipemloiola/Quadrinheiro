@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -157,10 +159,8 @@ fun ExploreScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val catalog by ModernCatalog.entries.collectAsState()
 
-    // Estados separados e progressivos: inicializados a partir do snapshot em memória (zero cálculo pesado na UI thread)
-    val recommendationState = remember {
-        mutableStateOf(ExploreShowcaseBuilder.memoRecommendations)
-    }
+    val exploreRecommendationState by viewModel.exploreRecommendationState.collectAsStateWithLifecycle()
+
     val starterComicsState = remember {
         mutableStateOf(ExploreShowcaseBuilder.memoStarter)
     }
@@ -170,8 +170,6 @@ fun ExploreScreen(
     val marvelComicsState = remember {
         mutableStateOf(ExploreShowcaseBuilder.memoMarvel)
     }
-
-    LaunchedEffect(listState) { listState.scrollToItem(0) }
 
     // 1. Garante restauração imediata do cache em disco do ModernCatalog e atualização silenciosa se TTL expirado
     LaunchedEffect(Unit) {
@@ -203,109 +201,6 @@ fun ExploreScreen(
             marvelComicsState.value = marvel
         }
         ExploreShowcaseBuilder.updateMemoizedSlices(stamp, starter, dc, marvel)
-    }
-
-    // 3. Publicação progressiva das recomendações "Para você" fora da Main Thread
-    LaunchedEffect(
-        comics,
-        profile.favoriteUniverse,
-        settings.profileFavoriteComicIds,
-        settings.profileFavoriteCharacters,
-        catalog
-    ) {
-        // Etapa 3a: Decodifica cache local persistido em Dispatchers.Default para abertura imediata
-        if (recommendationState.value.isEmpty() && settings.cachedRecommendationsJson.isNotBlank()) {
-            val restoredFromDisk = withContext(Dispatchers.Default) {
-                PersonalizedDiscovery.decodeCachedRecommendations(settings.cachedRecommendationsJson)
-                    .filter { rec ->
-                        comics.none { lib ->
-                            lib.id == rec.comic.id ||
-                                (lib.externalId.isNotBlank() && lib.externalId == rec.comic.externalId)
-                        }
-                    }
-            }
-            if (restoredFromDisk.isNotEmpty() &&
-                !ExploreShowcaseBuilder.hasSameRecommendations(recommendationState.value, restoredFromDisk)
-            ) {
-                recommendationState.value = restoredFromDisk
-                ExploreShowcaseBuilder.updateMemoizedRecommendations(restoredFromDisk)
-            }
-        }
-
-        // Se o catálogo base ainda está restaurando/carregando e vazio, aguarda brevemente para evitar duplo cálculo
-        if (catalog.isEmpty() && ModernCatalog.isLoading.value) {
-            var waited = 0L
-            while (ModernCatalog.current.isEmpty() && ModernCatalog.isLoading.value && waited < 600L) {
-                delay(50L)
-                waited += 50L
-            }
-        }
-
-        val taste = withContext(Dispatchers.Default) {
-            PersonalizedDiscovery.extractTasteProfile(comics, settings, profile.favoriteUniverse)
-        }
-        val storedParts = settings.recommendationTasteHash.split(":")
-        val storedHash = storedParts.firstOrNull().orEmpty()
-        val storedTimeMs = storedParts.getOrNull(1)?.toLongOrNull() ?: 0L
-        val nowMs = System.currentTimeMillis()
-        val persistedValid = storedHash == taste.tasteHash &&
-            storedTimeMs > 0L &&
-            (nowMs - storedTimeMs) < PERSISTED_CACHE_TTL_MS &&
-            settings.cachedRecommendationsJson.isNotBlank()
-
-        // Etapa 3b: Recomendações heurísticas locais rápidas em Dispatchers.Default
-        val localFast = withContext(Dispatchers.Default) {
-            PersonalizedDiscovery.recommendWithReasons(
-                catalog + RecommendationCandidateRetriever.getCachedPool(),
-                comics,
-                profile.favoriteUniverse,
-                settings
-            )
-        }
-        if (localFast.isNotEmpty() && (!persistedValid || recommendationState.value.isEmpty())) {
-            if (!ExploreShowcaseBuilder.hasSameRecommendations(recommendationState.value, localFast)) {
-                recommendationState.value = localFast
-                ExploreShowcaseBuilder.updateMemoizedRecommendations(localFast)
-            }
-        }
-
-        // Etapa 3c: Busca ativa escalonada (somente após o catálogo base não estar disputando rede inicial)
-        val needsActiveRefresh = !persistedValid || !RecommendationCandidateRetriever.isCacheValid(taste.tasteHash)
-        if (!needsActiveRefresh || (catalog.isEmpty() && ModernCatalog.isLoading.value)) return@LaunchedEffect
-
-        val computed = withContext(Dispatchers.Default) {
-            val retrieved = RecommendationCandidateRetriever.retrieveCandidates(taste, MultiApiSearchEngine())
-            val ranked = PersonalizedDiscovery.recommendWithReasons(
-                catalog + retrieved,
-                comics,
-                profile.favoriteUniverse,
-                settings
-            )
-            FirebaseAiRecommendationEnhancer.enhanceOrFallback(
-                taste = taste,
-                candidates = ranked
-            )
-        }
-        if (computed.isNotEmpty()) {
-            if (!ExploreShowcaseBuilder.hasSameRecommendations(recommendationState.value, computed)) {
-                recommendationState.value = computed
-                ExploreShowcaseBuilder.updateMemoizedRecommendations(computed)
-            }
-            val encodedJson = withContext(Dispatchers.Default) {
-                PersonalizedDiscovery.encodeCachedRecommendations(computed)
-            }
-            val newHashStamp = "${taste.tasteHash}:${System.currentTimeMillis()}"
-            if (encodedJson.isNotBlank() &&
-                (encodedJson != settings.cachedRecommendationsJson || storedHash != taste.tasteHash)
-            ) {
-                viewModel.updateSettings { current ->
-                    current.copy(
-                        cachedRecommendationsJson = encodedJson,
-                        recommendationTasteHash = newHashStamp
-                    )
-                }
-            }
-        }
     }
 
     BackHandler(collection != null) { collection = null }
@@ -355,7 +250,7 @@ fun ExploreScreen(
                                 }
                             }
                         }
-                        val recs = recommendationState.value
+                        val recs = exploreRecommendationState.recommendations
                         val reasonMap = recs.associate { it.comic.id to it.reasonLabel }
                         val entries = when (selected) {
                             "Para você" -> recs.map { it.comic }.ifEmpty { catalog.take(12) }
@@ -405,7 +300,7 @@ fun ExploreScreen(
                                                 }
                                             }
                                         },
-                                        modifier = Modifier.heightIn(min = 44.dp).testTag("explore_load_more_button")
+                                        modifier = Modifier.heightIn(min = 48.dp).testTag("explore_load_more_button")
                                     ) {
                                         Text("Carregar mais edições", color = theme.accent)
                                     }
@@ -415,7 +310,7 @@ fun ExploreScreen(
                     } else {
                         item(key = "Para você", contentType = "explore_for_you_section") {
                             ExploreForYouSection(
-                                recommendationState = recommendationState,
+                                recommendations = exploreRecommendationState.recommendations,
                                 catalogFallback = catalog,
                                 onExpand = { collection = "Para você" },
                                 onComic = onComic
@@ -454,23 +349,22 @@ fun ExploreScreen(
 
 @Composable
 private fun ExploreForYouSection(
-    recommendationState: State<List<RecommendedComic>>,
+    recommendations: List<RecommendedComic>,
     catalogFallback: List<ComicEntry>,
     onExpand: () -> Unit,
     onComic: (ComicEntry) -> Unit
 ) {
     val theme = LocalIOS27Theme.current
-    val recs by recommendationState
-    val entries = remember(recs, catalogFallback) {
-        if (recs.isNotEmpty()) recs.map { it.comic } else catalogFallback.take(12)
+    val entries = remember(recommendations, catalogFallback) {
+        if (recommendations.isNotEmpty()) recommendations.map { it.comic } else catalogFallback.take(12)
     }
-    val reasonMap = remember(recs) {
-        recs.associate { it.comic.id to it.reasonLabel }
+    val reasonMap = remember(recommendations) {
+        recommendations.associate { it.comic.id to it.reasonLabel }
     }
     if (entries.isNotEmpty()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(onClick = onExpand),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onExpand),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -511,7 +405,7 @@ private fun ExploreCatalogSection(
     if (entries.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(onClick = onExpand),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onExpand),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -538,7 +432,19 @@ private fun ExplorePoster(
     reasonLabel: String? = null
 ) {
     val t = LocalIOS27Theme.current
-    Column(modifier.clickable { onComic(comic) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val semanticDescription = buildString {
+        append(comic.displayTitle)
+        if (comic.authors.isNotBlank()) append(", de ").append(comic.authors)
+        if (!reasonLabel.isNullOrBlank()) append(". Motivo: ").append(reasonLabel)
+    }
+    Column(
+        modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = semanticDescription
+            }
+            .clickable(onClickLabel = "Ver detalhes de ${comic.displayTitle}") { onComic(comic) },
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         BookCover(
             comic.coverUrl,
             comic.displayTitle,

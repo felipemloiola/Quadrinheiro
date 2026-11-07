@@ -32,6 +32,13 @@ fun BackdropEffectScope.lens(
         padding = (padding - refractionHeight).fastCoerceAtLeast(0f)
     }
 
+    val effectiveRefractionHeight = com.example.ui.components.LiquidGlassOptics.computeEffectiveRefractionHeightPx(
+        requestedHeightPx = refractionHeight,
+        widthPx = size.width,
+        heightPx = size.height,
+        compactScale = 1.0f
+    )
+
     val cornerRadii = cornerRadii
     val effect =
         if (cornerRadii != null) {
@@ -51,7 +58,7 @@ fun BackdropEffectScope.lens(
                 setFloatUniform("size", size.width, size.height)
                 setFloatUniform("offset", -padding, -padding)
                 setFloatUniform("cornerRadii", cornerRadii)
-                setFloatUniform("refractionHeight", refractionHeight)
+                setFloatUniform("refractionHeight", effectiveRefractionHeight)
                 setFloatUniform("refractionAmount", -refractionAmount)
                 setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
                 if (chromaticAberration) {

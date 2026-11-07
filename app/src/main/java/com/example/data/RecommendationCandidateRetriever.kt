@@ -4,6 +4,8 @@ import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.security.MessageDigest
@@ -36,36 +38,55 @@ data class UserTasteProfile(
 object RecommendationCandidateRetriever {
     private const val TTL_MS = 12 * 60 * 60 * 1000L // 12 horas
 
-    @Volatile
-    private var lastRunHash: String = ""
+    data class MemoryPoolCache(
+        val ownerUid: String,
+        val hash: String,
+        val timestamp: Long,
+        val pool: List<ComicEntry>
+    )
 
     @Volatile
-    private var lastRunTime: Long = 0L
+    private var memoryPool: MemoryPoolCache? = null
 
-    @Volatile
-    private var cachedRetrievedPool: List<ComicEntry> = emptyList()
-
-    fun isCacheValid(currentHash: String): Boolean {
-        return currentHash == lastRunHash && (System.currentTimeMillis() - lastRunTime) < TTL_MS && cachedRetrievedPool.isNotEmpty()
+    fun isCacheValid(currentHash: String, ownerUid: String = ""): Boolean {
+        val cached = memoryPool ?: return false
+        val matchesOwner = ownerUid.isBlank() || cached.ownerUid == ownerUid
+        return matchesOwner &&
+            currentHash == cached.hash &&
+            (System.currentTimeMillis() - cached.timestamp) < TTL_MS &&
+            cached.pool.isNotEmpty()
     }
 
-    fun getCachedPool(): List<ComicEntry> = cachedRetrievedPool
+    fun getCachedPool(ownerUid: String = ""): List<ComicEntry> {
+        val cached = memoryPool ?: return emptyList()
+        if (ownerUid.isNotBlank() && cached.ownerUid != ownerUid) return emptyList()
+        return cached.pool
+    }
 
-    fun updateCache(hash: String, pool: List<ComicEntry>) {
-        lastRunHash = hash
-        lastRunTime = System.currentTimeMillis()
-        cachedRetrievedPool = pool
+    fun updateCache(hash: String, pool: List<ComicEntry>, ownerUid: String = "") {
+        memoryPool = MemoryPoolCache(
+            ownerUid = ownerUid,
+            hash = hash,
+            timestamp = System.currentTimeMillis(),
+            pool = pool
+        )
+    }
+
+    fun clearForAccountSwitch() {
+        memoryPool = null
     }
 
     /**
-     * Gera até 4 consultas simultâneas seguras e não bloqueantes para alimentar o pool de candidatos.
+     * Executa até 4 consultas simultâneas em paralelo (async/awaitAll) com orçamento de 4500ms,
+     * retendo lotes parciais já recebidos caso ocorra timeout antes da conclusão total.
      */
     suspend fun retrieveCandidates(
         taste: UserTasteProfile,
-        searchEngine: MultiApiSearchEngine
+        searchEngine: MultiApiSearchEngine,
+        ownerUid: String = ""
     ): List<ComicEntry> = withContext(Dispatchers.IO) {
-        if (isCacheValid(taste.tasteHash)) {
-            return@withContext cachedRetrievedPool
+        if (isCacheValid(taste.tasteHash, ownerUid)) {
+            return@withContext getCachedPool(ownerUid)
         }
 
         val queries = mutableListOf<String>()
@@ -105,22 +126,25 @@ object RecommendationCandidateRetriever {
             return@withContext emptyList()
         }
 
-        val results = mutableListOf<ComicEntry>()
-        for (q in limitedQueries) {
-            val candidatesForQuery = withTimeoutOrNull(4500L) {
-                var items = emptyList<ComicEntry>()
-                runCatching {
-                    searchEngine.searchOnlineProgressive(q, searchLanguage = "ALL").collect { batch ->
-                        if (batch.isNotEmpty()) items = batch
+        val queryDeferreds = limitedQueries.map { q ->
+            async(Dispatchers.IO) {
+                var partialBatch = emptyList<ComicEntry>()
+                withTimeoutOrNull(4500L) {
+                    runCatching {
+                        searchEngine.searchOnlineProgressive(q, searchLanguage = "ALL").collect { batch ->
+                            if (batch.isNotEmpty()) {
+                                partialBatch = batch
+                            }
+                        }
                     }
                 }
-                items
-            }.orEmpty()
-            results.addAll(candidatesForQuery)
+                partialBatch
+            }
         }
 
-        val deduplicated = CatalogSearchPolicy.deduplicateByCanonicalWork(results)
-        updateCache(taste.tasteHash, deduplicated)
+        val allResults = queryDeferreds.awaitAll().flatten()
+        val deduplicated = CatalogSearchPolicy.deduplicateByCanonicalWork(allResults)
+        updateCache(taste.tasteHash, deduplicated, ownerUid)
         deduplicated
     }
 }

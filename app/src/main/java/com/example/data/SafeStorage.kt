@@ -1240,6 +1240,189 @@ class SafeStorage(context: Context) {
         val entries: List<ComicEntry>
     )
 
+    data class AccountRecommendationsSnapshot(
+        val schemaVersion: Int,
+        val ownerUid: String,
+        val tasteFingerprint: String,
+        val libraryCount: Int,
+        val savedAtEpochMs: Long,
+        val recommendations: List<RecommendedComic>,
+        val isLegacyProvisional: Boolean = false
+    )
+
+    private val recommendationFileLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private fun lockForOwner(ownerUid: String): Any {
+        val safeKey = recommendationFileKey(ownerUid)
+        return recommendationFileLocks.computeIfAbsent(safeKey) { Any() }
+    }
+
+    internal fun recommendationFileKey(ownerUid: String): String {
+        val normalizedUid = ownerUid.trim().ifEmpty { "guest_local" }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(normalizedUid.toByteArray(StandardCharsets.UTF_8))
+        val sha256Hex = digest.joinToString("") { "%02x".format(it) }
+        return "recs_v2_$sha256Hex"
+    }
+
+    private fun durableRecommendationsDir(): java.io.File =
+        java.io.File(appContext.filesDir, "quadrinheiro_recommendations").apply { mkdirs() }
+
+    internal fun durableRecommendationsFile(ownerUid: String): java.io.File {
+        val key = recommendationFileKey(ownerUid)
+        return java.io.File(durableRecommendationsDir(), "$key.json")
+    }
+
+    /**
+     * Salva o snapshot durável de recomendações da conta em filesDir com escrita atômica (.tmp -> fsync -> .bak -> renameTo).
+     */
+    fun saveAccountRecommendationsSnapshot(
+        ownerUid: String,
+        tasteFingerprint: String,
+        items: List<RecommendedComic>,
+        libraryCount: Int,
+        savedAtEpochMs: Long = System.currentTimeMillis()
+    ): Boolean {
+        val targetUid = ownerUid.trim().ifEmpty { "guest_local" }
+        val encodedItemsJson = PersonalizedDiscovery.encodeDurableAccountRecommendations(items)
+        if (encodedItemsJson.isBlank()) return false
+
+        synchronized(lockForOwner(targetUid)) {
+            val root = JSONObject().apply {
+                put("schemaVersion", 2)
+                put("ownerUid", targetUid)
+                put("tasteFingerprint", tasteFingerprint)
+                put("libraryCount", libraryCount)
+                put("savedAtEpochMs", savedAtEpochMs)
+                put("items", JSONArray(encodedItemsJson))
+            }
+            val payloadString = root.toString()
+            val payloadBytes = payloadString.toByteArray(StandardCharsets.UTF_8)
+            if (payloadBytes.size > PersonalizedDiscovery.MAX_DURABLE_ENVELOPE_BYTES) {
+                return false
+            }
+
+            val dir = durableRecommendationsDir()
+            val targetFile = durableRecommendationsFile(targetUid)
+            val tmpFile = java.io.File(dir, "${targetFile.name}.tmp")
+            val bakFile = java.io.File(dir, "${targetFile.name}.bak")
+
+            return try {
+                java.io.FileOutputStream(tmpFile).use { fos ->
+                    fos.write(payloadBytes)
+                    fos.flush()
+                    fos.fd.sync()
+                }
+
+                if (!tmpFile.exists() || tmpFile.length() != payloadBytes.size.toLong()) {
+                    tmpFile.delete()
+                    return false
+                }
+
+                if (targetFile.exists() && targetFile.length() > 0L) {
+                    try {
+                        java.io.FileInputStream(targetFile).use { input ->
+                            java.io.FileOutputStream(bakFile).use { output ->
+                                input.copyTo(output)
+                                output.flush()
+                                output.fd.sync()
+                            }
+                        }
+                    } catch (_: Throwable) {
+                    }
+                }
+
+                if (!tmpFile.renameTo(targetFile)) {
+                    java.io.FileInputStream(tmpFile).use { input ->
+                        java.io.FileOutputStream(targetFile).use { output ->
+                            input.copyTo(output)
+                            output.flush()
+                            output.fd.sync()
+                        }
+                    }
+                    tmpFile.delete()
+                }
+                true
+            } catch (_: Throwable) {
+                tmpFile.delete()
+                false
+            }
+        }
+    }
+
+    /**
+     * Carrega o snapshot durável da conta com validação estrita de schema e ownerUid,
+     * suportando recuperação automática de .bak e migração honesta de dados legados.
+     */
+    fun loadAccountRecommendationsSnapshot(ownerUid: String): AccountRecommendationsSnapshot? {
+        val targetUid = ownerUid.trim().ifEmpty { "guest_local" }
+        synchronized(lockForOwner(targetUid)) {
+            val targetFile = durableRecommendationsFile(targetUid)
+            val dir = durableRecommendationsDir()
+            val bakFile = java.io.File(dir, "${targetFile.name}.bak")
+            val tmpFile = java.io.File(dir, "${targetFile.name}.tmp")
+            if (tmpFile.exists()) runCatching { tmpFile.delete() }
+
+            fun parseSnapshot(file: java.io.File): AccountRecommendationsSnapshot? {
+                if (!file.isFile || !file.exists() || file.length() <= 0L) return null
+                return try {
+                    val raw = file.readText(StandardCharsets.UTF_8)
+                    val root = JSONObject(raw)
+                    val schema = root.optInt("schemaVersion", 0)
+                    val fileOwner = root.optString("ownerUid", "")
+                    if (schema != 2 || fileOwner != targetUid) return null
+                    val fingerprint = root.optString("tasteFingerprint", "")
+                    val libCount = root.optInt("libraryCount", 0)
+                    val savedAt = root.optLong("savedAtEpochMs", 0L)
+                    val itemsArr = root.optJSONArray("items") ?: return null
+                    val recs = PersonalizedDiscovery.decodeCachedRecommendations(itemsArr.toString())
+                    if (recs.isEmpty()) return null
+                    AccountRecommendationsSnapshot(
+                        schemaVersion = 2,
+                        ownerUid = targetUid,
+                        tasteFingerprint = fingerprint,
+                        libraryCount = libCount,
+                        savedAtEpochMs = savedAt,
+                        recommendations = recs,
+                        isLegacyProvisional = false
+                    )
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+
+            val primary = parseSnapshot(targetFile)
+            if (primary != null) return primary
+
+            val recoveredBak = parseSnapshot(bakFile)
+            if (recoveredBak != null) {
+                runCatching {
+                    bakFile.copyTo(targetFile, overwrite = true)
+                }
+                return recoveredBak
+            }
+
+            // Migração legada: tenta ler settings.cachedRecommendationsJson da conta ativa
+            val legacySettings = loadAccountState(targetUid)?.settings ?: loadState().settings
+            if (legacySettings.cachedRecommendationsJson.isNotBlank()) {
+                val decoded = PersonalizedDiscovery.decodeCachedRecommendations(legacySettings.cachedRecommendationsJson)
+                if (decoded.isNotEmpty()) {
+                    return AccountRecommendationsSnapshot(
+                        schemaVersion = 1,
+                        ownerUid = targetUid,
+                        tasteFingerprint = "", // Não comprovado pelo algoritmo canônico v2
+                        libraryCount = 0,
+                        savedAtEpochMs = 0L,
+                        recommendations = decoded,
+                        isLegacyProvisional = true
+                    )
+                }
+            }
+
+            return null
+        }
+    }
+
     @Synchronized
     fun saveModernCatalogSnapshot(
         entries: List<ComicEntry>,
@@ -1328,7 +1511,13 @@ class SafeStorage(context: Context) {
         put("autoFillReadDate", s.autoFillReadDate)
         put("showPagesInDiary", s.showPagesInDiary)
         put("shareStarsMatchTheme", s.shareStarsMatchTheme)
-        put("cachedRecommendationsJson", s.cachedRecommendationsJson.take(12288))
+        val rawRecs = s.cachedRecommendationsJson
+        val safeRecs = if (rawRecs.length > 12288) {
+            PersonalizedDiscovery.encodeCachedRecommendations(PersonalizedDiscovery.decodeCachedRecommendations(rawRecs))
+        } else {
+            rawRecs
+        }
+        put("cachedRecommendationsJson", safeRecs)
         put("recommendationTasteHash", s.recommendationTasteHash.take(64))
         val tagsArr = JSONArray()
         s.quickReviewTags.forEach { tagsArr.put(it) }
@@ -1344,6 +1533,12 @@ class SafeStorage(context: Context) {
                 val t = tagsArr.optString(i).trim()
                 if (t.isNotEmpty()) tagsList.add(t)
             }
+        }
+        val rawCachedRecs = obj.optString("cachedRecommendationsJson", def.cachedRecommendationsJson)
+        val validCachedRecs = if (rawCachedRecs.length > 12288) {
+            PersonalizedDiscovery.encodeCachedRecommendations(PersonalizedDiscovery.decodeCachedRecommendations(rawCachedRecs))
+        } else {
+            rawCachedRecs
         }
         return AppSettings(
             profileBannerUrl = obj.optString("profileBannerUrl").take(200000),
@@ -1388,7 +1583,7 @@ class SafeStorage(context: Context) {
             autoFillReadDate = obj.optBoolean("autoFillReadDate", def.autoFillReadDate),
             showPagesInDiary = obj.optBoolean("showPagesInDiary", def.showPagesInDiary),
             shareStarsMatchTheme = obj.optBoolean("shareStarsMatchTheme", def.shareStarsMatchTheme),
-            cachedRecommendationsJson = obj.optString("cachedRecommendationsJson", def.cachedRecommendationsJson).take(12288),
+            cachedRecommendationsJson = validCachedRecs,
             recommendationTasteHash = obj.optString("recommendationTasteHash", def.recommendationTasteHash).take(64),
             quickReviewTags = if (tagsArr != null) tagsList else def.quickReviewTags
         )

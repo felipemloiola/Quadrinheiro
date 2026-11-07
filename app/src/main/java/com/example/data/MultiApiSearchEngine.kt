@@ -24,7 +24,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-class MultiApiSearchEngine {
+open class MultiApiSearchEngine {
     companion object {
         val ipv4FirstDns = object : Dns {
             override fun lookup(hostname: String): List<InetAddress> = try { Dns.SYSTEM.lookup(hostname).sortedBy { it is Inet6Address } }
@@ -92,7 +92,7 @@ class MultiApiSearchEngine {
         } catch (_: Exception) {
         }
     }
-    fun searchOnlineProgressive(query: String, searchLanguage: String = "ALL", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
+    open fun searchOnlineProgressive(query: String, searchLanguage: String = "ALL", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
         val literal = query.trim().take(100)
         if (literal.length < 2) { send(emptyList()); return@channelFlow }
         val key = searchCacheKey(literal, searchLanguage, provider, hdCovers)

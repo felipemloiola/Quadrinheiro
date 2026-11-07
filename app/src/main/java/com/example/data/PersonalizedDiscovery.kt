@@ -3,6 +3,7 @@ package com.example.data
 import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 /** Metadata ranking only. No account history or favorite list is sent to a provider. */
@@ -91,10 +92,7 @@ object PersonalizedDiscovery {
             .filter { it.isNotBlank() }
             .distinct()
 
-        val rawSeed = (library.map { it.id + it.status.name + it.rating } + settings.profileFavoriteCharacters + settings.profileFavoriteComicIds + favoriteUniverse).joinToString("|")
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(rawSeed.toByteArray())
-        val hash = digest.take(8).joinToString("") { "%02x".format(it) }
+        val hash = computeCanonicalTasteFingerprint(library, settings, favoriteUniverse)
 
         return UserTasteProfile(
             readingSeries = reading,
@@ -106,6 +104,39 @@ object PersonalizedDiscovery {
             favoriteUniverse = favoriteUniverse,
             tasteHash = hash
         )
+    }
+
+    /**
+     * Calcula o fingerprint determinístico canônico v2 da conta, imune a mudanças de ordem da lista,
+     * atualizações de currentPage, updatedAt, coverUrl ou flags de sync transitórias.
+     */
+    fun computeCanonicalTasteFingerprint(
+        library: List<ComicEntry>,
+        settings: AppSettings,
+        favoriteUniverse: String
+    ): String {
+        val sortedComics = library.sortedWith(
+            compareBy<ComicEntry> { it.id.ifBlank { it.externalId } }
+                .thenBy { it.externalId }
+        )
+        val comicsPart = sortedComics.joinToString(";") { c ->
+            val sortedAuthors = c.authors.split(',', ';', '/')
+                .map { normalized(it) }
+                .filter { it.isNotBlank() }
+                .sorted()
+                .joinToString(",")
+            val key = c.id.ifBlank { c.externalId }
+            "${key}|${c.status.name}|${c.rating}|${c.favorite}|${c.rereadCount}|${normalized(c.seriesName)}|${c.issueNumber}|${sortedAuthors}|${normalized(c.publisher)}"
+        }
+
+        val sortedFavComicIds = settings.profileFavoriteComicIds.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString(",")
+        val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
+        val cleanUniverse = normalized(favoriteUniverse)
+
+        val canonicalPayload = "v2|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     fun recommendWithReasons(
@@ -272,16 +303,27 @@ object PersonalizedDiscovery {
         return recommendWithReasons(catalog, library, favoriteUniverse, settings).map { it.comic }
     }
 
+    const val MAX_DURABLE_RECOMMENDATIONS = 24
+    const val MAX_DURABLE_ENVELOPE_BYTES = 64 * 1024 // 64 KB
+    const val MAX_CLOUD_RECOMMENDATIONS = 16
+    const val MAX_CLOUD_PREFS_BYTES = 12 * 1024 // 12 KB
+
     /**
-     * Serializa até 16 recomendações de forma compacta (<= 12 KB) para SafeStorage e Firestore.
+     * Serializa recomendações respeitando um teto rígido de bytes UTF-8 para o JSONArray completo.
+     * Nunca trunca JSON no meio de uma string; empacota itens completos um a um até o limite.
      */
-    fun encodeCachedRecommendations(items: List<RecommendedComic>): String {
+    fun encodeRecommendationsWithByteBudget(
+        items: List<RecommendedComic>,
+        maxItems: Int,
+        maxBytesUtf8: Int
+    ): String {
         if (items.isEmpty()) return ""
         return try {
-            val arr = org.json.JSONArray()
-            for (rec in items.take(16)) {
+            val candidateItems = items.take(maxItems)
+            val jsonObjects = candidateItems.map { rec ->
                 val c = rec.comic
-                val obj = org.json.JSONObject().apply {
+                val safeCover = if (c.coverUrl.startsWith("data:") && c.coverUrl.length > 512) "" else c.coverUrl.take(450)
+                org.json.JSONObject().apply {
                     put("id", c.id.take(90))
                     put("externalId", c.externalId.take(90))
                     put("title", c.title.take(160))
@@ -292,31 +334,53 @@ object PersonalizedDiscovery {
                     put("format", c.format.take(60))
                     put("releaseYear", c.releaseYear)
                     put("pageCount", c.pageCount)
-                    put("coverUrl", c.coverUrl.take(450))
+                    put("coverUrl", safeCover)
                     put("seriesName", c.seriesName.take(120))
                     put("issueNumber", c.issueNumber)
                     put("reasonLabel", rec.reasonLabel.take(42))
                     put("score", rec.score)
                     put("signalSource", rec.signalSource.take(32))
                 }
-                arr.put(obj)
             }
-            val raw = arr.toString()
-            if (raw.toByteArray(Charsets.UTF_8).size <= 12_288) raw else ""
+
+            val finalArray = org.json.JSONArray()
+            for (obj in jsonObjects) {
+                finalArray.put(obj)
+                val currentBytes = finalArray.toString().toByteArray(StandardCharsets.UTF_8).size
+                if (currentBytes > maxBytesUtf8) {
+                    finalArray.remove(finalArray.length() - 1)
+                    break
+                }
+            }
+            finalArray.toString()
         } catch (_: Throwable) {
             ""
         }
     }
 
     /**
-     * Restaura a lista de recomendações salvas no cache da conta (SafeStorage / Firestore).
+     * Serializa até 16 recomendações de forma compacta (<= 12 KB) para AppSettings e Firestore.
+     */
+    fun encodeCachedRecommendations(items: List<RecommendedComic>): String {
+        return encodeRecommendationsWithByteBudget(items, MAX_CLOUD_RECOMMENDATIONS, MAX_CLOUD_PREFS_BYTES)
+    }
+
+    /**
+     * Serializa até 24 recomendações completas para o snapshot durável da conta em filesDir (<= 64 KB).
+     */
+    fun encodeDurableAccountRecommendations(items: List<RecommendedComic>): String {
+        return encodeRecommendationsWithByteBudget(items, MAX_DURABLE_RECOMMENDATIONS, MAX_DURABLE_ENVELOPE_BYTES)
+    }
+
+    /**
+     * Restaura a lista de recomendações salvas no cache da conta (SafeStorage / filesDir / Firestore).
      */
     fun decodeCachedRecommendations(rawJson: String): List<RecommendedComic> {
         if (rawJson.isBlank()) return emptyList()
         return try {
             val arr = org.json.JSONArray(rawJson)
             val result = mutableListOf<RecommendedComic>()
-            for (i in 0 until arr.length().coerceAtMost(16)) {
+            for (i in 0 until arr.length().coerceAtMost(MAX_DURABLE_RECOMMENDATIONS)) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val id = obj.optString("id", "").trim()
                 val title = obj.optString("title", "").trim()

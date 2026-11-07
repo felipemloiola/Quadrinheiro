@@ -54,6 +54,42 @@ import kotlin.math.min
  * ============================================================================================
  */
 
+/**
+ * Unificação da espessura óptica e teto geométrico de refração para o Liquid Glass.
+ * Teto unificado: 0.40 * minDim.
+ */
+object LiquidGlassOptics {
+    const val MAX_THICKNESS_RATIO = 0.40f
+    const val MIN_REFRACTION_PX = 1.0f
+
+    /**
+     * Calcula a espessura refrativa efetiva em pixels baseada na fórmula unificada de 0,40 * minDim.
+     * Aplica o compactScale uma única vez por caminho de renderização.
+     * Trata dimensões inválidas, NaN, Infinity e tamanhos diminutos sem violar o teto geométrico.
+     */
+    fun computeEffectiveRefractionHeightPx(
+        requestedHeightPx: Float,
+        widthPx: Float,
+        heightPx: Float,
+        compactScale: Float = 1.0f
+    ): Float {
+        if (widthPx.isNaN() || heightPx.isNaN() || widthPx <= 0f || heightPx <= 0f) {
+            return 0f
+        }
+        val minDim = minOf(widthPx, heightPx)
+        if (minDim <= 0f || minDim.isNaN() || minDim.isInfinite()) return 0f
+        val geometricCeiling = minDim * MAX_THICKNESS_RATIO
+        val scale = if (compactScale.isNaN() || compactScale.isInfinite() || compactScale <= 0f) 1.0f else compactScale
+        val scaled = if (requestedHeightPx.isNaN() || requestedHeightPx.isInfinite() || requestedHeightPx <= 0f) {
+            minOf(MIN_REFRACTION_PX, geometricCeiling)
+        } else {
+            requestedHeightPx * scale
+        }
+        val safeMin = minOf(MIN_REFRACTION_PX, geometricCeiling)
+        return scaled.coerceAtMost(geometricCeiling).coerceAtLeast(safeMin)
+    }
+}
+
 object SdfShader {
     /**
      * Shader AGSL baseado em `SdfShader.android.kt` (AndroidLiquidGlass-kmp por Kyant).
@@ -107,7 +143,8 @@ object SdfShader {
                 return half4(0.0);
             }
 
-            float safeRefractionH = max(refractionHeight, 1.0);
+            float maxRefraction = min(safeSize.x, safeSize.y) * 0.40;
+            float safeRefractionH = clamp(refractionHeight, 1.0, max(1.0, maxRefraction));
             float normalizedDepth = clamp(1.0 + sd / safeRefractionH, 0.0, 1.0);
             float meniscusFactor = circleMap(normalizedDepth);
 
@@ -197,9 +234,14 @@ object SdfShader {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && enableEdgeRefraction && width > 4f && height > 4f) {
             return runCatching {
-                val maxBound = max(1f, min(width, height) * 0.5f)
-                val cr = if (cornerRadiusPx > 1f) cornerRadiusPx.coerceIn(1f, maxBound) else maxBound
-                val safeH = refractionHeightPx.coerceIn(1f, maxBound)
+                val maxCorner = max(1f, min(width, height) * 0.5f)
+                val cr = if (cornerRadiusPx > 1f) cornerRadiusPx.coerceIn(1f, maxCorner) else maxCorner
+                val safeH = LiquidGlassOptics.computeEffectiveRefractionHeightPx(
+                    requestedHeightPx = refractionHeightPx,
+                    widthPx = width,
+                    heightPx = height,
+                    compactScale = 1.0f
+                )
                 val shader = com.kyant.backdrop.LiquidGlassShaderPrewarmer.obtain(AGSL_SDF_LIQUID_GLASS_SOURCE).apply {
                     setFloatUniform("size", width, height)
                     setFloatUniform("cornerRadii", cr, cr, cr, cr)

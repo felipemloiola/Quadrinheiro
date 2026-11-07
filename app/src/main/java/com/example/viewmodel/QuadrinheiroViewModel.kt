@@ -39,6 +39,8 @@ import com.example.ui.components.SocialShareRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -180,6 +182,22 @@ class QuadrinheiroViewModel(
     val isInitialBootAndSyncReady: StateFlow<Boolean> = _isInitialBootAndSyncReady.asStateFlow()
 
     private var authSessionGeneration: Long = 0L
+    private val _isLocalRestoreComplete = MutableStateFlow(false)
+    val isLocalRestoreComplete: StateFlow<Boolean> = _isLocalRestoreComplete.asStateFlow()
+
+    // Estado centralizado e persistente da seção "Para você" do Explorar (coordenado fora da UI)
+    data class ExploreRecommendationUiState(
+        val ownerUid: String = "",
+        val recommendations: List<com.example.data.RecommendedComic> = emptyList(),
+        val tasteFingerprint: String = "",
+        val isRefreshing: Boolean = false,
+        val isLegacyProvisional: Boolean = false
+    )
+
+    private val _exploreRecommendationState = MutableStateFlow(ExploreRecommendationUiState())
+    val exploreRecommendationState: StateFlow<ExploreRecommendationUiState> = _exploreRecommendationState.asStateFlow()
+    private var recommendationJob: Job? = null
+    private val recommendationJobMutex = kotlinx.coroutines.sync.Mutex()
 
     private var cloudProfileJob: Job? = null
     private var cloudComicsJob: Job? = null
@@ -401,9 +419,14 @@ class QuadrinheiroViewModel(
             }
         }
 
+        // Hidratação local assíncrona de recomendações no boot (fora da Main Thread, sem aguardar sync remoto)
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLocalRestoreComplete.value = true
+            hydrateRecommendationsForActiveAccountAsync()
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { com.example.data.ModernCatalog.restoreFromDiskCache(storage) }
-            // Defer non-critical background work until after initial Activity SurfaceSyncGroup transaction completes
             delay(600)
             // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
             if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
@@ -1119,6 +1142,11 @@ class QuadrinheiroViewModel(
 
         resetUsernameVerification(cancelPendingJob = true)
         persistAll(userProfile.uid, sessionChanged = true)
+        com.example.data.RecommendationCandidateRetriever.clearForAccountSwitch()
+        _isLocalRestoreComplete.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            hydrateRecommendationsForActiveAccountAsync()
+        }
 
         if (userProfile.provider == "google") {
             val cloudAuthUser = CloudAuthUser(
@@ -1242,6 +1270,11 @@ class QuadrinheiroViewModel(
 
         resetUsernameVerification(cancelPendingJob = true)
         persistAll("guest_local", sessionChanged = true)
+        com.example.data.RecommendationCandidateRetriever.clearForAccountSwitch()
+        _isLocalRestoreComplete.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            hydrateRecommendationsForActiveAccountAsync()
+        }
         resetToReadingHome()
         startSessionEntryTransition()
         showNotice("Modo Convidado ativo")
@@ -1270,6 +1303,8 @@ class QuadrinheiroViewModel(
         cloudComicsJob?.cancel()
         cloudProfileSaveJob?.cancel()
         persistJob?.cancel()
+        recommendationJob?.cancel()
+        com.example.data.RecommendationCandidateRetriever.clearForAccountSwitch()
 
         val wasGuestLogout = isCurrentSessionGuest()
         val outgoingUid = if (wasGuestLogout) {
@@ -1306,6 +1341,7 @@ class QuadrinheiroViewModel(
         startOrStopCloudListeners(null)
         _showAuthModalFromSettings.value = false
         _authFeedback.value = null
+        _exploreRecommendationState.value = ExploreRecommendationUiState()
         _isSyncingCloud.value = false
         _isAuthLoading.value = false
         resetUsernameVerification(cancelPendingJob = true)
@@ -1846,6 +1882,9 @@ class QuadrinheiroViewModel(
         }
         persistAll(activeUid)
         scheduleCloudProfileSave(nowMs)
+        if (candidate.favoriteUniverse != _profile.value.favoriteUniverse) {
+            triggerRecommendationRefreshIfNeeded(forceRefresh = false)
+        }
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
@@ -1869,6 +1908,9 @@ class QuadrinheiroViewModel(
         _profile.value = nextProfile
         persistAll()
         scheduleCloudProfileSave(nowMs)
+        if (showcaseChanged) {
+            triggerRecommendationRefreshIfNeeded(forceRefresh = false)
+        }
     }
 
     private fun scheduleCloudProfileSave(updatedAtMs: Long) {
@@ -2283,6 +2325,14 @@ class QuadrinheiroViewModel(
         _comics.value = currentList
         if(previousReview?.rating!=entry.rating || previousReview?.review!=entry.review)com.example.data.CommunityAutoSync.enqueue(storage,activeOwnerUid(),entry)
         persistAll()
+        val currentRecs = _exploreRecommendationState.value.recommendations
+        if (currentRecs.isNotEmpty()) {
+            val unowned = filterOwnedFromRecommendations(currentRecs, currentList)
+            if (unowned.size != currentRecs.size) {
+                _exploreRecommendationState.value = _exploreRecommendationState.value.copy(recommendations = unowned)
+            }
+        }
+        triggerRecommendationRefreshIfNeeded(forceRefresh = false)
         QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
 
         val uid = activeCloudUid()
@@ -2337,8 +2387,10 @@ class QuadrinheiroViewModel(
     }
 
     fun deleteComic(id: String) {
-        _comics.value = _comics.value.filterNot { it.id == id }
+        val updated = _comics.value.filterNot { it.id == id }
+        _comics.value = updated
         persistAll()
+        triggerRecommendationRefreshIfNeeded(forceRefresh = false)
         val uid = activeCloudUid()
         val repo = cloudRepo
         if (uid != null && repo != null) {
@@ -2455,5 +2507,172 @@ class QuadrinheiroViewModel(
 
     fun buildAndroidZipBytes(): ByteArray {
         return storage.buildStandaloneIOS27ZipBytes(_comics.value, _profile.value, _appSettings.value)
+    }
+
+    /**
+     * Restaura assincronamente as recomendações salvas em filesDir sem bloquear a Main Thread
+     * e sem depender da sincronização remota do Firestore.
+     */
+    suspend fun hydrateRecommendationsForActiveAccountAsync() = withContext(Dispatchers.IO) {
+        val targetUid = activeOwnerUid()
+        val snapshot = storage.loadAccountRecommendationsSnapshot(targetUid)
+        if (snapshot != null) {
+            val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations, _comics.value)
+            withContext(Dispatchers.Main) {
+                if (activeOwnerUid() == targetUid) {
+                    _exploreRecommendationState.value = ExploreRecommendationUiState(
+                        ownerUid = targetUid,
+                        recommendations = unownedRecs,
+                        tasteFingerprint = snapshot.tasteFingerprint,
+                        isRefreshing = false,
+                        isLegacyProvisional = snapshot.isLegacyProvisional
+                    )
+                }
+            }
+        }
+        triggerRecommendationRefreshIfNeeded(forceRefresh = false)
+    }
+
+    private fun filterOwnedFromRecommendations(
+        recs: List<com.example.data.RecommendedComic>,
+        library: List<ComicEntry>
+    ): List<com.example.data.RecommendedComic> {
+        val ownedIds = library.map { it.id }.filter { it.isNotBlank() }.toSet()
+        val ownedExt = library.map { it.externalId }.filter { it.isNotBlank() }.toSet()
+        return recs.filter { rec ->
+            rec.comic.id !in ownedIds &&
+                (rec.comic.externalId.isBlank() || rec.comic.externalId !in ownedExt)
+        }
+    }
+
+    /**
+     * Coalesce a geração de recomendações caso o tasteFingerprint mude ou haja migração legada provisória.
+     * Nunca invalida nem recalcula sobre biblioteca vazia transitória.
+     */
+    fun triggerRecommendationRefreshIfNeeded(forceRefresh: Boolean = false) {
+        val currentUid = activeOwnerUid()
+        val currentGeneration = authSessionGeneration
+        val librarySnapshot = _comics.value
+        val settingsSnapshot = _appSettings.value
+        val universeSnapshot = _profile.value.favoriteUniverse
+
+        // Barreira: se restauração local não terminou, não roda sobre estado vazio
+        if (!_isLocalRestoreComplete.value) return
+
+        recommendationJob?.cancel()
+        recommendationJob = viewModelScope.launch(Dispatchers.IO) {
+            recommendationJobMutex.lock()
+            try {
+                ensureActive()
+                if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration) return@launch
+
+                val canonicalFingerprint = com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
+                    library = librarySnapshot,
+                    settings = settingsSnapshot,
+                    favoriteUniverse = universeSnapshot
+                )
+
+                val currentState = _exploreRecommendationState.value
+                val isSnapshotAlreadyValid = !forceRefresh &&
+                    currentState.ownerUid == currentUid &&
+                    currentState.tasteFingerprint == canonicalFingerprint &&
+                    currentState.recommendations.isNotEmpty() &&
+                    !currentState.isLegacyProvisional
+
+                if (isSnapshotAlreadyValid) {
+                    return@launch
+                }
+
+                // Sinaliza início de atualização mantendo a lista anterior visível na UI
+                withContext(Dispatchers.Main) {
+                    if (activeOwnerUid() == currentUid) {
+                        _exploreRecommendationState.value = _exploreRecommendationState.value.copy(
+                            ownerUid = currentUid,
+                            isRefreshing = true
+                        )
+                    }
+                }
+
+                val taste = com.example.data.PersonalizedDiscovery.extractTasteProfile(
+                    library = librarySnapshot,
+                    settings = settingsSnapshot,
+                    favoriteUniverse = universeSnapshot
+                )
+
+                val retrieved = com.example.data.RecommendationCandidateRetriever.retrieveCandidates(
+                    taste = taste,
+                    searchEngine = searchEngine,
+                    ownerUid = currentUid
+                )
+
+                val catalogPool = com.example.data.ModernCatalog.current.ifEmpty {
+                    com.example.data.CuratedCatalog.curatedComicsCatalog
+                }
+
+                val ranked = com.example.data.PersonalizedDiscovery.recommendWithReasons(
+                    catalog = catalogPool + retrieved,
+                    library = librarySnapshot,
+                    favoriteUniverse = universeSnapshot,
+                    settings = settingsSnapshot
+                ).take(com.example.data.PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS)
+
+                val enhanced = com.example.data.FirebaseAiRecommendationEnhancer.enhanceOrFallback(
+                    taste = taste,
+                    candidates = ranked
+                )
+
+                ensureActive()
+                if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration) return@launch
+
+                if (enhanced.isNotEmpty()) {
+                    // Grava snapshot durável de 24 itens em filesDir
+                    storage.saveAccountRecommendationsSnapshot(
+                        ownerUid = currentUid,
+                        tasteFingerprint = canonicalFingerprint,
+                        items = enhanced,
+                        libraryCount = librarySnapshot.size
+                    )
+
+                    // Grava espelho de nuvem em AppSettings sem marcar Profile.isDirty
+                    val cloudJson = com.example.data.PersonalizedDiscovery.encodeCachedRecommendations(enhanced)
+                    val cloudStamp = "$canonicalFingerprint:${System.currentTimeMillis()}"
+                    saveLocalRecommendationSettingsMirror(cloudJson, cloudStamp)
+
+                    val unownedEnhanced = filterOwnedFromRecommendations(enhanced, librarySnapshot)
+                    withContext(Dispatchers.Main) {
+                        if (activeOwnerUid() == currentUid) {
+                            _exploreRecommendationState.value = ExploreRecommendationUiState(
+                                ownerUid = currentUid,
+                                recommendations = unownedEnhanced,
+                                tasteFingerprint = canonicalFingerprint,
+                                isRefreshing = false,
+                                isLegacyProvisional = false
+                            )
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        if (activeOwnerUid() == currentUid) {
+                            _exploreRecommendationState.value = _exploreRecommendationState.value.copy(isRefreshing = false)
+                        }
+                    }
+                }
+            } finally {
+                recommendationJobMutex.unlock()
+            }
+        }
+    }
+
+    private fun saveLocalRecommendationSettingsMirror(cloudJson: String, tasteStamp: String) {
+        val curSettings = _appSettings.value
+        if (curSettings.cachedRecommendationsJson != cloudJson || curSettings.recommendationTasteHash != tasteStamp) {
+            val nextSettings = curSettings.copy(
+                cachedRecommendationsJson = cloudJson,
+                recommendationTasteHash = tasteStamp
+            )
+            _appSettings.value = nextSettings
+            // Salva apenas localmente sem marcar ReaderProfile como sujo para evitar cascade no Firestore
+            storage.saveState(_comics.value, _profile.value, nextSettings, activeOwnerUid())
+        }
     }
 }

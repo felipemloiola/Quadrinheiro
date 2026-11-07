@@ -70,12 +70,14 @@ half4 main(float2 coord) {
     float radius = radiusAt(coord, cornerRadii);
     
     float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    if (-sd >= refractionHeight) {
+    float maxRefraction = min(size.x, size.y) * 0.40;
+    float safeRefractionH = clamp(refractionHeight, 0.001, max(0.001, maxRefraction));
+    if (-sd >= safeRefractionH) {
         return content.eval(coord);
     }
     sd = min(sd, 0.0);
     
-    float d = circleMap(1.0 - -sd / max(refractionHeight, 0.001)) * refractionAmount;
+    float d = circleMap(1.0 - -sd / safeRefractionH) * refractionAmount;
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord + 1e-6));
     
@@ -107,18 +109,20 @@ half4 main(float2 coord) {
     float radius = radiusAt(coord, cornerRadii);
     
     float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    if (-sd >= refractionHeight) {
+    float maxRefraction = min(size.x, size.y) * 0.40;
+    float safeRefractionH = clamp(refractionHeight, 0.001, max(0.001, maxRefraction));
+    if (-sd >= safeRefractionH) {
         return content.eval(coord);
     }
     sd = min(sd, 0.0);
     
-    float d = circleMap(1.0 - -sd / max(refractionHeight, 0.001)) * refractionAmount;
+    float d = circleMap(1.0 - -sd / safeRefractionH) * refractionAmount;
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord + 1e-6));
     
     float2 refractedCoord = coord + d * grad;
     float cornerFactor = (centeredCoord.x * centeredCoord.y) / max(halfSize.x * halfSize.y, 1.0);
-    float edgeFactor = 1.0 - (-sd / max(refractionHeight, 0.001));
+    float edgeFactor = 1.0 - (-sd / safeRefractionH);
     float2 tangent = float2(-grad.y, grad.x);
     float2 dispersedCoord = d * (
         grad * (0.42 + 0.58 * abs(cornerFactor)) +

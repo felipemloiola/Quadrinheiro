@@ -20,7 +20,7 @@ object StorageMaintenance {
     const val OFFLINE_DB_BUDGET_BYTES = 25L * 1024 * 1024
     private const val MAX_DIAGNOSTIC_ENTRIES = 20000
     private const val MAX_DIAGNOSTIC_DEPTH = 8
-    private val uidSegmentRegex = Regex("(account_state_v1_|profile_showcase_|community_pending_|community_published_rev_)([A-Za-z0-9_.-]+)")
+    private val uidSegmentRegex = Regex("(account_state_v1_|profile_showcase_|community_pending_|community_published_rev_|recs_v2_)([A-Za-z0-9_.-]+)")
     private val emailSegmentRegex = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
 
     internal fun sanitizeDiagnosticPath(rawPath: String): String {
