@@ -1323,7 +1323,8 @@ fun AppleSlider(
     accentColor: Color = activeTrackColor,
     forceLensPreview: Boolean = false,
     lightSurface: Boolean = false,
-    backdrop: Backdrop? = null
+    backdrop: Backdrop? = null,
+    valueProvider: (() -> Float)? = null
 ) {
     val baseRange = if (min != 0f || max != 100f) min..max else valueRange
     val safeEnd = maxOf(baseRange.endInclusive, baseRange.start + 1f)
@@ -1331,10 +1332,14 @@ fun AppleSlider(
     val safeValue = value.coerceIn(safeRange)
     val threshold = 0.001f
     val actualAccent = if (accentColor != Color(0xFF0088FF)) accentColor else activeTrackColor
-    val callback = { v: Float ->
-        val clamped = v.coerceIn(safeRange)
-        onValueChange(clamped)
-        onChange(clamped)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnChange by rememberUpdatedState(onChange)
+    val callback = remember(safeRange) {
+        { v: Float ->
+            val clamped = v.coerceIn(safeRange)
+            currentOnValueChange(clamped)
+            currentOnChange(clamped)
+        }
     }
     val effectiveBackdrop = backdrop ?: LocalLiquidGlassBackdrop.current ?: rememberLayerBackdrop()
     Row(
@@ -1344,7 +1349,7 @@ fun AppleSlider(
     ) {
         leadingIcon?.invoke()
         com.kyant.backdrop.catalog.components.LiquidSlider(
-            value = { safeValue },
+            value = valueProvider ?: { safeValue },
             onValueChange = callback,
             valueRange = safeRange,
             visibilityThreshold = threshold,
@@ -1786,7 +1791,10 @@ fun LiquidGlassSegmentedControl(
                 Modifier
                     .clearAndSetSemantics {}
                     .alpha(0f)
-                    .layerBackdrop(tabsBackdrop)
+                    .layerBackdrop(
+                        backdrop = tabsBackdrop,
+                        freezeSnapshot = dampedDragAnimation.pressProgress <= 0.005f
+                    )
                     .graphicsLayer {
                         translationX = panelOffset
                     }
@@ -1799,9 +1807,11 @@ fun LiquidGlassSegmentedControl(
                         },
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
-                            vibrancy()
-                            blur(8f.dp.toPx())
-                            lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
+                            if (progress > 0.005f) {
+                                vibrancy()
+                                blur(8f.dp.toPx())
+                                lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
+                            }
                         },
                         layerBlock = {
                             val progress = dampedDragAnimation.pressProgress
@@ -1847,12 +1857,14 @@ fun LiquidGlassSegmentedControl(
                     },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        lens(
-                            10f.dp.toPx() * progress,
-                            18f.dp.toPx() * progress,
-                            depthEffect = true,
-                            chromaticAberration = true
-                        )
+                        if (progress > 0.005f) {
+                            lens(
+                                10f.dp.toPx() * progress,
+                                18f.dp.toPx() * progress,
+                                depthEffect = true,
+                                chromaticAberration = true
+                            )
+                        }
                     },
                     layerBlock = {
                         scaleX = SegmentedControlGeometry.computeLupaScaleX(
@@ -2134,22 +2146,30 @@ fun <T> AppleMenuPicker(
     val baseSurfaceColor = if (isLight) Color.White.copy(alpha = glassAlpha) else Color(0xFF16161C).copy(alpha = glassAlpha)
     val activeAccent = if (isLight && s.accentColor == Color.White) s.textPrimary else s.accentColor
 
+    var triggerCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    fun computeAnchorBounds(): IntRect {
+        val coords = triggerCoords
+        if (coords != null && coords.isAttached) {
+            val pos = coords.positionInRoot()
+            val sz = coords.size
+            return IntRect(
+                left = pos.x.roundToInt(),
+                top = pos.y.roundToInt(),
+                right = (pos.x + sz.width).roundToInt(),
+                bottom = (pos.y + sz.height).roundToInt()
+            )
+        }
+        return anchorBounds
+    }
+
     Box(
         modifier = modifier.onGloballyPositioned { coords ->
-            if (coords.isAttached) {
-                val pos = coords.positionInRoot()
-                val sz = coords.size
-                val newBounds = IntRect(
-                    left = pos.x.roundToInt(),
-                    top = pos.y.roundToInt(),
-                    right = (pos.x + sz.width).roundToInt(),
-                    bottom = (pos.y + sz.height).roundToInt()
-                )
+            triggerCoords = coords
+            if (open && coords.isAttached) {
+                val newBounds = computeAnchorBounds()
                 if (anchorBounds != newBounds) {
                     anchorBounds = newBounds
-                    if (open) {
-                        menuHost?.updateAnchorBounds(menuId, newBounds)
-                    }
+                    menuHost?.updateAnchorBounds(menuId, newBounds)
                 }
             }
         }
@@ -2251,14 +2271,18 @@ fun <T> AppleMenuPicker(
                     indication = null
                 ) {
                     val nextOpen = !open
+                    if (nextOpen) {
+                        anchorBounds = computeAnchorBounds()
+                    }
                     open = nextOpen
                     if (menuHost != null) {
-                        if (nextOpen && anchorBounds.width > 0 && anchorBounds.height > 0) {
+                        val activeBounds = anchorBounds
+                        if (nextOpen && activeBounds.width > 0 && activeBounds.height > 0) {
                             // Dispara no mesmo frame do clique para zero atraso na abertura!
                             menuHost.showMenu(
                                 LiquidGlassMenuRequest(
                                     id = menuId,
-                                    anchorBounds = anchorBounds,
+                                    anchorBounds = activeBounds,
                                     triggerLabel = currentOpt.label,
                                     triggerIcon = Icons.Default.UnfoldMore,
                                     items = menuItems,

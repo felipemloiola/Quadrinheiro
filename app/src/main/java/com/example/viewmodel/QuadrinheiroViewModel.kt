@@ -964,7 +964,6 @@ class QuadrinheiroViewModel(
             }
             val updatedShelfItem = matchedShelfComic
             if (updatedShelfItem != null) {
-                storage.saveComicTranslation(translated)
                 _comics.value = nextShelf
                 persistAll()
                 val uid = activeCloudUid()

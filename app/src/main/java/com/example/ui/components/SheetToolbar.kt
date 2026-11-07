@@ -21,10 +21,23 @@ import com.example.ui.theme.LocalIOS27Theme
 
 /** Equal touch targets and one baseline; content scrolls in a separate clipped region. */
 @Composable
-internal fun SheetToolbar(title: String, closeTag: String, shareTag: String, onClose: () -> Unit,
-    onShare: () -> Unit, onSave: (() -> Unit)? = null) {
+internal fun SheetToolbar(
+    title: String,
+    closeTag: String,
+    shareTag: String,
+    onClose: () -> Unit,
+    onShare: () -> Unit,
+    onSave: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
     val theme = LocalIOS27Theme.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(Modifier.size(44.dp).testTag(closeTag).clickable(role = Role.Button, onClickLabel = "Fechar", onClick = onClose), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Close, "Fechar", tint = theme.textSecondary, modifier = Modifier.size(21.dp))
         }

@@ -73,7 +73,7 @@ class PresentationMaintenanceTest {
         storage.setItem(SafeStorage.TRANSLATION_CACHE_KEY, translations.toString())
         repeat(2) { storage.trimTranslationCache() }
         val bounded = JSONObject(storage.getItem(SafeStorage.TRANSLATION_CACHE_KEY)!!)
-        assertEquals(1024, bounded.length())
+        assertEquals(SafeStorage.MAX_TRANSLATION_CACHE_ENTRIES, bounded.length())
         assertTrue(bounded.has("book-1099"))
         assertFalse(bounded.has("book-0"))
     }

@@ -9,9 +9,9 @@ import kotlinx.coroutines.*
 
 /** Only app-owned, recoverable files. Never traverses collection/profile storage. */
 object CacheMaintenance {
-    const val SHARED_CARDS_BUDGET_BYTES = 8L * 1024 * 1024
-    const val MAX_SHARED_CARD_FILES = 6
-    private const val SHARED_CARDS_TTL_MS = 24L * 60 * 60 * 1000
+    const val SHARED_CARDS_BUDGET_BYTES = 4L * 1024 * 1024
+    const val MAX_SHARED_CARD_FILES = 3
+    private const val SHARED_CARDS_TTL_MS = 6L * 60 * 60 * 1000
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun schedule(context: Context) {
@@ -24,8 +24,8 @@ object CacheMaintenance {
     internal fun prune(
         context: Context,
         now: Long = System.currentTimeMillis(),
-        maxOrphans: Int = 2,
-        maxOrphanBytes: Long = 64L * 1024 * 1024
+        maxOrphans: Int = 1,
+        maxOrphanBytes: Long = 32L * 1024 * 1024
     ) {
         val active = InAppUpdateDownload.load(context)
         if (active != null && active.update.code <= BuildConfig.VERSION_CODE) InAppUpdateDownload.cancel(context, active)

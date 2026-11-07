@@ -269,9 +269,9 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             } else {
                 val credits = (if (tab == 1) detail?.characters.orEmpty() else detail?.creators.orEmpty()).distinctBy { it.id }
                 if (detail?.creditsScope == "series") item { Text("Personagens e equipe da série", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp), fontSize = 12.sp) }
-                items(credits, key = { it.id }) { credit ->
+                itemsIndexed(credits, key = { _, it -> it.id }) { index, credit ->
                     val type = if (tab == 1) "character" else "person"
-                    CreditRow(credit, type) { openEntity(type, credit.id) }
+                    CreditRow(credit, type, autoLoad = index < 6) { openEntity(type, credit.id) }
                 }
                 if (!loading && credits.isEmpty()) item { Text("Ainda não há informações desta edição no catálogo.", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp)) }
             }
@@ -328,12 +328,15 @@ private fun DetailSection(title: String, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-private fun CreditRow(credit: CatalogCredit, type: String, onClick: () -> Unit) {
+private fun CreditRow(credit: CatalogCredit, type: String, autoLoad: Boolean = true, onClick: () -> Unit) {
     val t = LocalIOS27Theme.current
     var image by remember(type, credit.id) { mutableStateOf(CatalogPortraits.cached(type, credit.id).orEmpty()) }
-    LaunchedEffect(type, credit.id) {
-        try { image = CatalogPortraits.image(type, credit.id) }
-        catch (cancel: CancellationException) { throw cancel }
+    LaunchedEffect(type, credit.id, autoLoad) {
+        if (autoLoad && image.isBlank()) {
+            try { image = CatalogPortraits.image(type, credit.id) }
+            catch (cancel: CancellationException) { throw cancel }
+            catch (_: Throwable) { }
+        }
     }
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Box(Modifier.size(62.dp).clip(RoundedCornerShape(14.dp)).background(t.bgSecondary), contentAlignment = Alignment.Center) {

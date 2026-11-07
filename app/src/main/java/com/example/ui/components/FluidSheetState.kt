@@ -36,22 +36,26 @@ internal fun sheetResistance(position: Float, dimension: Float): Float =
 class FluidSheetState internal constructor(
     private val scope: CoroutineScope,
     private val height: Float,
+    private val initialOffset: Float,
     private val dismissThreshold: Float,
     private val expandThreshold: Float,
     private val reduced: () -> Boolean,
     private val onDismiss: () -> Unit,
     private val onExpand: () -> Unit
 ) {
-    private val animation = Animatable(if (reduced()) 0f else height)
+    private val animation = Animatable(if (reduced()) initialOffset else height)
     private var held by mutableStateOf<Float?>(null)
     private var job: Job? = null
     private val tracker = VelocityTracker()
-    private var rawPosition = 0f
+    private var rawPosition = initialOffset
     val offset: Float get() = held ?: animation.value
+    val isMoving: Boolean get() = held != null || animation.isRunning
     val scrimFraction: Float get() = (1f - offset / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     fun dismiss() = settle(height, 0f, dismiss = true)
-    fun enter() = settle(0f, 0f)
+    fun enter() = settle(initialOffset, 0f)
+    fun expandToTop() = settle(0f, 0f)
+    fun snapToRest() = settle(initialOffset, 0f)
 
     private fun settle(target: Float, velocity: Float, dismiss: Boolean = false) {
         val current = offset
@@ -61,7 +65,7 @@ class FluidSheetState internal constructor(
             animation.snapTo(current)
             held = null
             if (reduced()) animation.snapTo(target)
-            else animation.animateTo(target, spring(if (abs(carryVelocity) > 1f) 0.8f else 1f, 500f), initialVelocity = carryVelocity)
+            else animation.animateTo(target, spring(if (abs(carryVelocity) > 1f) 0.85f else 1f, 480f), initialVelocity = carryVelocity)
             if (dismiss) onDismiss()
         }
     }
@@ -73,40 +77,48 @@ class FluidSheetState internal constructor(
                 job?.cancel()
                 held = rawPosition
                 tracker.resetTracking()
-                // Event timestamps are added on movement; never use wall-clock time.
             },
             onVerticalDrag = { change, amount ->
                 change.consume()
                 rawPosition += amount
                 tracker.addPosition(change.uptimeMillis, Offset(0f, rawPosition))
-                held = sheetResistance(rawPosition, height)
+                // Permite arrastar entre o topo (0f) e a parte inferior com resistência suave
+                held = if (rawPosition < 0f) sheetResistance(rawPosition, height) else rawPosition
             },
             onDragEnd = {
                 val velocity = tracker.calculateVelocity().y
                 val endpoint = projectSheetEndpoint(rawPosition, velocity)
                 when {
-                    endpoint > dismissThreshold -> settle(height, velocity, dismiss = true)
-                    endpoint < -expandThreshold -> { onExpand(); settle(0f, velocity) }
-                    else -> settle(0f, velocity)
+                    endpoint > initialOffset + dismissThreshold -> settle(height, velocity, dismiss = true)
+                    endpoint < initialOffset - expandThreshold -> {
+                        settle(0f, velocity)
+                        onExpand()
+                    }
+                    else -> settle(initialOffset, velocity)
                 }
             },
-            onDragCancel = { settle(0f, 0f) }
+            onDragCancel = { settle(initialOffset, 0f) }
         )
     }
 }
 
 @Composable
-fun rememberFluidSheet(onDismiss: () -> Unit, onExpand: () -> Unit): FluidSheetState {
+fun rememberFluidSheet(
+    initialHeightFraction: Float = 0.82f,
+    onDismiss: () -> Unit,
+    onExpand: () -> Unit
+): FluidSheetState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val height = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val totalHeight = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val initialOffset = totalHeight * (1f - initialHeightFraction)
     val dismissThreshold = with(density) { 95.dp.toPx() }
     val expandThreshold = with(density) { 55.dp.toPx() }
     val dismiss = rememberUpdatedState(onDismiss)
     val expand = rememberUpdatedState(onExpand)
     val reduced = rememberReducedMotion()
-    val state = remember(scope, height, dismissThreshold, expandThreshold) {
-        FluidSheetState(scope, height, dismissThreshold, expandThreshold, reduced, { dismiss.value() }, { expand.value() })
+    val state = remember(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold) {
+        FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced, { dismiss.value() }, { expand.value() })
     }
     LaunchedEffect(state) { state.enter() }
     BackHandler { state.dismiss() }

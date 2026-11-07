@@ -584,6 +584,12 @@ fun QuadrinheiroApp(
             menuHostState.dismissMenu()
         }
 
+        val isAnyModalSheetOpen = selectedComic != null ||
+            infoModalComic != null ||
+            showManualModal ||
+            socialShareRequest != null ||
+            isSidebarOpen
+
         CompositionLocalProvider(
             LocalLiquidGlassBackdrop provides backgroundBackdrop,
             LocalLiquidGlassScrollState provides activeListState,
@@ -604,7 +610,7 @@ fun QuadrinheiroApp(
                         .layerBackdrop(
                             backdrop = mainContentBackdrop,
                             reuseRecordedContent = false,
-                            freezeSnapshot = isExtremeFling
+                            freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
                         )
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
@@ -624,7 +630,7 @@ fun QuadrinheiroApp(
                             .layerBackdrop(
                                 backdrop = backgroundBackdrop,
                                 reuseRecordedContent = false,
-                                freezeSnapshot = isExtremeFling
+                                freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
                             )
                     ) {
                         Box(

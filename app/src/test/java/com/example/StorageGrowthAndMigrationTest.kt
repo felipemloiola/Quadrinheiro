@@ -188,8 +188,9 @@ class StorageGrowthAndMigrationTest {
         assertFalse(rawPrefs.contains(SafeStorage.TRANSLATION_CACHE_KEY))
         val snapshotFile = storage.snapshotFile(SafeStorage.TRANSLATION_CACHE_KEY)
         assertTrue(snapshotFile.exists())
+        assertTrue(snapshotFile.exists())
         assertTrue(
-            "Cache de traduções deve respeitar o teto rígido de 512 KB + overhead JSON",
+            "Cache de traduções deve respeitar o teto de 128 KB + overhead JSON",
             snapshotFile.length() <= SafeStorage.MAX_TRANSLATION_CACHE_BYTES + 16_384L
         )
 
@@ -204,6 +205,24 @@ class StorageGrowthAndMigrationTest {
         assertEquals(listOf("Sandman"), storage.loadAccountState(aliceUid)!!.comics.map { it.title })
         assertEquals(listOf("Watchmen"), storage.loadAccountState(bobUid)!!.comics.map { it.title })
         assertEquals(listOf("Akira"), storage.loadGuestState().comics.map { it.title })
+    }
+
+    @Test
+    fun codeCacheAndOrphanUpdatesAreClassifiedAsCacheNotLocalData() {
+        val codeCacheDir = File(context.applicationInfo.dataDir, "code_cache").apply { mkdirs() }
+        val testShaderFile = File(codeCacheDir, "test_shader.agsl").apply { writeText("shader code content".repeat(2000)) }
+        val updatesDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")?.apply { mkdirs() }
+        val orphanApk = updatesDir?.resolve("quadrinheiro-999.apk")?.apply { writeBytes(ByteArray(1024 * 50)) }
+
+        val usage = StorageMaintenance.usage(context)
+        assertTrue("code_cache deve estar categorizado em categories", usage.categories["Cache do sistema (code_cache)"] ?: 0L > 0L)
+        assertTrue("cacheBytes deve incluir o tamanho de code_cache", usage.cacheBytes >= testShaderFile.length())
+        if (orphanApk != null) {
+            assertTrue("Atualizações baixadas devem estar presentes", (usage.categories["Atualizações baixadas"] ?: 0L) >= orphanApk.length())
+        }
+
+        testShaderFile.delete()
+        orphanApk?.delete()
     }
 
     @Test

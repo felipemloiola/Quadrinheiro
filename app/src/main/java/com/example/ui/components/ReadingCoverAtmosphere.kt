@@ -19,15 +19,35 @@ import coil.request.ImageRequest
 
 /** Decorative cover light ends at the display midpoint, with no full-screen blur pass. */
 @Composable
-internal fun ReadingCoverAtmosphere(url: String, background: Color, modifier: Modifier = Modifier, fraction:Float=.34f) {
+internal fun ReadingCoverAtmosphere(url: String, background: Color, modifier: Modifier = Modifier, fraction: Float = .34f) {
     val context = LocalContext.current
-    val request = remember(url, context) { ImageRequest.Builder(context).data(url).size(144, 216)
-        .crossfade(false).allowHardware(true).allowRgb565(true)
-        .memoryCacheKey(url + "_ambient144").diskCacheKey(url + "_ambient144").build() }
+    val cleanUrl = remember(url) { url.trim().replace("http://", "https://") }
+    val request = remember(cleanUrl, context) {
+        ImageRequest.Builder(context)
+            .data(cleanUrl)
+            .size(240, 360)
+            .precision(coil.size.Precision.INEXACT)
+            .crossfade(false)
+            .allowHardware(true)
+            .allowRgb565(true)
+            .memoryCacheKey(cleanUrl)
+            .diskCacheKey(cleanUrl)
+            .placeholderMemoryCacheKey(cleanUrl)
+            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+            .build()
+    }
+    val fadeBrush = remember(background) {
+        Brush.verticalGradient(
+            0f to background.copy(alpha = .12f),
+            .25f to background.copy(alpha = .25f),
+            .55f to background.copy(alpha = .60f),
+            .8f to background.copy(alpha = .92f),
+            1f to background
+        )
+    }
     Box(modifier.fillMaxWidth().fillMaxHeight(fraction).clipToBounds().testTag("reading_cover_atmosphere")) {
         AsyncImage(request, null, Modifier.fillMaxSize().blur(18.dp).alpha(.25f), contentScale = ContentScale.Crop)
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-            0f to background.copy(alpha = .12f), .25f to background.copy(alpha = .25f),
-            .55f to background.copy(alpha = .60f), .8f to background.copy(alpha = .92f), 1f to background)))
+        Box(Modifier.fillMaxSize().background(fadeBrush))
     }
 }

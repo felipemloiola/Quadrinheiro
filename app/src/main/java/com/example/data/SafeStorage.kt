@@ -39,8 +39,8 @@ class SafeStorage(context: Context) {
         const val ACCOUNT_STATE_PREFIX = "quadrinheiro_account_state_v1_"
         const val GUEST_STATE_KEY = "quadrinheiro_guest_isolated_state_v1"
         const val MODERN_CATALOG_SNAPSHOT_KEY = "quadrinheiro_modern_catalog_snapshot_v1"
-        const val MAX_TRANSLATION_CACHE_ENTRIES = 1024
-        const val MAX_TRANSLATION_CACHE_BYTES = 512 * 1024
+        const val MAX_TRANSLATION_CACHE_ENTRIES = 256
+        const val MAX_TRANSLATION_CACHE_BYTES = 128 * 1024
         private const val ACCOUNT_REF_PREFIX = "@ref:"
         private val EXTERNAL_SNAPSHOT_KEYS = setOf(TRANSLATION_CACHE_KEY, MODERN_CATALOG_SNAPSHOT_KEY)
         private val memoryFallback = java.util.concurrent.ConcurrentHashMap<String, String>()

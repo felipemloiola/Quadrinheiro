@@ -16,8 +16,8 @@ data class StorageUsage(
 }
 
 object StorageMaintenance {
-    const val RECOVERABLE_CACHE_BUDGET_BYTES = 80L * 1024 * 1024
-    const val OFFLINE_DB_BUDGET_BYTES = 25L * 1024 * 1024
+    const val RECOVERABLE_CACHE_BUDGET_BYTES = 24L * 1024 * 1024
+    const val OFFLINE_DB_BUDGET_BYTES = 10L * 1024 * 1024
     private const val MAX_DIAGNOSTIC_ENTRIES = 20000
     private const val MAX_DIAGNOSTIC_DEPTH = 8
     private val uidSegmentRegex = Regex("(account_state_v1_|profile_showcase_|community_pending_|community_published_rev_|recs_v2_)([A-Za-z0-9_.-]+)")
@@ -77,12 +77,16 @@ object StorageMaintenance {
     fun usage(context: Context): StorageUsage {
         val data = File(context.applicationInfo.dataDir).canonicalFile
         val cache = context.cacheDir.canonicalFile
+        val codeCache = runCatching { context.codeCacheDir.canonicalFile }.getOrNull()
         val externalCache = context.externalCacheDir?.canonicalFile
         val external = context.getExternalFilesDir(null)?.canonicalFile
+        val downloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")?.canonicalFile
         val cacheInternalPath = cache.path + File.separator
+        val codeCachePath = codeCache?.let { it.path + File.separator }
         val cacheExternalPath = externalCache?.let { it.path + File.separator }
+        val downloadsPath = downloads?.let { it.path + File.separator }
         val externalPath = external?.let { it.path + File.separator }
-        val cachePaths = listOfNotNull(cacheInternalPath, cacheExternalPath)
+        val cachePaths = listOfNotNull(cacheInternalPath, codeCachePath, cacheExternalPath, downloadsPath)
         val externalPaths = listOfNotNull(externalPath)
         fun inRoots(path: String, roots: List<String>) = roots.any { path == it.removeSuffix(File.separator) || path.startsWith(it) }
         val visitedLocalFiles = HashSet<String>()
@@ -90,44 +94,48 @@ object StorageMaintenance {
             val path = runCatching { file.canonicalPath }.getOrNull() ?: return@onEnter false
             (path == data.path || path.startsWith(data.path + File.separator)) && !inRoots(path, cachePaths + externalPaths)
         }.filter { it.isFile && runCatching { visitedLocalFiles.add(it.canonicalPath) }.getOrDefault(false) }.sumOf { it.length() }
-        val externalBytes = external?.let(::bytes) ?: 0L
-        val cacheBytes = bytes(cache) + (externalCache?.takeIf { it != cache }?.let(::bytes) ?: 0L)
-        val localBytes = dataBytes + externalBytes
+        
         fun safeSize(file: File?): Long = file?.let { runCatching { bytes(it) }.getOrDefault(0L) } ?: 0L
         fun under(root: File, relative: String) = safeSize(root.resolve(relative))
-        val downloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
+
         val sharedPreferences = under(data, "shared_prefs")
         val databases = under(data, "databases")
         val files = under(data, "files")
         val noBackup = context.noBackupFilesDir.canonicalFile.takeIf {
             it != data && !it.path.startsWith(data.resolve("files").path + File.separator)
         }?.let(::safeSize) ?: 0L
-        val codeCache = runCatching { context.codeCacheDir.canonicalFile }.getOrNull()?.takeIf {
+
+        val codeCacheBytes = codeCache?.takeIf {
             it != data && it != cache && !it.path.startsWith(cache.path + File.separator)
         }?.let(::safeSize) ?: 0L
+        val externalUpdates = safeSize(downloads)
+        val externalBytes = (external?.let(::bytes) ?: 0L) - externalUpdates
+        val cacheBytes = bytes(cache) + (externalCache?.takeIf { it != cache }?.let(::bytes) ?: 0L) + codeCacheBytes + externalUpdates
+        val localBytes = (dataBytes + externalBytes).coerceAtLeast(0L)
+
         val cacheCovers = under(cache, "quadrinheiro_covers_disk_cache")
         val httpCache = under(cache, "quadrinheiro_http_cache")
         val snapshotsCache = under(cache, "quadrinheiro_snapshots")
         val sharedCards = under(cache, "shared_cards")
         val updateCache = under(cache, "updates")
-        val externalUpdates = safeSize(downloads)
+
         val categories = linkedMapOf(
             "Preferências e estado local" to sharedPreferences,
             "Bancos e sincronização offline" to databases,
             "Arquivos do app" to files,
             "Backups locais" to noBackup,
-            "Cache do sistema (code_cache)" to codeCache,
-            "Outros dados locais" to (dataBytes - sharedPreferences - databases - files - noBackup - codeCache).coerceAtLeast(0L),
+            "Cache do sistema (code_cache)" to codeCacheBytes,
+            "Outros dados locais" to (dataBytes - sharedPreferences - databases - files - noBackup).coerceAtLeast(0L),
             "Capas em cache" to cacheCovers,
             "Respostas de rede" to httpCache,
             "Snapshots e traduções em cache" to snapshotsCache,
             "Cartões compartilhados" to sharedCards,
             "Atualizações em cache" to updateCache,
-            "Outros caches" to (cacheBytes - cacheCovers - httpCache - snapshotsCache - sharedCards - updateCache).coerceAtLeast(0L),
-            "Arquivos externos do app" to (externalBytes - externalUpdates).coerceAtLeast(0L),
+            "Outros caches" to (cacheBytes - cacheCovers - httpCache - snapshotsCache - sharedCards - updateCache - codeCacheBytes - externalUpdates).coerceAtLeast(0L),
+            "Arquivos externos do app" to externalBytes.coerceAtLeast(0L),
             "Atualizações baixadas" to externalUpdates
         )
-        val largest = largestFiles(listOf(data, cache) + listOfNotNull(externalCache, external))
+        val largest = largestFiles(listOfNotNull(data, cache, codeCache, externalCache, external, downloads))
         return StorageUsage(cacheBytes, localBytes, categories, largest)
     }
 

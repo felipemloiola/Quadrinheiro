@@ -1156,7 +1156,7 @@ class QuadrinheiroCloudRepository(
     }
 
     companion object {
-        const val FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES = 25L * 1024L * 1024L
+        const val FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES = 10L * 1024L * 1024L
         private val configuredDatabases = java.util.Collections.synchronizedSet(HashSet<Int>())
 
         /**

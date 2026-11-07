@@ -31,7 +31,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     }
 
     companion object {
-        const val COIL_DISK_CACHE_BUDGET_BYTES = 48L * 1024L * 1024L
+        const val COIL_DISK_CACHE_BUDGET_BYTES = 16L * 1024L * 1024L
     }
 
     override fun newImageLoader(): ImageLoader =

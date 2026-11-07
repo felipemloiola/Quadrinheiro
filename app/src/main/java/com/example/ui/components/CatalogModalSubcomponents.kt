@@ -82,6 +82,12 @@ import com.kyant.shapes.RoundedRectangle
 import java.util.Calendar
 import java.util.Locale
 
+private val CalendarMonthNames = listOf(
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+)
+private val CalendarWeekDays = listOf("D", "S", "T", "Q", "Q", "S", "S")
+
 /**
  * Interactive Apple iOS Mini Calendar Picker for selecting `readDate` (`YYYY-MM-DD`).
  */
@@ -106,11 +112,8 @@ fun AppleMiniCalendarPicker(
     var viewYear by remember(parsedParts.first) { mutableIntStateOf(parsedParts.first) }
     var viewMonth by remember(parsedParts.second) { mutableIntStateOf(parsedParts.second) } // 1..12
 
-    val monthNames = listOf(
-        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-    )
-    val weekDays = listOf("D", "S", "T", "Q", "Q", "S", "S")
+    val monthNames = CalendarMonthNames
+    val weekDays = CalendarWeekDays
 
     val cal = remember(viewYear, viewMonth) {
         Calendar.getInstance().apply {
@@ -319,6 +322,12 @@ fun LiquidGlassSheetRefractiveLayer(
     }
 }
 
+private val ReadingStatusSegmentOptions = listOf(
+    SegmentOption(ReadingStatus.READ, "Lido"),
+    SegmentOption(ReadingStatus.READING, "Lendo"),
+    SegmentOption(ReadingStatus.WANT_TO_READ, "Quero Ler")
+)
+
 /**
  * Seletor de Status de Leitura (Lido / Lendo / Quero Ler).
  */
@@ -329,11 +338,7 @@ internal fun CatalogStatusSegmentedBar(
     modifier: Modifier = Modifier
 ) {
     AppleSegmentedPicker(
-        options = listOf(
-            SegmentOption(ReadingStatus.READ, "Lido"),
-            SegmentOption(ReadingStatus.READING, "Lendo"),
-            SegmentOption(ReadingStatus.WANT_TO_READ, "Quero Ler")
-        ),
+        options = ReadingStatusSegmentOptions,
         value = value,
         onChange = onChange,
         modifier = modifier.fillMaxWidth()
@@ -756,14 +761,28 @@ fun ComicSequenceCarouselCard(
 
 /**
  * Cabeçalho da Capa, Título Editável, Autor e Metadados no Modal de Catalogação.
+ * Parametrizado com campos primitivos para pular recomposição quando estrelas, páginas, resenha ou tags mudam.
  */
 @Composable
 internal fun CatalogWorkSummaryHeader(
-    draftComic: ComicEntry,
-    onUpdateDraftComic: ((ComicEntry) -> ComicEntry) -> Unit
+    coverUrl: String,
+    title: String,
+    authors: String,
+    publisher: String,
+    releaseYear: Int,
+    pageCount: Int,
+    onChangeTitle: (String) -> Unit,
+    onChangeAuthors: (String) -> Unit
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
+    val metadataLine = remember(publisher, releaseYear, pageCount) {
+        listOfNotNull(
+            publisher.takeIf { it.isNotBlank() },
+            releaseYear.toString(),
+            pageCount.takeIf { it > 1 }?.let { "$it págs" }
+        ).joinToString(" • ")
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -771,10 +790,10 @@ internal fun CatalogWorkSummaryHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         BookCover(
-            src = draftComic.coverUrl,
-            title = draftComic.title,
-            publisher = draftComic.publisher,
-            year = draftComic.releaseYear,
+            src = coverUrl,
+            title = title,
+            publisher = publisher,
+            year = releaseYear,
             modifier = Modifier
                 .width(64.dp)
                 .aspectRatio(2f / 3f)
@@ -786,8 +805,8 @@ internal fun CatalogWorkSummaryHeader(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             BasicTextField(
-                value = draftComic.title,
-                onValueChange = { v -> onUpdateDraftComic { it.copy(title = v) } },
+                value = title,
+                onValueChange = onChangeTitle,
                 textStyle = TextStyle(
                     fontFamily = PlusJakartaSansFamily,
                     fontSize = 16.sp,
@@ -798,8 +817,8 @@ internal fun CatalogWorkSummaryHeader(
                 modifier = Modifier.fillMaxWidth()
             )
             BasicTextField(
-                value = draftComic.authors,
-                onValueChange = { v -> onUpdateDraftComic { it.copy(authors = v) } },
+                value = authors,
+                onValueChange = onChangeAuthors,
                 textStyle = TextStyle(
                     fontFamily = PlusJakartaSansFamily,
                     fontSize = 12.sp,
@@ -809,7 +828,7 @@ internal fun CatalogWorkSummaryHeader(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = listOfNotNull(draftComic.publisher.takeIf { it.isNotBlank() }, draftComic.releaseYear.toString(), draftComic.pageCount.takeIf { it > 1 }?.let { "$it págs" }).joinToString(" • "),
+                text = metadataLine,
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Medium,
                 color = s.textSecondary
@@ -823,11 +842,13 @@ internal fun CatalogWorkSummaryHeader(
  */
 @Composable
 internal fun CatalogReadingDateAndRereadsSection(
-    draftComic: ComicEntry,
+    readDate: String,
+    rereadCount: Int,
     allowRereads: Boolean,
     showMiniCalendar: Boolean,
     onToggleMiniCalendar: () -> Unit,
-    onUpdateDraftComic: ((ComicEntry) -> ComicEntry) -> Unit
+    onChangeReadDate: (String) -> Unit,
+    onChangeRereadCount: (Int) -> Unit
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -873,7 +894,7 @@ internal fun CatalogReadingDateAndRereadsSection(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = draftComic.readDate.ifBlank { "Selecionar data" },
+                    text = readDate.ifBlank { "Selecionar data" },
                     fontFamily = SpaceGroteskTabularFamily,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -889,9 +910,9 @@ internal fun CatalogReadingDateAndRereadsSection(
             exit = shrinkVertically(calendarMotion.tween(160)) + fadeOut(calendarMotion.tween(120))
         ) {
             AppleMiniCalendarPicker(
-                selectedDateStr = draftComic.readDate,
+                selectedDateStr = readDate,
                 onSelectDate = { pickedDate ->
-                    onUpdateDraftComic { it.copy(readDate = pickedDate) }
+                    onChangeReadDate(pickedDate)
                     onToggleMiniCalendar()
                 }
             )
@@ -914,8 +935,8 @@ internal fun CatalogReadingDateAndRereadsSection(
                         color = s.textPrimary
                     )
                     Text(
-                        text = if (draftComic.rereadCount > 0) {
-                            "Registrado como releitura (${draftComic.rereadCount}x)"
+                        text = if (rereadCount > 0) {
+                            "Registrado como releitura (${rereadCount}x)"
                         } else {
                             "Primeira leitura"
                         },
@@ -924,11 +945,11 @@ internal fun CatalogReadingDateAndRereadsSection(
                     )
                 }
                 AppleStepper(
-                    value = draftComic.rereadCount,
+                    value = rereadCount,
                     min = 0,
                     max = 50,
                     step = 1,
-                    onChange = { v -> onUpdateDraftComic { it.copy(rereadCount = v) } }
+                    onChange = onChangeRereadCount
                 )
             }
         }
@@ -940,9 +961,11 @@ internal fun CatalogReadingDateAndRereadsSection(
  */
 @Composable
 internal fun CatalogRatingAndFavoriteSection(
-    draftComic: ComicEntry,
+    rating: Float,
+    favorite: Boolean,
     halfStarRatings: Boolean,
-    onUpdateDraftComic: ((ComicEntry) -> ComicEntry) -> Unit
+    onChangeRating: (Float) -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -972,16 +995,19 @@ internal fun CatalogRatingAndFavoriteSection(
                     softWrap = false,
                     color = s.textPrimary.copy(alpha = 0.85f)
                 )
-                if (draftComic.rating > 0f) {
+                if (rating > 0f) {
+                    val formattedRating = remember(rating) {
+                        "${String.format(Locale.US, "%.1f", rating)} ★ (Limpar)"
+                    }
                     Text(
-                        text = "${String.format(Locale.US, "%.1f", draftComic.rating)} ★ (Limpar)",
+                        text = formattedRating,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = s.accentColor,
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier.clickable {
-                            onUpdateDraftComic { it.copy(rating = 0f) }
+                            onChangeRating(0f)
                         }
                     )
                 } else {
@@ -996,8 +1022,8 @@ internal fun CatalogRatingAndFavoriteSection(
                 }
             }
             StarRating(
-                rating = draftComic.rating,
-                onChange = { r -> onUpdateDraftComic { it.copy(rating = r) } },
+                rating = rating,
+                onChange = onChangeRating,
                 size = "lg",
                 starColor = s.starColor,
                 allowHalf = halfStarRatings
@@ -1032,18 +1058,18 @@ internal fun CatalogRatingAndFavoriteSection(
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(
-                            if (draftComic.favorite) Color(0xFFF43F5E).copy(alpha = 0.18f)
+                            if (favorite) Color(0xFFF43F5E).copy(alpha = 0.18f)
                             else Color.Transparent
                         )
                         .clickable {
-                            onUpdateDraftComic { it.copy(favorite = !it.favorite) }
+                            onToggleFavorite()
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (draftComic.favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        imageVector = if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Gostei",
-                        tint = if (draftComic.favorite) Color(0xFFF43F5E) else s.textSecondary.copy(alpha = 0.65f),
+                        tint = if (favorite) Color(0xFFF43F5E) else s.textSecondary.copy(alpha = 0.65f),
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -1604,7 +1630,6 @@ internal fun CatalogReadingProgressSection(
     val s = mat.scheme
     val safeTotal = pageCount.coerceAtLeast(1)
     val currentPage = currentPageProvider().coerceIn(0, safeTotal)
-    val trackColor = if (s.isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f)
 
     Column(
         modifier = Modifier
@@ -1629,7 +1654,12 @@ internal fun CatalogReadingProgressSection(
                 min = 0,
                 max = safeTotal,
                 step = 1,
-                onChange = onChangePage
+                onChange = { next ->
+                    val clamped = next.coerceIn(0, safeTotal)
+                    if (clamped != currentPageProvider()) {
+                        onChangePage(clamped)
+                    }
+                }
             )
         }
 
@@ -1638,11 +1668,17 @@ internal fun CatalogReadingProgressSection(
 
         AppleSlider(
             value = currentPage.toFloat(),
+            valueProvider = { currentPageProvider().coerceIn(0, safeTotal).toFloat() },
             min = 0f,
             max = safeTotal.toFloat(),
             step = 1f,
             accentColor = accentColor,
-            onChange = { v -> onChangePage(v.roundToInt()) }
+            onChange = { v ->
+                val next = v.roundToInt().coerceIn(0, safeTotal)
+                if (next != currentPageProvider()) {
+                    onChangePage(next)
+                }
+            }
         )
     }
 }

@@ -22,7 +22,14 @@ internal fun ProfileImage(source: String, description: String?, modifier: Modifi
     val context = LocalContext.current
     val resolved = com.example.data.ProfileShowcase.characterImage(source)
     val data = remember(resolved) { if (resolved.startsWith("data:image")) runCatching { Base64.decode(resolved.substringAfter("base64,"), Base64.DEFAULT) }.getOrNull() else resolved }
-    val request = remember(data) { ImageRequest.Builder(context).data(data).allowHardware(true).size(if (face) 240 else 1200, if (face) 280 else 400).build() }
+    val request = remember(data, face) {
+        ImageRequest.Builder(context)
+            .data(data)
+            .allowHardware(true)
+            .allowRgb565(true)
+            .size(if (face) 140 else 720, if (face) 140 else 240)
+            .build()
+    }
     AsyncImage(request, description, modifier, contentScale = ContentScale.Crop, alignment = if (face) Alignment.TopCenter else Alignment.Center)
 }
 

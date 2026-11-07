@@ -1006,7 +1006,11 @@ object PortugueseComicTranslator {
 
         if (isFinal) {
             recordComicTranslation(localizedEntry, ptTitle, ptSynopsis, isFinalSynopsis = true)
-            onTranslationPersisted?.invoke(localizedEntry)
+            val synopsisChanged = entry.synopsisPtBr != localizedEntry.synopsisPtBr && localizedEntry.synopsisPtBr.isNotBlank()
+            val titleChanged = entry.titlePtBr != localizedEntry.titlePtBr && localizedEntry.titlePtBr.isNotBlank()
+            if (synopsisChanged || titleChanged) {
+                onTranslationPersisted?.invoke(localizedEntry)
+            }
             return localizedEntry
         }
 

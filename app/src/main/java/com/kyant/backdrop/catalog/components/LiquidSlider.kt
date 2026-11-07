@@ -161,11 +161,15 @@ fun LiquidSlider(
 
         // Camada da trilha gravada em largura total para que a refração da lente
         // enxergue perfeitamente as pontas arredondadas da barra dentro do vidro em 0% e 100%.
+        val isScrollInProgress = com.example.ui.components.LocalLiquidGlassExtremeFling.current
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(36.dp)
-                .layerBackdrop(trackBackdrop)
+                .layerBackdrop(
+                    backdrop = trackBackdrop,
+                    freezeSnapshot = isScrollInProgress && !isDraggingNow && dampedDragAnimation.pressProgress <= 0.005f
+                )
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -345,13 +349,15 @@ fun LiquidSlider(
                     },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        blur(6f.dp.toPx() * (1f - progress))
-                        lens(
-                            refractionHeight = 10f.dp.toPx() * progress,
-                            refractionAmount = 14f.dp.toPx() * progress,
-                            depthEffect = true,
-                            chromaticAberration = true
-                        )
+                        if (progress > 0.005f) {
+                            blur(6f.dp.toPx() * (1f - progress))
+                            lens(
+                                refractionHeight = 10f.dp.toPx() * progress,
+                                refractionAmount = 14f.dp.toPx() * progress,
+                                depthEffect = true,
+                                chromaticAberration = true
+                            )
+                        }
                     },
                     layerBlock = {
                         val velocity = dampedDragAnimation.velocity / 10f
