@@ -134,7 +134,7 @@ fun AuthCredentialsFieldsSection(
     // AUTH_UNIFIED_HEIGHT_V5: a single size animation, not two competing field springs.
     Column(
         modifier = Modifier.fillMaxWidth().animateContentSize(
-            animationSpec = motion.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            animationSpec = motion.tween(220, easing = com.example.ui.theme.AppMotion.EaseOutStrong)
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {

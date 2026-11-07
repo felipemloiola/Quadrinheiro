@@ -17,6 +17,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.text.BasicText
@@ -499,7 +501,7 @@ fun QuadrinheiroApp(
                 visibleState = remember {
                     androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
                 },
-                enter = fadeIn(motion.tween(450))
+                enter = fadeIn(motion.tween(240))
             ) {
                 WelcomeIntroScreen(
                     onContinue = {
@@ -531,7 +533,7 @@ fun QuadrinheiroApp(
                 visibleState = remember {
                     androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true }
                 },
-                enter = fadeIn(motion.tween(450))
+                enter = fadeIn(motion.tween(240))
             ) {
             AuthScreen(
                 uiState = authScreenUiState,
@@ -917,8 +919,8 @@ fun QuadrinheiroApp(
                 // Floating Toast Notice
                 AnimatedVisibility(
                     visible = toast != null,
-                    enter = fadeIn() + slideInVertically { it / 2 },
-                    exit = fadeOut() + slideOutVertically { it / 2 },
+                    enter = fadeIn(motion.tween(200)) + slideInVertically(motion.tween(220)) { it / 2 } + scaleIn(initialScale = 0.96f, animationSpec = motion.spring(0.85f, 420f)),
+                    exit = fadeOut(motion.tween(140)) + slideOutVertically(motion.tween(160)) { it / 2 } + scaleOut(targetScale = 0.96f, animationSpec = motion.tween(140)),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .windowInsetsPadding(WindowInsets.navigationBars)
@@ -1210,9 +1212,10 @@ private fun IOS27BottomTabViewContainer(
     modifier: Modifier = Modifier,
     backdrop: Backdrop = rememberLayerBackdrop()
 ) {
+    val motion = com.example.ui.theme.LocalAppMotion.current
     val collapsedFraction by animateFloatAsState(
         targetValue = if (isTabBarCollapsed) 1f else 0f,
-        animationSpec = spring(
+        animationSpec = motion.spring(
             dampingRatio = 0.94f,
             stiffness = 360f,
             visibilityThreshold = 0.0005f
@@ -1258,13 +1261,13 @@ private fun IOS27BottomTabViewContainer(
         AnimatedVisibility(
             visible = showBottomAccessory && featuredReadingItem != null && !isTabBarCollapsed,
             modifier = Modifier.padding(bottom = 8.dp),
-            enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 2 } + expandVertically(tween(240), expandFrom = Alignment.Top),
-            exit = fadeOut(tween(160)) + slideOutVertically(tween(220)) { it / 2 } + shrinkVertically(tween(200), shrinkTowards = Alignment.Top)
+            enter = fadeIn(motion.tween(220)) + slideInVertically(motion.tween(260)) { it / 2 } + expandVertically(motion.tween(240), expandFrom = Alignment.Top),
+            exit = fadeOut(motion.tween(160)) + slideOutVertically(motion.tween(200)) { it / 2 } + shrinkVertically(motion.tween(180), shrinkTowards = Alignment.Top)
         ) {
             featuredReadingItem?.let { item ->
                 val progressFraction by animateFloatAsState(
                     targetValue = (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1)).coerceIn(0f, 1f),
-                    animationSpec = spring(stiffness = 380f, dampingRatio = 0.85f),
+                    animationSpec = motion.spring(stiffness = 380f, dampingRatio = 0.85f),
                     label = "miniPlayerProgress"
                 )
 
@@ -1584,12 +1587,12 @@ private fun IOS27BottomTabViewContainer(
             LaunchedEffect(isSearchSelected) {
                 if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
                     searchAnimationScope.launch {
-                        searchGlassProgressAnim.animateTo(1f, tween(55))
-                        searchGlassProgressAnim.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 350f))
+                        searchGlassProgressAnim.animateTo(1f, motion.tween(55))
+                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 350f))
                     }
                     searchAnimationScope.launch {
-                        searchScaleAnim.animateTo(1.15f, tween(55))
-                        searchScaleAnim.animateTo(1f, spring(dampingRatio = 0.48f, stiffness = 380f))
+                        searchScaleAnim.animateTo(1.15f, motion.tween(55))
+                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 0.48f, stiffness = 380f))
                     }
                 }
                 handledByPointer = false
@@ -1599,7 +1602,7 @@ private fun IOS27BottomTabViewContainer(
             // No press-down (frames 24-25), o ícone escurece/reduz opacidade para 0.22f; no release (frame 26), volta a 1f já azul
             val searchIconAlpha by animateFloatAsState(
                 targetValue = if (isSearchPressed && !isSearchSelected) 0.22f else 1f,
-                animationSpec = tween(durationMillis = if (isSearchPressed) 65 else 50),
+                animationSpec = motion.tween(durationMillis = if (isSearchPressed) 65 else 50),
                 label = "SearchIconAlpha"
             )
 
@@ -1679,13 +1682,13 @@ private fun IOS27BottomTabViewContainer(
                             searchAnimationScope.launch {
                                 searchGlassProgressAnim.animateTo(
                                     1f,
-                                    spring(dampingRatio = 0.9f, stiffness = 700f)
+                                    motion.spring(dampingRatio = 0.9f, stiffness = 700f)
                                 )
                             }
                             searchAnimationScope.launch {
                                 searchScaleAnim.animateTo(
                                     1.15f,
-                                    spring(dampingRatio = 0.75f, stiffness = 550f)
+                                    motion.spring(dampingRatio = 0.75f, stiffness = 550f)
                                 )
                             }
 
@@ -1706,33 +1709,33 @@ private fun IOS27BottomTabViewContainer(
                                 currentOnSelectTab("search")
                                 searchAnimationScope.launch {
                                     if (searchScaleAnim.value < 1.13f) {
-                                        searchScaleAnim.animateTo(1.15f, tween(50))
+                                        searchScaleAnim.animateTo(1.15f, motion.tween(50))
                                     }
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        spring(dampingRatio = 0.48f, stiffness = 380f)
+                                        motion.spring(dampingRatio = 0.48f, stiffness = 380f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     if (searchGlassProgressAnim.value < 0.85f) {
-                                        searchGlassProgressAnim.animateTo(1f, tween(50))
+                                        searchGlassProgressAnim.animateTo(1f, motion.tween(50))
                                     }
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.85f, stiffness = 340f)
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 340f)
                                     )
                                 }
                             } else {
                                 searchAnimationScope.launch {
                                     searchScaleAnim.animateTo(
                                         1f,
-                                        spring(dampingRatio = 0.65f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 0.65f, stiffness = 400f)
                                     )
                                 }
                                 searchAnimationScope.launch {
                                     searchGlassProgressAnim.animateTo(
                                         0f,
-                                        spring(dampingRatio = 0.85f, stiffness = 400f)
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 400f)
                                     )
                                 }
                             }

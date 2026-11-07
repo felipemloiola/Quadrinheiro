@@ -46,4 +46,15 @@ class FluidMotionPolicyTest {
         assertEquals(0, fade.durationMillis)
         assertEquals(0, fade.delay)
     }
+
+    @Test fun defaultTweenUsesSub300msAndResponsiveEaseOutStrongCurve() {
+        val defaultTween = AppMotion(reduced = false).tween<Float>()
+        assertTrue("Default UI duration must be under 300ms", defaultTween.durationMillis < 300)
+        assertEquals(AppMotion.UI_ENTER_MS, defaultTween.durationMillis)
+        assertEquals(AppMotion.EaseOutStrong, defaultTween.easing)
+        // Strong ease-out covers >50% of distance in the first 30% of time (responsive start, no ease-in lag)
+        assertTrue(AppMotion.EaseOutStrong.transform(0.30f) > 0.50f)
+        assertTrue(AppMotion.EaseOutQuint.transform(0.30f) > 0.50f)
+        assertTrue(AppMotion.UI_EXIT_MS < AppMotion.UI_ENTER_MS)
+    }
 }

@@ -882,10 +882,11 @@ internal fun CatalogReadingDateAndRereadsSection(
             }
         }
 
+        val calendarMotion = com.example.ui.theme.LocalAppMotion.current
         AnimatedVisibility(
             visible = showMiniCalendar,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expandVertically(calendarMotion.tween(220)) + fadeIn(calendarMotion.tween(180)),
+            exit = shrinkVertically(calendarMotion.tween(160)) + fadeOut(calendarMotion.tween(120))
         ) {
             AppleMiniCalendarPicker(
                 selectedDateStr = draftComic.readDate,

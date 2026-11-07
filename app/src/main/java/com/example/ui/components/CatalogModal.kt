@@ -308,12 +308,6 @@ fun CatalogSheetModal(
     val sheetShape = remember { RoundedRectangle(24f.dp) }
     val sheetBackdrop = rememberLayerBackdrop()
 
-    val targetMaxHeight by animateDpAsState(
-        targetValue = if (isSheetExpanded) 860.dp else 650.dp,
-        animationSpec = motion.spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
-        label = "sheetMaxHeight"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -331,7 +325,7 @@ fun CatalogSheetModal(
                     if (isSheetExpanded) Modifier.fillMaxHeight(0.96f)
                     else Modifier
                         .padding(bottom = 10.dp)
-                        .heightIn(max = targetMaxHeight)
+                        .heightIn(max = 650.dp)
                 )
                 .clip(sheetShape)
                 .clickable(

@@ -7,6 +7,9 @@ Este repositório é um aplicativo **Android nativo** em Kotlin, Jetpack Compose
 - `.claude/skills/quadrinheiro-apple-quality/SKILL.md`: práticas de qualidade e entregas, adaptadas de **claude-code-apple-skills**.
 - `.claude/skills/quadrinheiro-android-ui-review/SKILL.md`: revisão de design e acessibilidade inspirada em **apple-design-skill**.
 - `.claude/skills/quadrinheiro-glass-performance/SKILL.md`: avaliação dos materiais e efeitos ópticos em Compose, com referências ao **Prismal**.
+- `.claude/skills/quadrinheiro-animation-performance/SKILL.md`: orçamento de quadro (8ms/120Hz), priorização de `graphicsLayer` na GPU e eliminação de re-layout por frame, adaptada de **animation-performance** (Emil Kowalski).
+- `.claude/skills/quadrinheiro-review-animations/SKILL.md`: os 10 padrões inegociáveis de revisão de movimento, curvas `ease-out` fortes, duração sub-300ms e respeito integral a `LocalAppMotion.reduced`, adaptada de **review-animations**.
+- `.claude/skills/quadrinheiro-improve-animations/SKILL.md`: fluxo de auditoria e geração de planos autocontidos em `plans/`, adaptada de **improve-animations**.
 
 ## Regras técnicas
 

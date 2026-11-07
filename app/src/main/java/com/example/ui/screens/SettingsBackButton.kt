@@ -28,8 +28,11 @@ internal fun SettingsBackButton(onBack: () -> Unit, modifier: Modifier = Modifie
         .clickable(role = Role.Button, onClick = onBack).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Voltar", tint = LocalIOS27Theme.current.textPrimary,
             modifier = Modifier.size(23.dp))
-        AnimatedVisibility(!collapsed, enter = expandHorizontally(motion.spring(1f, 700f)) + fadeIn(),
-            exit = shrinkHorizontally(motion.spring(1f, 700f)) + fadeOut()) {
+        AnimatedVisibility(
+            !collapsed,
+            enter = expandHorizontally(motion.spring(1f, 700f)) + fadeIn(motion.tween(180)),
+            exit = shrinkHorizontally(motion.spring(1f, 700f)) + fadeOut(motion.tween(120))
+        ) {
             Text(label, color = LocalIOS27Theme.current.textPrimary, fontSize = 15.sp,
                 maxLines = 1, modifier = Modifier.padding(end = 6.dp))
         }
