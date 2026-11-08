@@ -108,8 +108,6 @@ data class CloudUserPreferences(
     val showPagesInDiary: Boolean = true,
     val shareStarsMatchTheme: Boolean = true,
     val cachedRecommendationsPayload: String = "",
-    val settingsUpdatedAt: Long = 0L,
-    val launcherIconMode: String = "original",
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
@@ -119,7 +117,23 @@ data class CloudUserPreferences(
 ) {
     @get:com.google.firebase.firestore.Exclude
     val recommendationTasteHash: String
-        get() = cachedRecommendationsPayload.substringBefore('\n', "").take(64)
+        get() = cachedRecommendationsPayload.substringBefore('\n', "").substringBefore('\t').take(64)
+
+    @get:com.google.firebase.firestore.Exclude
+    val settingsUpdatedAt: Long
+        get() {
+            val header = cachedRecommendationsPayload.substringBefore('\n', "")
+            val parts = header.split('\t')
+            return parts.getOrNull(1)?.toLongOrNull() ?: 0L
+        }
+
+    @get:com.google.firebase.firestore.Exclude
+    val launcherIconMode: String
+        get() {
+            val header = cachedRecommendationsPayload.substringBefore('\n', "")
+            val parts = header.split('\t')
+            return parts.getOrNull(2)?.takeIf { it.isNotBlank() } ?: "original"
+        }
 
     @get:com.google.firebase.firestore.Exclude
     val cachedRecommendationsJson: String
@@ -181,9 +195,13 @@ data class CloudUserPreferences(
 
     companion object {
         fun fromAppSettings(s: AppSettings): CloudUserPreferences {
-            val cleanHash = s.recommendationTasteHash.replace("\n", "").take(64)
+            val cleanHash = s.recommendationTasteHash.replace("\n", "").replace("\t", "").take(64)
             val cleanJson = s.cachedRecommendationsJson.take(12288)
-            val payload = if (cleanHash.isEmpty() && cleanJson.isEmpty()) "" else "$cleanHash\n$cleanJson"
+            val cleanMode = s.launcherIconMode.replace("\n", "").replace("\t", "").ifBlank { "original" }.take(30)
+            val cleanUpdatedAt = s.settingsUpdatedAt.coerceAtLeast(0L)
+            val hasMeta = cleanUpdatedAt > 0L || cleanMode != "original"
+            val header = if (hasMeta) "$cleanHash\t$cleanUpdatedAt\t$cleanMode" else cleanHash
+            val payload = if (header.isEmpty() && cleanJson.isEmpty()) "" else "$header\n$cleanJson"
             val cleanFavComics = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
             val cleanFavChars = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4)
             return CloudUserPreferences(
@@ -230,8 +248,6 @@ data class CloudUserPreferences(
                 showPagesInDiary = s.showPagesInDiary,
                 shareStarsMatchTheme = s.shareStarsMatchTheme,
                 cachedRecommendationsPayload = payload,
-                settingsUpdatedAt = s.settingsUpdatedAt,
-                launcherIconMode = s.launcherIconMode.ifBlank { "original" }.take(30),
                 quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
             )
         }
@@ -720,9 +736,7 @@ class QuadrinheiroCloudRepository(
                         autoFillReadDate = (map["autoFillReadDate"] as? Boolean) ?: true,
                         showPagesInDiary = (map["showPagesInDiary"] as? Boolean) ?: true,
                         shareStarsMatchTheme = (map["shareStarsMatchTheme"] as? Boolean) ?: true,
-                        cachedRecommendationsPayload = (map["cachedRecommendationsPayload"] as? String).orEmpty(),
-                        settingsUpdatedAt = (map["settingsUpdatedAt"] as? Number)?.toLong() ?: 0L,
-                        launcherIconMode = (map["launcherIconMode"] as? String).orEmpty().ifBlank { "original" }
+                        cachedRecommendationsPayload = (map["cachedRecommendationsPayload"] as? String).orEmpty()
                     )
                 }.getOrNull()
                 else -> null
