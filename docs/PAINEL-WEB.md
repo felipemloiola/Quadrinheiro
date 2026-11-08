@@ -12,12 +12,13 @@ O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `mai
 - **Integrações:** acompanhamento das integrações de design e ferramentas planejadas.
 - **Performance:** registro manual de medições e avaliação de desempenho.
 - **Decisões:** histórico de decisões e próximos passos.
+- **Notas:** ideias, rascunhos, pesquisas e referências com fotos, busca, fixação e salvamento automático.
 
 ## Dados e sincronização
 
 O botão **Sincronizar GitHub** consulta informações públicas do repositório em modo somente leitura.
 
-As tarefas, decisões, métricas e anotações são salvas localmente no navegador usando `localStorage`. A exportação e importação de JSON permite transferir ou fazer backup do progresso. Os registros não são sincronizados automaticamente entre dispositivos.
+As tarefas, decisões, métricas e textos das notas são salvos localmente no navegador usando `localStorage`. As fotos anexadas às notas ficam no `IndexedDB`, para não sobrecarregar o `localStorage`. A exportação JSON inclui os textos e as imagens referenciadas pelas notas; a importação restaura ambos. Os registros não são sincronizados automaticamente entre dispositivos. Use backups para migrar de aparelho.
 
 ## Emulador removido
 
@@ -43,3 +44,14 @@ O painel adota a linguagem visual do aplicativo Android, referenciada em `app/sr
 - A visão geral mostra um anel de progresso **calculado dos critérios realmente marcados** nas tarefas; não representa evidência nem progresso declarado automaticamente.
 
 **Arquivos:** `docs/index.html` contém os dados e a lógica da interface; `docs/visual.css` contém a camada visual revisada, carregada após os estilos antigos. Para atualizar o visual, altere `visual.css` e, se necessário, incremente o sufixo `?v=...` na referência de `index.html` para limpar caches.
+
+## Notas e anexos de imagens
+
+- Para criar uma nota, abra **Notas → Nova nota**, escreva um título e conteúdo, escolha **Ideia**, **Rascunho**, **Referência** ou **Pesquisa** e feche o editor: as alterações são salvas durante a digitação.
+- Para anexar fotos, use a área **Adicionar fotos**, arraste imagens ou cole uma captura da área de transferência. São permitidas até 10 fotos por nota; arquivos individuais de até 15 MB são reduzidos quando necessário.
+- As notas podem ser pesquisadas, filtradas por categoria, fixadas no topo, editadas e excluídas.
+- As fotos são mantidas em armazenamento **local** do dispositivo/navegador, não em uma nuvem nem publicadas no repositório. Limpar os dados do site poderá apagá-las; faça backups periódicos com **Exportar** (inclui as fotos).
+- Um backup pode ficar grande quando inclui muitas imagens. A importação aceita JSON até 120 MB, substituindo os registros anteriores após confirmação.
+- O painel não sincroniza automaticamente notas entre celular e computador. Para sincronização em nuvem no futuro, será necessário configurar armazenamento privado com autenticação.
+
+Arquivos relacionados: `docs/notes.js` (funcionalidade/IndexedDB) e `docs/notes.css` (interface da seção Notas).
