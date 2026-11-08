@@ -1,40 +1,40 @@
-# Painel web do Quadrinheiro
+# Painel do Quadrinheiro
 
-Site: [Quadrinheiro · Projeto](https://felipemloiola.github.io/Quadrinheiro/) (após ativar o GitHub Pages).
+Site público: https://felipemloiola.github.io/Quadrinheiro/
 
-## Publicação automática sem baixar `index.html`
+Publicado automaticamente pelo GitHub Pages a partir da branch `main`, diretório `docs/`. Atualize `docs/index.html` no repositório para publicar mudanças sem redistribuir arquivos HTML.
 
-O site está em `docs/index.html`, acompanhado de `docs/quadrinheiro-logo.svg`. O GitHub Pages publica o diretório `docs/` da branch `main`. Ative uma única vez em:
+## Emulador Android dentro do site — Appetize
 
-**Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: main → Folder: /docs → Save.**
+A aba **Emulador** incorpora o player Android do [Appetize](https://appetize.io) por um iframe oficialmente suportado. O APK real é executado na nuvem: o site funciona em PCs, celulares e tablets, sem instalação de Android Studio.
 
-Endereço esperado: https://felipemloiola.github.io/Quadrinheiro/
+### Ativação única
 
-Atualize o arquivo `docs/index.html` no repositório para publicar futuras versões automaticamente; não é preciso baixar nem instalar o HTML. Pode haver atraso de publicação/cache e basta atualizar a página.
+1. Crie uma conta em https://appetize.io e gere um token de API em Organization → API Token.
+2. No GitHub: **Settings → Secrets and variables → Actions → New repository secret**. Nome exato: `APPETIZE_API_TOKEN`; valor: token secreto.
+3. Execute **Actions → Atualizar APK no Appetize → Run workflow** na branch `main`.
+4. O workflow baixa `quadrinheiro.apk` da release mais recente, envia ao Appetize e cria/atualiza `docs/emulator-build.json` com o **Build ID público** (nunca com o token).
+5. Abra https://felipemloiola.github.io/Quadrinheiro/#emulator e clique em **Play** no player. Em novas releases, o workflow repete o upload e atualiza a referência automaticamente.
 
-Se usava o site como arquivo local, os dados de backlog, métricas e decisões ficam em `localStorage` do endereço antigo. Use **Exportar** antes e **Importar** no site publicado, uma vez, para migrar os registros.
+O player só abre uma sessão Android quando o usuário toca em Play. Feche a sessão ao terminar para não desperdiçar a franquia mensal. Consulte o plano gratuito no Appetize: minutos são limitados.
 
-## SpawnDroid
+### Identificador manual
 
-A aba Emulador apresenta o acesso direto ao app já enviado na sua conta:
-https://app.spawndroid.io/dashboard/apps/quadrinheiro
+Se um APK já estiver publicado no Appetize, é possível inserir seu **Build ID público** na aba Emulador, sem GitHub Actions. O navegador salva essa preferência localmente, sem armazenar credenciais. Ela prevalece sobre o identificador automático até ser alterada; para acompanhar as novas releases automaticamente, não preencha o campo manual.
 
-O console funciona em uma aba autenticada. A tentativa de incorporar o console via `iframe` é **experimental**: não há garantia documentada de que o provedor permita incorporação ou cookies de sessão por outro site. O link direto é o caminho recomendado. O painel não simula uma sessão nem conhece seu status remoto.
+### Arquivos
 
-### Atualização automática do APK
+- `docs/index.html`: painel, métricas, backlog e player Appetize.
+- `docs/quadrinheiro-logo.svg`: logotipo oficial do projeto.
+- `.github/workflows/sync-appetize.yml`: upload e atualização do build público.
+- `docs/emulator-build.json`: criado automaticamente pelo workflow após seu primeiro sucesso.
 
-Workflow: `.github/workflows/sync-spawndroid.yml`.
+### Dados locais
 
-1. SpawnDroid → **API & CI/CD → API Keys** → crie chave com scope `upload`.
-2. GitHub → Settings → Secrets and variables → Actions → New repository secret. Nome exato: `SPAWNDROID_API_KEY`.
-3. GitHub Actions → **Atualizar APK no SpawnDroid** → **Run workflow**.
+Backlog, métricas, decisões e checklist são salvos em localStorage no navegador. Para migrar de um `index.html` local, exporte JSON na instalação anterior e importe no endereço publicado.
 
-Depois disso, toda nova release com `quadrinheiro.apk` será enviada e o workflow também fará reenvio periódico para mitigar o prazo de retenção de 7 dias do plano Hobby. Upload **não inicia** uma sessão e **não consome** device-minutes. Abra o console manualmente para iniciar o teste.
+### Observações
 
-O plano Hobby exibido na captura do usuário permite **200 device-minutes por mês**, com uma sessão paralela; o consumo ocorre enquanto o dispositivo está ativo. Pare a sessão no SpawnDroid ao terminar.
+O envio do APK e o embed são suportados oficialmente, mas a primeira sessão real ainda depende da configuração do token e da franquia do Appetize. O painel não pode acessar a chave API e não altera o repositório diretamente.
 
-Nunca coloque chave API no HTML ou no repositório. Somente secrets do GitHub Actions.
-
-## Observações
-
-O site é estático e não grava no GitHub: tarefas, decisões e notas são salvas no navegador local. O sync GitHub lê apenas informações públicas.
+Documentação: https://docs.appetize.io/platform/embedding-apps
