@@ -1,0 +1,63 @@
+name: Atualizar APK no SpawnDroid
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  schedule:
+    # Reenvio gratuito a cada ~4 dias: o Hobby retém builds por 7 dias.
+    - cron: "17 5 */4 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quadrinheiro-spawndroid-upload
+  cancel-in-progress: false
+
+jobs:
+  publish-build:
+    if: github.repository == 'felipemloiola/Quadrinheiro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SPAWNDROID_API_KEY: ${{ secrets.SPAWNDROID_API_KEY }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Verificar credencial do SpawnDroid
+        id: credential
+        run: |
+          if [ -z "$SPAWNDROID_API_KEY" ]; then
+            echo "::notice::Cadastre o secret SPAWNDROID_API_KEY em Settings → Secrets and variables → Actions (scope upload)."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Baixar APK da release mais recente
+        if: steps.credential.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          TAG="$RELEASE_TAG"
+          if [ -z "$TAG" ]; then
+            TAG="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          fi
+          test -n "$TAG"
+          mkdir -p .spawn-build
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'quadrinheiro.apk' --dir .spawn-build --clobber
+          test -s .spawn-build/quadrinheiro.apk
+          echo "Release: $TAG"
+
+      - name: Enviar APK para SpawnDroid
+        if: steps.credential.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          # Apenas armazenamento do build: não inicia dispositivos nem consome minutos.
+          RESPONSE="$(curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST 'https://app.spawndroid.io/api/apps' \
+            --header "Authorization: Bearer $SPAWNDROID_API_KEY" \
+            --form 'file=@.spawn-build/quadrinheiro.apk;type=application/vnd.android.package-archive')"
+          printf '%s' "$RESPONSE" | jq -e '.app.slug' >/dev/null
+          echo "APK enviado e registrado no SpawnDroid."
+          printf '%s' "$RESPONSE" | jq '{slug: .app.slug, parsed: .parsed}'
