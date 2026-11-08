@@ -1,40 +1,32 @@
-# Painel do Quadrinheiro
+# Painel web do Quadrinheiro
 
-Site público: https://felipemloiola.github.io/Quadrinheiro/
+**Site publicado:** https://felipemloiola.github.io/Quadrinheiro/
 
-Publicado automaticamente pelo GitHub Pages a partir da branch `main`, diretório `docs/`. Atualize `docs/index.html` no repositório para publicar mudanças sem redistribuir arquivos HTML.
+O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `main` e da pasta `docs/`. Para atualizar o site, basta modificar `docs/index.html` no GitHub. Não é necessário baixar ou instalar novos arquivos.
 
-## Emulador Android dentro do site — Appetize
+## Seções disponíveis
 
-A aba **Emulador** incorpora o player Android do [Appetize](https://appetize.io) por um iframe oficialmente suportado. O APK real é executado na nuvem: o site funciona em PCs, celulares e tablets, sem instalação de Android Studio.
+- **Visão geral:** indicadores de tarefas, progresso e últimos marcos.
+- **Repositório:** estrutura e referências ao projeto Android.
+- **Backlog:** melhorias, prioridades, responsáveis, status e evidências.
+- **Integrações:** acompanhamento das integrações de design e ferramentas planejadas.
+- **Performance:** registro manual de medições e avaliação de desempenho.
+- **Decisões:** histórico de decisões e próximos passos.
 
-### Ativação única
+## Dados e sincronização
 
-1. Crie uma conta em https://appetize.io e gere um token de API em Organization → API Token.
-2. No GitHub: **Settings → Secrets and variables → Actions → New repository secret**. Nome exato: `APPETIZE_API_TOKEN`; valor: token secreto.
-3. Execute **Actions → Atualizar APK no Appetize → Run workflow** na branch `main`.
-4. O workflow baixa `quadrinheiro.apk` da release mais recente, envia ao Appetize e cria/atualiza `docs/emulator-build.json` com o **Build ID público** (nunca com o token).
-5. Abra https://felipemloiola.github.io/Quadrinheiro/#emulator e clique em **Play** no player. Em novas releases, o workflow repete o upload e atualiza a referência automaticamente.
+O botão **Sincronizar GitHub** consulta informações públicas do repositório em modo somente leitura.
 
-O player só abre uma sessão Android quando o usuário toca em Play. Feche a sessão ao terminar para não desperdiçar a franquia mensal. Consulte o plano gratuito no Appetize: minutos são limitados.
+As tarefas, decisões, métricas e anotações são salvas localmente no navegador usando `localStorage`. A exportação e importação de JSON permite transferir ou fazer backup do progresso. Os registros não são sincronizados automaticamente entre dispositivos.
 
-### Identificador manual
+## Emulador removido
 
-Se um APK já estiver publicado no Appetize, é possível inserir seu **Build ID público** na aba Emulador, sem GitHub Actions. O navegador salva essa preferência localmente, sem armazenar credenciais. Ela prevalece sobre o identificador automático até ser alterada; para acompanhar as novas releases automaticamente, não preencha o campo manual.
+A seção de emulador Android foi removida por solicitação do usuário. Também foram removidos do repositório os workflows `sync-appetize.yml` e `sync-spawndroid.yml`, além da configuração pública do build. Nenhum serviço externo de emulação é carregado pelo painel.
 
-### Arquivos
+Segredos eventualmente cadastrados no GitHub permanecem armazenados até serem excluídos manualmente em **Settings → Secrets and variables → Actions**; após a remoção dos workflows, o site não utiliza `APPETIZE_API_TOKEN` nem `SPAWNDROID_API_KEY`.
 
-- `docs/index.html`: painel, métricas, backlog e player Appetize.
-- `docs/quadrinheiro-logo.svg`: logotipo oficial do projeto.
-- `.github/workflows/sync-appetize.yml`: upload e atualização do build público.
-- `docs/emulator-build.json`: criado automaticamente pelo workflow após seu primeiro sucesso.
+## Arquivos
 
-### Dados locais
-
-Backlog, métricas, decisões e checklist são salvos em localStorage no navegador. Para migrar de um `index.html` local, exporte JSON na instalação anterior e importe no endereço publicado.
-
-### Observações
-
-O envio do APK e o embed são suportados oficialmente, mas a primeira sessão real ainda depende da configuração do token e da franquia do Appetize. O painel não pode acessar a chave API e não altera o repositório diretamente.
-
-Documentação: https://docs.appetize.io/platform/embedding-apps
+- `docs/index.html`: painel web.
+- `docs/quadrinheiro-logo.svg`: logotipo original.
+- `docs/PAINEL-WEB.md`: esta documentação.
