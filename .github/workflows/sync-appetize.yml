@@ -1,0 +1,94 @@
+name: Atualizar APK no Appetize
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quadrinheiro-appetize-upload
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'felipemloiola/Quadrinheiro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Verificar configuração
+        run: |
+          if [ -z "$APPETIZE_API_TOKEN" ]; then
+            echo "::error::Cadastre APPETIZE_API_TOKEN em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Baixar APK da última release
+        id: apk
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          fi
+          mkdir -p .appetize
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'quadrinheiro.apk' --dir .appetize --clobber
+          test -s .appetize/quadrinheiro.apk
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "APK obtido: $tag"
+
+      - name: Recuperar Build ID anterior
+        id: previous
+        run: |
+          key=""
+          if [ -f docs/emulator-build.json ]; then
+            key="$(jq -r '.publicKey // ""' docs/emulator-build.json)"
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Enviar ou atualizar APK no Appetize
+        uses: appetizeio/github-action-appetize@v1.1.0
+        id: upload
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          publicKey: ${{ steps.previous.outputs.key }}
+          appFile: .appetize/quadrinheiro.apk
+          platform: android
+          fileType: apk
+          note: Quadrinheiro ${{ steps.apk.outputs.tag }}
+
+      - name: Publicar Build ID público no site
+        env:
+          BUILD_ID: ${{ steps.upload.outputs.publicKey }}
+          VERSION: ${{ steps.apk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$BUILD_ID" =~ ^[a-zA-Z0-9_-]{5,128}$ ]]; then
+            echo "::error::Build ID público ausente ou inválido."
+            exit 1
+          fi
+          jq -n --arg publicKey "$BUILD_ID" --arg release "$VERSION" \
+            --arg updatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{provider:"appetize",publicKey:$publicKey,release:$release,updatedAt:$updatedAt}' > /tmp/emulator-build.json
+          path="repos/$GITHUB_REPOSITORY/contents/docs/emulator-build.json"
+          payload="$(jq -n --arg message "chore(emulator): publish Appetize build for $VERSION" \
+            --arg content "$(base64 -w0 /tmp/emulator-build.json)" \
+            '{message:$message,content:$content,branch:"main"}')"
+          sha="$(gh api "$path" --jq '.sha' 2>/dev/null || true)"
+          if [ -n "$sha" ]; then
+            payload="$(printf '%s' "$payload" | jq --arg sha "$sha" '. + {sha:$sha}')"
+          fi
+          printf '%s' "$payload" > /tmp/gh-pages-payload.json
+          gh api "$path" --method PUT --input /tmp/gh-pages-payload.json --silent
+          echo "Publicação do build $VERSION concluída. O player do site lerá o novo Build ID."
