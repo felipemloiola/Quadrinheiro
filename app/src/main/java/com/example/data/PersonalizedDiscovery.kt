@@ -269,7 +269,13 @@ object PersonalizedDiscovery {
             } else null
         }.sortedByDescending { it.score }
 
-        val effectiveScored = if (scored.isNotEmpty()) scored else {
+        val hasPersonalSignals = library.isNotEmpty() ||
+            settings.profileFavoriteComicIds.isNotEmpty() ||
+            settings.profileFavoriteCharacters.isNotEmpty()
+
+        val effectiveScored = if (scored.isNotEmpty()) {
+            scored
+        } else if (!hasPersonalSignals) {
             candidates.map { candidate ->
                 val feat = features(candidate)
                 val pub = candidate.publisher.lowercase()
@@ -285,6 +291,8 @@ object PersonalizedDiscovery {
                 if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
                 RecommendedComic(candidate, reason, score, "CATALOG_SHOWCASE")
             }.sortedByDescending { it.score }
+        } else {
+            emptyList()
         }
 
         // Aplica diversidade MMR: no máximo 2 edições da mesma série e 3 do mesmo autor no topo

@@ -49,26 +49,26 @@ fun LauncherIconPicker(
         else -> LauncherIconStyle.fromThemeId(currentThemeId)
     }
 
-    // Cor do fundo do preview baseada no estilo ativo
+    // Cor do fundo do preview:
+    // Original: fundo neutro do ícone clássico (#1C1C1E no escuro / #F3F4F7 no claro)
+    // Tema: fundo do tema ativo do app (claro ou escuro)
+    val isThemeMode = currentMode == "theme"
     val previewBgColor by animateColorAsState(
-        targetValue = when (activeStyle) {
-            LauncherIconStyle.DEFAULT -> if (theme.isDark) Color(0xFF1C1C1E) else Color(0xFFF3F4F7)
-            LauncherIconStyle.BLACK -> Color(0xFF101010)
-            LauncherIconStyle.WHITE -> Color(0xFFF8F9FA)
-            LauncherIconStyle.PURPLE -> Color(0xFF8B5CF6)
-            LauncherIconStyle.BLUE -> Color(0xFF2E7CF6)
-            LauncherIconStyle.GREEN -> Color(0xFF28A745)
-            LauncherIconStyle.ORANGE -> Color(0xFFE67E22)
-            LauncherIconStyle.RED -> Color(0xFFD9383A)
+        targetValue = if (!isThemeMode) {
+            if (theme.isDark) Color(0xFF1C1C1E) else Color(0xFFF3F4F7)
+        } else {
+            if (theme.isDark) Color(0xFF101010) else Color(0xFFF3F4F7)
         },
         animationSpec = tween(durationMillis = 200),
         label = "launcher_preview_bg"
     )
 
-    val logoVariant = when (activeStyle) {
-        LauncherIconStyle.DEFAULT -> if (theme.isDark) QuadrinheiroLogoVariant.OnDark else QuadrinheiroLogoVariant.Primary
-        LauncherIconStyle.WHITE -> QuadrinheiroLogoVariant.Primary
-        else -> QuadrinheiroLogoVariant.OnDark
+    // Original: sempre exibe o logotipo colorido cromático original (QuadrinheiroLogoVariant.Primary)
+    // Tema: exibe o "Q" colorido com a cor de destaque (theme.accent) sobre o fundo do tema ativo
+    val logoVariant = if (!isThemeMode) {
+        QuadrinheiroLogoVariant.Primary
+    } else {
+        QuadrinheiroLogoVariant.OnDark
     }
 
     fun applyMode(newMode: String) {
@@ -93,7 +93,7 @@ fun LauncherIconPicker(
                     .size(46.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(previewBgColor)
-                    .border(0.5.dp, if (activeStyle == LauncherIconStyle.WHITE) Color(0x33000000) else Color(0x22FFFFFF), RoundedCornerShape(12.dp)),
+                    .border(0.5.dp, if (theme.isDark) Color(0x33FFFFFF) else Color(0x1F000000), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 QuadrinheiroLogo(logoVariant, Modifier.size(34.dp))
@@ -106,9 +106,10 @@ fun LauncherIconPicker(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = when (currentMode) {
-                        "theme" -> "Tema ativo (${activeStyle.label})"
-                        else -> "Padrão monocromático"
+                    text = if (isThemeMode) {
+                        "Tema ativo (${if (theme.isDark) "Escuro" else "Claro"} • ${activeStyle.label})"
+                    } else {
+                        "Original colorido"
                     },
                     color = theme.textSecondary,
                     fontSize = 12.sp,
@@ -116,7 +117,7 @@ fun LauncherIconPicker(
                 )
             }
             AppleMenuPicker(
-                value = if (currentMode == "theme") "theme" else "original",
+                value = if (isThemeMode) "theme" else "original",
                 onChange = { selected ->
                     applyMode(selected)
                 },

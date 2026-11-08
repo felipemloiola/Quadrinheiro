@@ -732,7 +732,7 @@ class QuadrinheiroViewModel(
                                         _shelfSort.value = remoteSettings.defaultShelfSort
                                     }
                                     runCatching {
-                                        LauncherAppearance.setLauncherMode(appContext, remoteSettings.launcherIconMode, remoteSettings.themeId)
+                                        LauncherAppearance.setLauncherMode(appContext, remoteSettings.launcherIconMode, remoteSettings.themeId, remoteSettings.colorScheme)
                                     }
                                     changedAny = true
                                 }
@@ -1140,7 +1140,7 @@ class QuadrinheiroViewModel(
             _activeReadingComicId.value = restoredActiveComicId
             runCatching { savedStateHandle["activeReadingComicId"] = restoredActiveComicId }
             runCatching {
-                LauncherAppearance.setLauncherMode(appContext, savedAccount.settings.launcherIconMode, savedAccount.settings.themeId)
+                LauncherAppearance.setLauncherMode(appContext, savedAccount.settings.launcherIconMode, savedAccount.settings.themeId, savedAccount.settings.colorScheme)
             }
         } else {
             val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
@@ -1956,7 +1956,7 @@ class QuadrinheiroViewModel(
 
         // Sincroniza LauncherAppearance com as preferências visuais
         runCatching {
-            LauncherAppearance.setLauncherMode(appContext, nextSettings.launcherIconMode, nextSettings.themeId)
+            LauncherAppearance.setLauncherMode(appContext, nextSettings.launcherIconMode, nextSettings.themeId, nextSettings.colorScheme)
         }
 
         val nextProfile = _profile.value.copy(

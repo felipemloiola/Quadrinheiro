@@ -262,6 +262,12 @@ class MainActivity : ComponentActivity() {
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        LauncherAppearance.foreground = false
+        LauncherAppearance.applyWhenBackground(this)
+    }
+
     override fun onStop() {
         super.onStop()
         LauncherAppearance.foreground = false
