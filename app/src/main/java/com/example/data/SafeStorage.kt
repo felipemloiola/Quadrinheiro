@@ -1519,6 +1519,8 @@ class SafeStorage(context: Context) {
         }
         put("cachedRecommendationsJson", safeRecs)
         put("recommendationTasteHash", s.recommendationTasteHash.take(64))
+        put("settingsUpdatedAt", s.settingsUpdatedAt)
+        put("launcherIconMode", s.launcherIconMode.take(30))
         val tagsArr = JSONArray()
         s.quickReviewTags.forEach { tagsArr.put(it) }
         put("quickReviewTags", tagsArr)
@@ -1585,6 +1587,8 @@ class SafeStorage(context: Context) {
             shareStarsMatchTheme = obj.optBoolean("shareStarsMatchTheme", def.shareStarsMatchTheme),
             cachedRecommendationsJson = validCachedRecs,
             recommendationTasteHash = obj.optString("recommendationTasteHash", def.recommendationTasteHash).take(64),
+            settingsUpdatedAt = obj.optLong("settingsUpdatedAt", 0L),
+            launcherIconMode = obj.optString("launcherIconMode", def.launcherIconMode).take(30),
             quickReviewTags = if (tagsArr != null) tagsList else def.quickReviewTags
         )
     }

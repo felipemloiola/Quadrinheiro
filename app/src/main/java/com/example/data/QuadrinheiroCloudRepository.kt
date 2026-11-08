@@ -108,6 +108,8 @@ data class CloudUserPreferences(
     val showPagesInDiary: Boolean = true,
     val shareStarsMatchTheme: Boolean = true,
     val cachedRecommendationsPayload: String = "",
+    val settingsUpdatedAt: Long = 0L,
+    val launcherIconMode: String = "original",
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",
@@ -171,6 +173,8 @@ data class CloudUserPreferences(
         shareStarsMatchTheme = shareStarsMatchTheme,
         cachedRecommendationsJson = cachedRecommendationsJson,
         recommendationTasteHash = recommendationTasteHash,
+        settingsUpdatedAt = settingsUpdatedAt,
+        launcherIconMode = launcherIconMode.ifBlank { "original" },
         quickReviewTags = quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
         )
     }
@@ -226,6 +230,8 @@ data class CloudUserPreferences(
                 showPagesInDiary = s.showPagesInDiary,
                 shareStarsMatchTheme = s.shareStarsMatchTheme,
                 cachedRecommendationsPayload = payload,
+                settingsUpdatedAt = s.settingsUpdatedAt,
+                launcherIconMode = s.launcherIconMode.ifBlank { "original" }.take(30),
                 quickReviewTags = s.quickReviewTags.map { it.trim().take(80) }.filter { it.isNotEmpty() }.take(40)
             )
         }
@@ -670,6 +676,57 @@ class QuadrinheiroCloudRepository(
                 is Number -> rawUpdatedAt.toLong()
                 else -> 0L
             }
+            val rawPrefs = get("preferences")
+            val parsedPrefs = when (rawPrefs) {
+                is Map<*, *> -> runCatching {
+                    val map = rawPrefs as Map<String, Any?>
+                    CloudUserPreferences(
+                        profileBannerUrl = (map["profileBannerUrl"] as? String).orEmpty(),
+                        profileShowcaseUpdatedAt = (map["profileShowcaseUpdatedAt"] as? Number)?.toLong() ?: 0L,
+                        themeId = (map["themeId"] as? String).orEmpty().ifBlank { "SYSTEM_MONO" },
+                        colorScheme = (map["colorScheme"] as? String).orEmpty().ifBlank { "system" },
+                        glassLevel = (map["glassLevel"] as? Number)?.toInt() ?: 26,
+                        glassVariant = (map["glassVariant"] as? String).orEmpty().ifBlank { "regular" },
+                        edgeRefraction = (map["edgeRefraction"] as? Boolean) ?: true,
+                        glassIntensity = (map["glassIntensity"] as? Number)?.toDouble() ?: 1.0,
+                        glassBlurIntensity = (map["glassBlurIntensity"] as? Number)?.toDouble() ?: 1.0,
+                        enableLensRefraction = (map["enableLensRefraction"] as? Boolean) ?: true,
+                        enableChromaticAberration = (map["enableChromaticAberration"] as? Boolean) ?: true,
+                        glassOpacity = (map["glassOpacity"] as? Number)?.toDouble() ?: 1.0,
+                        backgroundExtension = (map["backgroundExtension"] as? Boolean) ?: true,
+                        showBottomAccessory = (map["showBottomAccessory"] as? Boolean) ?: true,
+                        showReadingNowBar = (map["showReadingNowBar"] as? Boolean) ?: false,
+                        showFloatingMenu = (map["showFloatingMenu"] as? Boolean) ?: false,
+                        minimizeTabBarOnScroll = (map["minimizeTabBarOnScroll"] as? Boolean) ?: true,
+                        reduceTransparency = (map["reduceTransparency"] as? Boolean) ?: false,
+                        increaseContrast = (map["increaseContrast"] as? Boolean) ?: false,
+                        boldText = (map["boldText"] as? Boolean) ?: false,
+                        dynamicTypeScale = (map["dynamicTypeScale"] as? Number)?.toInt() ?: 100,
+                        reduceMotion = (map["reduceMotion"] as? Boolean) ?: false,
+                        onOffLabels = (map["onOffLabels"] as? Boolean) ?: false,
+                        shelfColumns = (map["shelfColumns"] as? Number)?.toInt() ?: 3,
+                        showProgressOnCovers = (map["showProgressOnCovers"] as? Boolean) ?: true,
+                        showRatingsOnGrid = (map["showRatingsOnGrid"] as? Boolean) ?: true,
+                        spine3dEffect = (map["spine3dEffect"] as? Boolean) ?: true,
+                        defaultShelfSort = (map["defaultShelfSort"] as? String).orEmpty().ifBlank { "RECENT" },
+                        shelfLayout = (map["shelfLayout"] as? String).orEmpty().ifBlank { "grid" },
+                        defaultFormat = (map["defaultFormat"] as? String).orEmpty().ifBlank { "Encadernado (TPB)" },
+                        searchLanguage = (map["searchLanguage"] as? String).orEmpty().ifBlank { "ALL" },
+                        searchProvider = (map["searchProvider"] as? String).orEmpty().ifBlank { "MULTI" },
+                        hdCovers = (map["hdCovers"] as? Boolean) ?: true,
+                        spoilerProtection = (map["spoilerProtection"] as? Boolean) ?: false,
+                        halfStarRatings = (map["halfStarRatings"] as? Boolean) ?: true,
+                        allowRereads = (map["allowRereads"] as? Boolean) ?: true,
+                        autoFillReadDate = (map["autoFillReadDate"] as? Boolean) ?: true,
+                        showPagesInDiary = (map["showPagesInDiary"] as? Boolean) ?: true,
+                        shareStarsMatchTheme = (map["shareStarsMatchTheme"] as? Boolean) ?: true,
+                        cachedRecommendationsPayload = (map["cachedRecommendationsPayload"] as? String).orEmpty(),
+                        settingsUpdatedAt = (map["settingsUpdatedAt"] as? Number)?.toLong() ?: 0L,
+                        launcherIconMode = (map["launcherIconMode"] as? String).orEmpty().ifBlank { "original" }
+                    )
+                }.getOrNull()
+                else -> null
+            }
             CloudUserProfile(
                 id = id,
                 ownerId = getString("ownerId").orEmpty().ifBlank { id },
@@ -684,6 +741,7 @@ class QuadrinheiroCloudRepository(
                 dailyPagesGoal = (getLong("dailyPagesGoal") ?: 30L).toInt(),
                 showGoalOnHome = getBoolean("showGoalOnHome") ?: true,
                 activeReadingComicId = getString("activeReadingComicId").orEmpty(),
+                preferences = parsedPrefs,
                 updatedAtMillis = tsMillis,
                 updatedAt = rawUpdatedAt as? Timestamp
             )
@@ -983,10 +1041,10 @@ class QuadrinheiroCloudRepository(
                 val isTakenByAnotherUser = targetHandleSnap?.exists() == true &&
                     targetOwnerId.isNotBlank() &&
                     targetOwnerId != userId
-                val isTemplateDefaultHandle = handleKey == "felipe_hqs" || handleKey == "convidado"
+                val isTemplateDefaultHandle = handleKey == "felipe_hqs" || handleKey == "felipe" || handleKey == "convidado" || handleKey.startsWith("leitor")
 
                 if (isTakenByAnotherUser && (!strictHandleReservation || isTemplateDefaultHandle)) {
-                    // Se o handle padrão (ex: @felipe_hqs) já pertence a outra conta no Firestore,
+                    // Se o handle padrão (ex: @felipe ou @felipe_hqs) já pertence a outra conta no Firestore,
                     // preserva o handle anterior do próprio usuário ou gera um identificador exclusivo
                     // para garantir que o perfil, metas, foto e activeReadingComicId sejam salvos!
                     val fallbackKey = if (oldHandleKey.isNotBlank() && oldHandleKey != handleKey) {
@@ -1024,14 +1082,25 @@ class QuadrinheiroCloudRepository(
                     updatedAt = null
                 )
 
-                kotlinx.coroutines.withTimeout(3500L) {
-                    db.runBatch { batch ->
-                        batch.set(db.collection("usernames").document(handleKey), reservation)
-                        if (oldShouldDelete) {
-                            batch.delete(db.collection("usernames").document(oldHandleKey))
-                        }
-                        batch.set(userDocRef, docData)
-                    }.await()
+                val batchSucceeded = runCatching {
+                    kotlinx.coroutines.withTimeout(3500L) {
+                        db.runBatch { batch ->
+                            batch.set(db.collection("usernames").document(handleKey), reservation)
+                            if (oldShouldDelete) {
+                                batch.delete(db.collection("usernames").document(oldHandleKey))
+                            }
+                            batch.set(userDocRef, docData)
+                        }.await()
+                    }
+                    true
+                }.getOrElse { false }
+
+                if (!batchSucceeded) {
+                    // Fallback imediato: se a reserva em /usernames/ falhar por qualquer motivo de permissão ou disputa,
+                    // salva o documento do usuário diretamente para NUNCA perder as preferências e configurações da conta!
+                    kotlinx.coroutines.withTimeout(3500L) {
+                        userDocRef.set(docData).await()
+                    }
                 }
                 StorageWriteTelemetry.recordFirestoreProfileWrite()
             } else {

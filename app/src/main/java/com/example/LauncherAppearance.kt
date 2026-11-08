@@ -14,18 +14,54 @@ object LauncherAppearance {
     internal const val NIGHT = "com.example.LauncherNight"
     private const val PREFS = "launcher_appearance"
     fun followsApp(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("follow_app", false)
+    fun selectedMode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("launcher_mode", if (followsApp(context)) "theme" else "original") ?: "original"
+
     fun selected(context: Context): LauncherIconStyle {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return if (followsApp(context)) LauncherIconStyle.fromId(prefs.getString("accent", "black")) else LauncherIconStyle.DEFAULT
+        val mode = prefs.getString("launcher_mode", if (prefs.getBoolean("follow_app", false)) "theme" else "original") ?: "original"
+        return when (mode) {
+            "original", "default" -> LauncherIconStyle.DEFAULT
+            "theme" -> {
+                val themeId = prefs.getString("theme_id", "SYSTEM_MONO")
+                LauncherIconStyle.fromThemeId(themeId)
+            }
+            else -> LauncherIconStyle.fromId(mode)
+        }
     }
+
     fun setFollowsApp(context: Context, follow: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("follow_app", follow).apply()
+        val mode = if (follow) "theme" else "original"
+        setLauncherMode(context, mode)
     }
-    fun rememberAccent(context: Context, themeId: String) {
-        val id = if (themeId == "SYSTEM_MONO") "black" else com.example.ui.theme.AppTheme.fromId(themeId).name.lowercase()
+
+    fun setLauncherMode(context: Context, mode: String, themeId: String? = null) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getString("accent", null) != id) prefs.edit().putString("accent", id).apply()
+        val editor = prefs.edit()
+            .putString("launcher_mode", mode)
+            .putBoolean("follow_app", mode != "original" && mode != "default")
+        if (!themeId.isNullOrBlank()) {
+            editor.putString("theme_id", themeId)
+            val mappedStyle = LauncherIconStyle.fromThemeId(themeId)
+            editor.putString("accent", mappedStyle.id)
+        } else if (mode != "theme" && mode != "original" && mode != "default") {
+            editor.putString("accent", mode)
+        }
+        editor.apply()
+        scheduleBackgroundSync(context)
     }
+
+    fun rememberAccent(context: Context, themeId: String) {
+        val mappedStyle = LauncherIconStyle.fromThemeId(themeId)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("theme_id", themeId)
+            .putString("accent", mappedStyle.id)
+            .apply()
+        if (selectedMode(context) == "theme") {
+            scheduleBackgroundSync(context)
+        }
+    }
+
     fun applyWhenBackground(context: Context) {
         if (!foreground) runCatching { sync(context.applicationContext) }
     }
@@ -35,7 +71,8 @@ object LauncherAppearance {
                 .setInitialDelay(5, TimeUnit.SECONDS).build()) }
     }
     fun select(context: Context, style: LauncherIconStyle) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("follow_app", style != LauncherIconStyle.DEFAULT).putString("accent", style.id).apply()
+        val mode = if (style == LauncherIconStyle.DEFAULT) "original" else style.id
+        setLauncherMode(context, mode)
     }
     internal fun aliasFor(style: LauncherIconStyle, night: Boolean) = if (style == LauncherIconStyle.DEFAULT) { if (night) NIGHT else DAY } else style.alias + if (night) "Night" else "Day"
     @Synchronized

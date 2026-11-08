@@ -8,6 +8,7 @@ import android.content.Context
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.example.LauncherAppearance
 import com.example.data.CloudAuthUser
 import com.example.data.CuratedCatalog
 import com.example.data.MultiApiSearchEngine
@@ -633,7 +634,46 @@ class QuadrinheiroViewModel(
             settings.profileShowcaseUpdatedAt,
             cleanComics.hashCode(),
             cleanChars.hashCode(),
-            cleanDetails.hashCode()
+            cleanDetails.hashCode(),
+            settings.themeId,
+            settings.colorScheme,
+            settings.glassLevel,
+            settings.glassVariant,
+            settings.edgeRefraction,
+            settings.glassIntensity,
+            settings.glassBlurIntensity,
+            settings.enableLensRefraction,
+            settings.enableChromaticAberration,
+            settings.glassOpacity,
+            settings.backgroundExtension,
+            settings.showBottomAccessory,
+            settings.showReadingNowBar,
+            settings.showFloatingMenu,
+            settings.minimizeTabBarOnScroll,
+            settings.reduceTransparency,
+            settings.increaseContrast,
+            settings.boldText,
+            settings.dynamicTypeScale,
+            settings.reduceMotion,
+            settings.onOffLabels,
+            settings.shelfColumns,
+            settings.showProgressOnCovers,
+            settings.showRatingsOnGrid,
+            settings.spine3dEffect,
+            settings.defaultShelfSort,
+            settings.shelfLayout,
+            settings.defaultFormat,
+            settings.searchLanguage,
+            settings.searchProvider,
+            settings.hdCovers,
+            settings.spoilerProtection,
+            settings.halfStarRatings,
+            settings.allowRereads,
+            settings.autoFillReadDate,
+            settings.showPagesInDiary,
+            settings.shareStarsMatchTheme,
+            settings.settingsUpdatedAt,
+            settings.launcherIconMode
         ).joinToString("|")
     }
 
@@ -674,7 +714,12 @@ class QuadrinheiroViewModel(
                                     }
                                     changedAny = true
                                 }
-                                if (!shouldPushLocal && remoteSettings != null && remoteSettings != _appSettings.value) {
+                                val localSettingsUpdatedAt = _appSettings.value.settingsUpdatedAt
+                                val remoteSettingsUpdatedAt = remoteSettings?.settingsUpdatedAt ?: 0L
+                                val settingsNeedsPush = remoteSettings != null && localSettingsUpdatedAt > remoteSettingsUpdatedAt
+                                val shouldApplyRemoteSettings = !shouldPushLocal && !settingsNeedsPush && remoteSettings != null && remoteSettings != _appSettings.value
+
+                                if (shouldApplyRemoteSettings && remoteSettings != null) {
                                     _appSettings.value = remoteSettings
                                     val nextLayout = remoteSettings.shelfLayout.ifBlank { "grid" }
                                     if (_shelfLayout.value != nextLayout) {
@@ -685,6 +730,9 @@ class QuadrinheiroViewModel(
                                     }
                                     if (_shelfSort.value != remoteSettings.defaultShelfSort) {
                                         _shelfSort.value = remoteSettings.defaultShelfSort
+                                    }
+                                    runCatching {
+                                        LauncherAppearance.setLauncherMode(appContext, remoteSettings.launcherIconMode, remoteSettings.themeId)
                                     }
                                     changedAny = true
                                 }
@@ -713,7 +761,7 @@ class QuadrinheiroViewModel(
                                 if (changedAny) {
                                     persistAll(user.uid)
                                 }
-                                if (shouldPushLocal || showcaseNeedsPush) {
+                                if (shouldPushLocal || showcaseNeedsPush || settingsNeedsPush) {
                                     val sig = computeProfilePushSignature(user.uid, resolvedProfile, _appSettings.value)
                                     if (sig != lastPushedProfileSignature) {
                                         lastPushedProfileSignature = sig
@@ -1091,6 +1139,9 @@ class QuadrinheiroViewModel(
                 ?: _comics.value.firstOrNull { it.status == ReadingStatus.READING }?.id
             _activeReadingComicId.value = restoredActiveComicId
             runCatching { savedStateHandle["activeReadingComicId"] = restoredActiveComicId }
+            runCatching {
+                LauncherAppearance.setLauncherMode(appContext, savedAccount.settings.launcherIconMode, savedAccount.settings.themeId)
+            }
         } else {
             val baseHandle = (userProfile.email?.substringBefore("@") ?: userProfile.displayName)
                 .lowercase()
@@ -1891,7 +1942,8 @@ class QuadrinheiroViewModel(
         val nowMs = System.currentTimeMillis()
         val candidateSettings = transform(_appSettings.value)
         val showcaseChanged = com.example.data.ProfileShowcase.differs(_appSettings.value, candidateSettings)
-        val nextSettings = if (showcaseChanged) candidateSettings.copy(profileShowcaseUpdatedAt = maxOf(nowMs, _appSettings.value.profileShowcaseUpdatedAt + 1)) else candidateSettings
+        var nextSettings = if (showcaseChanged) candidateSettings.copy(profileShowcaseUpdatedAt = maxOf(nowMs, _appSettings.value.profileShowcaseUpdatedAt + 1)) else candidateSettings
+        nextSettings = nextSettings.copy(settingsUpdatedAt = nowMs)
         if (showcaseChanged) storage.saveShowcase(activeOwnerUid(), nextSettings)
         _appSettings.value = nextSettings
         if (nextSettings.shelfLayout.isNotBlank() && _shelfLayout.value != nextSettings.shelfLayout) {
@@ -1901,6 +1953,12 @@ class QuadrinheiroViewModel(
         if (_shelfSort.value != nextSettings.defaultShelfSort) {
             _shelfSort.value = nextSettings.defaultShelfSort
         }
+
+        // Sincroniza LauncherAppearance com as preferências visuais
+        runCatching {
+            LauncherAppearance.setLauncherMode(appContext, nextSettings.launcherIconMode, nextSettings.themeId)
+        }
+
         val nextProfile = _profile.value.copy(
             updatedAt = nowMs,
             isDirty = true

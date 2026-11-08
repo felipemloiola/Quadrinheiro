@@ -644,6 +644,8 @@ data class AppSettings(
     val shareStarsMatchTheme: Boolean = true,
     val cachedRecommendationsJson: String = "",
     val recommendationTasteHash: String = "",
+    val settingsUpdatedAt: Long = 0L,
+    val launcherIconMode: String = "original", // "original" | "theme" | "black" | "white" | "purple" | "blue" | "green" | "orange" | "red"
     val quickReviewTags: List<String> = listOf(
         "Roteiro impecável",
         "Arte incrível",

@@ -905,7 +905,10 @@ fun SettingsTabScreen(
                                 }
                             }
 
-                            com.example.ui.components.LauncherIconPicker()
+                            com.example.ui.components.LauncherIconPicker(
+                                appSettings = appSettings,
+                                onUpdateSettings = { transform -> viewModel.updateSettings(transform) }
+                            )
 
                             // 3. Menu Exclusivo do Liquid Glass dentro de Aparência
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
