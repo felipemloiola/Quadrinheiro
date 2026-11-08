@@ -1,0 +1,95 @@
+name: Publicar Quadrinheiro no emulador web
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quadrinheiro-appetize-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-appetize:
+    if: github.repository == 'felipemloiola/Quadrinheiro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Confirmar API token de Appetize
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+        run: |
+          if [ -z "$APPETIZE_API_TOKEN" ]; then
+            echo 'Falta cadastrar APPETIZE_API_TOKEN em Settings > Secrets and variables > Actions.' >&2
+            exit 1
+          fi
+      - name: Obter o APK da release pública
+        id: release
+        env:
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          tag="${EVENT_RELEASE_TAG:-$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')}"
+          mkdir -p .appetize-build
+          gh release download "$tag" --pattern quadrinheiro.apk --dir .appetize-build --clobber
+          test -s .appetize-build/quadrinheiro.apk
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Reutilizar o build ID anterior para manter a URL permanente
+        id: previous
+        run: |
+          set -euo pipefail
+          key=""
+          if [ -f docs/emulator-build.json ]; then
+            key="$(python3 -c 'import json; print(json.load(open("docs/emulator-build.json")).get("publicKey", "") or "")')"
+          fi
+          echo "id=$key" >> "$GITHUB_OUTPUT"
+      - name: Enviar ou atualizar o APK no Appetize
+        id: appetize
+        uses: appetizeio/github-action-appetize@v1.1.0
+        with:
+          apiToken: ${{ secrets.APPETIZE_API_TOKEN }}
+          publicKey: ${{ steps.previous.outputs.id }}
+          platform: android
+          appFile: .appetize-build/quadrinheiro.apk
+          fileType: apk
+          note: Quadrinheiro ${{ steps.release.outputs.tag }}
+      - name: Publicar somente o build ID (nunca credenciais)
+        env:
+          APPETIZE_PUBLIC_KEY: ${{ steps.appetize.outputs.publicKey }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, json, base64, datetime, subprocess
+          key = os.environ['APPETIZE_PUBLIC_KEY']
+          if not key or not all(c.isalnum() or c in '_-' for c in key):
+              raise SystemExit('Identificador público do build ausente ou inválido')
+          contents = {
+              'provider': 'appetize',
+              'publicKey': key,
+              'release': os.environ['RELEASE_TAG'],
+              'updatedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+          }
+          payload = {
+              'message': f"chore(emulator): publish Android build for {contents['release']}",
+              'content': base64.b64encode((json.dumps(contents, ensure_ascii=False, indent=2)+'\n').encode()).decode(),
+              'branch': 'main',
+          }
+          path = f"repos/{os.environ['GITHUB_REPOSITORY']}/contents/docs/emulator-build.json"
+          sha = subprocess.run(['gh','api',path,'--jq','.sha'], capture_output=True, text=True)
+          if sha.returncode == 0 and sha.stdout.strip():
+              payload['sha'] = sha.stdout.strip()
+          with open('/tmp/emulator-payload.json','w') as f:
+              json.dump(payload,f)
+          subprocess.run(['gh','api',path,'--method','PUT','--input','/tmp/emulator-payload.json'],check=True)
+          print('Build público atualizado:', contents['release'])
+          PY
