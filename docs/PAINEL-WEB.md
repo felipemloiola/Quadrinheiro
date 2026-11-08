@@ -30,3 +30,16 @@ Segredos eventualmente cadastrados no GitHub permanecem armazenados até serem e
 - `docs/index.html`: painel web.
 - `docs/quadrinheiro-logo.svg`: logotipo original.
 - `docs/PAINEL-WEB.md`: esta documentação.
+
+## Identidade visual e acessibilidade
+
+O painel adota a linguagem visual do aplicativo Android, referenciada em `app/src/main/java/com/example/ui/theme/Theme.kt` e `Type.kt`, e os princípios do arquivo `apple-design/SKILL.md` fornecido para a reformulação:
+
+- Cores nativas: preto `#000000` e cinza-claro `#F2F2F7`, cartões neutros e azul do sistema `#0A84FF`.
+- SF Pro Text/Display quando disponível no dispositivo, com fontes de sistema como alternativa; **nenhum arquivo de fonte da Apple é redistribuído**.
+- Navegação flutuante no celular, superfície translúcida no cabeçalho, agrupamento por proximidade e hierarquia mais discreta.
+- Resposta imediata à pressão do ponteiro, transições curtas e reversíveis; opção `prefers-reduced-motion` para eliminar deslocamentos.
+- Alternativas de acessibilidade para menor transparência (`prefers-reduced-transparency`) e contraste reforçado (`prefers-contrast`).
+- A visão geral mostra um anel de progresso **calculado dos critérios realmente marcados** nas tarefas; não representa evidência nem progresso declarado automaticamente.
+
+**Arquivos:** `docs/index.html` contém os dados e a lógica da interface; `docs/visual.css` contém a camada visual revisada, carregada após os estilos antigos. Para atualizar o visual, altere `visual.css` e, se necessário, incremente o sufixo `?v=...` na referência de `index.html` para limpar caches.
