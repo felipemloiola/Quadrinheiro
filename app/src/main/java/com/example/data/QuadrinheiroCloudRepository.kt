@@ -1055,7 +1055,7 @@ class QuadrinheiroCloudRepository(
                 val isTakenByAnotherUser = targetHandleSnap?.exists() == true &&
                     targetOwnerId.isNotBlank() &&
                     targetOwnerId != userId
-                val isTemplateDefaultHandle = handleKey == "felipe_hqs" || handleKey == "felipe" || handleKey == "convidado" || handleKey.startsWith("leitor")
+                val isTemplateDefaultHandle = handleKey == "felipe_hqs" || handleKey == "felipe" || handleKey == "convidado"
 
                 if (isTakenByAnotherUser && (!strictHandleReservation || isTemplateDefaultHandle)) {
                     // Se o handle padrão (ex: @felipe ou @felipe_hqs) já pertence a outra conta no Firestore,
@@ -1096,7 +1096,7 @@ class QuadrinheiroCloudRepository(
                     updatedAt = null
                 )
 
-                val batchSucceeded = runCatching {
+                if (strictHandleReservation && !isTemplateDefaultHandle) {
                     kotlinx.coroutines.withTimeout(3500L) {
                         db.runBatch { batch ->
                             batch.set(db.collection("usernames").document(handleKey), reservation)
@@ -1106,14 +1106,24 @@ class QuadrinheiroCloudRepository(
                             batch.set(userDocRef, docData)
                         }.await()
                     }
-                    true
-                }.getOrElse { false }
+                } else {
+                    val batchSucceeded = runCatching {
+                        kotlinx.coroutines.withTimeout(3500L) {
+                            db.runBatch { batch ->
+                                batch.set(db.collection("usernames").document(handleKey), reservation)
+                                if (oldShouldDelete) {
+                                    batch.delete(db.collection("usernames").document(oldHandleKey))
+                                }
+                                batch.set(userDocRef, docData)
+                            }.await()
+                        }
+                        true
+                    }.getOrElse { false }
 
-                if (!batchSucceeded) {
-                    // Fallback imediato: se a reserva em /usernames/ falhar por qualquer motivo de permissão ou disputa,
-                    // salva o documento do usuário diretamente para NUNCA perder as preferências e configurações da conta!
-                    kotlinx.coroutines.withTimeout(3500L) {
-                        userDocRef.set(docData).await()
+                    if (!batchSucceeded) {
+                        kotlinx.coroutines.withTimeout(3500L) {
+                            userDocRef.set(docData).await()
+                        }
                     }
                 }
                 StorageWriteTelemetry.recordFirestoreProfileWrite()

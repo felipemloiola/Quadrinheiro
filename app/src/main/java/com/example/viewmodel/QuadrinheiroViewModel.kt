@@ -765,7 +765,7 @@ class QuadrinheiroViewModel(
                                     val sig = computeProfilePushSignature(user.uid, resolvedProfile, _appSettings.value)
                                     if (sig != lastPushedProfileSignature) {
                                         lastPushedProfileSignature = sig
-                                        runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value) }.onSuccess {
+                                        runCatching { repo.saveUserProfile(user.uid, resolvedProfile, _appSettings.value, strictHandleReservation = false) }.onSuccess {
                                             markProfileCleanInMemoryAndStorage(resolvedProfile.updatedAt, user.uid)
                                         }.onFailure {
                                             lastPushedProfileSignature = ""
@@ -777,7 +777,7 @@ class QuadrinheiroViewModel(
                                 val sig = computeProfilePushSignature(user.uid, localProf, _appSettings.value)
                                 if (sig != lastPushedProfileSignature) {
                                     lastPushedProfileSignature = sig
-                                    runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value) }.onSuccess {
+                                    runCatching { repo.saveUserProfile(user.uid, localProf, _appSettings.value, strictHandleReservation = false) }.onSuccess {
                                         markProfileCleanInMemoryAndStorage(localProf.updatedAt, user.uid)
                                     }.onFailure {
                                         lastPushedProfileSignature = ""
@@ -1404,7 +1404,7 @@ class QuadrinheiroViewModel(
             if (outgoingCloudUid != null && repo != null) {
                 kotlinx.coroutines.withTimeoutOrNull(2500L) {
                     runCatching {
-                        repo.saveUserProfile(outgoingCloudUid, profileSnapshot, settingsSnapshot)
+                        repo.saveUserProfile(outgoingCloudUid, profileSnapshot, settingsSnapshot, strictHandleReservation = false)
                     }
                     val dirtyComics = comicsSnapshot.filter { it.isDirty }
                     if (dirtyComics.isNotEmpty()) {
@@ -1457,7 +1457,7 @@ class QuadrinheiroViewModel(
             val dirtyComics = _comics.value.filter { it.isDirty }
             runCatching {
                 val snapshot = _profile.value
-                repo.saveUserProfile(user.uid, snapshot, _appSettings.value)
+                repo.saveUserProfile(user.uid, snapshot, _appSettings.value, strictHandleReservation = false)
                 markProfileCleanInMemoryAndStorage(snapshot.updatedAt, user.uid)
                 val syncedIds = if (dirtyComics.isNotEmpty()) {
                     repo.syncDirtyComicsBatch(user.uid, _comics.value)
@@ -1987,7 +1987,7 @@ class QuadrinheiroViewModel(
                     storage.reserveLocalHandle(activeKey, uid)
                 }
                 val res = kotlinx.coroutines.withTimeoutOrNull(3500L) {
-                    runCatching { repo.saveUserProfile(uid, profileSnap, settingsSnap) }
+                    runCatching { repo.saveUserProfile(uid, profileSnap, settingsSnap, strictHandleReservation = false) }
                 }
                 if (res != null && res.isSuccess) {
                     markProfileCleanInMemoryAndStorage(profileSnap.updatedAt, uid)
