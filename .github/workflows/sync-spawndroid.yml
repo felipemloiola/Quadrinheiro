@@ -53,11 +53,52 @@ jobs:
         if: steps.credential.outputs.enabled == 'true'
         run: |
           set -euo pipefail
-          # Apenas armazenamento do build: não inicia dispositivos nem consome minutos.
-          RESPONSE="$(curl --fail-with-body --silent --show-error --retry 3 --retry-delay 5 \
+          APK='.spawn-build/quadrinheiro.apk'
+          SIZE="$(stat -c '%s' "$APK")"
+          echo "APK: $SIZE bytes"
+          # Fluxo recomendado para CI: presign -> PUT -> registrar.
+          # Preserva o corpo de erros 400 para facilitar o diagnóstico.
+          request() {
+            local method="$1" url="$2" body="$3"
+            local status
+            status="$(curl --silent --show-error --retry 2 --retry-delay 3 \
+              --output "$body" --write-out '%{http_code}' \
+              --request "$method" "$url" \
+              --header "Authorization: Bearer $SPAWNDROID_API_KEY" \
+              --header 'Content-Type: application/json' \
+              --data "$(jq -nc --arg filename quadrinheiro.apk --argjson size "$SIZE" '{filename:$filename,size:$size}')")"
+            if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+              echo "::error::SpawnDroid HTTP $status na etapa de presign"
+              jq -c '{error,code}' "$body" 2>/dev/null || head -c 1000 "$body"
+              exit 1
+            fi
+          }
+          request POST 'https://app.spawndroid.io/api/apps/presign' /tmp/spawn-presign.json
+          KEY="$(jq -er '.key' /tmp/spawn-presign.json)"
+          URL="$(jq -er '.url' /tmp/spawn-presign.json)"
+          TYPE="$(jq -r '.contentType // "application/vnd.android.package-archive"' /tmp/spawn-presign.json)"
+          echo 'URL de upload temporária obtida.'
+          # URL temporária nunca é exibida nos logs.
+          PUT_STATUS="$(curl --silent --show-error --retry 2 --retry-delay 3 \
+            --output /tmp/spawn-put-response.txt --write-out '%{http_code}' \
+            --request PUT "$URL" --header "Content-Type: $TYPE" \
+            --upload-file "$APK")"
+          if [ "$PUT_STATUS" -lt 200 ] || [ "$PUT_STATUS" -ge 300 ]; then
+            echo "::error::Upload do APK ao storage falhou (HTTP $PUT_STATUS)"
+            exit 1
+          fi
+          BODY="$(jq -nc --arg key "$KEY" --arg filename quadrinheiro.apk '{key:$key,filename:$filename}')"
+          REGISTER_STATUS="$(curl --silent --show-error --retry 2 --retry-delay 3 \
+            --output /tmp/spawn-register.json --write-out '%{http_code}' \
             --request POST 'https://app.spawndroid.io/api/apps' \
             --header "Authorization: Bearer $SPAWNDROID_API_KEY" \
-            --form 'file=@.spawn-build/quadrinheiro.apk;type=application/vnd.android.package-archive')"
-          printf '%s' "$RESPONSE" | jq -e '.app.slug' >/dev/null
-          echo "APK enviado e registrado no SpawnDroid."
-          printf '%s' "$RESPONSE" | jq '{slug: .app.slug, parsed: .parsed}'
+            --header 'Content-Type: application/json' \
+            --data "$BODY")"
+          if [ "$REGISTER_STATUS" -lt 200 ] || [ "$REGISTER_STATUS" -ge 300 ]; then
+            echo "::error::Registro do APK falhou (HTTP $REGISTER_STATUS)"
+            jq -c '{error,code}' /tmp/spawn-register.json 2>/dev/null || echo 'Resposta não JSON'
+            exit 1
+          fi
+          jq -e '.app.slug' /tmp/spawn-register.json >/dev/null
+          jq '{slug: .app.slug, parsed: .parsed}' /tmp/spawn-register.json
+          echo 'APK enviado e registrado no SpawnDroid.'
