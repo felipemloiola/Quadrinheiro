@@ -201,6 +201,9 @@ fun ExploreScreen(
             marvelComicsState.value = marvel
         }
         ExploreShowcaseBuilder.updateMemoizedSlices(stamp, starter, dc, marvel)
+        if (exploreRecommendationState.recommendations.isEmpty()) {
+            viewModel.triggerRecommendationRefreshIfNeeded(forceRefresh = false)
+        }
     }
 
     BackHandler(collection != null) { collection = null }

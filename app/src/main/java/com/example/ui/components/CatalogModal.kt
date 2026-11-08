@@ -1,6 +1,10 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalDensity
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -431,6 +435,7 @@ fun CatalogSheetModal(
 
                     // Compose and measure only the editor sections near the viewport.
                     val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
+                    val bottomOffsetDp = with(LocalDensity.current) { sheet.offset.coerceAtLeast(0f).toDp() }
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f).fillMaxWidth().clipToBounds().testTag("editor_list"),
@@ -440,7 +445,7 @@ fun CatalogSheetModal(
                             start = if (isSheetExpanded) 22.dp else 18.dp,
                             end = if (isSheetExpanded) 22.dp else 18.dp,
                             top = 4.dp,
-                            bottom = 22.dp
+                            bottom = 32.dp + bottomOffsetDp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                         ),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -805,10 +810,16 @@ fun ManualEntrySheetModal(
                 )
             }
 
+            val manualBottomOffsetDp = with(LocalDensity.current) { sheet.offset.coerceAtLeast(0f).toDp() }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(22.dp),
+                contentPadding = PaddingValues(
+                    start = 22.dp,
+                    end = 22.dp,
+                    top = 22.dp,
+                    bottom = 32.dp + manualBottomOffsetDp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                ),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item(key = "manual-header", contentType = "header") {

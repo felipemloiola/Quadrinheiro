@@ -50,23 +50,77 @@ class CommunityRepository(context: Context,
     }
     suspend fun rating(comic: ComicEntry): CommunityRating = withTimeout(12000) {
         check(currentUid() != null)
-        val row = published(communityComicKey(comic)).where(field("rating").greaterThan(0))
-            .aggregate(field("rating").average().alias("average"), countAll().alias("count")).execute().await().results.firstOrNull()
-        CommunityRating((row?.getData()?.get("average") as? Number)?.toDouble() ?: 0.0, (row?.getData()?.get("count") as? Number)?.toLong() ?: 0)
+        try {
+            val row = published(communityComicKey(comic)).where(field("rating").greaterThan(0))
+                .aggregate(field("rating").average().alias("average"), countAll().alias("count")).execute().await().results.firstOrNull()
+            CommunityRating((row?.getData()?.get("average") as? Number)?.toDouble() ?: 0.0, (row?.getData()?.get("count") as? Number)?.toLong() ?: 0)
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            val docs = db.collection("communityReviews")
+                .whereEqualTo("published", true)
+                .whereEqualTo("comicKey", communityComicKey(comic))
+                .whereGreaterThan("rating", 0)
+                .get().await()
+            if (docs.isEmpty) {
+                CommunityRating(0.0, 0L)
+            } else {
+                val total = docs.documents.sumOf { (it.getDouble("rating") ?: 0.0) }
+                CommunityRating(total / docs.size(), docs.size().toLong())
+            }
+        }
     }
     suspend fun reviews(cursor: CommunityCursor? = null, comicKey: String? = null): CommunityPage<CommunityReview> = withTimeout(12000) {
         check(currentUid() != null) { "Entre na sua conta para abrir a Comunidade." }
-        // Server-side filtering, stable cursor and bounded result set. Pipelines do not poll/cache.
-        val results = afterCursor(published(comicKey), cursor)
-            .sort(field("createdAt").descending(), field("__name__").descending()).limit(20).execute().await().results
-        val items = results.mapNotNull { row ->
-            val data = row.getData(); val created = data["createdAt"] as? Timestamp ?: return@mapNotNull null
-            CommunityReview(row.getId() ?: return@mapNotNull null, data["ownerId"] as? String ?: "", data["author"] as? String ?: "Leitor",
-                data["handle"] as? String ?: "", data["title"] as? String ?: "HQ", data["cover"] as? String ?: "",
-                (data["rating"] as? Number)?.toDouble() ?: 0.0, data["body"] as? String ?: "", created, data["avatar"] as? String ?: "")
+        try {
+            // Server-side filtering, stable cursor and bounded result set. Pipelines do not poll/cache.
+            val results = afterCursor(published(comicKey), cursor)
+                .sort(field("createdAt").descending(), field("__name__").descending()).limit(20).execute().await().results
+            val items = results.mapNotNull { row ->
+                val data = row.getData(); val created = data["createdAt"] as? Timestamp ?: return@mapNotNull null
+                CommunityReview(row.getId() ?: return@mapNotNull null, data["ownerId"] as? String ?: "", data["author"] as? String ?: "Leitor",
+                    data["handle"] as? String ?: "", data["title"] as? String ?: "HQ", data["cover"] as? String ?: "",
+                    (data["rating"] as? Number)?.toDouble() ?: 0.0, data["body"] as? String ?: "", created, data["avatar"] as? String ?: "")
+            }
+            val last = results.lastOrNull()
+            CommunityPage(items, last?.let { row -> (row.getData()["createdAt"] as? Timestamp)?.let { CommunityCursor(it, row.ref!!.path) } }, results.size == 20)
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            var q: Query = db.collection("communityReviews").whereEqualTo("published", true)
+            if (comicKey != null) {
+                q = q.whereEqualTo("comicKey", comicKey)
+            }
+            q = q.orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(20)
+            if (cursor != null) {
+                val cursorDoc = runCatching { db.document(cursor.path).get().await() }.getOrNull()
+                if (cursorDoc != null && cursorDoc.exists()) {
+                    q = q.startAfter(cursorDoc)
+                }
+            }
+            val snapshot = q.get().await()
+            val items = snapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val created = doc.getTimestamp("createdAt") ?: return@mapNotNull null
+                CommunityReview(
+                    id = doc.id,
+                    ownerId = data["ownerId"] as? String ?: "",
+                    author = data["author"] as? String ?: "Leitor",
+                    handle = data["handle"] as? String ?: "",
+                    title = data["title"] as? String ?: "HQ",
+                    cover = data["cover"] as? String ?: "",
+                    rating = (data["rating"] as? Number)?.toDouble() ?: 0.0,
+                    body = data["body"] as? String ?: "",
+                    createdAt = created,
+                    avatar = data["avatar"] as? String ?: ""
+                )
+            }
+            val lastDoc = snapshot.documents.lastOrNull()
+            val nextCursor = lastDoc?.let { doc ->
+                doc.getTimestamp("createdAt")?.let { ts -> CommunityCursor(ts, doc.reference.path) }
+            }
+            CommunityPage(items, nextCursor, snapshot.size() == 20)
         }
-        val last = results.lastOrNull()
-        CommunityPage(items, last?.let { row -> (row.getData()["createdAt"] as? Timestamp)?.let { CommunityCursor(it, row.ref!!.path) } }, results.size == 20)
     }
     suspend fun publish(expectedUid: String, profile: ReaderProfile, comic: ComicEntry, body: String, rating: Double): String = withTimeout(12000) {
         val uid = requireOwner(expectedUid)
@@ -96,14 +150,40 @@ class CommunityRepository(context: Context,
     }
     suspend fun comments(postId: String, cursor: CommunityCursor? = null): CommunityPage<CommunityComment> = withTimeout(12000) {
         check(currentUid() != null)
-        val results = afterCursor(db.pipeline().collection("communityReviews/$postId/comments"), cursor)
-            .sort(field("createdAt").descending(), field("__name__").descending()).limit(20).execute().await().results
-        val items = results.mapNotNull { row -> val d = row.getData()
-            CommunityComment(row.getId() ?: return@mapNotNull null, d["ownerId"] as? String ?: "", d["author"] as? String ?: "Leitor",
-                d["body"] as? String ?: "", d["createdAt"] as? Timestamp ?: return@mapNotNull null)
+        try {
+            val results = afterCursor(db.pipeline().collection("communityReviews/$postId/comments"), cursor)
+                .sort(field("createdAt").descending(), field("__name__").descending()).limit(20).execute().await().results
+            val items = results.mapNotNull { row -> val d = row.getData()
+                CommunityComment(row.getId() ?: return@mapNotNull null, d["ownerId"] as? String ?: "", d["author"] as? String ?: "Leitor",
+                    d["body"] as? String ?: "", d["createdAt"] as? Timestamp ?: return@mapNotNull null)
+            }
+            val last = results.lastOrNull()
+            CommunityPage(items, last?.let { row -> (row.getData()["createdAt"] as? Timestamp)?.let { CommunityCursor(it, row.ref!!.path) } }, results.size == 20)
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            var q: Query = db.collection("communityReviews").document(postId).collection("comments")
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .orderBy(FieldPath.documentId(), Query.Direction.DESCENDING)
+                .limit(20)
+            if (cursor != null) {
+                val cursorDoc = runCatching { db.document(cursor.path).get().await() }.getOrNull()
+                if (cursorDoc != null && cursorDoc.exists()) {
+                    q = q.startAfter(cursorDoc)
+                }
+            }
+            val snapshot = q.get().await()
+            val items = snapshot.documents.mapNotNull { doc ->
+                val d = doc.data ?: return@mapNotNull null
+                val created = doc.getTimestamp("createdAt") ?: return@mapNotNull null
+                CommunityComment(doc.id, d["ownerId"] as? String ?: "", d["author"] as? String ?: "Leitor",
+                    d["body"] as? String ?: "", created)
+            }
+            val lastDoc = snapshot.documents.lastOrNull()
+            val nextCursor = lastDoc?.let { doc ->
+                doc.getTimestamp("createdAt")?.let { ts -> CommunityCursor(ts, doc.reference.path) }
+            }
+            CommunityPage(items, nextCursor, snapshot.size() == 20)
         }
-        val last = results.lastOrNull()
-        CommunityPage(items, last?.let { row -> (row.getData()["createdAt"] as? Timestamp)?.let { CommunityCursor(it, row.ref!!.path) } }, results.size == 20)
     }
     suspend fun comment(expectedUid: String, postId: String, profile: ReaderProfile, body: String) = withTimeout(12000) {
         val uid = requireOwner(expectedUid); require(body.trim().length in 1..1200)

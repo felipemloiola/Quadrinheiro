@@ -41,12 +41,12 @@ fun LauncherIconPicker(
 
     val currentMode = appSettings?.launcherIconMode ?: remember { LauncherAppearance.selectedMode(context) }
     val currentThemeId = appSettings?.themeId ?: "SYSTEM_MONO"
+    val currentColorScheme = appSettings?.colorScheme ?: "system"
 
     // Determina o estilo do ícone correspondente
     val activeStyle = when (currentMode) {
         "original", "default" -> LauncherIconStyle.DEFAULT
-        "theme" -> LauncherIconStyle.fromThemeId(currentThemeId)
-        else -> LauncherIconStyle.fromId(currentMode)
+        else -> LauncherIconStyle.fromThemeId(currentThemeId)
     }
 
     // Cor do fundo do preview baseada no estilo ativo
@@ -72,7 +72,7 @@ fun LauncherIconPicker(
     }
 
     fun applyMode(newMode: String) {
-        LauncherAppearance.setLauncherMode(context, newMode, currentThemeId)
+        LauncherAppearance.setLauncherMode(context, newMode, currentThemeId, currentColorScheme)
         onUpdateSettings { it.copy(launcherIconMode = newMode) }
     }
 
@@ -107,9 +107,8 @@ fun LauncherIconPicker(
                 )
                 Text(
                     text = when (currentMode) {
-                        "original", "default" -> "Padrão monocromático"
-                        "theme" -> "Seguindo o tema (${activeStyle.label})"
-                        else -> "Cor: ${activeStyle.label}"
+                        "theme" -> "Tema ativo (${activeStyle.label})"
+                        else -> "Padrão monocromático"
                     },
                     color = theme.textSecondary,
                     fontSize = 12.sp,
@@ -117,86 +116,16 @@ fun LauncherIconPicker(
                 )
             }
             AppleMenuPicker(
-                value = when (currentMode) {
-                    "original", "default" -> "original"
-                    "theme" -> "theme"
-                    else -> "custom"
-                },
+                value = if (currentMode == "theme") "theme" else "original",
                 onChange = { selected ->
-                    when (selected) {
-                        "original" -> applyMode("original")
-                        "theme" -> applyMode("theme")
-                        "custom" -> applyMode(activeStyle.takeIf { it != LauncherIconStyle.DEFAULT }?.id ?: "blue")
-                    }
+                    applyMode(selected)
                 },
                 options = listOf(
                     SegmentOption("original", "Original"),
-                    SegmentOption("theme", "Tema"),
-                    SegmentOption("custom", "Cores")
+                    SegmentOption("theme", "Tema")
                 ),
                 modifier = Modifier.widthIn(max = 160.dp).testTag("launcher_icon_style")
             )
-        }
-
-        // Paleta de cores selecionáveis quando no modo "custom" ou para troca rápida
-        val colorStyles = remember {
-            listOf(
-                LauncherIconStyle.BLACK,
-                LauncherIconStyle.WHITE,
-                LauncherIconStyle.PURPLE,
-                LauncherIconStyle.BLUE,
-                LauncherIconStyle.GREEN,
-                LauncherIconStyle.ORANGE,
-                LauncherIconStyle.RED
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            colorStyles.forEach { style ->
-                val isSelected = currentMode == style.id || (currentMode == "theme" && activeStyle == style)
-                val colorValue = when (style) {
-                    LauncherIconStyle.BLACK -> Color(0xFF101010)
-                    LauncherIconStyle.WHITE -> Color(0xFFF3F4F7)
-                    LauncherIconStyle.PURPLE -> Color(0xFF8B5CF6)
-                    LauncherIconStyle.BLUE -> Color(0xFF2E7CF6)
-                    LauncherIconStyle.GREEN -> Color(0xFF28A745)
-                    LauncherIconStyle.ORANGE -> Color(0xFFE67E22)
-                    LauncherIconStyle.RED -> Color(0xFFD9383A)
-                    else -> Color(0xFF2E7CF6)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(colorValue)
-                        .border(
-                            width = if (isSelected) 2.5.dp else 1.dp,
-                            color = if (isSelected) theme.accent else (if (style == LauncherIconStyle.WHITE) Color(0x33000000) else Color(0x22FFFFFF)),
-                            shape = CircleShape
-                        )
-                        .clickable {
-                            applyMode(style.id)
-                        }
-                        .testTag("launcher_color_${style.id}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (style == LauncherIconStyle.WHITE) Color.Black else Color.White)
-                        )
-                    }
-                }
-            }
         }
     }
 }

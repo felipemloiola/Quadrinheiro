@@ -438,8 +438,8 @@ fun QuadrinheiroTheme(
     // SYSTEM_MONO_THEME_V7: explicit user choices always take precedence.
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     val launcherContext = LocalContext.current
-    androidx.compose.runtime.LaunchedEffect(settings.themeId) {
-        com.example.LauncherAppearance.rememberAccent(launcherContext, settings.themeId)
+    androidx.compose.runtime.LaunchedEffect(settings.themeId, settings.colorScheme) {
+        com.example.LauncherAppearance.rememberAccent(launcherContext, settings.themeId, settings.colorScheme)
     }
     val isDark = when (settings.colorScheme.lowercase()) {
         "system" -> systemDark

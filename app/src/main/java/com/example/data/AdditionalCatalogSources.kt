@@ -74,7 +74,7 @@ internal object AdditionalCatalogSources {
         if (provider == "MANGA") return listOf("kitsu", "mangadex")
         val books = mutableListOf("catalog", "apple-br", "google-pt", "open-library")
         if (language != "PT") books.add("apple-us")
-        if (provider != "BOOKS") books.addAll(listOf("kitsu", "mangadex"))
+        if (provider != "BOOKS" && provider != "COMICS") books.addAll(listOf("kitsu", "mangadex"))
         return books
     }
     suspend fun load(source: String, query: String, language: String, page: Int = 0): List<ComicEntry> = withContext(Dispatchers.IO) {

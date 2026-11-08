@@ -35,10 +35,10 @@ private object CommunityMemory {
 internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, onLogin: () -> Unit, comic: ComicEntry? = null) {
     val context = LocalContext.current
     val storage = remember { SafeStorage(context) }
-    val repo = remember { CommunityRepository(context) }
-    val uid = repo.activeAccountUid()
+    val repo = remember { runCatching { CommunityRepository(context) }.getOrNull() }
+    val uid = repo?.activeAccountUid()
     val t = LocalIOS27Theme.current
-    if (uid == null) {
+    if (repo == null || uid == null) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionHeading("Histórias para conversar", "Entre para ver avaliações, publicar resenhas e conversar com outros leitores.")
             TextButton(onClick = onLogin) { Text("Entrar", color = t.accent) }
@@ -56,6 +56,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
         var cloudPosts by remember(cacheKey) { mutableStateOf(cached?.page?.items.orEmpty()) }
         val posts = remember(localRatedPosts, cloudPosts) {
             (cloudPosts + localRatedPosts)
+                .filter { it.id.isNotBlank() }
                 .distinctBy { it.id }
                 .sortedByDescending { it.createdAt.toDate().time }
                 .take(100)
@@ -88,13 +89,13 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                     }
                     if (refresh) CommunityMemory.put(cacheKey, page, publicationRevision)
                     if (repo.activeAccountUid() == uid) {
-                        cloudPosts = ((if (refresh) emptyList() else cloudPosts) + page.items).distinctBy { it.id }.takeLast(100)
+                        cloudPosts = ((if (refresh) emptyList() else cloudPosts) + page.items).filter { it.id.isNotBlank() }.distinctBy { it.id }.takeLast(100)
                         cursor = page.cursor
                         more = page.hasMore
                     }
                 } catch (cancel: CancellationException) {
                     throw cancel
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
                     if (posts.isEmpty()) {
                         error = "Não foi possível carregar as publicações da nuvem. Tente novamente."
                     }

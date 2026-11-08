@@ -75,7 +75,7 @@ open class MultiApiSearchEngine {
         return "$provider:$countryCode:hd$hdCovers:${query.trim()}".lowercase()
     }
     fun getCached(key: String): List<ComicEntry>? {
-        val match = Regex("^(multi|books|manga):(br|us):hd(true|false):(.*)$", RegexOption.IGNORE_CASE).matchEntire(key.trim())
+        val match = Regex("^(multi|books|comics|manga):(br|us):hd(true|false):(.*)$", RegexOption.IGNORE_CASE).matchEntire(key.trim())
         val resolved = if (match == null) searchCacheKey(key, "ALL", "MULTI", true) else "${match.groupValues[1].lowercase()}:${match.groupValues[2].lowercase()}:hd${match.groupValues[3].lowercase()}:${match.groupValues[4].trim().lowercase()}"
         return synchronized(cache) { cache[resolved] }
     }

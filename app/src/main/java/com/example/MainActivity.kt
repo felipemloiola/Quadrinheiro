@@ -265,7 +265,10 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         LauncherAppearance.foreground = false
-        if (!isChangingConfigurations) LauncherAppearance.scheduleBackgroundSync(this)
+        if (!isChangingConfigurations) {
+            LauncherAppearance.applyWhenBackground(this)
+            LauncherAppearance.scheduleBackgroundSync(this)
+        }
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = false
     }
 

@@ -269,13 +269,31 @@ object PersonalizedDiscovery {
             } else null
         }.sortedByDescending { it.score }
 
+        val effectiveScored = if (scored.isNotEmpty()) scored else {
+            candidates.map { candidate ->
+                val feat = features(candidate)
+                val pub = candidate.publisher.lowercase()
+                val reason = when {
+                    favoriteUniverse.isNotBlank() && preferred(feat, favoriteUniverse) -> "Destaque de $favoriteUniverse"
+                    pub.contains("dc") || pub.contains("vertigo") -> "Destaque do Universo DC"
+                    pub.contains("marvel") -> "Destaque do Universo Marvel"
+                    candidate.genre.contains("Mangá", true) -> "Destaque em Mangás"
+                    else -> "Recomendado para sua estante"
+                }
+                var score = 30
+                if (candidate.coverUrl.isNotBlank()) score += 10
+                if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
+                RecommendedComic(candidate, reason, score, "CATALOG_SHOWCASE")
+            }.sortedByDescending { it.score }
+        }
+
         // Aplica diversidade MMR: no máximo 2 edições da mesma série e 3 do mesmo autor no topo
         val seriesCount = mutableMapOf<String, Int>()
         val authorCount = mutableMapOf<String, Int>()
         val diverseList = mutableListOf<RecommendedComic>()
         val deferredList = mutableListOf<RecommendedComic>()
 
-        for (item in scored) {
+        for (item in effectiveScored) {
             val seriesKey = SeriesSequenceEngine.inferBaseSeriesTitle(item.comic).ifBlank { item.comic.title }
             val authorKey = SeriesSequenceEngine.extractPrimaryAuthor(item.comic.authors)
 

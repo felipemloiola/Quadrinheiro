@@ -529,6 +529,8 @@ fun Modifier.tintedLiquidBlueButton(
     pressProgress: Float = 0f,
     isActive: Boolean = false
 ): Modifier {
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val chromatic = !settings.reduceTransparency && settings.enableChromaticAberration
     return this
         .drawBackdrop(
             backdrop = backdrop,
@@ -537,12 +539,14 @@ fun Modifier.tintedLiquidBlueButton(
                 // ESTRITAMENTE: 1. vibrancy => 2. blur => 3. lens
                 vibrancy()
                 blur(8f.dp.toPx())
-                lens(
-                    refractionHeight = 14f.dp.toPx(),
-                    refractionAmount = 28f.dp.toPx(),
-                    depthEffect = true,
-                    chromaticAberration = true
-                )
+                if (settings.enableLensRefraction && !settings.reduceTransparency) {
+                    lens(
+                        refractionHeight = 14f.dp.toPx(),
+                        refractionAmount = 28f.dp.toPx(),
+                        depthEffect = true,
+                        chromaticAberration = chromatic
+                    )
+                }
             },
             layerBlock = {
                 val scale = lerp(1f, 1.12f, pressProgress)
@@ -1590,6 +1594,7 @@ fun LiquidGlassSegmentedControl(
     tabIcons: List<ImageVector?>? = null
 ) {
     val isLightTheme = !LocalIsDarkTheme.current
+    val settings = com.example.ui.theme.LocalAppSettings.current
     val containerColor =
         if (isLightTheme) Color(0xFFEAEAEF).copy(alpha = 0.72f)
         else Color(0xFF2B2B30).copy(alpha = 0.62f)
@@ -1701,9 +1706,7 @@ fun LiquidGlassSegmentedControl(
                                 awaitFirstDown(requireUnconsumed = false)
                                 dampedDragAnimation.press()
                                 val up = waitForUpOrCancellation()
-                                if (up == null || currentSelectedIndex == index) {
-                                    dampedDragAnimation.release()
-                                }
+                                dampedDragAnimation.release()
                             }
                         }
                         .selectable(
@@ -1767,7 +1770,9 @@ fun LiquidGlassSegmentedControl(
                         effects = {
                             vibrancy()
                             blur(8f.dp.toPx())
-                            lens(16f.dp.toPx(), 16f.dp.toPx())
+                            if (settings.enableLensRefraction && !settings.reduceTransparency) {
+                                lens(16f.dp.toPx(), 16f.dp.toPx())
+                            }
                         },
                         layerBlock = {
                             val progress = dampedDragAnimation.pressProgress
@@ -1813,7 +1818,9 @@ fun LiquidGlassSegmentedControl(
                             if (progress > 0.005f) {
                                 vibrancy()
                                 blur(8f.dp.toPx())
-                                lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
+                                if (settings.enableLensRefraction && !settings.reduceTransparency) {
+                                    lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
+                                }
                             }
                         },
                         layerBlock = {
@@ -1861,12 +1868,15 @@ fun LiquidGlassSegmentedControl(
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
                         if (progress > 0.005f) {
-                            lens(
-                                10f.dp.toPx() * progress,
-                                18f.dp.toPx() * progress,
-                                depthEffect = true,
-                                chromaticAberration = true
-                            )
+                            val chromatic = !settings.reduceTransparency && settings.enableChromaticAberration
+                            if (settings.enableLensRefraction && !settings.reduceTransparency) {
+                                lens(
+                                    10f.dp.toPx() * progress,
+                                    18f.dp.toPx() * progress,
+                                    depthEffect = true,
+                                    chromaticAberration = chromatic
+                                )
+                            }
                         }
                     },
                     layerBlock = {

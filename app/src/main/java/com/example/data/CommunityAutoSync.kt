@@ -211,7 +211,7 @@ object CommunityAutoSync {
                 }
             }
             if (sharedChanged) {
-                storage.setItem(SHARED_POSTS_KEY, updatedShared.toString())
+                runCatching { storage.setItem(SHARED_POSTS_KEY, updatedShared.toString()) }
             }
         }
 

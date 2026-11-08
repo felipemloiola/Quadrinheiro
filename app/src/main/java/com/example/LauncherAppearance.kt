@@ -34,7 +34,7 @@ object LauncherAppearance {
         setLauncherMode(context, mode)
     }
 
-    fun setLauncherMode(context: Context, mode: String, themeId: String? = null) {
+    fun setLauncherMode(context: Context, mode: String, themeId: String? = null, colorScheme: String? = null) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
             .putString("launcher_mode", mode)
@@ -46,17 +46,23 @@ object LauncherAppearance {
         } else if (mode != "theme" && mode != "original" && mode != "default") {
             editor.putString("accent", mode)
         }
+        if (!colorScheme.isNullOrBlank()) {
+            editor.putString("color_scheme", colorScheme)
+        }
         editor.apply()
         scheduleBackgroundSync(context)
     }
 
-    fun rememberAccent(context: Context, themeId: String) {
+    fun rememberAccent(context: Context, themeId: String, colorScheme: String? = null) {
         val mappedStyle = LauncherIconStyle.fromThemeId(themeId)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.edit()
+        val editor = prefs.edit()
             .putString("theme_id", themeId)
             .putString("accent", mappedStyle.id)
-            .apply()
+        if (!colorScheme.isNullOrBlank()) {
+            editor.putString("color_scheme", colorScheme)
+        }
+        editor.apply()
         if (selectedMode(context) == "theme") {
             scheduleBackgroundSync(context)
         }
@@ -78,7 +84,14 @@ object LauncherAppearance {
     @Synchronized
     fun sync(context: Context) {
         if (foreground) return
-        val night = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val scheme = prefs.getString("color_scheme", "system")
+        val systemNight = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val night = when (scheme?.lowercase()) {
+            "dark" -> true
+            "light" -> false
+            else -> systemNight
+        }
         val pm = context.packageManager
         val desired = aliasFor(selected(context), night)
         val names = listOf(desired) + (listOf(DAY, NIGHT) + LauncherIconStyle.entries.filter { it != LauncherIconStyle.DEFAULT }.flatMap { listOf(it.alias, it.alias + "Day", it.alias + "Night") }).filter { it != desired }

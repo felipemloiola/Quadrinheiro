@@ -1439,10 +1439,12 @@ fun SettingsTabScreen(
                                     modifier = Modifier.padding(horizontal = 4.dp)
                                 )
                                 AppleSegmentedPicker(
-                                    value = appSettings.searchProvider,
+                                    value = if (appSettings.searchProvider in listOf("MULTI", "COMICS", "MANGA")) appSettings.searchProvider else "MULTI",
                                     onChange = { v -> viewModel.updateSettings { it.copy(searchProvider = v) } },
                                     options = listOf(
-                                        SegmentOption("MULTI", "Catálogo online")
+                                        SegmentOption("MULTI", "Todas"),
+                                        SegmentOption("COMICS", "Quadrinhos"),
+                                        SegmentOption("MANGA", "Mangás")
                                     )
                                 )
                             }
