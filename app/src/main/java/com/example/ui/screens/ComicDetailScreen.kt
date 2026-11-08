@@ -75,6 +75,14 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     LaunchedEffect(comic.id, comic.externalId, entity, tab) { listState.scrollToItem(0) }
     BackHandler { goBack() }
     LaunchedEffect(comic.id, comic.externalId, entity, retry) {
+        // Se a HQ já tiver dados essenciais e não for entidade selecionada, não dispara busca completa online
+        val hasLocalData = entity == null && comic.authors.isNotBlank() && comic.publisher.isNotBlank() &&
+            comic.pageCount > 0 && (comic.synopsisPtBr.isNotBlank() || comic.synopsis.isNotBlank())
+        if (hasLocalData && retry == 0) {
+            loading = false
+            failed = false
+            return@LaunchedEffect
+        }
         loading = true; failed = false
         try {
             detail = withContext(Dispatchers.IO) {
@@ -89,8 +97,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         fallbackBanner = ""
         val resource = detail ?: return@LaunchedEffect
         if (resource.banner.isNotBlank()) return@LaunchedEffect
+        // Busca banner externo apenas se solicitado explicitamente (retry > 0)
+        if (retry <= 0) return@LaunchedEffect
         try {
-            val banner = ComicBannerResolver.resolve(resource, if (entity == null) comic.displayTitle else resource.title, force = retry > 0)
+            val banner = ComicBannerResolver.resolve(resource, if (entity == null) comic.displayTitle else resource.title, force = true)
             if (detail?.id == resource.id && detail?.type == resource.type) fallbackBanner = banner
         } catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { }

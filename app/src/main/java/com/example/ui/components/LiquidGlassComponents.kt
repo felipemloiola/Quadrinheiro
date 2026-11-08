@@ -1020,7 +1020,10 @@ fun BookCover(
 
         if (cleanSrc.isNotEmpty() && !hasFailed) {
             val context = LocalContext.current
-            val imageRequest = remember(cleanSrc, context) {
+            val diskPolicy = remember(cleanSrc) {
+                com.example.data.LibraryDiskCacheRegistry.diskCachePolicyFor(cleanSrc)
+            }
+            val imageRequest = remember(cleanSrc, context, diskPolicy) {
                 ImageRequest.Builder(context)
                     .data(cleanSrc)
                     .size(240, 360)
@@ -1029,7 +1032,7 @@ fun BookCover(
                     .memoryCacheKey(cleanSrc)
                     .diskCacheKey(cleanSrc)
                     .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(diskPolicy)
                     .networkCachePolicy(CachePolicy.ENABLED)
                     .allowHardware(true)
                     .allowRgb565(true)
@@ -2729,6 +2732,7 @@ fun SculpturalWaveBackdrop(
                     val context = LocalContext.current
                     val ambientScaffoldReq = remember(featuredCoverUrl, context) {
                         val clean = featuredCoverUrl.replace("http://", "https://")
+                        val diskPolicy = com.example.data.LibraryDiskCacheRegistry.diskCachePolicyFor(clean)
                         ImageRequest.Builder(context)
                             .data(clean)
                             .size(28, 42)
@@ -2739,7 +2743,7 @@ fun SculpturalWaveBackdrop(
                             .memoryCacheKey(clean + "_scaffold_amb")
                             .diskCacheKey(clean + "_scaffold_amb")
                             .memoryCachePolicy(CachePolicy.ENABLED)
-                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .diskCachePolicy(diskPolicy)
                             .build()
                     }
                     AsyncImage(

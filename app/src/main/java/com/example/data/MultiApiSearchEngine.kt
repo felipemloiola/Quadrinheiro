@@ -54,8 +54,11 @@ open class MultiApiSearchEngine {
         @Synchronized fun initHttpCache(context: android.content.Context) {
             if (isCacheInitialized) return
             try {
-                val cache = okhttp3.Cache(java.io.File(context.cacheDir, "quadrinheiro_http_cache"), HTTP_CACHE_BUDGET_BYTES)
-                sharedHttpClient = sharedHttpClient.newBuilder().cache(cache).build(); isCacheInitialized = true
+                // Remove qualquer resquício de cache HTTP antigo em disco
+                runCatching { java.io.File(context.cacheDir, "quadrinheiro_http_cache").deleteRecursively() }
+                // MultiApiSearchEngine já possui cache LRU em memória (48 requisições completas).
+                // Não adicionamos cache OkHttp em disco para buscas e navegação para evitar inchaço progressivo.
+                isCacheInitialized = true
             } catch (_: Throwable) { }
         }
     }

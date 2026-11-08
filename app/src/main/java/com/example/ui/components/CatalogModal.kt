@@ -276,6 +276,17 @@ fun CatalogSheetModal(
     LaunchedEffect(draftComic.id, draftComic.externalId) {
         val requested = draftComic
         remoteInfo = null
+        val hasEssentialData = requested.synopsisPtBr.isNotBlank() &&
+            requested.authors.isNotBlank() &&
+            requested.publisher.isNotBlank() &&
+            requested.pageCount > 0 &&
+            requested.coverUrl.isNotBlank()
+
+        if (hasEssentialData) {
+            metadataLoading = false
+            return@LaunchedEffect
+        }
+
         metadataLoading = true
         try {
             val resolvedPair = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -329,55 +340,6 @@ fun CatalogSheetModal(
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { }
         finally { metadataLoading = false }
-    }
-    LaunchedEffect(remoteInfo?.id, remoteInfo?.type, translationRetryToken) {
-        val info = remoteInfo ?: return@LaunchedEffect
-        val requestedId = draftComic.id
-        val requestedExternalId = draftComic.externalId
-        if (info.description.isNotBlank() && !PortugueseComicTranslator.isPortugueseText(info.description)) {
-            translationLoading = true
-            translationFailed = false
-            try {
-                val translated = com.example.data.ComicVineCatalog.translated(info)
-                if (remoteInfo?.id == info.id && remoteInfo?.type == info.type && draftComic.id == requestedId &&
-                    draftComic.externalId == requestedExternalId) {
-                    if (translated.description.isNotBlank()) {
-                        draftComic = draftComic.copy(
-                            synopsis = draftComic.synopsis.ifBlank { info.description },
-                            synopsisPtBr = translated.description
-                        )
-                        translationFailed = false
-                    } else if (draftComic.synopsisPtBr.isBlank()) {
-                        translationFailed = true
-                    }
-                }
-            } catch (cancel: kotlinx.coroutines.CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                if (draftComic.synopsisPtBr.isBlank()) translationFailed = true
-            } finally {
-                translationLoading = false
-            }
-        }
-    }
-    // Prefetching strategy otimizada para reduzir CPU/memória e garantir rolagem ultra fluida
-    LaunchedEffect(draftComic.coverUrl) {
-        val cleanUrl = draftComic.coverUrl.trim().replace("http://", "https://")
-        if (cleanUrl.isNotBlank()) {
-            val prefetch = ImageRequest.Builder(context)
-                .data(cleanUrl)
-                .size(240, 360)
-                .precision(coil.size.Precision.INEXACT)
-                .memoryCacheKey(cleanUrl)
-                .diskCacheKey(cleanUrl)
-                .memoryCachePolicy(CachePolicy.ENABLED)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .networkCachePolicy(CachePolicy.ENABLED)
-                .allowHardware(true)
-                .allowRgb565(true)
-                .build()
-            coil.Coil.imageLoader(context).enqueue(prefetch)
-        }
     }
 
     val sheetShape = remember { RoundedRectangle(24f.dp) }

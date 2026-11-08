@@ -23,6 +23,7 @@ internal fun ReadingCoverAtmosphere(url: String, background: Color, modifier: Mo
     val context = LocalContext.current
     val cleanUrl = remember(url) { url.trim().replace("http://", "https://") }
     val request = remember(cleanUrl, context) {
+        val diskPolicy = com.example.data.LibraryDiskCacheRegistry.diskCachePolicyFor(cleanUrl)
         ImageRequest.Builder(context)
             .data(cleanUrl)
             .size(240, 360)
@@ -34,7 +35,7 @@ internal fun ReadingCoverAtmosphere(url: String, background: Color, modifier: Mo
             .diskCacheKey(cleanUrl)
             .placeholderMemoryCacheKey(cleanUrl)
             .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
-            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+            .diskCachePolicy(diskPolicy)
             .build()
     }
     val fadeBrush = remember(background) {

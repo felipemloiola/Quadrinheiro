@@ -16,6 +16,7 @@ import com.example.data.QuadrinheiroAuthManager
 import com.example.data.QuadrinheiroCloudRepository
 import com.example.data.QuadrinheiroSyncWorker
 import com.example.data.SafeStorage
+import com.example.data.SeriesSequenceEngine
 import com.example.widget.QuadrinheiroWidgetIntents
 import com.example.widget.QuadrinheiroWidgetStateBus
 import com.example.widget.QuadrinheiroWidgetsSync
@@ -380,6 +381,25 @@ class QuadrinheiroViewModel(
     }
 
     init {
+        com.example.data.LibraryDiskCacheRegistry.registerUrls(
+            initial.comics.map { it.coverUrl } + listOfNotNull(initial.profile.avatarUrl, initial.settings.profileBannerUrl)
+        )
+        viewModelScope.launch {
+            _comics.collect { list ->
+                com.example.data.LibraryDiskCacheRegistry.registerUrls(list.map { it.coverUrl })
+            }
+        }
+        viewModelScope.launch {
+            _profile.collect { p ->
+                com.example.data.LibraryDiskCacheRegistry.registerUrls(listOfNotNull(p.avatarUrl))
+            }
+        }
+        viewModelScope.launch {
+            _appSettings.collect { s ->
+                com.example.data.LibraryDiskCacheRegistry.registerUrls(listOfNotNull(s.profileBannerUrl))
+            }
+        }
+
         PortugueseComicTranslator.onTranslationPersisted = { translatedComic ->
             persistTranslatedComic(translatedComic)
         }
@@ -515,14 +535,6 @@ class QuadrinheiroViewModel(
                 val withCover = if (needsCoverUpdate && catalogHit != null) {
                     updatedAny = true
                     comic.copy(coverUrl = catalogHit.coverUrl)
-                } else if (comic.coverUrl.isBlank() || comic.coverUrl.contains("covers.openlibrary.org")) {
-                    val newUrl = searchEngine.resolveBestCoverUrl(comic.title, comic.authors)
-                    if (newUrl.isNotBlank() && newUrl != comic.coverUrl) {
-                        updatedAny = true
-                        comic.copy(coverUrl = newUrl)
-                    } else {
-                        comic
-                    }
                 } else {
                     comic
                 }
@@ -549,9 +561,6 @@ class QuadrinheiroViewModel(
                 _comics.value = healedList
                 persistAll(healingOwner)
             }
-            // Prefetch leve e prioritário: apenas 4 capas do acervo ativo (em leitura ou topo)
-            val initialCoversToWarm = _comics.value.filter { it.status == ReadingStatus.READING }.ifEmpty { _comics.value.take(4) }
-            prefetchCovers(initialCoversToWarm.take(4))
 
             // Aguarda conclusão da inicialização crítica, restauração de login/estado e sincronização inicial
             kotlinx.coroutines.withTimeoutOrNull(4_500L) {
@@ -560,17 +569,6 @@ class QuadrinheiroViewModel(
                 }
             }
 
-            // Pré-aquecimento do ModernCatalog em baixa prioridade em Dispatchers.IO somente se cache ausente ou expirado (TTL)
-            val prevPriority = Thread.currentThread().priority
-            try {
-                runCatching { Thread.currentThread().priority = Thread.MIN_PRIORITY }
-                searchEngine.prewarmPopularSearches(appContext)
-                if (_comics.value.isEmpty()) {
-                    prefetchCovers(CuratedCatalog.curatedComicsCatalog.take(4))
-                }
-            } finally {
-                runCatching { Thread.currentThread().priority = prevPriority }
-            }
             if (_searchQuery.value.isNotBlank()) {
                 triggerOnlineSearchIfNeeded()
             }
@@ -1436,11 +1434,14 @@ class QuadrinheiroViewModel(
         pendingCoverPrefetches.forEach { it.dispose() }
         pendingCoverPrefetches.clear()
         if (items.isEmpty()) return
+        // Desativa downloads agressivos de capas externas que não pertençam à biblioteca do usuário
+        val allowedItems = items.filter { com.example.data.LibraryDiskCacheRegistry.isAllowedForDiskWrite(it.coverUrl) }
+        if (allowedItems.isEmpty()) return
         val loader = appContext.imageLoader
         val isHd = _appSettings.value.hdCovers
         val targetW = if (isHd) 200 else 140
         val targetH = (targetW * 1.5f).toInt()
-        items.distinctBy { it.coverUrl }.take(6).forEach { item ->
+        allowedItems.distinctBy { it.coverUrl }.take(4).forEach { item ->
             val url = item.coverUrl.trim().replace("http://", "https://")
             if (url.startsWith("https://")) {
                 val req = ImageRequest.Builder(appContext)
@@ -2073,12 +2074,20 @@ class QuadrinheiroViewModel(
             _onlineSequencePool.value = emptyList()
             return
         }
+        val localGroup = SeriesSequenceEngine.findSequenceForComic(
+            target = comic,
+            userComics = _comics.value,
+            catalogComics = CuratedCatalog.curatedComicsCatalog + com.example.data.ModernCatalog.current
+        )
+        val localSequence = localGroup.issues.map { it.comic }
+        if (localSequence.size > 1) {
+            _onlineSequencePool.value = localSequence
+            return
+        }
         sequenceJob = viewModelScope.launch(Dispatchers.IO) {
+            // Busca apenas se não houver dados locais de sequência
             val fetched = searchEngine.fetchSequenceIssuesOnline(comic, _appSettings.value.hdCovers)
             _onlineSequencePool.value = fetched
-            if (fetched.isNotEmpty()) {
-                prefetchCovers(fetched.take(8))
-            }
         }
     }
 
@@ -2598,18 +2607,20 @@ class QuadrinheiroViewModel(
                     favoriteUniverse = universeSnapshot
                 )
 
-                val retrieved = com.example.data.RecommendationCandidateRetriever.retrieveCandidates(
-                    taste = taste,
-                    searchEngine = searchEngine,
-                    ownerUid = currentUid
-                )
-
-                val catalogPool = com.example.data.ModernCatalog.current.ifEmpty {
-                    com.example.data.CuratedCatalog.curatedComicsCatalog
+                // Gera recomendações primariamente a partir do acervo local e candidatos em cache
+                // sem disparar dezenas de requisições HTTP e downloads em segundo plano.
+                val cachedOrLocalPool = if (com.example.data.RecommendationCandidateRetriever.isCacheValid(taste.tasteHash, currentUid)) {
+                    com.example.data.RecommendationCandidateRetriever.getCachedPool(currentUid)
+                } else {
+                    emptyList()
                 }
 
+                val catalogPool = (com.example.data.ModernCatalog.current.ifEmpty {
+                    com.example.data.CuratedCatalog.curatedComicsCatalog
+                } + cachedOrLocalPool).distinctBy { it.id }
+
                 val ranked = com.example.data.PersonalizedDiscovery.recommendWithReasons(
-                    catalog = catalogPool + retrieved,
+                    catalog = catalogPool,
                     library = librarySnapshot,
                     favoriteUniverse = universeSnapshot,
                     settings = settingsSnapshot

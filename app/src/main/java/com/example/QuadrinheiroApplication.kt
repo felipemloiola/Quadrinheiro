@@ -15,9 +15,9 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         runCatching {
             val storage = SafeStorage(this)
+            this.cacheDir.resolve("quadrinheiro_http_cache").deleteRecursively()
             if (storage.getItem("quadrinheiro_heif_cache_purged_v1") != "true") {
                 this.cacheDir.resolve("quadrinheiro_covers_disk_cache").deleteRecursively()
-                this.cacheDir.resolve("quadrinheiro_http_cache").deleteRecursively()
                 storage.setItem("quadrinheiro_heif_cache_purged_v1", "true")
             }
         }

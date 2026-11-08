@@ -15,6 +15,48 @@ data class StorageUsage(
     val totalBytes: Long get() = cacheBytes + localBytes
 }
 
+/**
+ * Registro em memória das URLs pertencentes à biblioteca e ao perfil do usuário ativo.
+ * Apenas URLs registradas aqui têm permissão para gravar arquivos no DiskCache do Coil.
+ * Todas as outras capas (Explorar, Busca, sequências não salvas, vitrines) são mantidas
+ * apenas na memória RAM (CachePolicy.READ_ONLY no disco), impedindo o inchaço contínuo de dados.
+ */
+object LibraryDiskCacheRegistry {
+    private val allowedUrls = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun registerUrls(urls: Collection<String>) {
+        urls.forEach { raw ->
+            val clean = raw.trim().replace("http://", "https://")
+            if (clean.startsWith("https://")) {
+                allowedUrls.add(clean)
+            }
+        }
+    }
+
+    fun unregisterUrl(raw: String) {
+        val clean = raw.trim().replace("http://", "https://")
+        allowedUrls.remove(clean)
+    }
+
+    fun clear() {
+        allowedUrls.clear()
+    }
+
+    fun isAllowedForDiskWrite(rawUrl: String): Boolean {
+        if (rawUrl.isBlank()) return false
+        val clean = rawUrl.trim().replace("http://", "https://")
+        return allowedUrls.contains(clean)
+    }
+
+    fun diskCachePolicyFor(rawUrl: String): coil.request.CachePolicy {
+        return if (isAllowedForDiskWrite(rawUrl)) {
+            coil.request.CachePolicy.ENABLED
+        } else {
+            coil.request.CachePolicy.READ_ONLY
+        }
+    }
+}
+
 object StorageMaintenance {
     const val RECOVERABLE_CACHE_BUDGET_BYTES = 24L * 1024 * 1024
     const val OFFLINE_DB_BUDGET_BYTES = 10L * 1024 * 1024
