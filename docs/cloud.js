@@ -39,7 +39,7 @@ function showGate(mode,message,kind='normal'){
  if(splash&&['checking','loading'].includes(mode))splash.textContent=message||'Carregando seu espaço…';
  if($('loginStatus')){$('loginStatus').textContent=message||'';$('loginStatus').dataset.kind=kind}
  if($('loginGoogle'))$('loginGoogle').disabled=!auth||mode!=='signed-out';
- if($('loginRetry'))$('loginRetry').hidden=!user||mode==='authenticated'||mode==='conflict';
+ if($('loginRetry'))$('loginRetry').hidden=mode!=='error'&&(!user||mode==='authenticated'||mode==='conflict');
  if($('loginSwitch'))$('loginSwitch').hidden=!user||mode==='authenticated';
 }
 function showMigration(value,exists){
@@ -60,6 +60,13 @@ const CONFIG_URL='cloud-config.json';
 const SDK='https://www.gstatic.com/firebasejs/13.2.0/';
 const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
+const INITIAL_READ_TIMEOUT_MS=16000;
+const PREF_READ_TIMEOUT_MS=5500;
+function withDeadline(promise,ms,description){
+ let timerId;
+ const deadline=new Promise((_,reject)=>{timerId=setTimeout(()=>reject(Error(description+' demorou mais que '+Math.ceil(ms/1000)+' segundos. Verifique a conexão e tente novamente.')),ms)});
+ return Promise.race([promise,deadline]).finally(()=>clearTimeout(timerId));
+}
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
 let sdk=null,retries=0,applyingRemote=false,pendingPhotoUploads=0,migratingLegacy=false;
@@ -159,7 +166,7 @@ async function openFirebase(config){
   }
   let providerIsGoogle=signed.providerData?.some(p=>p.providerId==='google.com')===true;
   try{
-   const token=await sdk.getIdTokenResult(signed);
+   const token=await withDeadline(sdk.getIdTokenResult(signed),12000,'Autenticação Google');
    providerIsGoogle=providerIsGoogle||token?.signInProvider==='google.com'||token?.claims?.firebase?.sign_in_provider==='google.com';
   }catch(err){showGate('error',safeMessage(err),'error');return}
   if(!providerIsGoogle||!signed.emailVerified){
@@ -186,7 +193,8 @@ async function migrateLegacy(legacy,remoteExists){
  const images=await NOTES().readLegacyImages(legacy.data);
  const data={...legacy.data,uiSettings:legacy.uiSettings||{},sidebarMode:legacy.sidebarMode||'expanded'};
  if(new TextEncoder().encode(hash(data)).length>MAX_DOC_BYTES)throw Error('Backup antigo muito grande para a migração automática.');
- active=true;migratingLegacy=true;
+ const wasActive=active;
+ active=true;migratingLegacy=!remoteExists;
  try{
   for(const image of images)await uploadImage(image);
   if(remoteExists){
@@ -206,38 +214,44 @@ async function migrateLegacy(legacy,remoteExists){
   return !remoteExists
  }finally{
   // A área privada só será desbloqueada depois de concluir a leitura remota.
-  migratingLegacy=false;active=false;
+  migratingLegacy=false;active=wasActive;
  }
 }
 async function inspectRemote(){
  if(!user)return;
  const expectedUid=user.uid;
  const ref=sdk.doc(db,'dashboardUsers',expectedUid);
- const snapshot=await sdk.getDocFromServer(ref);
+ notice('Lendo registros principais do Firestore…');
+ const snapshot=await withDeadline(sdk.getDocFromServer(ref),INITIAL_READ_TIMEOUT_MS,'Leitura dos registros');
  if(!user||user.uid!==expectedUid)return;
  remoteRef=ref;
  remoteDoc=snapshot.exists()?snapshot.data().state:null;
  const legacy=APP.getLegacySnapshot?.();
- let migrated=false,migrationWarning='';
+ if(remoteDoc){
+  // Não espere fotos e migração antiga para liberar uma conta que já possui dados.
+  await hydrate(remoteDoc);
+  if(!user||user.uid!==expectedUid)return;
+  activate(remoteDoc,'Seus registros estão disponíveis. As fotos são carregadas separadamente.');
+  if(legacy){
+   Promise.resolve().then(()=>migrateLegacy(legacy,true))
+    .then(()=>{if(user?.uid===expectedUid)notice('Dados antigos transferidos para um backup protegido no Firestore.')})
+    .catch(err=>{if(user?.uid===expectedUid)notice('Os dados antigos foram preservados: '+safeMessage(err),true)});
+  }
+  return
+ }
  if(legacy){
-  try{migrated=await migrateLegacy(legacy,!!remoteDoc)}
-  catch(err){
-   migrationWarning='Os registros antigos ainda estão neste dispositivo porque a migração falhou: '+safeMessage(err);
-   if(!remoteDoc){showGate('error',migrationWarning,'error');notice(migrationWarning,true);return}
+  notice('Migrando seus dados antigos para a nuvem…');
+  try{
+   const migrated=await withDeadline(migrateLegacy(legacy,false),INITIAL_READ_TIMEOUT_MS,'Migração de dados antigos');
+   if(!user||user.uid!==expectedUid)return;
+   if(migrated){activate(cloudState(),'Registros antigos migrados para o Firestore.');return}
+  }catch(err){
+   showGate('error','Não foi possível migrar os registros antigos. Eles permanecem intactos neste dispositivo. '+safeMessage(err),'error');
+   return
   }
  }
  if(!user||user.uid!==expectedUid)return;
- if(remoteDoc){
-  await hydrate(remoteDoc);
-  activate(remoteDoc,'Dados carregados diretamente do Firestore.');
-  if(migrationWarning)notice(migrationWarning,true);
-  return
- }
- if(migrated){
-  activate(cloudState(),'Registros antigos migrados com sucesso para o Firestore.');
-  return
- }
- await createCloudWorkspace();
+ await withDeadline(createCloudWorkspace(),INITIAL_READ_TIMEOUT_MS,'Criação do espaço na nuvem');
 }
 function activate(data,description){
  if(!user||!remoteRef)return;
@@ -256,26 +270,38 @@ function activate(data,description){
 }
 async function hydrate(data){
  if(!data||!Array.isArray(data.tasks)||!Array.isArray(data.notes)||!Array.isArray(data.decisions)||!Array.isArray(data.measurements))throw Error('O backup da nuvem é inválido.');
+ const expectedUid=user?.uid;
  applyingRemote=true;
  try{
-  await downloadPhotos(data);
   APP.replaceCloudState(data);
-  let uiSettings=data.uiSettings;
+  if(data.uiSettings)window.QuadrinheiroSettings?.importPrefs(data.uiSettings);
+  if(['collapsed','expanded'].includes(data.sidebarMode))window.QuadrinheiroSidebar?.setMode(data.sidebarMode);
   const prefsRef=preferenceDoc();
   if(prefsRef){
-   const prefSnapshot=await sdk.getDocFromServer(prefsRef);
-   if(prefSnapshot.exists()&&prefSnapshot.data()?.settings){
-    uiSettings=prefSnapshot.data().settings;
-   }else if(uiSettings&&Object.keys(uiSettings).length){
-    // Migração automática das preferências do documento principal anterior.
-    await sdk.setDoc(prefsRef,{ownerId:user.uid,settings:uiSettings,updatedAt:sdk.serverTimestamp()});
+   notice('Aplicando suas preferências…');
+   try{
+    const prefSnapshot=await withDeadline(sdk.getDocFromServer(prefsRef),PREF_READ_TIMEOUT_MS,'Leitura das preferências');
+    if(!user||user.uid!==expectedUid)return;
+    if(prefSnapshot.exists()&&prefSnapshot.data()?.settings){
+     window.QuadrinheiroSettings?.importPrefs(prefSnapshot.data().settings);
+    }else if(data.uiSettings&&Object.keys(data.uiSettings).length){
+     // Migração em segundo plano: nunca segure a tela por uma escrita auxiliar.
+     sdk.setDoc(prefsRef,{ownerId:expectedUid,settings:data.uiSettings,updatedAt:sdk.serverTimestamp()})
+      .catch(err=>{if(user?.uid===expectedUid)notice('Falha ao migrar preferências: '+safeMessage(err),true)});
+    }
+   }catch(err){
+    // A aparência existente no documento principal continua disponível.
+    if(user?.uid===expectedUid)notice('Tema padrão do seu painel aplicado. Preferências separadas indisponíveis: '+safeMessage(err),true);
    }
   }
-  if(uiSettings)window.QuadrinheiroSettings?.importPrefs(uiSettings);
-  if(['collapsed','expanded'].includes(data.sidebarMode))window.QuadrinheiroSidebar?.setMode(data.sidebarMode);
  }finally{applyingRemote=false}
+ // Anexos são buscados após liberar a interface, sem bloquear o acesso às notas.
+ if(user?.uid===expectedUid&&imageIds(data).size){
+  Promise.resolve().then(()=>downloadPhotos(data,expectedUid))
+   .catch(err=>{if(user?.uid===expectedUid&&active)notice('Não foi possível carregar todas as fotos: '+safeMessage(err),true)});
+ }
 }
-async function downloadPhotos(data){
+async function downloadPhotos(data,expectedUid=user?.uid){
  const refs=imageIds(data);
  if(!refs.size)return;
  const existing=await NOTES().getLocalImageRecords();
@@ -298,7 +324,7 @@ async function downloadPhotos(data){
   if(!/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(dataUrl))throw Error('Formato de imagem inválido.');
   imported.push({id,noteId:'',name:meta.data().name||'Imagem',dataUrl});
  }
- if(imported.length)await NOTES().upsertCloudImages(imported);
+ if(imported.length&&user?.uid===expectedUid&&active)await NOTES().upsertCloudImages(imported);
 }
 async function uploadPhotos(data){
  const refs=imageIds(data);
@@ -406,7 +432,7 @@ async function googleSignIn(){
 }
 $('loginGoogle')?.addEventListener('click',googleSignIn);
 $('loginRetry')?.addEventListener('click',async()=>{
- if(!user)return;showGate('loading','Conectando novamente…');
+ if(!auth){window.location.reload();return}if(!user){showGate('signed-out','Entre com Google novamente.');return}showGate('loading','Conectando novamente…');
  try{await inspectRemote()}catch(err){showGate('error',safeMessage(err),'error')}
 });
 $('loginSwitch')?.addEventListener('click',async()=>{if(auth)await sdk.signOut(auth)});
