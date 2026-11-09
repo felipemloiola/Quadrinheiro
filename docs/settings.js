@@ -33,7 +33,7 @@ function load(){
  }catch{return {...defaults}}
 }
 let preferences=load();
-function persist(){try{localStorage.setItem(key,JSON.stringify(preferences))}catch{APP?.notify('O navegador não permitiu salvar os ajustes.',true)}}
+function persist(){try{localStorage.setItem(key,JSON.stringify(preferences));window.QuadrinheiroCloud?.notifyLocalChange()}catch{APP?.notify('O navegador não permitiu salvar os ajustes.',true)}}
 function rgb(hex){const s=hex.replace('#','');return [0,2,4].map(n=>parseInt(s.slice(n,n+2),16))}
 function hex(rgbValue){return '#'+rgbValue.map(x=>Math.round(x).toString(16).padStart(2,'0')).join('').toUpperCase()}
 function mixed(a,b,amount){const x=rgb(a),y=rgb(b);return hex(x.map((n,i)=>n+(y[i]-n)*amount))}
