@@ -1,12 +1,10 @@
-/* Quadrinheiro · Sidebar desktop expansa/recolhida; preferência local. */
+/* Quadrinheiro · Sidebar: preferência remota, somente em memória na sessão. */
 (()=>{
 'use strict';
-const KEY='quadrinheiro-sidebar-v1';
 const root=document.documentElement;
 const toggle=document.getElementById('sidebarToggle');
 if(!toggle)return;
-function read(){try{return localStorage.getItem(KEY)==='collapsed'?'collapsed':'expanded'}catch{return 'expanded'}}
-let mode=read();
+let mode='expanded';
 function paint(){
  root.dataset.sidebar=mode;
  const expanded=mode==='expanded';
@@ -20,11 +18,11 @@ function paint(){
 }
 function setMode(value){
  mode=value==='collapsed'?'collapsed':'expanded';
- try{localStorage.setItem(KEY,mode)}catch{}
  paint();
  window.QuadrinheiroCloud?.notifyLocalChange();
 }
 toggle.addEventListener('click',()=>setMode(mode==='expanded'?'collapsed':'expanded'));
-window.QuadrinheiroSidebar={getMode:()=>mode,setMode};
+function resetSession(){mode='expanded';paint()}
+window.QuadrinheiroSidebar={getMode:()=>mode,setMode,resetSession};
 paint();
 })();
