@@ -157,6 +157,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="smooth-sidebar.css?v=20261109f">
 <link rel="stylesheet" href="cloud.css?v=20261109a">
 <link rel="stylesheet" href="login.css?v=20261109j">
+  <link rel="stylesheet" href="mobile.css?v=20261109a">
 </head>
 <body>
 <section id="authSplash" role="status" aria-live="polite" aria-label="Carregando Quadrinheiro">
@@ -212,7 +213,24 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       </button>
       </div>
     </div>
+    <button class="mobile-more-toggle" id="mobileMoreToggle" type="button" aria-controls="mobileNavPanel" aria-expanded="false" aria-pressed="false" aria-haspopup="dialog" aria-label="Mais seções">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="12" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/></svg>
+      <span>Mais</span>
+    </button>
   </aside>
+  <div class="mobile-nav-backdrop" id="mobileNavBackdrop" hidden></div>
+  <section class="mobile-nav-panel" id="mobileNavPanel" role="dialog" aria-modal="true" aria-label="Mais seções" hidden>
+    <div class="mobile-nav-panel-header">
+      <strong>Outras seções</strong>
+      <button type="button" class="mobile-nav-close" id="mobileNavClose" aria-label="Fechar menu">×</button>
+    </div>
+    <div class="mobile-more-links">
+      <button type="button" class="mobile-nav-link" data-mobile-goto="repository" aria-label="Abrir Repositório"></button>
+      <button type="button" class="mobile-nav-link" data-mobile-goto="integrations" aria-label="Abrir Integrações"></button>
+      <button type="button" class="mobile-nav-link" data-mobile-goto="performance" aria-label="Abrir Performance"></button>
+      <button type="button" class="mobile-nav-link" data-mobile-goto="decisions" aria-label="Abrir Decisões"></button>
+    </div>
+  </section>
   <main class="main">
     <header class="topbar"><div class="crumb">Quadrinheiro <span>/</span> <strong id="crumbName">Visão geral</strong></div><div class="top-actions"><button class="btn ghost" id="importBtn" title="Importar backup JSON"></button><button class="btn ghost" id="exportBtn" title="Exportar dados JSON"></button><button class="btn primary" id="syncBtn" title="Sincronizar metadados públicos do GitHub" aria-label="Sincronizar metadados públicos do GitHub"></button><input type="file" accept="application/json,.json" id="fileInput" hidden></div></header>
     <div class="content">
@@ -379,7 +397,7 @@ function completion(t){let c=Array.isArray(t.checks)?t.checks:[];return c.length
 function statusPill(s){let cl={'Concluída':'done','Em andamento':'work','Em revisão':'review','Bloqueada':'block','Backlog':'wait','Documentada':'done','Em avaliação':'work','Revisar':'block'}[s]||'wait';return `<span class="pill ${cl}">${escapeHtml(s)}</span>`}
 function priorityPill(p){return `<span class="pill ${escapeHtml((p||'P2').toLowerCase())}">${escapeHtml(p)}</span>`}
 function notify(msg,error=false){let el=document.getElementById('toast');el.textContent=msg;el.style.background=error?'#53303d':'#243c44';el.classList.add('show');clearTimeout(notify.timer);notify.timer=setTimeout(()=>el.classList.remove('show'),3100)}
-function go(page){if(!document.getElementById(page))return;currentPage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===page));document.querySelectorAll('.nav-btn').forEach(el=>{let active=el.dataset.page===page;el.classList.toggle('active',active);el.setAttribute('aria-current',active?'page':'false')});document.getElementById('crumbName').textContent={overview:'Visão geral',repository:'Repositório',backlog:'Backlog',integrations:'Integrações',performance:'Performance',decisions:'Decisões',notes:'Notas',settings:'Ajustes'}[page];try{history.replaceState(null,'','#'+page)}catch{}window.scrollTo({top:0,behavior:'instant'});render();}
+function go(page){if(!document.getElementById(page))return;currentPage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===page));document.querySelectorAll('.nav-btn').forEach(el=>{let active=el.dataset.page===page;el.classList.toggle('active',active);el.setAttribute('aria-current',active?'page':'false')});document.getElementById('crumbName').textContent={overview:'Visão geral',repository:'Repositório',backlog:'Backlog',integrations:'Integrações',performance:'Performance',decisions:'Decisões',notes:'Notas',settings:'Ajustes'}[page];try{history.replaceState(null,'','#'+page)}catch{}window.scrollTo({top:0,behavior:'instant'});render();window.QuadrinheiroMobileNav?.sync(page);}
 function hydrateIcons(){const nav=[['overview','Visão geral'],['repository','Repositório'],['backlog','Backlog'],['integrations','Integrações'],['performance','Performance'],['decisions','Decisões'],['notes','Notas'],['settings','Ajustes']];nav.forEach(([k,title])=>(()=>{const button=document.querySelector(`.nav-btn[data-page="${k}"]`);button.innerHTML=ico(k)+`<span>${title}</span>${k==='backlog'?'<span class="count" id="navBacklog">0</span>':''}`;button.setAttribute('aria-label',title)})());document.getElementById('syncBtn').innerHTML=ico('refresh')+'<span class="hide-mobile">Sincronizar GitHub</span>';document.getElementById('importBtn').innerHTML=ico('upload')+'<span class="hide-mobile">Importar</span>';document.getElementById('exportBtn').innerHTML=ico('download')+'<span class="hide-mobile">Exportar</span>';document.getElementById('addTask').innerHTML=ico('plus')+' Nova tarefa';document.getElementById('addMetric').innerHTML=ico('plus')+' Registrar medição';document.getElementById('addDecision').innerHTML=ico('plus')+' Nova decisão';document.getElementById('bannerIcon').innerHTML=ico('shield')}
 function render(){renderOverview();renderRepo();renderTasks();renderIntegrations();renderPerformance();renderDecisions();window.QuadrinheiroNotes?.render();window.QuadrinheiroSettings?.render()}
 function renderOverview(){
@@ -519,6 +537,7 @@ hydrateIcons();go(['overview','repository','backlog','integrations','performance
 </script>
 <script src="settings.js?v=20261109h"></script>
 <script src="sidebar.js?v=20261109i"></script>
+<script src="mobile.js?v=20261109a"></script>
 <script src="notes.js?v=20261109f"></script>
 <script type="module" src="cloud.js?v=20261109s"></script>
 </body>
