@@ -223,28 +223,25 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
  .login-google,.login-mark,.login-brand-q{transition:none!important;animation:none!important}
 }
 
-/* Ondas diagonais de cores: franjas inclinadas avançam da direita para a esquerda.
-   Paleta duplicada nas metades para disfarçar a união entre os ciclos. */
+/* Onda diagonal periódica sem salto: a faixa se repete a cada 200px
+   no eixo do gradiente 135°. Um deslocamento de -141.421356px em ambos
+   os eixos equivale a um período exato (200 / sqrt(2)).
+   Assim, o primeiro e o último quadro mostram as mesmas cores. */
 @keyframes quadrinheiro-logo-colors {
-  from { background-position: 0% 50%; }
-  to { background-position: 100% 50%; }
+  from { background-position: 0px 0px; }
+  to { background-position: -141.421356px -141.421356px; }
 }
 @supports ((background-clip:text) or (-webkit-background-clip:text)) {
   #loginScreen .login-story h1 span {
-    background-image: linear-gradient(125deg,
-      #2563EB 0%,
-      #00B4D8 8%,
-      #FF1493 17%,
-      #FF9100 26%,
-      #FFD000 34%,
-      #2563EB 50%,
-      #00B4D8 58%,
-      #FF1493 67%,
-      #FF9100 76%,
-      #FFD000 84%,
-      #2563EB 100%);
-    background-size: 200% 130%;
-    background-position: 0% 50%;
+    background-image: repeating-linear-gradient(135deg,
+      #2563EB 0px,
+      #00B4D8 32px,
+      #FF1493 70px,
+      #FF9100 110px,
+      #FFD000 150px,
+      #2563EB 200px);
+    background-size: 100% 100%;
+    background-position: 0px 0px;
     background-repeat: no-repeat;
     -webkit-background-clip: text;
     background-clip: text;
@@ -257,13 +254,13 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
 @media (prefers-reduced-motion: reduce) {
   #loginScreen .login-story h1 span {
     animation: none !important;
-    background-position: 25% 50%;
+    background-position: 0px 0px;
     will-change: auto;
   }
 }
 html[data-motion="reduced"] #loginScreen .login-story h1 span {
   animation: none !important;
-  background-position: 25% 50%;
+  background-position: 0px 0px;
   will-change: auto;
 }
 
