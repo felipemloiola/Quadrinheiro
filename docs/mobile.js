@@ -8,8 +8,8 @@
  const closeButton=document.getElementById('mobileNavClose');
  if(!trigger||!panel||!backdrop||!closeButton)return;
  const media=window.matchMedia('(max-width:620px)');
- const pages=['repository','integrations','performance','decisions'];
- const titles={repository:'Repositório',integrations:'Integrações',performance:'Performance',decisions:'Decisões'};
+ const pages=['repository','integrations','progress','performance','decisions'];
+ const titles={repository:'Repositório',integrations:'Integrações',progress:'Progresso',performance:'Performance',decisions:'Decisões'};
  let opened=false;
  for(const page of pages){
   const target=panel.querySelector('[data-mobile-goto="'+page+'"]');

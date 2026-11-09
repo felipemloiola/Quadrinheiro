@@ -1,3 +1,0 @@
-OK app/src/main/java/com/example/ui/components/SocialShareCardSheet.kt
-SKIP app/src/main/java/com/example/ui/screens/SettingsScreen.kt
-Brand typography cloned with SfProDisplayFontFamily Bold, Settings footer crash fixed, and logo perfectly centered on social card.

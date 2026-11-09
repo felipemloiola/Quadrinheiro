@@ -1,3 +1,0 @@
-Legacy V7 mutating transformations retired; no Kotlin files changed by this script.
-CHECK: refactored SafeStorage retains missing-preference defaults and isolated state loaders.
-Guest UI, theme, typography and auth implementations are not reapplied or overwritten.

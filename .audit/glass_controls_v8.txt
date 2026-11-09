@@ -1,3 +1,0 @@
-SKIP: original shared gesture detector already restored
-Settings logo preserved. Global exclusive-drag override disabled.
-Device verification pending for tab-bar hold/drag behavior.

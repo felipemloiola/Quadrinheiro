@@ -1,3 +1,0 @@
-SKIP: duplicate progress bar already removed
-Device verification pending: only one page slider; minus/plus and saving still work.
-Removed source:

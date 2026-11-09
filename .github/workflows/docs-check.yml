@@ -1,0 +1,19 @@
+name: Validate documentation panel
+on:
+  pull_request:
+    paths: ['docs/**', '.github/scripts/docs-progress.test.cjs', '.github/workflows/docs-check.yml']
+  push:
+    branches: [main]
+    paths: ['docs/**', '.github/scripts/docs-progress.test.cjs', '.github/workflows/docs-check.yml']
+permissions:
+  contents: read
+jobs:
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check docs/progress.js && node --check docs/mobile.js
+      - run: node --test .github/scripts/docs-progress.test.cjs

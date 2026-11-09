@@ -1,2 +1,0 @@
-OK app/src/main/java/com/example/ui/components/SocialShareCardSheet.kt
-Brand typography cloned identically to the social card, and logo centered vertically.
