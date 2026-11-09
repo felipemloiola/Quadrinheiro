@@ -327,6 +327,11 @@ window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,co
    notice('Sincronização privada ainda não configurada. Seus dados permanecem no navegador.',true);
    return
   }
+  if(!Array.isArray(conf.allowedEmails)||!conf.allowedEmails.length){
+   showGate('setup','Cadastre seu endereço Google autorizado em cloud-config.json antes de habilitar o acesso.','error');
+   notice('A lista de contas Google autorizadas está vazia.',true);
+   return
+  }
   await openFirebase(conf);
  }catch(err){showGate('setup',safeMessage(err),'error');notice(safeMessage(err),true)}
 })();
