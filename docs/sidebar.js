@@ -3,7 +3,8 @@
 'use strict';
 const root=document.documentElement;
 const toggle=document.getElementById('sidebarToggle');
-if(!toggle)return;
+const brandExpand=document.getElementById('sidebarBrandExpand');
+if(!toggle||!brandExpand)return;
 let mode='expanded';
 function paint(){
  root.dataset.sidebar=mode;
@@ -11,6 +12,10 @@ function paint(){
  toggle.setAttribute('aria-expanded',String(expanded));
  toggle.setAttribute('aria-label',expanded?'Recolher barra lateral':'Expandir barra lateral');
  toggle.title=expanded?'Recolher barra lateral':'Expandir barra lateral';
+ brandExpand.disabled=expanded;
+ brandExpand.tabIndex=expanded?-1:0;
+ brandExpand.setAttribute('aria-expanded',String(expanded));
+ brandExpand.setAttribute('aria-hidden',String(expanded));
  const label=toggle.querySelector('.sidebar-toggle-text');
  if(label)label.textContent=expanded?'Recolher menu':'Expandir menu';
  const icon=toggle.querySelector('svg');
@@ -23,7 +28,8 @@ function setMode(value){
  paint();
  window.QuadrinheiroCloud?.notifyLocalChange();
 }
-toggle.addEventListener('click',()=>setMode(mode==='expanded'?'collapsed':'expanded'));
+toggle.addEventListener('click',()=>{if(mode==='expanded')setMode('collapsed')});
+brandExpand.addEventListener('click',()=>{if(mode==='collapsed')setMode('expanded')});
 function resetSession(){mode='expanded';paint()}
 window.QuadrinheiroSidebar={getMode:()=>mode,setMode,resetSession};
 paint();
