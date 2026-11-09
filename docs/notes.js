@@ -273,7 +273,39 @@ async function upsertCloudImages(records){
  }
  render();
 }
+// Compatibilidade de migração com o IndexedDB da versão antiga.
+// Nunca grava fotos no dispositivo: apenas lê para transferir, e remove após confirmação.
+async function readLegacyImages(legacyState){
+ const ids=new Set((legacyState.notes||[]).flatMap(n=>(n.photos||[]).map(p=>p.id)));
+ if(!ids.size)return [];
+ if(!window.indexedDB)throw Error('O navegador não permite migrar fotos antigas.');
+ const db=await new Promise((resolve,reject)=>{
+  const request=indexedDB.open('quadrinheiro-notas-images-v1',1);
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error||Error('Não foi possível abrir as fotos antigas.'));
+ });
+ try{
+  if(!db.objectStoreNames.contains('images'))throw Error('O banco antigo de fotos não existe.');
+  const records=await new Promise((resolve,reject)=>{
+   const request=db.transaction('images','readonly').objectStore('images').getAll();
+   request.onsuccess=()=>resolve(request.result||[]);
+   request.onerror=()=>reject(request.error||Error('Falha ao ler as fotos antigas.'));
+  });
+  const found=records.filter(r=>ids.has(r.id)&&validImage(r.dataUrl));
+  if(found.length!==ids.size)throw Error('Fotos locais antigas estão incompletas. Não serão excluídas automaticamente.');
+  return found
+ }finally{db.close()}
+}
+async function clearLegacyImages(){
+ if(!window.indexedDB)return;
+ await new Promise((resolve,reject)=>{
+  const req=indexedDB.deleteDatabase('quadrinheiro-notas-images-v1');
+  req.onsuccess=()=>resolve();
+  req.onerror=()=>reject(req.error||Error('Não foi possível limpar as imagens antigas.'));
+  req.onblocked=()=>reject(Error('Feche as outras abas do painel para concluir a limpeza do IndexedDB antigo.'));
+ })
+}
 function resetSession(){imageCache.clear();render()}
-window.QuadrinheiroNotes={render,exportImages,importImages,getLocalImageRecords,upsertCloudImages,resetSession};
+window.QuadrinheiroNotes={render,exportImages,importImages,getLocalImageRecords,upsertCloudImages,readLegacyImages,clearLegacyImages,resetSession};
 render();
 })();
