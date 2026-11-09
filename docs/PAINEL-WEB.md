@@ -55,3 +55,15 @@ O painel adota a linguagem visual do aplicativo Android, referenciada em `app/sr
 - O painel não sincroniza automaticamente notas entre celular e computador. Para sincronização em nuvem no futuro, será necessário configurar armazenamento privado com autenticação.
 
 Arquivos relacionados: `docs/notes.js` (funcionalidade/IndexedDB) e `docs/notes.css` (interface da seção Notas).
+
+## Visão geral — painel de atividade (revisão visual)
+
+A página inicial agora adota uma organização compacta inspirada em painéis de atividade profissionais: fundo neutro, cartões de cantos suaves, ícones discretos, navegação lateral e tabelas de eventos legíveis.
+
+- **Seis indicadores** calculados dos dados disponíveis: tarefas pendentes, em andamento, concluídas, com evidências, notas locais e última release do GitHub.
+- **Backlog por área**: quantidade de tarefas e proporção de critérios de aceite marcados em até quatro áreas.
+- **Evolução**: progresso dos checklists, tarefas P0 ainda abertas e total de medições cadastradas; não representa benchmark automático.
+- **Atividade recente**: os últimos commits públicos retornados pela API do GitHub, com título, autor, hash, data e acesso à origem. A consulta ocorre ao abrir o site, ao usar **Sincronizar GitHub** e periodicamente enquanto a página está ativa. Falhas de rede exibem os últimos dados consultados ou um estado vazio, sem inventar registros.
+- **Registros recentes**: notas, decisões e benchmarks criados no próprio navegador; nenhum deles é publicado pelo site no repositório.
+
+A camada visual desta revisão fica em `docs/dashboard.css`, carregada depois de `visual.css` e `notes.css`. O HTML e as rotinas de exibição permanecem em `docs/index.html`. A versão móvel mantém as sete abas acessíveis pela barra inferior. Tema claro, movimento reduzido e contraste reforçado continuam disponíveis.
