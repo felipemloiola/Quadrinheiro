@@ -295,7 +295,7 @@ const seedDecisions=[
 const seedRoot=['.audit','.claude','.github','AGENTS.md','CONTEXTO-DO-APP.md','README.md','app','branding','catalog-service','docs','firebase.json','firestore.rules','macrobenchmark','plans','settings.gradle.kts'];
 const seed={schema:1,tasks:seedTasks,decisions:seedDecisions,measurements:[],nextActions:[],notes:[],repo:{release:'v1.0.79',releaseUrl:BASE+'/releases/tag/v1.0.79',head:'e763d8e',headUrl:BASE+'/commit/e763d8e1869e400f1a3dd1107479b49cd93a9f38',branch:'main',root:seedRoot,lastSync:null,verifiedAt:'2026-11-08',source:'Snapshot verificado em 08/11/2026'}};
 const deepClone=x=>JSON.parse(JSON.stringify(x));
-let state=load();let currentPage='overview';let focusRestore=null;
+let state=deepClone(seed);let currentPage='overview';let focusRestore=null;
 function load(key=STORAGE_KEY){try{let raw=localStorage.getItem(key);if(!raw)return deepClone(seed);let parsed=JSON.parse(raw);if(parsed.schema!==1||!Array.isArray(parsed.tasks)||!Array.isArray(parsed.decisions)||!Array.isArray(parsed.measurements))throw Error('Versão inválida');return {...deepClone(seed),...parsed,notes:Array.isArray(parsed.notes)?parsed.notes:[],repo:{...seed.repo,...(parsed.repo||{})}}}catch{return deepClone(seed)}}
 function save(){try{if(!activeAccountId)return;localStorage.setItem(activeStorageKey(),JSON.stringify(state));window.QuadrinheiroCloud?.notifyLocalChange()}catch{notify('Sem espaço para salvar; exporte um backup.',true)}}
 function setUserScope(uid){
@@ -305,7 +305,7 @@ function setUserScope(uid){
   const previous=localStorage.getItem(LEGACY_OWNER_KEY);
   if(!previous&&!localStorage.getItem(key)){
    const legacy=localStorage.getItem(STORAGE_KEY);
-   if(legacy){localStorage.setItem(key,legacy);localStorage.setItem(LEGACY_OWNER_KEY,uid)}
+   if(legacy){localStorage.setItem(key,legacy);localStorage.setItem(LEGACY_OWNER_KEY,uid);localStorage.removeItem(STORAGE_KEY)}
   }
  }catch{}
  activeAccountId=uid;
@@ -464,6 +464,6 @@ hydrateIcons();go(['overview','repository','backlog','integrations','performance
 <script src="settings.js?v=20261109e"></script>
 <script src="sidebar.js?v=20261109d"></script>
 <script src="notes.js?v=20261109d"></script>
-<script type="module" src="cloud.js?v=20261109e"></script>
+<script type="module" src="cloud.js?v=20261109f"></script>
 </body>
 </html>
