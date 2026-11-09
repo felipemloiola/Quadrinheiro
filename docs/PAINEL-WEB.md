@@ -4,7 +4,7 @@ O centro de trabalho do Quadrinheiro é publicado em [felipemloiola.github.io/Qu
 
 ## Arquitetura
 
-O site é um projeto estático com HTML, CSS e JavaScript. A interface usa a tipografia e os temas inspirados no aplicativo Android, um menu lateral expansível e a logo colorida na tela de entrada. A palavra **“continuar.”** apresenta um gradiente animado da direita para a esquerda, respeitando `prefers-reduced-motion`.
+O site é um projeto estático com HTML, CSS e JavaScript. A interface usa a tipografia e os temas inspirados no aplicativo Android, um menu lateral expansível e a logo colorida na tela de entrada. A palavra **“continuar.”** apresenta uma onda de gradiente diagonal (125°), que atravessa o texto da direita para a esquerda a cada 2,65 segundos, respeitando `prefers-reduced-motion`.
 
 O painel exige login Google com a conta autorizada. O acesso aos registros depende das regras publicadas no Firestore. Apesar da tela de entrada, os arquivos públicos do GitHub Pages continuam publicamente acessíveis; **somente os dados protegidos pelo backend são privados**.
 
@@ -59,3 +59,9 @@ Mais detalhes: [CONFIGURAR-SYNC-FIREBASE.md](CONFIGURAR-SYNC-FIREBASE.md).
 5. Use **Sair da conta**; a área de trabalho deve ser bloqueada imediatamente.
 6. Teste com rede indisponível: o site não deve afirmar que dados ainda não enviados foram salvos.
 7. Teste anexos e a exportação Markdown/JSON.
+
+## Splash e transição da navegação (09/11/2026)
+
+A primeira tela exibida pelo HTML é o **splash com a marca colorida** e uma barra de progresso indeterminada. Os estados `checking` e `loading` do Firebase ocultam totalmente o formulário, enquanto a sessão Google é restaurada e o documento privado é lido do Firestore. O formulário aparece apenas com `signed-out`, `setup` ou `error`; o painel aparece somente com `authenticated`. O texto do splash acompanha os estágios reais do carregamento. As animações respeitam a opção de reduzir movimento.
+
+A barra lateral separa fisicamente o controle de expandir/recolher da marca `Q`. Logo, controle e ícones da navegação permanecem em posições próprias nos dois modos; somente os rótulos desaparecem ou reaparecem durante a mudança de largura. O controle não usa mais sobreposição no Q e continua atualizando `aria-expanded` e seu texto acessível.
