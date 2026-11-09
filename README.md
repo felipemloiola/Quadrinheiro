@@ -11,11 +11,16 @@
 
 <p align="center">
   <a href="https://github.com/felipemloiola/Quadrinheiro/releases/latest">Download APK</a> ·
-  <a href="https://felipemloiola.github.io/Quadrinheiro/">Project dashboard</a> ·
   <a href="https://github.com/felipemloiola/Quadrinheiro/issues">Report an issue</a>
 </p>
 
 **Android 7.0+ · Kotlin · Jetpack Compose · Material 3**
+
+## App preview
+
+[**Watch the 12-second Quadrinheiro demo (English, MP4)**](QuadrinheiroPromo-12s-EN.mp4)
+
+The video highlights the real Home, Explore, and Profile screens, along with the comic library and reading features. The original in-app screenshots are shown in Portuguese; the promotional captions are in English.
 
 Quadrinheiro pairs a comic-book library with reading goals, personalized discovery, profiles, and a community. Its interface uses translucent materials, cover-inspired lighting, and spring-based motion. The appearance can be customized for different color schemes and accessibility needs.
 
@@ -73,20 +78,6 @@ Quadrinheiro pairs a comic-book library with reading goals, personalized discove
 Future updates can be downloaded through Quadrinheiro once the version with the in-app updater is installed. Android still requires user confirmation before installing an update. The updater checks the package identity, version, size, SHA-256 hash, and signing certificate.
 
 > **Privacy and compatibility:** your library and preferences are private to your account. Saving a rating or review may publish it to the Community. Lock-screen progress and Now Bar behavior vary by Android version, device, permissions, and privacy settings.
-
-## Project dashboard
-
-The [Quadrinheiro web dashboard](https://felipemloiola.github.io/Quadrinheiro/) is published from the `docs/` directory through GitHub Pages. It is a project-management companion, **not a browser-based Android emulator**.
-
-Its sections include Overview, Repository, Backlog, Integrations, Performance, Decisions, and **Notes**. Notes support ideas, drafts, research, reference images, search, pinning, and automatic local saving.
-
-- Project records and note text are saved in the browser's **localStorage**.
-- Attached photos are stored in **IndexedDB**.
-- JSON export/import supports backups including note images.
-- Notes **do not automatically sync across devices**; export a backup when moving browsers or devices.
-- **Sync GitHub** reads public repository information; it does not upload personal notes.
-
-See [Web dashboard documentation](docs/PAINEL-WEB.md) for details.
 
 ## Technology
 
@@ -160,7 +151,7 @@ app/src/main/java/com/example/
 └── widget/        # Home-screen widgets
 
 catalog-service/     # Cloudflare catalog service
-docs/                # GitHub Pages dashboard and documentation
+docs/                # Project and development documentation
 branding/            # Official Quadrinheiro logo
 ```
 
