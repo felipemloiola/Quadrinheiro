@@ -29,9 +29,28 @@ box.innerHTML=
  '<p class="settings-note">As fotos também são sincronizadas, em partes privadas no Firestore. Dados e configurações locais permanecem disponíveis mesmo sem conexão.</p>';
 column.insertBefore(box,column.firstChild);
 const $=id=>document.getElementById(id);
+const workspace=$('workspace');
+let allowEmails=[],authDenyReason='';
+function showGate(mode,message,kind='normal'){
+ document.documentElement.dataset.auth=mode;
+ if(workspace)workspace.inert=mode!=='authenticated';
+ if($('loginStatus')){$('loginStatus').textContent=message||'';$('loginStatus').dataset.kind=kind}
+ if($('loginGoogle'))$('loginGoogle').disabled=!auth||mode!=='signed-out';
+ if($('loginRetry'))$('loginRetry').hidden=!user||mode==='authenticated'||mode==='conflict';
+ if($('loginSwitch'))$('loginSwitch').hidden=!user||mode==='authenticated';
+}
+function showMigration(value,exists){
+ if($('loginMigration'))$('loginMigration').hidden=!value;
+ if($('loginUseCloud'))$('loginUseCloud').disabled=!exists;
+}
 const notice=(message,isError=false)=>{
  $('cloudStatus').textContent=message;
  $('cloudStatus').dataset.status=isError?'error':'normal';
+ const mode=document.documentElement.dataset.auth;
+ if(!['authenticated','signed-out','setup'].includes(mode)&&$('loginStatus')){
+  $('loginStatus').textContent=message;
+  $('loginStatus').dataset.kind=isError?'error':'normal';
+ }
 };
 const CONFIG_URL='cloud-config.json';
 const SDK='https://www.gstatic.com/firebasejs/13.2.0/';
@@ -73,12 +92,13 @@ function localStamp(){try{return localStorage.getItem(LAST_PREFIX+user.uid)||''}
 function saveStamp(data){try{localStorage.setItem(LAST_PREFIX+user.uid,hash(data))}catch{}}
 function setDecisionVisible(value){$('cloudDecisions').hidden=!value}
 function resetSession(){
- clearTimeout(timer);if(subscribed){subscribed();subscribed=null}
+ clearTimeout(timer);
+ APP.setUserScope?.(null);if(subscribed){subscribed();subscribed=null}
  user=null;active=false;dirty=false;queued=false;uploading=false;remoteDoc=null;remoteRef=null;
  $('cloudLogout').hidden=true;
- $('cloudLogin').hidden=false;
+ $('cloudLogin').hidden=true;
  $('cloudAccount').textContent='';
- setDecisionVisible(false);
+ setDecisionVisible(false);showMigration(false,false);
 }
 async function openFirebase(config){
  if(!sdk){
@@ -89,6 +109,7 @@ async function openFirebase(config){
   ]);
   sdk={...app,...authModule,...firestore};
  }
+ allowEmails=(Array.isArray(config.allowedEmails)?config.allowedEmails:[]).map(v=>String(v).trim().toLowerCase()).filter(Boolean);
  services=sdk.initializeApp({
   apiKey:config.apiKey,
   authDomain:config.authDomain,
@@ -99,16 +120,28 @@ async function openFirebase(config){
  db=config.databaseId&&config.databaseId!=='(default)'?
    sdk.getFirestore(services,config.databaseId):sdk.getFirestore(services);
  $('cloudLogin').disabled=false;
- notice('Pronto para entrar com Google.');
+ showGate('checking','Verificando sua sessão Google…');
  sdk.onAuthStateChanged(auth,async signed=>{
-  if(!signed){resetSession();notice('Entre com Google para sincronizar seus registros.');return}
-  user=signed;
-  $('cloudLogout').hidden=false;
-  $('cloudLogin').hidden=true;
+  if(!signed){
+   resetSession();const reason=authDenyReason;authDenyReason='';
+   showGate('signed-out',reason||'Entre com sua conta Google para continuar.',reason?'error':'normal');
+   return
+  }
+  if(!signed.providerData?.some(p=>p.providerId==='google.com')){
+   authDenyReason='Este painel aceita somente contas Google.';await sdk.signOut(auth);return
+  }
+  if(allowEmails.length&&!allowEmails.includes(String(signed.email||'').toLowerCase())){
+   authDenyReason='Esta conta Google não está autorizada a acessar o painel.';await sdk.signOut(auth);return
+  }
+  user=signed;APP.setUserScope?.(user.uid);
+  $('cloudLogout').hidden=false;$('cloudLogin').hidden=true;
   $('cloudAccount').textContent='Conta: '+(user.email||'Google')+' · seus dados ficam restritos ao seu UID.';
+  showGate('loading','Carregando sua área de trabalho…');
   notice('Conferindo registros privados…');
-  try{await inspectRemote()}catch(err){notice(safeMessage(err),true)}
+  try{await inspectRemote()}
+  catch(err){showGate('error',safeMessage(err),'error');notice(safeMessage(err),true)}
  });
+ sdk.getRedirectResult(auth).catch(err=>showGate('error',safeMessage(err),'error'));
 }
 async function inspectRemote(){
  if(!user)return;
@@ -125,9 +158,10 @@ async function inspectRemote(){
  if(remoteDoc&&APP.isDefaultLocal?.()){
   await hydrate(remoteDoc);activate(remoteDoc,'Dados carregados da nuvem.');return
  }
- setDecisionVisible(true);
- if(remoteDoc)notice('Dados locais e da nuvem diferem. Escolha qual versão manter.');
- else notice('Primeiro acesso: envie os registros deste aparelho à nuvem.');
+ if(!remoteDoc){await uploadLocal();return}
+ setDecisionVisible(true);showMigration(true,true);
+ showGate('conflict','Encontramos versões diferentes. Escolha qual deve ser mantida.');
+ notice('Dados locais e da nuvem diferem. Escolha qual versão manter.');
  $('cloudLoad').disabled=!remoteDoc;
  $('cloudDecisionHint').textContent=remoteDoc?
   'Escolha “Carregar” para usar a versão da nuvem; ou “Enviar” para substituí-la pelos dados deste aparelho. Faça um backup JSON antes de substituir.' :
@@ -135,7 +169,9 @@ async function inspectRemote(){
 }
 function activate(data,description){
  active=true;dirty=false;retries=0;remoteHash=hash(data);saveStamp(data);
- setDecisionVisible(false);notice(description||'Nuvem conectada e sincronizando.');
+ setDecisionVisible(false);showMigration(false,false);
+ showGate('authenticated','');
+ notice(description||'Nuvem conectada e sincronizando.');
  if(subscribed)subscribed();
  subscribed=sdk.onSnapshot(remoteRef,async snapshot=>{
   if(!active||!snapshot.exists()||snapshot.metadata.hasPendingWrites||dirty||uploading)return;
@@ -244,14 +280,33 @@ async function uploadLocal(){
  active=true;dirty=true;setDecisionVisible(false);
  await push();
  if(!dirty)activate(cloudState(),'Dados enviados à nuvem e sincronização ativa.');
- else {active=false;setDecisionVisible(true)}
+ else {
+  active=false;setDecisionVisible(true);showMigration(true,!!remoteDoc);
+  showGate('error','Não foi possível salvar na nuvem. Confira as regras do Firestore e tente novamente.','error');
+ }
 }
-$('cloudLogin').addEventListener('click',async()=>{
+async function googleSignIn(){
+ if(!sdk||!auth)return;
+ showGate('loading','Abrindo sua conta Google…');
  try{
   const provider=new sdk.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
   await sdk.signInWithPopup(auth,provider);
- }catch(err){notice(safeMessage(err),true)}
+ }catch(err){
+  if(String(err?.code||'').includes('popup-blocked')&&sdk.signInWithRedirect){
+   await sdk.signInWithRedirect(auth,new sdk.GoogleAuthProvider());
+  }else showGate('signed-out',safeMessage(err),'error')
+ }
+}
+$('loginGoogle')?.addEventListener('click',googleSignIn);
+$('loginUseCloud')?.addEventListener('click',loadCloud);
+$('loginUseLocal')?.addEventListener('click',uploadLocal);
+$('loginRetry')?.addEventListener('click',async()=>{
+ if(!user)return;showGate('loading','Conectando novamente…');
+ try{await inspectRemote()}catch(err){showGate('error',safeMessage(err),'error')}
 });
+$('loginSwitch')?.addEventListener('click',async()=>{if(auth)await sdk.signOut(auth)});
+$('cloudLogin').addEventListener('click',googleSignIn);
 $('cloudLogout').addEventListener('click',async()=>{
  try{await sdk.signOut(auth);notice('Conta desconectada. Os registros locais permanecem neste navegador.')}
  catch(err){notice(safeMessage(err),true)}
@@ -265,10 +320,11 @@ window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,co
   if(!response.ok)throw Error('Não foi possível ler cloud-config.json');
   const conf=await response.json();
   if(!conf.enabled||!conf.apiKey||!conf.projectId||!conf.appId||!conf.authDomain){
-   notice('Sincronização privada ainda não configurada. Seus dados continuam salvos neste navegador.');
+   showGate('setup','Login indisponível: é necessário configurar o Firebase Web e publicar as regras de segurança.','error');
+   notice('Sincronização privada ainda não configurada. Seus dados permanecem no navegador.',true);
    return
   }
   await openFirebase(conf);
- }catch(err){notice(safeMessage(err),true)}
+ }catch(err){showGate('setup',safeMessage(err),'error');notice(safeMessage(err),true)}
 })();
 })();
