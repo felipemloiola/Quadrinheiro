@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-09T21:40:06.508Z",
-  "summary": "Otimizações integradas, com gestos, molas e Liquid Glass preservados. A publicação assinada está em preparação; os testes e a entrega são acompanhados abaixo.",
+  "updatedAt": "2026-11-09T21:46:20.182Z",
+  "summary": "Otimizações publicadas na versão 1.0.85, preservando gestos, molas e Liquid Glass. Implementação e testes concluídos; os limites de validação estão descritos abaixo.",
   "items": [
     {
       "title": "Versão e contexto",
@@ -57,9 +57,9 @@
     },
     {
       "title": "Publicação assinada",
-      "status": "work",
-      "detail": "Gerando a versão estável com o certificado permanente, compatível com a atualização dentro do app.",
-      "evidence": "A geração executa novamente os testes antes de disponibilizar o APK."
+      "status": "done",
+      "detail": "Versão estável 1.0.85 (código 1085) publicada com o certificado permanente e manifesto para atualização dentro do app.",
+      "evidence": "Arquivo e assinatura conferidos. Release: https://github.com/felipemloiola/Quadrinheiro/releases/tag/v1.0.85"
     }
   ]
 }
