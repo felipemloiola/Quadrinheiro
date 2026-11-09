@@ -41,6 +41,19 @@ function luminance(color){return rgb(color).map(c=>c/255).map(c=>c<=.04045?c/12.
 function colorFor(accent,mode){const target=options.find(o=>o.id===accent)||options[0];const active=target[mode];const secondary=target[mode+'Secondary']||mixed(active,mode==='dark'?'#FFFFFF':'#000000',mode==='dark'?.28:.15);return {active,secondary,onAccent:luminance(active)>.23?'#141418':'#FFFFFF'}}
 const systemQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
 function currentTheme(){return preferences.themeMode==='system'?(systemQuery?.matches?'dark':'light'):preferences.themeMode}
+function updateBrandFavicon(theme,accent){
+ // Os três contornos são os mesmos da marca Android, pintados com theme.accent.
+ const bg=theme==='dark'?'#101010':'#F3F4F7';
+ const icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">'+
+   '<rect width="108" height="108" rx="25" fill="'+bg+'"/>'+
+   '<g fill="'+accent+'">'+
+   '<path d="M44.8 26.3 28.9 32.9 25 54l6.6 21.1 7.9-5.3 3.3-9.2-2.7-7.9 3.3-13.2z"/>'+
+   '<path d="M49.4 26.3h17.8l13.2 9.2v15.2H63.9l-2-5.9-8.6-6-5.2.7z"/>'+
+   '<path d="M63.9 55.3h15.2l-2.7 8.6 9.3 13.9-2 5.9-14.5-5.3-13.9 2-15.2-3.3 6-11.2 7.9-2.7z"/>'+
+   '</g></svg>';
+ const url='data:image/svg+xml,'+encodeURIComponent(icon);
+ for(const link of document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]'))link.href=url;
+}
 function apply(){
  const theme=currentTheme(),accent=colorFor(preferences.accent,theme);
  root.dataset.theme=theme;
@@ -52,6 +65,7 @@ function apply(){
  root.style.setProperty('--accent',accent.active);
  root.style.setProperty('--accent-2',accent.secondary);
  root.style.setProperty('--accent-contrast',accent.onAccent);
+ updateBrandFavicon(theme,accent.active);
  const themeColor=document.querySelector('meta[name="theme-color"]');if(themeColor)themeColor.content=theme==='dark'?'#000000':'#F2F2F7'
 }
 function update(changes,{announce=true}={}){
