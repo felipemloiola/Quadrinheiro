@@ -35,6 +35,8 @@ class OnlineDiscoveryPolicyTest {
         assertTrue(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","en")))
         assertNull(PersonalizedDiscovery.verifiedCandidate(comic("de","Swamp Thing: Grüne Hölle")))
         assertNull(PersonalizedDiscovery.verifiedCandidate(comic("it","Swamp Thing di Alan Moore - Volume 3")))
+        assertEquals("Uma história em português",PersonalizedDiscovery.verifiedCandidate(
+            comic("translated","An unfamiliar story").copy(titlePtBr="Uma história em português"))?.displayTitle)
     }
 
     private fun comic(id:String,title:String,publisher:String="DC Comics") = ComicEntry(

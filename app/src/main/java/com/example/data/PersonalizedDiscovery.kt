@@ -11,7 +11,14 @@ object PersonalizedDiscovery {
     internal fun verifiedCandidate(c: ComicEntry): ComicEntry? {
         if (PortugueseComicTranslator.isUnwantedForeignOrBundleResult(c.title, c.synopsis)) return null
         // A cached translation must not invent a character absent from the original title.
-        val title = PortugueseComicTranslator.translateTitleToPtBr(c.title)
+        val rawTitle = " " + normalized(c.title) + " "
+        val inventedCharacter = CharacterDirectory.portuguese.any { (english, portuguese) ->
+            val cached = " " + normalized(c.titlePtBr) + " "
+            cached.contains(" ${normalized(portuguese)} ") &&
+                !rawTitle.contains(" ${normalized(english)} ") && !rawTitle.contains(" ${normalized(portuguese)} ")
+        }
+        val title = c.titlePtBr.takeIf { it.isNotBlank() && !inventedCharacter }
+            ?: PortugueseComicTranslator.translateTitleToPtBr(c.title)
         val series = c.seriesName.takeIf { it.isNotBlank() && normalized(title).contains(normalized(it)) }.orEmpty()
         return c.copy(titlePtBr = title, seriesName = series)
     }
