@@ -239,3 +239,9 @@ html[data-motion="reduced"] .app,
 html[data-motion="reduced"] .sidebar .brandtext,
 html[data-motion="reduced"] .sidebar .side-label,
 html[data-motion="reduced"] .sidebar .nav .nav-btn>span:not(.count){transition:none!important}
+
+/* Somente o Q, sem fundo quadrado ou moldura. */
+.sidebar .brand-logo,html[data-sidebar="collapsed"] .sidebar .brand-logo{
+ background:transparent!important;box-shadow:none!important;border:0!important;border-radius:0!important;
+}
+.sidebar .brand-logo .brand-q{transform:none!important;width:42px!important;height:42px!important}
