@@ -58,7 +58,7 @@ const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
-let sdk=null,retries=0,applyingRemote=false,pendingPhotoUploads=0;
+let sdk=null,retries=0,applyingRemote=false,pendingPhotoUploads=0,migratingLegacy=false;
 function cloudState(){
  const s=APP.getState();
  return {
@@ -92,7 +92,7 @@ function setDecisionVisible(value){$('cloudDecisions').hidden=!value}
 function resetSession(){
  clearTimeout(timer);
  if(subscribed){subscribed();subscribed=null}
- user=null;active=false;dirty=false;queued=false;uploading=false;remoteDoc=null;remoteRef=null;
+ user=null;active=false;dirty=false;queued=false;uploading=false;migratingLegacy=false;remoteDoc=null;remoteRef=null;
  APP.setUserScope?.(null);
  NOTES()?.resetSession?.();
  window.QuadrinheiroSettings?.resetSession?.();
@@ -163,7 +163,7 @@ async function migrateLegacy(legacy,remoteExists){
  const images=await NOTES().readLegacyImages(legacy.data);
  const data={...legacy.data,uiSettings:legacy.uiSettings||{},sidebarMode:legacy.sidebarMode||'expanded'};
  if(new TextEncoder().encode(hash(data)).length>MAX_DOC_BYTES)throw Error('Backup antigo muito grande para a migração automática.');
- active=true;
+ active=true;migratingLegacy=true;
  try{
   for(const image of images)await uploadImage(image);
   if(remoteExists){
@@ -183,7 +183,7 @@ async function migrateLegacy(legacy,remoteExists){
   return !remoteExists
  }finally{
   // A área privada só será desbloqueada depois de concluir a leitura remota.
-  active=false;
+  migratingLegacy=false;active=false;
  }
 }
 async function inspectRemote(){
@@ -340,7 +340,7 @@ async function push(){
  }
 }
 function notifyLocalChange(){
- if(!active||applyingRemote)return;
+ if(!active||applyingRemote||migratingLegacy)return;
  dirty=true;retries=0;
  clearTimeout(timer);
  timer=setTimeout(push,650);
