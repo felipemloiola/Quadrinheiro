@@ -320,6 +320,16 @@ function getLegacySnapshot(){
    try{sidebarMode=localStorage.getItem('quadrinheiro-sidebar-v1')==='collapsed'?'collapsed':'expanded'}catch{}
    return {key,data:{...deepClone(seed),...data,notes:Array.isArray(data.notes)?data.notes:[]},uiSettings,sidebarMode}
   }
+  // As preferências antigas também são migradas, mesmo sem tarefas salvas no navegador.
+  const oldPrefs=localStorage.getItem('quadrinheiro-ui-settings-v1');
+  const oldSidebar=localStorage.getItem('quadrinheiro-sidebar-v1');
+  const oldTheme=localStorage.getItem('quadrinheiro-theme-v2');
+  if(oldPrefs||oldSidebar||oldTheme){
+   let uiSettings=null;
+   try{uiSettings=oldPrefs?JSON.parse(oldPrefs):null}catch{}
+   if(!uiSettings&&['light','dark'].includes(oldTheme))uiSettings={themeMode:oldTheme};
+   return {key:null,data:deepClone(seed),uiSettings,sidebarMode:oldSidebar==='collapsed'?'collapsed':'expanded'};
+  }
  }catch{}
  return null
 }
