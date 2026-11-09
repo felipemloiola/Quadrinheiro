@@ -2,7 +2,17 @@
 
 **Site publicado:** https://felipemloiola.github.io/Quadrinheiro/
 
-O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `main` e da pasta `docs/`. Para atualizar o site, basta modificar `docs/index.html` no GitHub. Não é necessário baixar ou instalar novos arquivos.
+O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `main` e da pasta `docs/`. Para atualizar o site, basta modificar seus arquivos em `docs/` no GitHub. Não é necessário baixar ou instalar novos arquivos.
+
+## Acesso obrigatório por conta Google
+
+A página inicial usa uma tela de entrada exclusiva para **Google Sign-in**. A área de trabalho permanece oculta e sem interação até o Firebase Authentication confirmar a sessão e os dados privados estarem disponíveis. Se faltar a configuração Firebase Web, o site informa a pendência em vez de ignorar o login.
+
+**Configuração pendente no repositório:** `docs/cloud-config.json` ainda contém `"enabled": false`; é necessário cadastrar um aplicativo Web Firebase, habilitar o login Google, autorizar o domínio `felipemloiola.github.io` e publicar as regras `firestore.rules`. Consulte [CONFIGURAR-SYNC-FIREBASE.md](CONFIGURAR-SYNC-FIREBASE.md). O conector Firebase instalado no ChatGPT não configura esses serviços automaticamente.
+
+Os registros locais ficam separados pelo UID do usuário Google. No primeiro login, dados do armazenamento anterior podem ser migrados uma única vez para a primeira conta autenticada. Ao sair, a área de trabalho volta à tela de login. O armazenamento remoto é feito em `projectDashboards/{uid}` e não altera as coleções dos usuários do aplicativo Android.
+
+**Limitação da hospedagem:** GitHub Pages continua disponibilizando arquivos HTML/CSS/JS publicamente. A tela de login protege a interface do usuário comum, enquanto a privacidade real dos registros depende das regras implantadas no Firestore. Use `allowedEmails` para filtrar a interface por e-mail e complemente com uma restrição de UID/e-mail nas regras do servidor se quiser uso exclusivo.
 
 ## Seções disponíveis
 
