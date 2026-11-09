@@ -1,74 +1,135 @@
 # Quadrinheiro
 
-<p align="center"><img src="branding/quadrinheiro-logo.svg" alt="Quadrinheiro" width="120" /></p>
+<p align="center">
+  <img src="branding/quadrinheiro-logo.svg" alt="Quadrinheiro logo" width="144" />
+</p>
 
-Aplicativo Android para organizar quadrinhos, acompanhar leituras e registrar a história da sua coleção. Desenvolvido em Kotlin e Jetpack Compose, com materiais translúcidos, iluminação inspirada nas capas e controles com resposta por molas.
+<p align="center">
+  <strong>Your comics, your reading journey, your collection.</strong><br />
+  An Android app for organizing comic books, tracking reading progress, and preserving the story of your collection.
+</p>
 
-[Baixar a versão mais recente](https://github.com/felipemloiola/Quadrinheiro/releases/latest) · [Reportar um problema](https://github.com/felipemloiola/Quadrinheiro/issues)
+<p align="center">
+  <a href="https://github.com/felipemloiola/Quadrinheiro/releases/latest">Download APK</a> ·
+  <a href="https://felipemloiola.github.io/Quadrinheiro/">Project dashboard</a> ·
+  <a href="https://github.com/felipemloiola/Quadrinheiro/issues">Report an issue</a>
+</p>
 
-## Recursos
+**Android 7.0+ · Kotlin · Jetpack Compose · Material 3**
 
-- **Início:** leitura atual, progresso e metas, com acesso rápido às suas histórias.
-- **Explorar:** recomendações baseadas nas leituras, avaliações e editora favorita; catálogo com carregamento por páginas sob demanda e remoção inteligente de duplicatas preservando edições distintas. A aba Comunidade reúne publicações, avaliações, resenhas e comentários dos leitores.
-- **Perfil:** banner panorâmico com maior área visível, esmaecimento contínuo, recorte, zoom, reenquadramento e busca de artes horizontais com diagnóstico claro; foto de perfil com contorno preto único, biografia, resumo das leituras, quatro HQs e quatro personagens favoritos com retratos alternativos verificados e busca tolerante a hífens, acentos, aliases bilíngues e pequenos erros de digitação. Favoritos e banner são preservados por conta e sincronizados.
-- **Biblioteca:** estante em grade ou lista, filtros de status, diário, tags, notas, resenhas e cadastro manual.
-- **Busca e catálogo:** Metron para edições, paginação, créditos e capas, com Comic Vine, Open Library, Google Books e Mercado Livre como complemento e Superhero API para personagens. Cada HQ tem um formulário organizado de registro/edição com sinopse expansível integrada, ação secundária associada à obra ("Ver página da HQ") e preservação integral de notas, resenhas, tags e progresso ao alternar status. O idioma original da edição é mantido separado da tradução dos metadados, sem sinopses ou editoras inventadas.
-- **Leitura:** progresso por página, metas na tela inicial e diário cronológico com registros e avaliações.
-- **Conta:** acesso com Google, isolamento rigoroso por conta (`account_state_<uid>`), proteção contra corrida assíncrona no logout/login e sincronização pelo Firebase sem descarte por relógio local/servidor.
-- **Widgets:** leitura atual, títulos recentes e metas, com aparência clara ou escura conforme o tema escolhido no app. A leitura atual acompanha a HQ selecionada no aplicativo.
-- **Acompanhamento:** notificação com progresso e ações de leitura; integração com Live Updates/Now Bar em aparelhos compatíveis. A preferência fica em **Ajustes → Biblioteca**.
-- **Compartilhamento:** cartões verticais de leitura concluída, momento e metas, com prévia, salvamento e compartilhamento pelo Android.
-- **Personalização e acessibilidade:** cores de destaque e do Q do ícone, fundo neutro claro/escuro, tamanho do texto, contraste, transparência e movimento reduzido. O ícone é aplicado após sair do app, preservando a tela em uso.
-- **Armazenamento:** medição exata sem contagem duplicada de diretórios sobrepostos (`dataDir`/`cacheDir`) e limpeza de arquivos recuperáveis em Ajustes (incluindo APKs antigos em `cacheDir/updates` e `filesDir/updates`), preservando integralmente biblioteca, contas e backups. Capas e respostas HTTP têm limites separados de 64 e 16 MiB.
-- **Atualizações:** download dentro do aplicativo, verificação do pacote e abertura do instalador do Android.
+Quadrinheiro pairs a comic-book library with reading goals, personalized discovery, profiles, and a community. Its interface uses translucent materials, cover-inspired lighting, and spring-based motion. The appearance can be customized for different color schemes and accessibility needs.
 
-## Instalação e compatibilidade
+## Features
 
-Requer **Android 7.0 ou superior**. Baixe o APK na página de releases. O Android pode pedir autorização para instalar aplicativos desta origem. Nas próximas versões, o próprio Quadrinheiro conduz o download e solicita a confirmação de instalação do sistema.
+### Home — keep reading
 
-A Comunidade exige uma conta conectada. Ao salvar uma avaliação ou resenha, ela é publicada automaticamente na Comunidade. O restante da biblioteca e as preferências continuam privados. Informações editoriais e imagens são atribuídas ao Comic Vine. Quando uma fonte não informa páginas ou equipe, o app não inventa esses dados; o total de páginas pode ser informado no registro.
+- Pick up your current comic with page-by-page progress and quick reading controls.
+- See annual reading goals, completed titles, and reading statistics.
+- Jump back into recently added books and your personal library.
+- Track reading activity through a chronological journal.
 
-A apresentação de notificações na tela bloqueada e na Now Bar depende da versão do Android, da One UI, das permissões e das preferências de privacidade do aparelho. A leitura utiliza uma notificação de progresso; não simula reprodução de áudio nem uma sessão do Spotify.
+### Explore — discover your next read
 
-Os efeitos gráficos usam caminhos compatíveis com a versão do sistema. A interface é inspirada nas diretrizes de design da Apple, implementada com APIs Android; não é uma implementação oficial da Apple.
+- Browse editions and recommendations informed by your library, ratings, favorite publisher, and other preferences.
+- Explore categories with paginated loading and duplicate-aware catalog results that preserve distinct editions.
+- Switch between **Discover** and **Community** inside Explore.
+- Read and share reviews, ratings, posts, and comments in the Community. A signed-in account is required for community participation.
+- Recent discovery improvements avoid filling a personalized feed with generic showcase recommendations when user preferences or collection signals already exist.
 
-## Desenvolvimento
+### Profile and Library — make the collection yours
 
-| Área | Tecnologia |
-|---|---|
-| Interface | Kotlin 2.2.10, Jetpack Compose e Material 3 |
-| Materiais e movimento | Backdrop/Liquid Glass, shaders e molas do Compose |
-| Imagens | Coil, caches de memória e disco limitados |
-| Dados | SafeStorage por conta, Firebase Auth e Cloud Firestore |
+- Personalize your profile with a banner, avatar, biography, reading statistics, four favorite comics, and four favorite characters.
+- Crop and reframe wide profile banners; saved profile artwork and favorites are associated with your account.
+- Open **Library** from Profile, then switch between the **Shelf** and **Journal**.
+- Browse the shelf in grid, list, or sequence layouts; sort, search, and filter by reading status and genre.
+- Register comics manually and save tags, notes, ratings, reviews, and reading progress.
+- Keep notes and progress when moving a comic between **Read**, **Reading**, and **Want to Read**.
+
+### Catalog and comic details
+
+- Edition metadata, page counts, credits, and covers from **Metron**, with **Comic Vine**, **Open Library**, **Google Books**, and **Mercado Livre** as supplementary sources.
+- Character information supported by the **Superhero API**.
+- Expandable synopses and a direct action to view a comic's source page.
+- Original-language edition details are kept distinct from translated metadata. Missing publisher, synopsis, credits, or page counts are not fabricated.
+
+### Personalization, reading, and updates
+
+- Dark and light surfaces, accent and launcher-icon color options, adjustable text size, contrast, transparency, and reduced-motion preferences.
+- Reading-progress notifications and optional Live Updates / Now Bar behavior on compatible Android devices.
+- Home-screen widgets for current reading, recent comics, and goals, with theme-aware appearance.
+- Shareable reading, completion, and goal cards.
+- Google sign-in and per-account storage with Firebase synchronization.
+- In-app APK download, verification, and handoff to the Android package installer.
+
+**Recently improved:** personalized discovery behavior, theme-aware launcher icon previews, synchronization of launcher appearance with theme settings, and application of icon appearance changes after the app moves to the background.
+
+## Installation
+
+1. Open the [latest GitHub Release](https://github.com/felipemloiola/Quadrinheiro/releases/latest).
+2. Download **`quadrinheiro.apk`**.
+3. Open the APK on a device running **Android 7.0 (API 24) or later**.
+4. If Android asks, allow installation from the app or browser used to open the APK, then confirm installation.
+
+Future updates can be downloaded through Quadrinheiro once the version with the in-app updater is installed. Android still requires user confirmation before installing an update. The updater checks the package identity, version, size, SHA-256 hash, and signing certificate.
+
+> **Privacy and compatibility:** your library and preferences are private to your account. Saving a rating or review may publish it to the Community. Lock-screen progress and Now Bar behavior vary by Android version, device, permissions, and privacy settings.
+
+## Project dashboard
+
+The [Quadrinheiro web dashboard](https://felipemloiola.github.io/Quadrinheiro/) is published from the `docs/` directory through GitHub Pages. It is a project-management companion, **not a browser-based Android emulator**.
+
+Its sections include Overview, Repository, Backlog, Integrations, Performance, Decisions, and **Notes**. Notes support ideas, drafts, research, reference images, search, pinning, and automatic local saving.
+
+- Project records and note text are saved in the browser's **localStorage**.
+- Attached photos are stored in **IndexedDB**.
+- JSON export/import supports backups including note images.
+- Notes **do not automatically sync across devices**; export a backup when moving browsers or devices.
+- **Sync GitHub** reads public repository information; it does not upload personal notes.
+
+See [Web dashboard documentation](docs/PAINEL-WEB.md) for details.
+
+## Technology
+
+| Area | Stack |
+| --- | --- |
+| Android app | Kotlin, Jetpack Compose, Material 3 |
+| UI and motion | Translucent / Liquid Glass-inspired surfaces, backdrop effects, shaders, Compose springs |
+| Images | Coil with bounded memory and disk caching |
+| Account and data | Firebase Authentication, Cloud Firestore, account-scoped SafeStorage |
 | Widgets | Jetpack Glance |
-| Build | AGP 9.1.1, Gradle 9.3.1 e JDK 21 no CI |
-| Verificação | JUnit, Robolectric, testes instrumentados e emuladores Firebase |
+| Catalog | Cloudflare Worker with upstream catalog integrations and caching |
+| Build / CI | Android Gradle Plugin 9.1.1, Gradle 9.3.1, JDK 21 |
+| Tests | JUnit, Robolectric, Android instrumentation tests, Firebase emulators |
 
-### Preparar o ambiente
+The visual language takes inspiration from Apple's Human Interface Guidelines, but it is implemented using Android APIs. It is **not** an official Apple UI implementation. The app uses Android's native sans-serif font rather than bundling Apple's proprietary SF Pro fonts.
 
-1. Instale Android Studio, JDK 21, Android SDK **36.1** e Gradle **9.3.1**. O repositório atualmente utiliza a instalação do Gradle; não inclui o executável `gradlew`.
-2. Clone o repositório e abra a pasta no Android Studio.
-3. Configure seu projeto Firebase e coloque o arquivo Android em `app/google-services.json`, ignorado pelo Git. Para login Google, habilite o provedor, configure o cliente OAuth Web e cadastre os certificados de assinatura do build.
-4. Execute na raiz:
+## Build from source
+
+Prerequisites: Android Studio, **JDK 21**, Android SDK **36.1**, and **Gradle 9.3.1**. The repository currently uses an installed Gradle executable rather than including a `gradlew` wrapper script.
+
+1. Clone the repository and open it in Android Studio.
+2. Configure your own Firebase project; place its Android configuration at `app/google-services.json` (ignored by Git).
+3. Enable Google Sign-In if needed, configure the Web OAuth client, and register the correct signing certificate fingerprints.
+4. Build a debug APK:
 
 ```sh
 gradle :app:assembleDebug
 ```
 
-O APK fica em `app/build/outputs/apk/debug/`. A configuração Firebase e as chaves de assinatura da publicação são fornecidas por secrets no GitHub Actions.
+The resulting APK is written to `app/build/outputs/apk/debug/`.
 
-### Verificar alterações
+### Run tests
 
 ```sh
 gradle :app:testDebugUnitTest
 gradle :app:connectedDebugAndroidTest
 ```
 
-Os testes que exercitam autenticação e regras exigem os emuladores Firebase. Consulte o [workflow de publicação](.github/workflows/release-apk.yml) para comandos, portas e variáveis usados no CI. Os testes de interface exigem um dispositivo ou emulador Android; o CI utiliza API 34. Testes em emulador não substituem a validação de funções específicas da Samsung em aparelho real.
+Authentication and security-rule tests may require the Firebase emulators. Instrumentation tests require a connected Android device or emulator; device-specific Samsung features still need validation on supported hardware.
 
-### Serviço do catálogo
+### Catalog service
 
-O diretório [`catalog-service`](catalog-service) contém o Worker Cloudflare. As chaves dos fornecedores ficam em secrets do servidor, nunca em `BuildConfig`, recursos Android ou no APK. O aplicativo usa somente o endereço público do serviço. O Firebase permanece no plano Spark; o catálogo usa Workers Free com Durable Object SQLite, cache compartilhado e limites globais por recurso.
+`catalog-service/` contains the Cloudflare Worker that mediates catalog access. Upstream provider credentials belong in **server-side secrets**, not in the APK, client configuration, or source control.
 
 ```sh
 cd catalog-service
@@ -82,33 +143,40 @@ npx wrangler secret put APIFY_API_TOKEN
 npm run deploy
 ```
 
-O serviço aceita somente operações de catálogo definidas no código. Respostas duplicadas compartilham a mesma consulta, o cache possui tamanho limitado e falhas não expõem URLs com credenciais. O Comic Vine limita consultas por recurso; os resultados ficam em cache por até três dias. O Actor GCD indicado foi avaliado, mas o teste inicial não retornou registros; não é executado a cada pesquisa ou seleção de capa.
+For the release pipeline and APK signing checks, see [Release workflow](.github/workflows/release-apk.yml). For in-app updates, see [Update documentation](docs/ATUALIZACOES-NO-APP.md).
 
-### Organização
+## Repository layout
 
 ```text
 app/src/main/java/com/example/
-├── data/          # Persistência, catálogos, tradução, sincronização e caches
-├── model/         # Modelos e preferências
-├── reading/       # Sessão de leitura e notificações
-├── ui/components/ # Controles, materiais, folhas e compartilhamento
-├── ui/screens/    # Telas e fluxos
-├── ui/theme/      # Cores, tipografia e política de movimento
-├── updates/       # Download e verificação de atualizações
-├── viewmodel/     # Estado da aplicação
-└── widget/        # Widgets e ações
+├── data/          # Catalogs, persistence, translation, sync, caches
+├── model/         # Models and preferences
+├── reading/       # Reading session and notifications
+├── ui/components/ # Reusable controls and surfaces
+├── ui/screens/    # Screens and flows
+├── ui/theme/      # Colors, typography, motion policy
+├── updates/       # APK download and verification
+├── viewmodel/     # App state
+└── widget/        # Home-screen widgets
+
+catalog-service/     # Cloudflare catalog service
+docs/                # GitHub Pages dashboard and documentation
+branding/            # Official Quadrinheiro logo
 ```
 
-Os caches de capas e HTTP têm limites separados. Arquivos temporários de atualização e cartões antigos são limpos automaticamente; coleção, registros e backups do usuário não fazem parte dessa limpeza.
+Storage tools account for overlapping application directories without double-counting. Recoverable caches and older temporary APKs can be cleaned without deleting libraries, accounts, or user backups. Comic covers and HTTP responses have separate size limits.
 
-## Documentação e referências
+## References
 
-- [Revisão de interface e acompanhamento da leitura](docs/REVISAO-HIG-NOW-BAR.md)
+- [UI and reading progress review](docs/REVISAO-HIG-NOW-BAR.md)
+- [Typography guidelines and Android adaptation](docs/TIPOGRAFIA.md)
 - [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
 - [AndroidLiquidGlass / Backdrop](https://github.com/Kyant0/AndroidLiquidGlass)
 - [LiquidGlassKMP](https://github.com/philipplackner/LiquidGlassKMP)
-- [Avisos de terceiros](licenses/)
+- [Third-party notices](licenses/)
 
-## Autoria e uso
+## Author and rights
 
-Criado por [Felipe Loiola](https://github.com/felipemloiola). Todos os direitos reservados, conforme os termos anteriormente publicados neste repositório. A disponibilidade pública do código não concede licença de redistribuição. Dependências e materiais de terceiros mantêm seus próprios termos.
+Created by [Felipe Loiola](https://github.com/felipemloiola).
+
+**All rights reserved.** Public source availability does not grant permission to redistribute the app or source code. Third-party dependencies and materials remain subject to their own licenses and terms.
