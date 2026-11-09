@@ -157,6 +157,35 @@ async function openFirebase(config){
  });
  sdk.getRedirectResult(auth).catch(err=>{if(!user)showGate('error',safeMessage(err),'error')});
 }
+// Transferência de dados existentes de versões antigas, sem perder notas ou fotos.
+// Se já há dados na nuvem, a versão antiga vira um backup remoto separado.
+async function migrateLegacy(legacy,remoteExists){
+ const images=await NOTES().readLegacyImages(legacy.data);
+ const data={...legacy.data,uiSettings:legacy.uiSettings||{},sidebarMode:legacy.sidebarMode||'expanded'};
+ if(new TextEncoder().encode(hash(data)).length>MAX_DOC_BYTES)throw Error('Backup antigo muito grande para a migração automática.');
+ active=true;
+ try{
+  for(const image of images)await uploadImage(image);
+  if(remoteExists){
+   const backup=sdk.doc(db,'dashboardUsers',user.uid,'legacyBackups','import-'+Date.now());
+   await sdk.setDoc(backup,{ownerId:user.uid,state:data,migratedAt:sdk.serverTimestamp()});
+  }else{
+   APP.replaceCloudState(data);
+   await NOTES().upsertCloudImages(images);
+   if(legacy.uiSettings)window.QuadrinheiroSettings?.importPrefs(legacy.uiSettings);
+   if(legacy.sidebarMode)window.QuadrinheiroSidebar?.setMode(legacy.sidebarMode);
+   dirty=true;
+   await push();
+   if(dirty)throw Error('Não foi possível concluir a migração antiga para o Firestore.');
+  }
+  await NOTES().clearLegacyImages();
+  APP.clearLegacySnapshot();
+  return !remoteExists
+ }finally{
+  // A área privada só será desbloqueada depois de concluir a leitura remota.
+  active=false;
+ }
+}
 async function inspectRemote(){
  if(!user)return;
  const expectedUid=user.uid;
@@ -165,9 +194,24 @@ async function inspectRemote(){
  if(!user||user.uid!==expectedUid)return;
  remoteRef=ref;
  remoteDoc=snapshot.exists()?snapshot.data().state:null;
+ const legacy=APP.getLegacySnapshot?.();
+ let migrated=false,migrationWarning='';
+ if(legacy){
+  try{migrated=await migrateLegacy(legacy,!!remoteDoc)}
+  catch(err){
+   migrationWarning='Os registros antigos ainda estão neste dispositivo porque a migração falhou: '+safeMessage(err);
+   if(!remoteDoc){showGate('error',migrationWarning,'error');notice(migrationWarning,true);return}
+  }
+ }
+ if(!user||user.uid!==expectedUid)return;
  if(remoteDoc){
   await hydrate(remoteDoc);
   activate(remoteDoc,'Dados carregados diretamente do Firestore.');
+  if(migrationWarning)notice(migrationWarning,true);
+  return
+ }
+ if(migrated){
+  activate(cloudState(),'Registros antigos migrados com sucesso para o Firestore.');
   return
  }
  await createCloudWorkspace();
