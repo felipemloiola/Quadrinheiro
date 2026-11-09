@@ -1,93 +1,61 @@
-# Ativar login Google obrigatório e salvamento privado do Quadrinheiro
+# Firebase do painel Quadrinheiro
 
-O painel agora tem uma **tela de entrada própria** e só abre a área de trabalho depois de autenticação via Google **e conexão com a versão privada dos dados no Firestore**. O site continua publicado no GitHub Pages, mas a interface fica bloqueada antes do login.
+## Situação atual — 09/11/2026
 
-**Estado atual:** o código está pronto no GitHub. A autenticação não entra em funcionamento enquanto `docs/cloud-config.json` permanecer com `"enabled": false`, ou enquanto login Google e regras do Firestore não tiverem sido configurados no Firebase Console. Nesse estado, o site mostra a tela de entrada informando a configuração pendente. Os dados que estavam no navegador não são apagados.
+O aplicativo Web Firebase do painel está **configurado e habilitado** na branch `main`. O usuário concluiu no Firebase Console o cadastro Web, habilitou o provedor Google, autorizou o domínio e publicou as regras de segurança para a coleção `dashboardUsers/{uid}` no banco de dados já usado pelo app Android. A configuração pública foi incorporada ao site.
 
-O conector Firebase pode estar instalado no ChatGPT, mas a instalação de um conector não ativa automaticamente um app Firebase Web, domínios OAuth ou regras. Eles precisam ser configurados e implantados no projeto correto.
+| Item | Valor |
+| --- | --- |
+| Projeto | `gen-lang-client-0375936605` |
+| Domínio autorizado | `felipemloiola.github.io` |
+| Aplicativo Web | `docs/cloud-config.json` |
+| Provedor | Firebase Authentication · Google |
+| Banco Firestore | `ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71` |
+| Registro privado | `dashboardUsers/{uid}` |
+| Anexos | `dashboardUsers/{uid}/photos/{photoId}/pieces/{index}` |
+| Acesso | Conta Google autorizada com e-mail verificado e UID correspondente |
+| Site | https://felipemloiola.github.io/Quadrinheiro/ |
 
-## 1. Preparar Firebase Web
+**O código e as regras estarem configurados não garante que a autenticação e a sincronização real já foram testadas.** Isso requer abrir o site num navegador com acesso à conta Google.
 
-1. Entre no [Firebase Console](https://console.firebase.google.com/) e abra o projeto Firebase utilizado pelo aplicativo Quadrinheiro.
-2. Em **Visão geral do projeto → Adicionar app → Web (</>)**, registre um app chamado `Quadrinheiro Painel`. Se já existir um app Web, use a configuração dele.
-3. Copie os valores **apiKey**, **authDomain**, **projectId** e **appId**. Esses valores compõem a **configuração pública de cliente Firebase**; não são chaves administrativas nem service account JSON.
-4. Em **Authentication → Sign-in method**, habilite **Google**.
-5. Em **Authentication → Settings → Authorized domains**, adicione `felipemloiola.github.io` (sem `https://`, sem `/Quadrinheiro`). Não é necessário habilitar login anônimo.
+## Testar a primeira entrada
 
-## 2. Habilitar acesso seguro ao Firestore
+1. Abra o [painel Quadrinheiro](https://felipemloiola.github.io/Quadrinheiro/).
+2. Clique em **Continuar com Google** e selecione o e-mail autorizado.
+3. O Firebase Authentication confirma a conta. Em seguida, o site procura `dashboardUsers/{uid}` no Firestore nomeado.
+4. Caso ainda não exista documento na nuvem, o painel cria o primeiro registro usando os dados desse navegador.
+5. Se já existir versão remota e os dados locais forem diferentes, o painel oferecerá **Usar dados da nuvem** ou **Enviar dados locais**.
+6. Depois da sincronização, crie uma nota, feche o navegador e entre num segundo dispositivo com a **mesma conta Google** para confirmar a persistência.
 
-A regra isolada `match /projectDashboards/{uid}` já foi adicionada ao arquivo `firestore.rules` no repositório, **sem modificar as regras de coleções do app Android**.
+Se o login não avançar, verifique o estado descrito na tela. Não desative as regras de segurança para contornar um erro.
 
-Publique as regras para o banco utilizado pelo painel. O projeto usa um banco nomeado em `firebase.json`:
+## Onde estão os arquivos
 
-`ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71`
+- `docs/cloud-config.json`: configuração pública do aplicativo Web, com `enabled: true`, projeto, banco nomeado e conta autorizada.
+- `docs/cloud.js`: login Google, proteção da área de trabalho, sincronização e recuperação de alterações pendentes.
+- `docs/index.html` e `docs/login.css`: interface de login e painel.
+- `docs/quadrinheiro-login-logo.svg`: marca colorida oficial, utilizada **somente** na entrada.
+- `firestore.rules`: regras do aplicativo Android preservadas, além do bloco `dashboardUsers/{userId}`, espelhando a versão publicada pelo usuário.
 
-Você pode abrir **Firebase Console → Firestore Database**, selecionar esse banco, abrir a aba **Rules** e publicar o conteúdo completo do arquivo `firestore.rules` do repositório. Verifique com cuidado se esse é o banco utilizado pelo app.
+### Privacidade
 
-Alternativamente, com o Firebase CLI autenticado no mesmo projeto, publique as regras do `firebase.json` (não execute isso em outro projeto).
+O GitHub Pages serve os arquivos HTML, CSS e JavaScript publicamente. A tela de login impede o uso regular do painel antes da autenticação, mas **não torna os arquivos do site privados**. Os documentos do Firestore são protegidos pelas regras implantadas no servidor. A lista de e-mails no JSON é um controle de interface, não um segredo.
 
-**Segurança:** os documentos só permitem leitura/escrita quando `request.auth.uid` coincide com o identificador do documento; consultas globais são negadas. Fotos são armazenadas em partes privadas por UID, protegidas pelas mesmas condições. Nunca publique uma regra `allow read, write: if true`.
+As regras do painel publicadas exigem UID correto, provedor Google, e-mail verificado e o e-mail explicitamente autorizado. Não existe razão para desativar a autenticação, modificar as regras de outras coleções ou contratar um plano pago apenas para realizar o primeiro teste.
 
-## 3. Configurar o site (uma única vez)
+### Sincronização e fotos
 
-Abra [docs/cloud-config.json](https://github.com/felipemloiola/Quadrinheiro/blob/main/docs/cloud-config.json) e clique em **Edit this file**.
+O Firestore salva tarefas, notas, decisões, métricas e preferências. As fotos são divididas em pequenas partes e salvas em subcoleções privadas da mesma conta. Isso evita usar o Cloud Storage em um projeto Spark, mas é adequado apenas a uma quantidade moderada de imagens.
 
-Preencha com os dados do aplicativo Web Firebase:
+Os dados também ficam localmente salvos no navegador autenticado, por UID. Atualizações são enviadas quando o usuário modifica o conteúdo; alterações remotas são recebidas em tempo real. Se uma gravação falhar, a interface indica o problema e uma nova tentativa ocorre quando a conexão retorna. Para evitar conflitos, não edite a mesma nota simultaneamente em vários aparelhos. Faça backups JSON regularmente.
 
-```json
-{
-  "enabled": true,
-  "apiKey": "VALOR_WEB_FIREBASE",
-  "authDomain": "ID_DO_PROJETO.firebaseapp.com",
-  "projectId": "ID_DO_PROJETO",
-  "appId": "1:...:web:...",
-  "allowedEmails": ["seu-email@gmail.com"],
-  "databaseId": "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71"
-}
-```
+### Solução de problemas
 
-Altere os campos de exemplo pelos valores reais do Firebase Web. **Não cole service accounts, tokens privados, senhas ou chaves de API do GitHub.**
+- **Domínio não autorizado:** confirme `felipemloiola.github.io` em Firebase Authentication → Settings → Authorized domains.
+- **Conta não autorizada:** entre com a conta que aparece em `allowedEmails` e nas regras do Firestore.
+- **Permissão negada:** confirme que a versão das regras com `dashboardUsers` foi publicada no **banco nomeado correto**.
+- **Nuvem indisponível:** verifique quotas, rede e se o Google Authentication está habilitado.
+- **Imagens não sincronizam:** mantenha a aba aberta até a mensagem de salvamento concluído e confirme que todas as partes da imagem foram gravadas.
+- **GitHub Pages mostra versão anterior:** atualize a página sem cache e aguarde o deploy da branch `main`.
 
-O campo **allowedEmails** é obrigatório para ativar o login do painel; se ficar vazio, o site mantém a tela de configuração pendente. Preencha **allowedEmails** com os endereços Google que podem entrar (por exemplo, somente o seu). Essa verificação melhora a experiência de acesso no navegador, mas **não é um controle de segurança do backend**: se deseja impedir que outras contas Google usem o serviço, também restrinja o e-mail/UID nas regras Firestore publicadas e teste as regras. Para a privacidade das suas próprias notas, a regra atual já separa os documentos por UID.
-
-Faça o commit na branch `main`; o GitHub Pages publicará a configuração. Como é a mesma configuração Web em todos os aparelhos, você não terá de preencher essas informações novamente no celular.
-
-### Nota sobre privacidade
-
-O GitHub Pages deste repositório é público: não é possível impedir que outras pessoas baixem o HTML/JavaScript público apenas com uma tela de login. A interface bloqueia a navegação até a autenticação e o Firestore protege os dados de cada UID. Para **restringir até a existência de contas** a um único usuário, é necessário também implementar/validar uma restrição de UID ou e-mail nas regras do servidor, não apenas no JavaScript. A chave Web Firebase não protege os dados por si só; a proteção depende das regras acima.
-
-## 4. Sincronizar os registros
-
-1. Abra [o painel](https://felipemloiola.github.io/Quadrinheiro/). A tela de login aparecerá antes de qualquer seção.
-2. Clique em **Continuar com Google** e utilize o endereço autorizado no `cloud-config.json`.
-3. No primeiro acesso, se não houver versão remota, o painel envia seus registros locais para sua conta automaticamente. Dados legados são vinculados apenas à primeira conta autenticada nesse navegador.
-4. Em outro dispositivo, entre com **a mesma conta Google**. Se ele estiver vazio, os dados da nuvem serão carregados; se já contiver registros diferentes, o painel apresentará opções antes de substituir a versão.
-5. Após ativar, alterações em tarefas, notas, métricas, decisões, preferências e fotos são salvas e recebidas pelo Firestore. É possível encerrar a sessão em **Ajustes**.
-6. Se ocorrer erro de conexão ou falta de regras, a área de trabalho permanece bloqueada, em vez de permitir acesso sem autenticação.
-
-**Conflitos:** se houver dados locais diferentes na primeira conexão, o painel pede que você escolha qual versão manter. Em edições simultâneas no mesmo conteúdo, a última gravação pode prevalecer; não use edição colaborativa simultânea. Faça backups JSON antes de sobrescrever uma versão.
-
-## 5. Fotos e limites
-
-O painel usa Firestore para dados e fotos, dividindo imagens em partes menores de aproximadamente 150 KB. Isso evita depender do Cloud Storage for Firebase, que exige o plano Blaze para funcionar. Fotos não são expostas por URLs públicas.
-
-O Firestore possui quotas sem cobrança para projetos elegíveis, mas **uso excessivo pode consumir essas quotas**. Muitas fotos ou backups grandes podem exigir uma arquitetura específica de mídia. O limite de documento do Firestore é de 1 MiB; o painel limita o conteúdo textual antes de enviar.
-
-Os dados locais continuam no navegador se a rede falhar. A interface informa erros de permissão, autenticação e sincronização. Mantenha o backup JSON como segurança adicional.
-
-## Solução de problemas
-
-- **Configuração pendente:** `enabled` ainda é `false` ou faltam valores reais em `cloud-config.json`.
-- **Domínio não autorizado:** configure `felipemloiola.github.io` em Authorized domains.
-- **Acesso negado:** publique as regras do banco correto, usando o mesmo projeto que aparece na configuração Web.
-- **Popup bloqueado:** permita a janela do Google no navegador.
-- **Fotos ausentes:** carregue primeiro a versão da nuvem no aparelho que ainda não possui os anexos.
-- **Erro de capacidade:** exporte o JSON e reduza imagens/quantidade de dados.
-
-Fontes oficiais: [Firebase Web](https://firebase.google.com/docs/web/setup), [Google Sign-in](https://firebase.google.com/docs/auth/web/google-signin), [Firestore Rules](https://firebase.google.com/docs/firestore/security/get-started), [Quotas Firestore](https://firebase.google.com/docs/firestore/quotas).
-
-## Sobre o modo exclusivo do Google
-
-As regras em `firestore.rules` exigem que os documentos do painel sejam acessados pelo mesmo UID autenticado, com provedor `google.com` e e-mail verificado. A configuração `allowedEmails` restringe as contas aceitas pela interface, mas qualquer lista de e-mails publicada em código estático é visível e não deve ser tratada como segredo. A configuração Web do Firebase é **pública por design**; nunca coloque um service-account JSON nela.
-
-O projeto guarda os dados no navegador em uma chave separada por UID; o conteúdo legado da instalação anterior é migrado somente para a primeira conta Google usada nesse navegador. Para migrar outra conta, exporte/importa um backup JSON conscientemente. A saída da conta recolhe a área de trabalho e não apaga o backup anterior do dispositivo.
+Documentação oficial: [Firebase Auth](https://firebase.google.com/docs/auth/web/google-signin) · [Firestore named databases](https://firebase.google.com/docs/firestore/manage-databases) · [Security Rules](https://firebase.google.com/docs/firestore/security/get-started).
