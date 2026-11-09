@@ -572,7 +572,8 @@ class QuadrinheiroCloudRepository(
     private val appContext = context.applicationContext
 
     init {
-        // Habilita Offline Persistence do Firestore com orçamento rígido de 25 MB
+        check(!CloudCacheRecovery.needsReview(appContext)) {"A revisão da sincronização local está pendente"}
+        // Target 10 MiB for evictable documents; pending mutations are not capped by this setting.
         val dbKey = System.identityHashCode(db)
         if (configuredDatabases.add(dbKey) &&
             db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings
@@ -822,13 +823,17 @@ class QuadrinheiroCloudRepository(
     fun observeUserProfile(userId: String): Flow<CloudUserProfile?> = callbackFlow {
         val path = "users/$userId"
         val registration = db.collection("users").document(userId)
-            .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
+            .addSnapshotListener(FirestoreSnapshotDispatch.executor, com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, error ->
                 try {
                     if (error != null) {
                         runCatching { handleFirestoreError(error, OperationType.GET, path, auth) }
                         close()
                         return@addSnapshotListener
                     }
+                    // The UI already has this local revision. Republishing a pending
+                    // SDK echo can cancel collectLatest's waiter and grow the write queue.
+                    // INCLUDE guarantees a committed event when only metadata changes.
+                    if (snapshot?.metadata?.hasPendingWrites() == true) return@addSnapshotListener
                     val profile = snapshot?.toCloudUserProfileSafe()
                     trySend(profile)
                 } catch (t: Throwable) {
@@ -918,13 +923,14 @@ class QuadrinheiroCloudRepository(
             .collection("comics")
             .orderBy("updatedAt", Query.Direction.DESCENDING)
             .limit(limit)
-            .addSnapshotListener(FirestoreSnapshotDispatch.executor) { snapshot, error ->
+            .addSnapshotListener(FirestoreSnapshotDispatch.executor, com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, error ->
                 try {
                     if (error != null) {
                         runCatching { handleFirestoreError(error, OperationType.LIST, path, auth) }
                         close()
                         return@addSnapshotListener
                     }
+                    if (snapshot?.metadata?.hasPendingWrites() == true) return@addSnapshotListener
                     val entries = snapshot?.documents
                         ?.mapNotNull { it.toCloudComicDocumentSafe()?.toComicEntry() }
                         .orEmpty()
@@ -1097,40 +1103,32 @@ class QuadrinheiroCloudRepository(
                 )
 
                 if (strictHandleReservation && !isTemplateDefaultHandle) {
-                    kotlinx.coroutines.withTimeout(3500L) {
-                        db.runBatch { batch ->
+                    awaitAccountWrite(userId, docData to true) { db.runBatch { batch ->
                             batch.set(db.collection("usernames").document(handleKey), reservation)
                             if (oldShouldDelete) {
                                 batch.delete(db.collection("usernames").document(oldHandleKey))
                             }
                             batch.set(userDocRef, docData)
-                        }.await()
-                    }
+                        } }
                 } else {
-                    val batchSucceeded = runCatching {
-                        kotlinx.coroutines.withTimeout(3500L) {
-                            db.runBatch { batch ->
+                    try {
+                        awaitAccountWrite(userId, docData to false) { db.runBatch { batch ->
                                 batch.set(db.collection("usernames").document(handleKey), reservation)
                                 if (oldShouldDelete) {
                                     batch.delete(db.collection("usernames").document(oldHandleKey))
                                 }
                                 batch.set(userDocRef, docData)
-                            }.await()
-                        }
-                        true
-                    }.getOrElse { false }
-
-                    if (!batchSucceeded) {
-                        kotlinx.coroutines.withTimeout(3500L) {
-                            userDocRef.set(docData).await()
-                        }
+                            } }
+                    } catch (error: FirebaseFirestoreException) {
+                        // Only a definitive reservation rejection can use the profile-only
+                        // fallback. A timeout leaves the original SDK mutation pending.
+                        if (error.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw error
+                        awaitAccountWrite(userId, docData) { userDocRef.set(docData) }
                     }
                 }
                 StorageWriteTelemetry.recordFirestoreProfileWrite()
             } else {
-                kotlinx.coroutines.withTimeout(3500L) {
-                    db.collection("users").document(userId).set(docData).await()
-                }
+                awaitAccountWrite(userId, docData) { db.collection("users").document(userId).set(docData) }
                 StorageWriteTelemetry.recordFirestoreProfileWrite()
             }
         } catch (e: Exception) {
@@ -1153,11 +1151,10 @@ class QuadrinheiroCloudRepository(
         val cloudDoc = CloudComicDocument.fromComicEntry(userId, comic)
         val path = "users/$userId/comics/${cloudDoc.id}"
         try {
-            db.collection("users").document(userId)
+            awaitAccountWrite(userId, cloudDoc) { db.collection("users").document(userId)
                 .collection("comics")
                 .document(cloudDoc.id)
-                .set(cloudDoc)
-                .await()
+                .set(cloudDoc) }
             StorageWriteTelemetry.recordFirestoreComicWrite(1)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, path, auth)
@@ -1222,7 +1219,8 @@ class QuadrinheiroCloudRepository(
             val chunks = comics.chunked(450)
             val colRef = db.collection("users").document(userId).collection("comics")
             for (chunk in chunks) {
-                db.runBatch { batch ->
+                val documents=chunk.map { CloudComicDocument.fromComicEntry(userId,it) }
+                awaitAccountWrite(userId, documents) { db.runBatch { batch ->
                     for (comic in chunk) {
                         val cloudDoc = CloudComicDocument.fromComicEntry(userId, comic)
                         batch.set(colRef.document(cloudDoc.id), cloudDoc)
@@ -1230,7 +1228,7 @@ class QuadrinheiroCloudRepository(
                         if (comic.externalId.isNotBlank()) syncedIds.add(comic.externalId)
                         syncedIds.add(cloudDoc.id)
                     }
-                }.await()
+                } }
                 StorageWriteTelemetry.recordFirestoreComicBatchWrite(chunk.size)
             }
         } catch (e: Exception) {
@@ -1248,8 +1246,13 @@ class QuadrinheiroCloudRepository(
         return syncAllComicsBatch(userId, dirtyItems)
     }
 
+    private suspend fun awaitAccountWrite(userId: String, payload: Any, start: () -> com.google.android.gms.tasks.Task<Void>) {
+        kotlinx.coroutines.withTimeout(3500L) { accountWrites.execute(db to userId,payload,start) }
+    }
+
     companion object {
         const val FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES = 10L * 1024L * 1024L
+        private val accountWrites=FirestoreWriteGate()
         private val configuredDatabases = java.util.Collections.synchronizedSet(HashSet<Int>())
 
         /**

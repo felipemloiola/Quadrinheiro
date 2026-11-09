@@ -31,9 +31,14 @@ fun communityComicKey(comic: ComicEntry): String {
 
 /** Only deliberately published snapshots leave the private library. No private profile joins. */
 class CommunityRepository(context: Context,
-    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id)),
+    db: FirebaseFirestore = FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id)),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()) {
     private val appContext = context.applicationContext
+    private val database=db
+    private val db: FirebaseFirestore get() {
+        check(!CloudCacheRecovery.needsReview(appContext)) {"A revisão da sincronização local está pendente"}
+        return database
+    }
     fun currentUid(): String? = auth.currentUser?.uid
     fun activeAccountUid(): String? = auth.currentUser?.uid
         ?: SafeStorage(appContext).loadAuthSession()?.takeIf { !it.isGuest && it.uid.isNotBlank() && it.uid != "guest_local" }?.uid

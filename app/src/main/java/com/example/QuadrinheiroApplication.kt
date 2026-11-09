@@ -7,20 +7,14 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.example.data.MultiApiSearchEngine
 import com.example.data.RejectHeifAvifDecoderFactory
-import com.example.data.SafeStorage
+import com.example.data.ImageMemoryPolicy
 
 /** One lazy loader/cache for activities and widgets, including a cold widget process. */
 class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
-        runCatching {
-            val storage = SafeStorage(this)
-            this.cacheDir.resolve("quadrinheiro_http_cache").deleteRecursively()
-            if (storage.getItem("quadrinheiro_heif_cache_purged_v1") != "true") {
-                this.cacheDir.resolve("quadrinheiro_covers_disk_cache").deleteRecursively()
-                storage.setItem("quadrinheiro_heif_cache_purged_v1", "true")
-            }
-        }
+        if(com.example.data.CloudCacheRecovery.needsReview(this))return
+        // Filesystem migrations run on CacheMaintenance's IO scope, never on first draw.
         com.example.data.CacheMaintenance.schedule(this)
         runCatching { LauncherAppearance.schedule(this) }
     }
@@ -46,8 +40,11 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
             }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.18)
-                    .strongReferencesEnabled(false)
+                    .maxSizeBytes(ImageMemoryPolicy.budgetBytes(
+                        Runtime.getRuntime().maxMemory(),
+                        getSystemService(android.app.ActivityManager::class.java)?.isLowRamDevice == true
+                    ))
+                    .strongReferencesEnabled(true)
                     .build()
             }
             .diskCache {

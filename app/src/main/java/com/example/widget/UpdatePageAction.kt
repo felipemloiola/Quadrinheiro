@@ -214,6 +214,7 @@ class UpdatePageAction : ActionCallback {
             expectedOwnerUid: String? = null
         ): ComicEntry? = withContext(Dispatchers.IO) {
             val appCtx = context.applicationContext
+            if(com.example.data.CloudCacheRecovery.isRepairInProgress(appCtx))return@withContext null
             val storage = SafeStorage(appCtx)
             val sessionSnapshot = storage.loadWidgetSessionSnapshot()
             val ownerUid = sessionSnapshot.ownerUid ?: return@withContext null

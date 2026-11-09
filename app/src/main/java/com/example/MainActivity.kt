@@ -201,6 +201,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if(com.example.data.CloudCacheRecovery.needsReview(this)) {
+            enableEdgeToEdge()
+            setContent { QuadrinheiroTheme(settings=com.example.model.AppSettings()) {
+                com.example.updates.AppUpdatePrompt()
+                com.example.ui.screens.CloudCacheRecoveryScreen { recreate() }
+            } }
+            return
+        }
         extractWidgetIntent(intent)
 
         // Pre-compile AGSL Liquid Glass shaders on an asynchronous background thread
@@ -618,8 +626,9 @@ fun QuadrinheiroApp(
                         .background(themeColors.bgPrimary)
                         .layerBackdrop(
                             backdrop = mainContentBackdrop,
-                            reuseRecordedContent = false,
-                            freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
+                            reuseRecordedContent = true,
+                            // Never freeze the interactive page while it is scrolling.
+                            freezeSnapshot = isAnyModalSheetOpen
                         )
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
@@ -638,7 +647,7 @@ fun QuadrinheiroApp(
                             .background(themeColors.bgPrimary)
                             .layerBackdrop(
                                 backdrop = backgroundBackdrop,
-                                reuseRecordedContent = false,
+                                reuseRecordedContent = true,
                                 freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
                             )
                     ) {

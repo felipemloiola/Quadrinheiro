@@ -192,15 +192,18 @@ object StorageMaintenance {
         CacheMaintenance.prune(context)
         runCatching { android.database.sqlite.SQLiteDatabase.releaseMemory() }
         val cacheRoot = context.cacheDir
-        val externalUpdateDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve("updates")
-        val currentCacheBytes = bytes(cacheRoot) + (externalUpdateDir?.let(::bytes) ?: 0L)
+        // Snapshots, downloads being installed, and runtime code caches cannot be reclaimed
+        // by evicting covers. Counting them caused repeated image eviction on every boot.
+        fun imageAndCardBytes() = listOf("shared_cards", "quadrinheiro_http_cache", "quadrinheiro_covers_disk_cache")
+            .sumOf { bytes(cacheRoot.resolve(it)) }
+        val currentCacheBytes = imageAndCardBytes()
         if (currentCacheBytes > RECOVERABLE_CACHE_BUDGET_BYTES) {
-            // Se ainda exceder o teto rígido de 80 MB, limpa cartões compartilhados e reduz caches recuperáveis
+            // Enforce the recoverable image/card budget without touching user snapshots.
             runCatching { cacheRoot.resolve("shared_cards").deleteRecursively() }
-            if (bytes(cacheRoot) > RECOVERABLE_CACHE_BUDGET_BYTES) {
+            if (imageAndCardBytes() > RECOVERABLE_CACHE_BUDGET_BYTES) {
                 runCatching { MultiApiSearchEngine.sharedHttpClient.cache?.evictAll() }
             }
-            if (bytes(cacheRoot) > RECOVERABLE_CACHE_BUDGET_BYTES) {
+            if (imageAndCardBytes() > RECOVERABLE_CACHE_BUDGET_BYTES) {
                 runCatching { Coil.imageLoader(context).diskCache?.clear() }
             }
             compacted = true
