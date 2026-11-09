@@ -76,7 +76,8 @@ function cloudState(){
 function hash(data){return JSON.stringify(data)}
 function safeMessage(err){
  const name=String(err?.code||'');
- if(name==='permission-denied'||name==='firestore/permission-denied')return 'Acesso negado: publique as regras privadas do Firestore antes de sincronizar.';
+ if(name==='permission-denied'||name==='firestore/permission-denied')return 'Acesso negado: confira as regras publicadas no banco Firestore do painel.';
+ if(name.includes('invalid-api-key')||name.includes('api-key-not-valid'))return 'A chave Web do Firebase foi recusada. Confira a API key atual no Firebase Console em Configurações do projeto → Aplicativo Web.';
  if(name.includes('unauthorized-domain'))return 'Inclua felipemloiola.github.io nos domínios autorizados do Firebase Auth.';
  if(name.includes('popup-blocked'))return 'Permita a janela pop-up do Google neste navegador.';
  if(name.includes('popup-closed-by-user'))return 'A entrada com Google foi cancelada.';
@@ -321,7 +322,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&d
 window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,connected:active,pending:dirty,user:user?.email||null})};
 (async()=>{
  try{
-  const response=await fetch(CONFIG_URL+'?v=20261109a',{cache:'no-store'});
+  const response=await fetch(CONFIG_URL+'?v=20261109b',{cache:'no-store'});
   if(!response.ok)throw Error('Não foi possível ler cloud-config.json');
   const conf=await response.json();
   if(!conf.enabled||!conf.apiKey||!conf.projectId||!conf.appId||!conf.authDomain){
