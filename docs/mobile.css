@@ -315,3 +315,42 @@ html[data-motion="reduced"] .mobile-nav-panel,html[data-motion="reduced"] .sideb
   .page :is(.panel,.dashboard-kpi,.dashboard-area-card,.notes-card,.settings-card){min-width:0}
   .page :is(.panel,.dashboard-kpi,.dashboard-area-card,.notes-card,.settings-card) :is(h1,h2,h3,p,strong,b,small){overflow-wrap:break-word}
 }
+
+/* Final responsive refinements for editable records and long repository titles. */
+@media(max-width:620px){
+ #backlog .data-table tr[data-task]{
+   cursor:pointer;
+   transition:background-color .16s ease,border-color .16s ease;
+ }
+ #backlog .data-table tr[data-task]::after{
+   content:"Editar ↗";
+   display:block;
+   margin-left:auto;
+   padding:5px 9px;
+   border:1px solid var(--border);
+   border-radius:8px;
+   color:var(--accent);
+   font-size:11px;
+   font-weight:650;
+ }
+ #backlog .data-table tr[data-task]:active{
+   background:color-mix(in srgb,var(--accent) 7%,var(--surface-2));
+ }
+ #backlog .data-table tr[data-task]:focus-visible{
+   outline:2px solid var(--accent);
+   outline-offset:2px;
+ }
+ .page :is(.repo-card,.integration-card,.stage,.action-item,.decision,.settings-row){
+   min-width:0;
+   max-width:100%;
+   overflow-wrap:anywhere;
+ }
+ .page :is(a,.plain-link,.repo-card-title,.integration-card-title,.notes-card h3){
+   overflow-wrap:anywhere;
+ }
+ .mobile-nav-backdrop{touch-action:none}
+}
+@media(prefers-reduced-motion:reduce){
+ #backlog .data-table tr[data-task]{transition:none!important}
+}
+html[data-motion="reduced"] #backlog .data-table tr[data-task]{transition:none!important}
