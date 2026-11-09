@@ -1,7 +1,7 @@
 name: Signed preview for device testing
 on:
   push:
-    branches: [fix/storage-discovery-profile]
+    branches: [fix/storage-discovery-profile, codex/android-thermal-write-queue]
     paths: ['.github/workflows/preview-apk.yml']
 permissions:
   contents: write
@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preview:
-    if: github.repository == 'felipemloiola/Quadrinheiro' && github.ref == 'refs/heads/fix/storage-discovery-profile'
+    if: github.repository == 'felipemloiola/Quadrinheiro' && (github.ref == 'refs/heads/fix/storage-discovery-profile' || github.ref == 'refs/heads/codex/android-thermal-write-queue')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:

@@ -85,7 +85,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.LiquidGlassRuntimeShaderDeviceTest,com.example.BackdropDrawWorkTest,com.example.FluidControlsTest --no-daemon --console=plain
+          script: gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.LiquidGlassRuntimeShaderDeviceTest,com.example.BackdropDrawWorkTest,com.example.FluidControlsTest,com.example.CloudCacheRecoveryConsentTest --no-daemon --console=plain
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -13,6 +13,7 @@ import com.example.data.ImageMemoryPolicy
 class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        if(com.example.data.CloudCacheRecovery.needsReview(this))return
         // Filesystem migrations run on CacheMaintenance's IO scope, never on first draw.
         com.example.data.CacheMaintenance.schedule(this)
         runCatching { LauncherAppearance.schedule(this) }

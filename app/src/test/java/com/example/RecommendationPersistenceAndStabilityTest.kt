@@ -135,7 +135,7 @@ class RecommendationPersistenceAndStabilityTest {
         // Verifica que o arquivo físico está em filesDir (fora de cacheDir) e não é apagado por clearRecoverable
         val targetFile = storage.durableRecommendationsFile(aliceUid)
         assertTrue(targetFile.exists())
-        assertTrue("Arquivo deve estar dentro de filesDir", targetFile.canonicalPath.contains("files/quadrinheiro_recommendations"))
+        assertEquals("Arquivo deve estar dentro de filesDir", context.filesDir.resolve("quadrinheiro_recommendations").canonicalFile, targetFile.canonicalFile.parentFile)
 
         // Executa limpeza de cache recuperável
         StorageMaintenance.clearRecoverable(context)

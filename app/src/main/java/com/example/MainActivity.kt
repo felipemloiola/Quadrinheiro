@@ -201,6 +201,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if(com.example.data.CloudCacheRecovery.needsReview(this)) {
+            enableEdgeToEdge()
+            setContent { QuadrinheiroTheme(settings=com.example.model.AppSettings()) {
+                com.example.updates.AppUpdatePrompt()
+                com.example.ui.screens.CloudCacheRecoveryScreen { recreate() }
+            } }
+            return
+        }
         extractWidgetIntent(intent)
 
         // Pre-compile AGSL Liquid Glass shaders on an asynchronous background thread

@@ -572,7 +572,8 @@ class QuadrinheiroCloudRepository(
     private val appContext = context.applicationContext
 
     init {
-        // Habilita Offline Persistence do Firestore com orçamento rígido de 25 MB
+        check(!CloudCacheRecovery.needsReview(appContext)) {"A revisão da sincronização local está pendente"}
+        // Target 10 MiB for evictable documents; pending mutations are not capped by this setting.
         val dbKey = System.identityHashCode(db)
         if (configuredDatabases.add(dbKey) &&
             db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings

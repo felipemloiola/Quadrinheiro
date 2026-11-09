@@ -14,6 +14,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -329,12 +330,16 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         val uid=signInTestUser("pending-echo@example.com")
         val repo=QuadrinheiroCloudRepository(context,db,auth)
         repo.saveUserProfile(uid,ReaderProfile(name="Initial",handle="@pendingecho"),AppSettings())
-        db.disableNetwork().await()
+        val ready=CompletableDeferred<Unit>()
         val committed=async(Dispatchers.Default) {
-            withTimeout(10000){repo.observeUserProfile(uid).first{it?.name=="Pending revision"}}
+            withTimeout(10000){repo.observeUserProfile(uid).first{
+                if(it?.name=="Initial")ready.complete(Unit)
+                it?.name=="Pending revision"
+            }}
         }
         try {
-            delay(200)
+            withTimeout(5000){ready.await()}
+            db.disableNetwork().await()
             val ref=db.collection("users").document(uid)
             val write=ref.update("name","Pending revision")
             withTimeout(3000){while(!ref.get(com.google.firebase.firestore.Source.CACHE).await().metadata.hasPendingWrites())delay(20)}
