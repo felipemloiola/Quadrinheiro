@@ -1,11 +1,11 @@
-/* Quadrinheiro · Notas. Dados no navegador; fotos no IndexedDB. */
+/* Quadrinheiro · Notas no Firestore. Fotos temporárias apenas em memória RAM. */
 (()=>{
 'use strict';
 const app=window.QuadrinheiroPanel;
 if(!app)return;
-const dbName='quadrinheiro-notas-images-v1',storeName='images';
 const validImage=data=>typeof data==='string'&&/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(data);
-let dbPromise=null,renderToken=0,typingTimer=null;
+const imageCache=new Map();
+let renderToken=0,typingTimer=null;
 const kinds=['Ideia','Rascunho','Referência','Pesquisa'];
 const byId=id=>document.getElementById(id);
 const esc=app.escapeHtml;
@@ -13,51 +13,25 @@ function notes(){const s=app.getState();if(!Array.isArray(s.notes))s.notes=[];re
 function uid(){return typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():'note-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}
 function timeNow(){return new Date().toISOString()}
 function dateLabel(iso){if(!iso)return 'Agora';const dt=new Date(iso);return Number.isNaN(+dt)?'Agora':new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(dt)}
-function openDb(){
- if(!('indexedDB' in window))return Promise.reject(new Error('Armazenamento de imagens indisponível neste navegador.'));
- if(!dbPromise){dbPromise=new Promise((resolve,reject)=>{
-  const request=indexedDB.open(dbName,1);
-  request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(storeName))db.createObjectStore(storeName,{keyPath:'id'})};
-  request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();dbPromise=null};resolve(db)};
-  request.onerror=()=>reject(request.error||new Error('Não foi possível acessar imagens.'));
-  request.onblocked=()=>reject(new Error('O armazenamento de imagens está bloqueado por outra aba.'));
- }).catch(e=>{dbPromise=null;throw e})}
- return dbPromise
+// A imagem só entra no cache temporário depois que a nuvem confirma o upload.
+async function getImage(id){return imageCache.get(id)||null}
+async function imageList(){return [...imageCache.values()]}
+async function saveImage(record){
+ if(!window.QuadrinheiroCloud?.uploadImage)throw new Error('A nuvem ainda não está disponível. Tente novamente após conectar.');
+ await window.QuadrinheiroCloud.uploadImage(record);
+ imageCache.set(record.id,record);
 }
-async function getImage(id){
- const db=await openDb();
- return new Promise((resolve,reject)=>{
-  const req=db.transaction(storeName,'readonly').objectStore(storeName).get(id);
-  req.onsuccess=()=>resolve(req.result||null);
-  req.onerror=()=>reject(req.error)
- })
+async function removeImage(id){
+ if(!window.QuadrinheiroCloud?.deleteImage)throw new Error('A nuvem ainda não está disponível.');
+ await window.QuadrinheiroCloud.deleteImage(id);
+ imageCache.delete(id);
 }
-async function imageList(){
- const db=await openDb();
- return new Promise((resolve,reject)=>{
-  const req=db.transaction(storeName,'readonly').objectStore(storeName).getAll();
-  req.onsuccess=()=>resolve(req.result||[]);
-  req.onerror=()=>reject(req.error)
- })
-}
-async function writeImages(action){
- const db=await openDb();
- return new Promise((resolve,reject)=>{
-  const tx=db.transaction(storeName,'readwrite');
-  tx.oncomplete=()=>resolve();
-  tx.onerror=()=>reject(tx.error||new Error('Falha ao salvar imagens.'));
-  tx.onabort=()=>reject(tx.error||new Error('Armazenamento de imagens interrompido.'));
-  try{action(tx.objectStore(storeName))}catch(e){tx.abort();reject(e)}
- })
-}
-async function saveImage(record){await writeImages(store=>store.put(record))}
-async function removeImage(id){await writeImages(store=>store.delete(id))}
 async function exportImages(){
- const selected=new Set(notes().flatMap(note=>Array.isArray(note.photos)?note.photos.map(x=>x.id):[]));
- if(!selected.size)return [];
+ const ids=new Set(notes().flatMap(n=>(n.photos||[]).map(photo=>photo.id)));
+ if(!ids.size)return [];
  const stored=await imageList();
- const found=stored.filter(item=>selected.has(item.id)&&validImage(item.dataUrl));
- if(found.length!==selected.size)throw new Error('Algumas fotos não estão disponíveis neste navegador. O backup não foi exportado para evitar perda silenciosa.');
+ const found=stored.filter(item=>ids.has(item.id)&&validImage(item.dataUrl));
+ if(found.length!==ids.size)throw new Error('Uma foto não está disponível na memória desta sessão. Recarregue e exporte novamente.');
  return found
 }
 async function importImages(records){
@@ -66,8 +40,8 @@ async function importImages(records){
  for(const item of records){
   if(!item||typeof item.id!=='string'||item.id.length>120||typeof item.noteId!=='string'||!validImage(item.dataUrl)||item.dataUrl.length>12000000)throw new Error('Uma imagem do backup é inválida.');
  }
- if(!records.length){try{await writeImages(store=>store.clear())}catch{};return}
- await writeImages(store=>{store.clear();for(const item of records)store.put({id:item.id,noteId:item.noteId,name:String(item.name||'Imagem').slice(0,160),dataUrl:item.dataUrl})})
+ // O backup só é aceito quando todos os anexos foram confirmados pela nuvem.
+ for(const item of records)await saveImage({id:item.id,noteId:item.noteId,name:String(item.name||'Imagem').slice(0,160),dataUrl:item.dataUrl});
 }
 function thumbFor(container,id){
  getImage(id).then(item=>{if(!item||!validImage(item.dataUrl)||!container.isConnected)return;const image=container.querySelector('img');if(image)image.src=item.dataUrl}).catch(()=>{})
@@ -77,7 +51,7 @@ function render(){
  if(!grid||!counter)return;
  const all=notes(),query=(search.value||'').trim().toLocaleLowerCase('pt-BR'),filter=kind.value;
  const result=all.filter(n=>(filter==='Todas'||n.kind===filter)&&(!query||[n.title,n.body,n.kind].join(' ').toLocaleLowerCase('pt-BR').includes(query))).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
- counter.textContent=result.length+' de '+all.length+' notas · salvas neste navegador';
+ counter.textContent=result.length+' de '+all.length+' notas · salvas no Firestore';
  if(!result.length){
   grid.innerHTML='<div class="notes-empty panel"><span class="notes-empty-glyph" aria-hidden="true">'+app.icon("notes")+'</span><h2>'+(all.length?'Nenhuma nota encontrada':'Um lugar para suas ideias.')+'</h2><p>'+(all.length?'Experimente outra busca ou categoria.':'Guarde inspirações, capturas de tela, referências e rascunhos sobre o Quadrinheiro.')+'</p><button type="button" class="btn primary" data-new-note>Escrever uma nota</button></div>';
   return
@@ -128,7 +102,7 @@ function noteAsMarkdown(note){
    ''
  ];
  if(photos.length){
-   metadata.push('## Fotos anexadas','','As fotos são armazenadas neste navegador e não são incluídas no arquivo Markdown. Use **Exportar backup JSON** para preservar as imagens.','');
+   metadata.push('## Fotos anexadas','','As fotos permanecem na sua conta Google no Firestore e não são incluídas no arquivo Markdown. Use **Exportar backup JSON** para obter uma cópia com anexos.','');
    for(const photo of photos)metadata.push('- '+String(photo.name||'Imagem').replace(/[\r\n]/g,' ').slice(0,160));
    metadata.push('');
  }
@@ -147,7 +121,7 @@ function downloadNote(id){
    link.click();
    link.remove();
    setTimeout(()=>URL.revokeObjectURL(url),15000);
-   app.notify((note.photos||[]).length?'Markdown baixado. As fotos permanecem no backup JSON.':'Nota exportada em Markdown.');
+   app.notify((note.photos||[]).length?'Markdown baixado. Os anexos continuam na nuvem.':'Nota exportada em Markdown.');
  }catch(error){app.notify(error.message||'Falha ao exportar nota.',true)}
 }
 
@@ -169,16 +143,16 @@ function openNote(id){
   '<div class="notes-photo-grid" id="notePhotoList"></div>'+
   '<div class="notes-drop-zone" id="notesDropZone" tabindex="0" role="button" aria-label="Adicionar fotos à nota"><span aria-hidden="true">＋</span><strong>Adicionar fotos</strong><small>Selecione, arraste ou cole imagens aqui · até 10 fotos por nota</small></div>'+
   '<input id="noteImageInput" type="file" accept="image/*" multiple hidden>'+
-  '<p class="notes-storage-message" id="notesUploadStatus">Fotos salvas somente neste navegador. O backup JSON inclui os anexos.</p>'+
+  '<p class="notes-storage-message" id="notesUploadStatus">Fotos enviadas ao Firestore. O backup JSON opcional inclui os anexos.</p>'+
   '</div>';
- const foot='<span class="notes-save-status" id="notesSaveStatus">Salvo automaticamente</span><div class="notes-editor-actions"><button type="button" class="btn small ghost danger" id="deleteNote">Excluir</button><button type="button" class="btn small" id="pinNote">'+(note.pinned?'Desafixar':'Fixar')+'</button><button type="button" class="btn small ghost" id="downloadNote">'+app.icon('download')+' Baixar .md</button><button type="button" class="btn primary" id="doneNote">Concluir</button></div>';
+ const foot='<span class="notes-save-status" id="notesSaveStatus">Salvamento automático na nuvem</span><div class="notes-editor-actions"><button type="button" class="btn small ghost danger" id="deleteNote">Excluir</button><button type="button" class="btn small" id="pinNote">'+(note.pinned?'Desafixar':'Fixar')+'</button><button type="button" class="btn small ghost" id="downloadNote">'+app.icon('download')+' Baixar .md</button><button type="button" class="btn primary" id="doneNote">Concluir</button></div>';
  app.modal(note.title||'Nova nota',body,foot);
  byId('modalBg').classList.add('notes-editor-open');
  const modalBody=byId('modalBody');
  const sync=()=>{
   note.updatedAt=timeNow();
   app.save();
-  const saved=byId('notesSaveStatus');if(saved)saved.textContent='Salvo neste navegador';
+  const saved=byId('notesSaveStatus');if(saved)saved.textContent='Enviando à nuvem…';
   clearTimeout(typingTimer);typingTimer=setTimeout(render,220)
  };
  modalBody.querySelectorAll('[data-note-field]').forEach(field=>field.addEventListener('input',()=>{
@@ -264,7 +238,7 @@ async function attachPhotos(note,files){
    note.updatedAt=timeNow();app.save();successes++;
   }catch(error){app.notify(error.message||'Não foi possível adicionar a imagem.',true)}
  }
- if(successes){status.textContent=successes+' foto(s) adicionada(s) e salvas no navegador.';paintPhotos(note);render()}
+ if(successes){status.textContent=successes+' foto(s) enviada(s) para a nuvem.';paintPhotos(note);render()}
  else status.textContent='Nenhuma imagem foi adicionada. Verifique formato, tamanho e permissões do navegador.'
 }
 async function removeNote(id){
@@ -289,16 +263,17 @@ byId('notesImportHint')?.addEventListener('click',()=>byId('importBtn')?.click()
 async function getLocalImageRecords(){
  const referenced=new Set(notes().flatMap(note=>(note.photos||[]).map(photo=>photo.id)));
  if(!referenced.size)return [];
- return (await imageList()).filter(record=>referenced.has(record.id)&&validImage(record.dataUrl))
+ return (await imageList()).filter(item=>referenced.has(item.id)&&validImage(item.dataUrl))
 }
 async function upsertCloudImages(records){
  if(!Array.isArray(records)||!records.length)return;
  for(const item of records){
-  if(!item||typeof item.id!=='string'||!validImage(item.dataUrl))throw Error('Imagem da nuvem inválida');
+  if(!item||typeof item.id!=='string'||!validImage(item.dataUrl))throw Error('Imagem da nuvem inválida.');
+  imageCache.set(item.id,item);
  }
- await writeImages(store=>{for(const item of records)store.put(item)});
  render();
 }
-window.QuadrinheiroNotes={render,exportImages,importImages,getLocalImageRecords,upsertCloudImages};
+function resetSession(){imageCache.clear();render()}
+window.QuadrinheiroNotes={render,exportImages,importImages,getLocalImageRecords,upsertCloudImages,resetSession};
 render();
 })();
