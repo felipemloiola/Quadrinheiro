@@ -17,6 +17,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[34])
 class OnlineDiscoveryPolicyTest {
+    @Test fun personalRecommendationsUseSpecialistSourcesWithoutChangingGeneralSearch() {
+        val specialized=AdditionalCatalogSources.enabledSources("VERIFIED_COMICS","PT")
+        assertEquals(listOf("catalog","kitsu","mangadex"),specialized)
+        assertFalse(specialized.any { it in setOf("apple-br","apple-us","google-pt","open-library") })
+        assertTrue(AdditionalCatalogSources.enabledSources("MULTI","PT").contains("apple-br"))
+    }
     @Test fun cachedTranslationCannotInventAFavoriteCharacter() {
         val entry=comic("siktc","Something is Killing the Children").copy(
             authors="James Tynion IV",titlePtBr="Monstro do Pântano is Killing the Children",

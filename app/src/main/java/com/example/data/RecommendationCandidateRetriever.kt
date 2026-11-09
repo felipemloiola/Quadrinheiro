@@ -111,7 +111,7 @@ object RecommendationCandidateRetriever {
                 var partialBatch = emptyList<ComicEntry>()
                 withTimeoutOrNull(4500L) {
                     runCatching {
-                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT").collect { batch ->
+                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT", provider = "VERIFIED_COMICS").collect { batch ->
                             if (batch.isNotEmpty()) {
                                 partialBatch = batch
                             }

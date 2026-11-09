@@ -149,7 +149,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v5|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v6|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
