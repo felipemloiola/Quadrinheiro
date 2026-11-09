@@ -8,11 +8,11 @@ O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `mai
 
 A página inicial usa uma tela de entrada exclusiva para **Google Sign-in**. A área de trabalho permanece oculta e sem interação até o Firebase Authentication confirmar a sessão e os dados privados estarem disponíveis. Se faltar a configuração Firebase Web, o site informa a pendência em vez de ignorar o login.
 
-**Configuração pendente no repositório:** `docs/cloud-config.json` ainda contém `"enabled": false`; é necessário cadastrar um aplicativo Web Firebase, habilitar o login Google, autorizar o domínio `felipemloiola.github.io` e publicar as regras `firestore.rules`. Consulte [CONFIGURAR-SYNC-FIREBASE.md](CONFIGURAR-SYNC-FIREBASE.md). O conector Firebase instalado no ChatGPT não configura esses serviços automaticamente.
+**Configuração no repositório:** `docs/cloud-config.json` está ativado para o projeto `gen-lang-client-0375936605`, com login Google, domínio `felipemloiola.github.io` e o banco Firestore nomeado do Android. As regras privadas `dashboardUsers/{uid}` foram publicadas no Firebase Console e espelhadas em `firestore.rules`. O funcionamento real deve ser confirmado por login e criação de uma nota em um navegador autorizado.
 
-Os registros locais ficam separados pelo UID do usuário Google. No primeiro login, dados do armazenamento anterior podem ser migrados uma única vez para a primeira conta autenticada. Ao sair, a área de trabalho volta à tela de login. O armazenamento remoto é feito em `projectDashboards/{uid}` e não altera as coleções dos usuários do aplicativo Android.
+Os registros locais ficam separados pelo UID do usuário Google. No primeiro login, dados do armazenamento anterior podem ser migrados uma única vez para a primeira conta autenticada. Ao sair, a área de trabalho volta à tela de login. O armazenamento remoto é feito em `dashboardUsers/{uid}` e não altera as coleções dos usuários do aplicativo Android.
 
-**Limitação da hospedagem:** GitHub Pages continua disponibilizando arquivos HTML/CSS/JS publicamente. A tela de login protege a interface do usuário comum, enquanto a privacidade real dos registros depende das regras implantadas no Firestore. Use `allowedEmails` para filtrar a interface por e-mail e complemente com uma restrição de UID/e-mail nas regras do servidor se quiser uso exclusivo.
+**Limitação da hospedagem:** GitHub Pages continua disponibilizando arquivos HTML/CSS/JS publicamente. A tela de login protege a interface do usuário comum, enquanto a privacidade real dos registros depende das regras implantadas no Firestore. `allowedEmails` filtra a interface e as regras publicadas também restringem o acesso ao e-mail Google autorizado, com UID correspondente e e-mail verificado.
 
 ## Seções disponíveis
 
@@ -29,7 +29,7 @@ Os registros locais ficam separados pelo UID do usuário Google. No primeiro log
 
 O botão **Sincronizar GitHub** consulta informações públicas do repositório em modo somente leitura.
 
-As tarefas, decisões, métricas e textos das notas continuam sendo salvos localmente em `localStorage`, e as fotos em `IndexedDB`. A exportação JSON inclui os textos e as imagens. **Sincronização privada entre dispositivos:** o painel já possui suporte a Firebase Auth + Firestore, mas a conexão permanece **inativa** até a configuração inicial em `docs/cloud-config.json`, habilitação do login Google e publicação das regras de segurança. Depois de ativada, as alterações são sincronizadas entre aparelhos conectados à mesma conta Google. Para instruções, leia [`CONFIGURAR-SYNC-FIREBASE.md`](CONFIGURAR-SYNC-FIREBASE.md).
+As tarefas, decisões, métricas e textos das notas continuam sendo salvos localmente em `localStorage`, e as fotos em `IndexedDB`. A exportação JSON inclui os textos e as imagens. **Sincronização privada entre dispositivos:** a configuração Web está habilitada; após login autorizado, o painel lê e grava em `dashboardUsers/{uid}` no Firestore nomeado. As alterações são sincronizadas entre aparelhos autenticados na mesma conta, sujeitas à disponibilidade de rede e quotas. Para instruções, leia [`CONFIGURAR-SYNC-FIREBASE.md`](CONFIGURAR-SYNC-FIREBASE.md).
 
 ## Emulador removido
 
@@ -119,7 +119,7 @@ A atualização foi projetada para manter todos os registros locais e as oito ab
 
 ## Logo temático e barra lateral
 
-- O `Q` na barra lateral usa a mesma geometria do logotipo Android, com preenchimento `var(--accent)`; seu fundo segue os valores de `LauncherIconPicker.kt`: `#101010` no tema escuro e `#F3F4F7` no claro. O favicon também se adapta à cor e ao tema.
+- O `Q` na barra lateral usa a mesma geometria do logotipo Android com preenchimento `var(--accent)`, sem quadrado de fundo. O favicon também se adapta à cor e ao tema.
 - O logo **continua visível quando o menu é recolhido**. Na barra lateral, o eixo horizontal de todos os ícones é fixo; apenas os textos mudam de opacidade/recorte ao alternar o estado. O logo na versão recolhida funciona como botão de expansão ao receber clique/toque, mostrando o ícone de dividir painel quando o cursor passa por ele.
 - O bloco inferior de texto extenso da barra lateral foi removido. O estado de dados e sincronização é apresentado em **Ajustes**.
 - Implementação: `docs/smooth-sidebar.css`, `docs/sidebar.js` e `docs/settings.js`.
@@ -127,7 +127,14 @@ A atualização foi projetada para manter todos os registros locais e as oito ab
 ## Salvamento privado em qualquer dispositivo
 
 - Arquivos: `docs/cloud.js`, `docs/cloud.css`, `docs/cloud-config.json` e `firestore.rules`.
-- **Antes de ativar:** o navegador mantém as alterações localmente, como anteriormente. Nenhuma gravação na nuvem é prometida.
-- **Depois de ativar e entrar:** usa autenticação Google, registros por UID e atualizações do Firestore. Notas e fotos também podem ser transferidas entre dispositivos. A primeira conexão resolve diferenças entre versão local e remota antes de substituir registros.
-- O `cloud-config.json` público não pode conter segredos administrativos. O site no GitHub Pages continua publicamente acessível, mas as coleções privadas só autorizam leitura/escrita do respectivo UID autenticado; regras ainda precisam ser **implantadas no Firebase**, pois um commit GitHub não as publica automaticamente.
+- **Agora ativado:** o Firebase Web usa o banco nomeado e a coleção `dashboardUsers/{uid}`. Ao autenticar, carrega, salva e monitora registros privados via Firestore. Notas e fotos também podem ser transferidas entre dispositivos. A primeira conexão resolve diferenças entre versão local e remota antes de substituir registros.
+- O `cloud-config.json` público não pode conter segredos administrativos. O site no GitHub Pages continua publicamente acessível, mas as coleções privadas só autorizam leitura/escrita do respectivo UID autenticado; as regras específicas do painel já foram publicadas no Firebase Console (09/11/2026). Commits GitHub futuros não publicam alterações adicionais automaticamente.
 - Fotos são armazenadas em partes privadas no Firestore, evitando a exigência atual de plano Blaze para Cloud Storage. O acesso gratuito depende das quotas do Firestore e do banco escolhido. Backups JSON continuam recomendados.
+
+## Integração final de login e marca colorida (09/11/2026)
+
+- `docs/cloud-config.json`: aplicativo Web Firebase registrado, Google Auth habilitado, banco nomeado `ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71` e `allowedEmails` com a conta autorizada.
+- `docs/cloud.js`: documentos em `dashboardUsers/{uid}`, fotos em `dashboardUsers/{uid}/photos/{id}/pieces/{n}`, sincronização em tempo real e reenvio das alterações locais pendentes ao recuperar a conexão.
+- `firestore.rules`: regras do painel alinhadas à versão publicada manualmente no Firebase, com verificação Google, e-mail e UID. Regras do app Android preservadas.
+- `docs/quadrinheiro-login-logo.svg`: SVG recortado da **logo colorida oficial**, com rosa, âmbar, azul e ciano. O destaque cromático da entrada é discreto; a logo Q da barra lateral continua monocromática e adaptável ao tema.
+- **Limite de validação:** alterações no GitHub não constituem prova de login real ou gravação no Firestore. Teste em navegador com a conta Google autorizada é necessário para confirmação ponta a ponta.
