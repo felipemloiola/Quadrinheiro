@@ -31,12 +31,27 @@ class OnlineDiscoveryPolicyTest {
     @Test fun explicitlyForeignEditionsAndLegacyForeignTitlesAreExcluded() {
         assertFalse(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","de")))
         assertFalse(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","it")))
+        assertFalse(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","zh")))
         assertTrue(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","pt-BR")))
         assertTrue(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","en")))
         assertNull(PersonalizedDiscovery.verifiedCandidate(comic("de","Swamp Thing: Grüne Hölle")))
         assertNull(PersonalizedDiscovery.verifiedCandidate(comic("it","Swamp Thing di Alan Moore - Volume 3")))
         assertEquals("Uma história em português",PersonalizedDiscovery.verifiedCandidate(
             comic("translated","An unfamiliar story").copy(titlePtBr="Uma história em português"))?.displayTitle)
+    }
+
+    @Test fun emptyNormalizedSeriesIsNotAContinuationAndStandaloneDoesNotImplyASequel() {
+        val reading=comic("reading","Batman: Ano Um").copy(status=ReadingStatus.READING,issueNumber=0)
+        val chinese=comic("zh","雲海爭奇錄 期刊十六").copy(authors="蘆葦草",publisher="",seriesName="雲海爭奇錄")
+        assertNull(PersonalizedDiscovery.verifiedCandidate(chinese))
+        val other=comic("other","Batman: O Longo Dia das Bruxas").copy(issueNumber=1)
+        val recs=PersonalizedDiscovery.recommendWithReasons(listOf(chinese,other),listOf(reading))
+        assertFalse(recs.any { it.signalSource=="READING_CONTINUATION" || it.comic.id=="zh" })
+        val monthly=reading.copy(id="monthly",externalId="monthly",title="Batman Absoluto #1",
+            seriesName="Batman Absoluto",format="Edição",issueNumber=1,pageCount=24)
+        val next=monthly.copy(id="next",externalId="next",title="Batman Absoluto #2",issueNumber=2)
+        assertTrue(PersonalizedDiscovery.recommendWithReasons(listOf(next),listOf(monthly))
+            .any { it.signalSource=="READING_CONTINUATION" })
     }
 
     private fun comic(id:String,title:String,publisher:String="DC Comics") = ComicEntry(

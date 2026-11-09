@@ -92,8 +92,8 @@ object ComicVineCatalog {
         val j = request("catalog", page = page)
         return MultiApiSearchEngine.CatalogPage(j.objects("items").map(::comic), j.optBoolean("hasMore"))
     }
-    internal fun supportedEdition(j: JSONObject): Boolean = j.optString("language").lowercase().substringBefore('-') !in
-        setOf("de", "deu", "ger", "german", "it", "ita", "italian", "fr", "fra", "fre", "french", "es", "spa", "spanish")
+    internal fun supportedEdition(j: JSONObject): Boolean = j.optString("language").lowercase().substringBefore('-').substringBefore('_') in
+        setOf("", "pt", "por", "portuguese", "en", "eng", "english")
     suspend fun characters(query: String): List<CharacterResult> {
         val normalized = CharacterDirectory.normalized(query)
         val english = CharacterDirectory.portuguese.entries.firstOrNull { CharacterDirectory.normalized(it.value) == normalized }?.key ?: query
