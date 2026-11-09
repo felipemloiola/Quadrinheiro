@@ -223,43 +223,46 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
  .login-google,.login-mark,.login-brand-q{transition:none!important;animation:none!important}
 }
 
-/* A palavra "continuar." percorre suavemente a paleta real do Q oficial.
-   Movimento apenas no preenchimento do texto; sem flashes nem deslocamento de layout. */
+/* Onda cromática que atravessa "continuar." continuamente da direita para a esquerda.
+   As duas metades do gradiente são idênticas: o reinício do ciclo é imperceptível. */
 @keyframes quadrinheiro-logo-colors {
   from { background-position: 0% 50%; }
   to { background-position: 100% 50%; }
 }
 @supports ((background-clip:text) or (-webkit-background-clip:text)) {
   #loginScreen .login-story h1 span {
-    background-image: linear-gradient(105deg,
+    background-image: linear-gradient(90deg,
       #2563EB 0%,
-      #00B4D8 16%,
-      #FF1493 34%,
-      #E11D48 42%,
-      #FF9100 57%,
-      #FFD000 67%,
-      #2563EB 83%,
-      #00B4D8 100%);
-    background-size: 265% 100%;
+      #00B4D8 8%,
+      #FF1493 17%,
+      #FF9100 26%,
+      #FFD000 34%,
+      #2563EB 50%,
+      #00B4D8 58%,
+      #FF1493 67%,
+      #FF9100 76%,
+      #FFD000 84%,
+      #2563EB 100%);
+    background-size: 200% 100%;
     background-position: 0% 50%;
     background-repeat: no-repeat;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    animation: quadrinheiro-logo-colors 11s ease-in-out infinite alternate;
+    animation: quadrinheiro-logo-colors 7.5s linear infinite;
     will-change: background-position;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   #loginScreen .login-story h1 span {
     animation: none !important;
-    background-position: 30% 50%;
+    background-position: 25% 50%;
     will-change: auto;
   }
 }
 html[data-motion="reduced"] #loginScreen .login-story h1 span {
   animation: none !important;
-  background-position: 30% 50%;
+  background-position: 25% 50%;
   will-change: auto;
 }
