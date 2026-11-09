@@ -141,12 +141,14 @@ async function openFirebase(config){
   try{await inspectRemote()}
   catch(err){showGate('error',safeMessage(err),'error');notice(safeMessage(err),true)}
  });
- sdk.getRedirectResult(auth).catch(err=>showGate('error',safeMessage(err),'error'));
+ sdk.getRedirectResult(auth).catch(err=>{if(!user)showGate('error',safeMessage(err),'error')});
 }
 async function inspectRemote(){
  if(!user)return;
- remoteRef=sdk.doc(db,'projectDashboards',user.uid);
+ const expectedUid=user.uid;
+ remoteRef=sdk.doc(db,'projectDashboards',expectedUid);
  const snapshot=await sdk.getDoc(remoteRef);
+ if(!user||user.uid!==expectedUid)return;
  remoteDoc=snapshot.exists()?snapshot.data().state:null;
  const own=cloudState();
  if(remoteDoc&&hash(remoteDoc)===hash(own)){
@@ -168,6 +170,7 @@ async function inspectRemote(){
   'Não existe um backup na nuvem. Use “Enviar dados deste aparelho” para criar um.';
 }
 function activate(data,description){
+ if(!user||!remoteRef)return;
  active=true;dirty=false;retries=0;remoteHash=hash(data);saveStamp(data);
  setDecisionVisible(false);showMigration(false,false);
  showGate('authenticated','');
