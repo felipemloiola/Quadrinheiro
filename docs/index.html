@@ -138,9 +138,9 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="settings.css?v=20261109b">
 <link rel="stylesheet" href="navigation.css?v=20261109b">
 <link rel="stylesheet" href="polish.css?v=20261109a">
-<link rel="stylesheet" href="smooth-sidebar.css?v=20261109b">
+<link rel="stylesheet" href="smooth-sidebar.css?v=20261109c">
 <link rel="stylesheet" href="cloud.css?v=20261109a">
-<link rel="stylesheet" href="login.css?v=20261109g">
+<link rel="stylesheet" href="login.css?v=20261109h">
 </head>
 <body>
 <section id="loginScreen" aria-label="Entrar no Quadrinheiro">
@@ -190,7 +190,12 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <button class="nav-btn" data-page="notes" title="Notas"></button>
       <button class="nav-btn" data-page="settings" title="Ajustes"></button>
     </nav>
-    
+    <div class="sidebar-session">
+      <button class="sidebar-signout" id="sidebarSignOut" type="button" aria-label="Sair da conta Google" title="Sair da conta" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M13 8l4 4-4 4M8 12h9"/></svg>
+        <span>Sair da conta</span>
+      </button>
+    </div>
   </aside>
   <main class="main">
     <header class="topbar"><div class="crumb">Quadrinheiro <span>/</span> <strong id="crumbName">Visão geral</strong></div><div class="top-actions"><button class="btn ghost" id="importBtn" title="Importar backup JSON"></button><button class="btn ghost" id="exportBtn" title="Exportar dados JSON"></button><button class="btn primary" id="syncBtn" title="Sincronizar metadados públicos do GitHub" aria-label="Sincronizar metadados públicos do GitHub"></button><input type="file" accept="application/json,.json" id="fileInput" hidden></div></header>
@@ -464,6 +469,6 @@ hydrateIcons();go(['overview','repository','backlog','integrations','performance
 <script src="settings.js?v=20261109e"></script>
 <script src="sidebar.js?v=20261109d"></script>
 <script src="notes.js?v=20261109d"></script>
-<script type="module" src="cloud.js?v=20261109k"></script>
+<script type="module" src="cloud.js?v=20261109l"></script>
 </body>
 </html>
