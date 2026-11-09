@@ -1,6 +1,6 @@
-/* Quadrinheiro: sync opcional, privado, entre navegadores via Firebase Auth + Firestore.
-   Não possui tokens de conta ou credenciais administrativas. O Firebase Web config é público.
-   Requer ativação da configuração web, Google sign-in e deployment de regras. */
+/* Quadrinheiro: painel privado com Google Auth e Firestore nomeado.
+   Configuração pública do aplicativo Web; dados privados protegidos por regras server-side.
+   Coleção real implantada: /dashboardUsers/{uid}. */
 (()=>{
 'use strict';
 const APP=window.QuadrinheiroPanel,NOTES=()=>window.QuadrinheiroNotes;
@@ -83,7 +83,7 @@ function safeMessage(err){
  if(name.includes('quota-exceeded'))return 'O limite do serviço foi atingido.';
  return String(err?.message||'Não foi possível acessar a nuvem.').slice(0,220)
 }
-function cloudDoc(s){return sdk.doc(db,'projectDashboards',user.uid,...s)}
+function cloudDoc(s){return sdk.doc(db,'dashboardUsers',user.uid,...s)}
 function photoMeta(photoId){return cloudDoc(['photos',photoId])}
 function photoPart(photoId,index){return cloudDoc(['photos',photoId,'pieces',String(index)])}
 function imageIds(data){return new Set((data.notes||[]).flatMap(n=>(n.photos||[]).map(p=>p.id)))}
@@ -127,7 +127,7 @@ async function openFirebase(config){
    showGate('signed-out',reason||'Entre com sua conta Google para continuar.',reason?'error':'normal');
    return
   }
-  if(!signed.providerData?.some(p=>p.providerId==='google.com')){
+  if(!signed.providerData?.some(p=>p.providerId==='google.com')||!signed.emailVerified){
    authDenyReason='Este painel aceita somente contas Google.';await sdk.signOut(auth);return
   }
   if(allowEmails.length&&!allowEmails.includes(String(signed.email||'').toLowerCase())){
@@ -146,7 +146,7 @@ async function openFirebase(config){
 async function inspectRemote(){
  if(!user)return;
  const expectedUid=user.uid;
- remoteRef=sdk.doc(db,'projectDashboards',expectedUid);
+ remoteRef=sdk.doc(db,'dashboardUsers',expectedUid);
  const snapshot=await sdk.getDoc(remoteRef);
  if(!user||user.uid!==expectedUid)return;
  remoteDoc=snapshot.exists()?snapshot.data().state:null;
@@ -323,7 +323,7 @@ window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,co
   if(!response.ok)throw Error('Não foi possível ler cloud-config.json');
   const conf=await response.json();
   if(!conf.enabled||!conf.apiKey||!conf.projectId||!conf.appId||!conf.authDomain){
-   showGate('setup','Login indisponível: é necessário configurar o Firebase Web e publicar as regras de segurança.','error');
+   showGate('setup','A configuração do Firebase Web ainda não está completa.','error');
    notice('Sincronização privada ainda não configurada. Seus dados permanecem no navegador.',true);
    return
   }
