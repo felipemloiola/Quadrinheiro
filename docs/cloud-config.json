@@ -1,9 +1,11 @@
 {
-  "enabled": false,
-  "apiKey": "",
-  "authDomain": "",
-  "projectId": "",
-  "appId": "",
+  "enabled": true,
+  "apiKey": "AIzaSyDDsNC_t2MfzercfIU-8S-BfSqCJs8zVAQ",
+  "authDomain": "gen-lang-client-0375936605.firebaseapp.com",
+  "projectId": "gen-lang-client-0375936605",
+  "appId": "1:637011560599:web:d249206709e0981ce5c1d2",
   "databaseId": "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71",
-  "allowedEmails": []
+  "allowedEmails": [
+    "felipe.mloiola@gmail.com"
+  ]
 }
