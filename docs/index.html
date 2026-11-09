@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#000000">
   <meta name="description" content="Centro de evolução do Quadrinheiro: repositório, backlog, integrações, performance e decisões.">
   <title>Quadrinheiro · Projeto</title>
-  <link rel="icon" type="image/svg+xml" href="quadrinheiro-logo.svg?v=1">
-  <link rel="shortcut icon" type="image/svg+xml" href="quadrinheiro-logo.svg?v=1">
+  <link rel="icon" type="image/svg+xml" href="quadrinheiro-login-logo.svg?v=20261109c">
+  <link rel="shortcut icon" type="image/svg+xml" href="quadrinheiro-login-logo.svg?v=20261109c">
   <!-- CSS essencial: exibe imediatamente o splash antes de carregar o tema e os módulos Firebase. -->
   <style>
     #authSplash{display:none;position:fixed;inset:0;z-index:1000;min-height:100dvh;align-items:center;justify-content:center;flex-direction:column;gap:18px;padding:24px;background:#07080b;color:#f6f6f8;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
@@ -156,7 +156,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="polish.css?v=20261109a">
 <link rel="stylesheet" href="smooth-sidebar.css?v=20261109f">
 <link rel="stylesheet" href="cloud.css?v=20261109a">
-<link rel="stylesheet" href="login.css?v=20261109i">
+<link rel="stylesheet" href="login.css?v=20261109j">
 </head>
 <body>
 <section id="authSplash" role="status" aria-live="polite" aria-label="Carregando Quadrinheiro">
@@ -517,9 +517,9 @@ window.QuadrinheiroPanel={getState:()=>state,save,setUserScope,replaceCloudState
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
-<script src="settings.js?v=20261109g"></script>
+<script src="settings.js?v=20261109h"></script>
 <script src="sidebar.js?v=20261109i"></script>
 <script src="notes.js?v=20261109f"></script>
-<script type="module" src="cloud.js?v=20261109q"></script>
+<script type="module" src="cloud.js?v=20261109r"></script>
 </body>
 </html>
