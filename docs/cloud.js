@@ -322,7 +322,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&d
 window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,connected:active,pending:dirty,user:user?.email||null})};
 (async()=>{
  try{
-  const response=await fetch(CONFIG_URL+'?v=20261109b',{cache:'no-store'});
+  const response=await fetch(CONFIG_URL+'?v=20261109c',{cache:'no-store'});
   if(!response.ok)throw Error('Não foi possível ler cloud-config.json');
   const conf=await response.json();
   if(!conf.enabled||!conf.apiKey||!conf.projectId||!conf.appId||!conf.authDomain){
