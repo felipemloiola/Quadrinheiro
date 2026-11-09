@@ -223,15 +223,15 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
  .login-google,.login-mark,.login-brand-q{transition:none!important;animation:none!important}
 }
 
-/* Onda cromática que atravessa "continuar." continuamente da direita para a esquerda.
-   As duas metades do gradiente são idênticas: o reinício do ciclo é imperceptível. */
+/* Ondas diagonais de cores: franjas inclinadas avançam da direita para a esquerda.
+   Paleta duplicada nas metades para disfarçar a união entre os ciclos. */
 @keyframes quadrinheiro-logo-colors {
   from { background-position: 0% 50%; }
   to { background-position: 100% 50%; }
 }
 @supports ((background-clip:text) or (-webkit-background-clip:text)) {
   #loginScreen .login-story h1 span {
-    background-image: linear-gradient(90deg,
+    background-image: linear-gradient(125deg,
       #2563EB 0%,
       #00B4D8 8%,
       #FF1493 17%,
@@ -243,14 +243,14 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
       #FF9100 76%,
       #FFD000 84%,
       #2563EB 100%);
-    background-size: 200% 100%;
+    background-size: 200% 130%;
     background-position: 0% 50%;
     background-repeat: no-repeat;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    animation: quadrinheiro-logo-colors 4s linear infinite;
+    animation: quadrinheiro-logo-colors 2.65s linear infinite;
     will-change: background-position;
   }
 }
