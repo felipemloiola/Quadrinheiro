@@ -21,7 +21,7 @@ As regras de segurança do painel foram publicadas no Firebase Console; o reposi
 
 1. Abra o [painel](https://felipemloiola.github.io/Quadrinheiro/).
 2. Faça login com a conta Google autorizada. A sessão fica persistente por meio do **Firebase Auth LOCAL**, até que você clique em **Sair da conta**. Após F5, o Auth restaura a sessão e o site busca os dados no Firestore.
-3. O conteúdo é carregado **diretamente do Firestore**, sem utilizar dados de um cache permanente do navegador.
+3. O documento principal é carregado **diretamente do Firestore** (sem cache local persistente) e disponibilizado assim que confirmado. Fotos, backup antigo e consultas auxiliares não impedem a abertura do painel.
 4. Tarefas, notas, decisões, métricas, preferências de tema e barra lateral são gravadas no documento privado. Fotos são enviadas diretamente a subcoleções privadas, antes de aparecerem como anexadas.
 5. Em outro dispositivo, entre com a mesma conta Google para acessar a mesma versão na nuvem.
 
@@ -49,3 +49,9 @@ O código novo não grava registros de trabalho em `localStorage` nem fotos em `
 - **Versão anterior no GitHub Pages:** force a atualização com Ctrl + Shift + R.
 
 Documentação oficial: [persistência de sessão Firebase Auth](https://firebase.google.com/docs/auth/web/auth-state-persistence) · [Firestore Web](https://firebase.google.com/docs/firestore/manage-data/enable-offline) · [regras Firestore](https://firebase.google.com/docs/firestore/security/get-started).
+
+## Se a tela de carregamento não terminar
+
+A partir de 09/11/2026, a inicialização possui limite de espera para a leitura principal do Firestore (**16 segundos**), exibindo o erro e **Repetir conexão** em vez de manter o splash sem fim. As preferências possuem limite próprio (**5,5 segundos**); se sua consulta falhar, o painel utiliza temporariamente os valores encontrados no documento principal. Fotos e migração do banco local antigo são executadas sem bloquear o acesso a uma conta que já tem dados remotos.
+
+Caso o erro continue, a mensagem na tela indica qual etapa falhou. Recarregue a página e verifique a conexão, o banco nomeado e as regras publicadas no Firebase. Se houver dados antigos no navegador, eles não serão excluídos sem confirmação de backup remoto.
