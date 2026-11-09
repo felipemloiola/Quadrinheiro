@@ -391,7 +391,7 @@ document.getElementById('closeModal').onclick=closeModal;document.getElementById
 
 
 function autoSyncEnabled(){try{return JSON.parse(localStorage.getItem('quadrinheiro-ui-settings-v1')||'{}').autoSync!==false}catch{return true}}
-window.QuadrinheiroPanel={getState:()=>state,save,escapeHtml,modal,closeModal,notify,go};
+window.QuadrinheiroPanel={getState:()=>state,save,escapeHtml,modal,closeModal,notify,go,icon:ico};
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
