@@ -34,6 +34,8 @@ let allowEmails=[],authDenyReason='';
 function showGate(mode,message,kind='normal'){
  document.documentElement.dataset.auth=mode;
  if(workspace)workspace.inert=mode!=='authenticated';
+ const splash=$('authSplashMessage');
+ if(splash&&['checking','loading'].includes(mode))splash.textContent=message||'Carregando seu espaço…';
  if($('loginStatus')){$('loginStatus').textContent=message||'';$('loginStatus').dataset.kind=kind}
  if($('loginGoogle'))$('loginGoogle').disabled=!auth||mode!=='signed-out';
  if($('loginRetry'))$('loginRetry').hidden=!user||mode==='authenticated'||mode==='conflict';
@@ -47,6 +49,7 @@ const notice=(message,isError=false)=>{
  $('cloudStatus').textContent=message;
  $('cloudStatus').dataset.status=isError?'error':'normal';
  const mode=document.documentElement.dataset.auth;
+ if(['checking','loading'].includes(mode)&&$('authSplashMessage'))$('authSplashMessage').textContent=message;
  if(!['authenticated','signed-out','setup'].includes(mode)&&$('loginStatus')){
   $('loginStatus').textContent=message;
   $('loginStatus').dataset.kind=isError?'error':'normal';
