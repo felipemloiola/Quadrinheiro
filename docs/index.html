@@ -229,7 +229,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
           <section class="panel dashboard-panel" aria-labelledby="recordsHeading">
             <div class="dashboard-panel-heading"><div><h2 class="dashboard-panel-title" id="recordsHeading">Registros recentes</h2><span class="dashboard-panel-subtitle">Notas, decisões e benchmarks locais</span></div><button type="button" class="btn small ghost" data-goto="notes">Abrir notas ↗</button></div>
             <div class="dashboard-local-list" id="dashboardLocalActivity"></div>
-            <p class="dashboard-project-note">Os registros são armazenados somente neste navegador.</p>
+            <p class="dashboard-project-note">Os registros são salvos exclusivamente na sua conta Google no Firestore.</p>
           </section>
         </div>
         <div class="dashboard-banner">
@@ -257,7 +257,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <section class="page" id="notes">
         <div class="head-row"><div><div class="eyebrow">Seu espaço criativo</div><h1 class="page-title">Notas e ideias</h1><p class="page-desc">Guarde ideias, rascunhos, referências e fotos para a próxima evolução do Quadrinheiro.</p></div><button type="button" class="btn primary" id="addNote">＋ Nova nota</button></div>
         <div class="notes-toolbar"><div class="notes-filters"><input class="field notes-search" type="search" id="notesSearch" placeholder="Buscar nas notas…" aria-label="Buscar notas" autocomplete="off"><select class="field notes-type-select" id="notesFilter" aria-label="Filtrar notas por categoria"><option value="Todas">Todas as categorias</option><option value="Ideia">Ideias</option><option value="Rascunho">Rascunhos</option><option value="Referência">Referências</option><option value="Pesquisa">Pesquisas</option></select></div><span class="notes-count" id="notesCount" aria-live="polite">0 notas</span></div>
-        <div class="notes-privacy"><span aria-hidden="true">◉</span><div><strong>Espaço pessoal.</strong> Notas e fotos ficam salvas apenas neste navegador, sem serem publicadas no GitHub. Use <button id="notesImportHint" class="plain-link" type="button" style="border:0;background:transparent;padding:0;cursor:pointer">Importar</button> ou o botão <b>Exportar</b> para transferir um backup com imagens.</div></div>
+        <div class="notes-privacy"><span aria-hidden="true">◉</span><div><strong>Espaço pessoal.</strong> Notas e fotos são privadas e ficam no Firestore, sem serem publicadas no GitHub. Use <button id="notesImportHint" class="plain-link" type="button" style="border:0;background:transparent;padding:0;cursor:pointer">Importar</button> ou o botão <b>Exportar</b> para transferir um backup com imagens.</div></div>
         <div class="notes-grid" id="notesGrid"></div>
       </section>
       <section class="page" id="settings" aria-label="Ajustes do painel"></section>
@@ -310,6 +310,35 @@ function setUserScope(uid){
  activeAccountId=typeof uid==='string'&&/^[A-Za-z0-9:_-]{6,150}$/.test(uid)?uid:null;
  state=deepClone(seed);
  render();
+}
+// Migração única de versões antigas: apenas leitura, seguida de limpeza após backup confirmado no Firestore.
+function getLegacySnapshot(){
+ if(!activeAccountId)return null;
+ try{
+  const owner=localStorage.getItem('quadrinheiro-painel-legacy-claim-v1');
+  const keys=['quadrinheiro-painel-v1-user-'+activeAccountId];
+  if(!owner||owner===activeAccountId)keys.push('quadrinheiro-painel-v1');
+  for(const key of keys){
+   const raw=localStorage.getItem(key);
+   if(!raw)continue;
+   const data=JSON.parse(raw);
+   if(data.schema!==1||!Array.isArray(data.tasks)||!Array.isArray(data.decisions)||!Array.isArray(data.measurements))continue;
+   return {key,data:{...deepClone(seed),...data,notes:Array.isArray(data.notes)?data.notes:[]}}
+  }
+ }catch{}
+ return null
+}
+function clearLegacySnapshot(){
+ if(!activeAccountId)return;
+ try{
+  const owner=localStorage.getItem('quadrinheiro-painel-legacy-claim-v1');
+  localStorage.removeItem('quadrinheiro-painel-v1-user-'+activeAccountId);
+  if(!owner||owner===activeAccountId){
+   localStorage.removeItem('quadrinheiro-painel-v1');
+   localStorage.removeItem('quadrinheiro-painel-legacy-claim-v1');
+   for(const key of ['quadrinheiro-ui-settings-v1','quadrinheiro-theme-v2','quadrinheiro-sidebar-v1'])localStorage.removeItem(key);
+  }
+ }catch{}
 }
 function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function safeUrl(raw){try{const u=new URL(raw);return ['https:','http:'].includes(u.protocol)?u.toString():''}catch{return ''}}
@@ -437,7 +466,7 @@ function importData(file){
  reader.onerror=()=>notify('Falha ao abrir o arquivo.',true);
  reader.readAsText(file)
 }
-async function syncGithub(silent=false){let btn=document.getElementById('syncBtn');btn.disabled=true;btn.style.opacity='.7';try{let requests=[fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/releases/latest',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/contents',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/commits?per_page=8',{headers:{Accept:'application/vnd.github+json'}})];let results=await Promise.allSettled(requests);let parsed=await Promise.all(results.map(async x=>{if(x.status!=='fulfilled'||!x.value.ok)return null;return x.value.json().catch(()=>null)}));let [r,release,root,commits]=parsed;let successes=0;if(r&&r.default_branch){state.repo.branch=r.default_branch;successes++}if(release&&release.tag_name){state.repo.release=release.tag_name;state.repo.releaseUrl=release.html_url||BASE+'/releases';successes++}if(Array.isArray(root)){state.repo.root=root.map(x=>x.name);successes++}if(Array.isArray(commits)&&commits[0]){state.repo.head=(commits[0].sha||'').slice(0,8);state.repo.headUrl=commits[0].html_url||BASE;state.repo.recentCommits=commits.slice(0,8).map(c=>({sha:(c.sha||'').slice(0,40),message:String(c.commit?.message||'Commit').split('\n')[0].slice(0,200),author:String(c.commit?.author?.name||c.author?.login||'Colaborador').slice(0,70),date:c.commit?.author?.date||'',url:c.html_url||''}));successes++}if(successes){state.repo.lastSync=new Date().toISOString();save();render();if(!silent)notify(`GitHub sincronizado: ${successes}/4 fontes.`)}else if(!silent)notify('Não foi possível acessar o GitHub. Snapshot e dados locais preservados.',true)}catch{if(!silent)notify('Falha de rede. Dados locais preservados.',true)}finally{btn.disabled=false;btn.style.opacity='1'}}
+async function syncGithub(silent=false){let btn=document.getElementById('syncBtn');btn.disabled=true;btn.style.opacity='.7';try{let requests=[fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/releases/latest',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/contents',{headers:{Accept:'application/vnd.github+json'}}),fetch('https://api.github.com/repos/felipemloiola/Quadrinheiro/commits?per_page=8',{headers:{Accept:'application/vnd.github+json'}})];let results=await Promise.allSettled(requests);let parsed=await Promise.all(results.map(async x=>{if(x.status!=='fulfilled'||!x.value.ok)return null;return x.value.json().catch(()=>null)}));let [r,release,root,commits]=parsed;let successes=0;if(r&&r.default_branch){state.repo.branch=r.default_branch;successes++}if(release&&release.tag_name){state.repo.release=release.tag_name;state.repo.releaseUrl=release.html_url||BASE+'/releases';successes++}if(Array.isArray(root)){state.repo.root=root.map(x=>x.name);successes++}if(Array.isArray(commits)&&commits[0]){state.repo.head=(commits[0].sha||'').slice(0,8);state.repo.headUrl=commits[0].html_url||BASE;state.repo.recentCommits=commits.slice(0,8).map(c=>({sha:(c.sha||'').slice(0,40),message:String(c.commit?.message||'Commit').split('\n')[0].slice(0,200),author:String(c.commit?.author?.name||c.author?.login||'Colaborador').slice(0,70),date:c.commit?.author?.date||'',url:c.html_url||''}));successes++}if(successes){state.repo.lastSync=new Date().toISOString();save();render();if(!silent)notify(`GitHub sincronizado: ${successes}/4 fontes.`)}else if(!silent)notify('Não foi possível acessar o GitHub. Dados privados preservados no Firestore.',true)}catch{if(!silent)notify('Falha de rede. Registros privados não foram alterados.',true)}finally{btn.disabled=false;btn.style.opacity='1'}}
 // Delegação de eventos para links de navegação e abertura de tarefas.
 document.addEventListener('click',e=>{let nav=e.target.closest('[data-page]');if(nav){go(nav.dataset.page);return}let dest=e.target.closest('[data-goto]');if(dest){go(dest.dataset.goto);return}let task=e.target.closest('[data-task]');if(task){openTask(task.dataset.task);return}let d=e.target.closest('[data-decision]');if(d){openDecision(d.dataset.decision);return}let step=e.target.closest('[data-step]');if(step){openNextStep(step.dataset.step);return}let del=e.target.closest('[data-delete-metric]');if(del){if(confirm('Excluir esta medição?')){state.measurements=state.measurements.filter(x=>x.id!==del.dataset.deleteMetric);save();render();notify('Medição excluída.')}return}if(e.target.closest('[data-export]'))exportData()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('modalBg').classList.contains('open'))closeModal();if((e.key==='Enter'||e.key===' ')&&e.target.matches('tr[data-task]')){e.preventDefault();openTask(e.target.dataset.task)}});
 document.getElementById('closeModal').onclick=closeModal;document.getElementById('modalBg').addEventListener('click',e=>{if(e.target.id==='modalBg')closeModal()});document.getElementById('addTask').onclick=addTask;document.getElementById('addMetric').onclick=openMetric;document.getElementById('addDecision').onclick=()=>openDecision();document.getElementById('addNextStep').onclick=()=>openNextStep();document.getElementById('syncBtn').onclick=()=>syncGithub();document.getElementById('exportBtn').onclick=exportData;document.getElementById('importBtn').onclick=()=>document.getElementById('fileInput').click();document.getElementById('fileInput').addEventListener('change',e=>{importData(e.target.files[0]);e.target.value=''});['taskSearch','taskStatus','taskPriority','taskArea'].forEach(id=>document.getElementById(id).addEventListener('input',renderTasks));document.getElementById('metricFilter').addEventListener('change',renderPerformance);
@@ -455,13 +484,13 @@ function replaceCloudState(cloudData){
  state={...deepClone(seed),...state,...cloudData,repo:currentRepo};
  render();
 }
-window.QuadrinheiroPanel={getState:()=>state,save,setUserScope,replaceCloudState,isDefaultLocal,escapeHtml,modal,closeModal,notify,go,icon:ico};
+window.QuadrinheiroPanel={getState:()=>state,save,setUserScope,replaceCloudState,getLegacySnapshot,clearLegacySnapshot,isDefaultLocal,escapeHtml,modal,closeModal,notify,go,icon:ico};
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
-<script src="settings.js?v=20261109e"></script>
-<script src="sidebar.js?v=20261109d"></script>
-<script src="notes.js?v=20261109d"></script>
-<script type="module" src="cloud.js?v=20261109l"></script>
+<script src="settings.js?v=20261109f"></script>
+<script src="sidebar.js?v=20261109e"></script>
+<script src="notes.js?v=20261109e"></script>
+<script type="module" src="cloud.js?v=20261109m"></script>
 </body>
 </html>
