@@ -162,14 +162,6 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
    <button class="login-google" type="button" id="loginGoogle" disabled><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.39 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.23 5.48-4.72 7.18l7.73 6C44.46 38.03 46.98 31.87 46.98 24.55z"/><path fill="#FBBC05" d="M10.53 28.59C10.05 27.12 9.77 25.58 9.77 24s.28-3.12.75-4.59l-7.98-6.2C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Continuar com Google</span></button>
    <p class="login-state" id="loginStatus" role="status" aria-live="polite">Preparando conexão segura…</p>
    <div class="login-recovery"><button type="button" id="loginRetry" hidden>Repetir conexão</button><button type="button" id="loginSwitch" hidden>Trocar conta Google</button></div>
-   <div class="login-session-panel" id="loginMigration" hidden>
-    <strong id="loginMigrationTitle">Escolha sua versão inicial</strong>
-    <p id="loginMigrationHint">Existem registros diferentes neste navegador e na nuvem.</p>
-    <div class="login-choice-row">
-      <button id="loginUseCloud" type="button" class="login-choice-primary">Usar dados da nuvem</button>
-      <button id="loginUseLocal" type="button">Enviar dados locais</button>
-    </div>
-   </div>
    <div class="login-division"></div>
    <div class="login-privacy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>Entrada exclusiva pelo Google. Não armazenamos senhas no painel.</span></div>
    <p class="login-help" id="loginHelp">Acesso exclusivo à conta autorizada. <a href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Problemas para entrar?</a></p>
@@ -212,7 +204,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
             <div class="dashboard-area-grid" id="dashboardAreaCards"></div>
           </section>
           <section class="panel dashboard-panel" aria-labelledby="progressHeading">
-            <div class="dashboard-panel-heading"><h2 class="dashboard-panel-title" id="progressHeading">Evolução do projeto</h2><span class="pill wait">Local</span></div>
+            <div class="dashboard-panel-heading"><h2 class="dashboard-panel-title" id="progressHeading">Evolução do projeto</h2><span class="pill done">Firestore</span></div>
             <div class="dashboard-area-summary">
               <div class="dashboard-progress-ring" id="heroRing" style="--value:0%" role="img" aria-label="0% dos critérios concluídos"><div class="inner"><strong id="heroCompletion">0%</strong><small>checklist</small></div></div>
               <div class="dashboard-progress-copy"><strong id="heroProgressNote">Aguardando checklists</strong><p>Critérios concluídos entre as tarefas cadastradas. Não representa validação automática.</p></div>
@@ -227,7 +219,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
             <p class="dashboard-project-note">Eventos provenientes do GitHub. Apenas os commits realmente retornados pela API são apresentados.</p>
           </section>
           <section class="panel dashboard-panel" aria-labelledby="recordsHeading">
-            <div class="dashboard-panel-heading"><div><h2 class="dashboard-panel-title" id="recordsHeading">Registros recentes</h2><span class="dashboard-panel-subtitle">Notas, decisões e benchmarks locais</span></div><button type="button" class="btn small ghost" data-goto="notes">Abrir notas ↗</button></div>
+            <div class="dashboard-panel-heading"><div><h2 class="dashboard-panel-title" id="recordsHeading">Registros recentes</h2><span class="dashboard-panel-subtitle">Notas, decisões e benchmarks na nuvem</span></div><button type="button" class="btn small ghost" data-goto="notes">Abrir notas ↗</button></div>
             <div class="dashboard-local-list" id="dashboardLocalActivity"></div>
             <p class="dashboard-project-note">Os registros são salvos exclusivamente na sua conta Google no Firestore.</p>
           </section>
@@ -257,7 +249,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <section class="page" id="notes">
         <div class="head-row"><div><div class="eyebrow">Seu espaço criativo</div><h1 class="page-title">Notas e ideias</h1><p class="page-desc">Guarde ideias, rascunhos, referências e fotos para a próxima evolução do Quadrinheiro.</p></div><button type="button" class="btn primary" id="addNote">＋ Nova nota</button></div>
         <div class="notes-toolbar"><div class="notes-filters"><input class="field notes-search" type="search" id="notesSearch" placeholder="Buscar nas notas…" aria-label="Buscar notas" autocomplete="off"><select class="field notes-type-select" id="notesFilter" aria-label="Filtrar notas por categoria"><option value="Todas">Todas as categorias</option><option value="Ideia">Ideias</option><option value="Rascunho">Rascunhos</option><option value="Referência">Referências</option><option value="Pesquisa">Pesquisas</option></select></div><span class="notes-count" id="notesCount" aria-live="polite">0 notas</span></div>
-        <div class="notes-privacy"><span aria-hidden="true">◉</span><div><strong>Espaço pessoal.</strong> Notas e fotos são privadas e ficam no Firestore, sem serem publicadas no GitHub. Use <button id="notesImportHint" class="plain-link" type="button" style="border:0;background:transparent;padding:0;cursor:pointer">Importar</button> ou o botão <b>Exportar</b> para transferir um backup com imagens.</div></div>
+        <div class="notes-privacy"><span aria-hidden="true">◉</span><div><strong>Espaço pessoal.</strong> Notas e fotos são privadas e ficam no Firestore, sem serem publicadas no GitHub. Use <button id="notesImportHint" class="plain-link" type="button" style="border:0;background:transparent;padding:0;cursor:pointer">Importar</button> ou o botão <b>Exportar</b> para criar um backup opcional com imagens.</div></div>
         <div class="notes-grid" id="notesGrid"></div>
       </section>
       <section class="page" id="settings" aria-label="Ajustes do painel"></section>
@@ -491,9 +483,9 @@ window.QuadrinheiroPanel={getState:()=>state,save,setUserScope,replaceCloudState
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
-<script src="settings.js?v=20261109f"></script>
-<script src="sidebar.js?v=20261109e"></script>
-<script src="notes.js?v=20261109e"></script>
-<script type="module" src="cloud.js?v=20261109m"></script>
+<script src="settings.js?v=20261109g"></script>
+<script src="sidebar.js?v=20261109f"></script>
+<script src="notes.js?v=20261109f"></script>
+<script type="module" src="cloud.js?v=20261109n"></script>
 </body>
 </html>
