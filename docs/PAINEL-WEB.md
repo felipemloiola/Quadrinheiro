@@ -75,3 +75,17 @@ Com a barra **recolhida**, o `Q` é o próprio botão para expandir. Com a barra
 - Temas e cores são gravados explicitamente em `dashboardUsers/{uid}/preferences/appearance` no Firestore. Gravações consecutivas são serializadas para que a última escolha prevaleça.
 - Na entrada ou após F5, o site recupera essas preferências diretamente do servidor, aplicando-as antes de mostrar o painel. Se o documento ainda não existir, importa as preferências do documento principal e cria a configuração dedicada.
 - Uma falha de gravação é mostrada ao usuário; selecionar uma cor não significa, por si só, que o servidor confirmou a persistência.
+
+## Interface responsiva para smartphones (09/11/2026)
+
+A interface móvel reutiliza os **mesmos componentes e tokens de tema da versão desktop**, com distribuição adaptada para telas estreitas:
+
+- **Dock com cinco destinos:** Visão geral, Backlog, Notas, Ajustes e Mais. O menu **Mais** abre Repositório, Integrações, Performance e Decisões, preservando todas as oito áreas do site.
+- **Cartões de dados:** KPIs em duas colunas, áreas do backlog em cartões, tabelas de tarefas e medições apresentadas como itens legíveis com indicador de edição e sem rolagem lateral forçada.
+- **Anotações e configurações:** notas em coluna única, filtros responsivos, seletores de cor e tema com áreas de toque maiores, formulários com texto de 16 px para reduzir zoom involuntário no iOS.
+- **Ações contextuais:** barra superior mais compacta, modais como folhas inferiores adaptadas às áreas seguras dos aparelhos e navegação por toque e teclado.
+- **Acessibilidade:** seletor de seções com `aria-expanded`, fechamento por Escape, retorno do foco ao gatilho e respeito à configuração de movimento reduzido.
+
+Implementação: `docs/mobile.css`, `docs/mobile.js` e os pontos de montagem em `docs/index.html`. Os dados continuam no Firestore e a navegação móvel usa o roteador existente, sem criar uma segunda instância de estado.
+
+**Validação:** as verificações automatizadas de sintaxe e o teste simulado de abertura, seleção, fechamento e estado do menu passaram. O layout ainda deve ser conferido visualmente em aparelhos reais de diferentes larguras antes de ser considerado validado em produção.
