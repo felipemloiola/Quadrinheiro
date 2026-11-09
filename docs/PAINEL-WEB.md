@@ -138,3 +138,10 @@ A atualização foi projetada para manter todos os registros locais e as oito ab
 - `firestore.rules`: regras do painel alinhadas à versão publicada manualmente no Firebase, com verificação Google, e-mail e UID. Regras do app Android preservadas.
 - `docs/quadrinheiro-login-logo.svg`: SVG recortado da **logo colorida oficial**, com rosa, âmbar, azul e ciano. O destaque cromático da entrada é discreto; a logo Q da barra lateral continua monocromática e adaptável ao tema.
 - **Limite de validação:** alterações no GitHub não constituem prova de login real ou gravação no Firestore. Teste em navegador com a conta Google autorizada é necessário para confirmação ponta a ponta.
+
+## Saída da conta e onda cromática (09/11/2026)
+
+- A barra lateral do desktop mostra **Sair da conta** na base; o ícone permanece fixo ao recolher o menu e apenas o texto é ocultado. No celular, a mesma saída permanece em **Ajustes → Sincronização entre dispositivos**.
+- Os dois controles utilizam `Firebase Auth.signOut`. A interface volta imediatamente ao bloqueio de login e retira os dados privados da sessão exibida, sem apagar o backup local daquela conta.
+- Se houver edição pendente, tenta gravar na nuvem antes de sair; quando não é possível, pede confirmação antes de encerrar a sessão.
+- A palavra **“continuar.”** da entrada usa onda contínua da direita para a esquerda, com ciclo de **4 segundos** nas cores da logo. `prefers-reduced-motion` mantém um gradiente estático.
