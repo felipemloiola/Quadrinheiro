@@ -19,7 +19,7 @@ O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `mai
 
 O botão **Sincronizar GitHub** consulta informações públicas do repositório em modo somente leitura.
 
-As tarefas, decisões, métricas e textos das notas são salvos localmente no navegador usando `localStorage`. As fotos anexadas às notas ficam no `IndexedDB`, para não sobrecarregar o `localStorage`. A exportação JSON inclui os textos e as imagens referenciadas pelas notas; a importação restaura ambos. Os registros não são sincronizados automaticamente entre dispositivos. Use backups para migrar de aparelho.
+As tarefas, decisões, métricas e textos das notas continuam sendo salvos localmente em `localStorage`, e as fotos em `IndexedDB`. A exportação JSON inclui os textos e as imagens. **Sincronização privada entre dispositivos:** o painel já possui suporte a Firebase Auth + Firestore, mas a conexão permanece **inativa** até a configuração inicial em `docs/cloud-config.json`, habilitação do login Google e publicação das regras de segurança. Depois de ativada, as alterações são sincronizadas entre aparelhos conectados à mesma conta Google. Para instruções, leia [`CONFIGURAR-SYNC-FIREBASE.md`](CONFIGURAR-SYNC-FIREBASE.md).
 
 ## Emulador removido
 
@@ -106,3 +106,18 @@ Arquivos: `docs/navigation.css` e `docs/sidebar.js`. Os ícones SVG são renderi
 - Foi corrigido também o estado vazio da aba Notas, que apontava para um identificador inválido do componente compartilhado de ícones.
 
 A atualização foi projetada para manter todos os registros locais e as oito abas existentes.
+
+## Logo temático e barra lateral
+
+- O `Q` na barra lateral usa a mesma geometria do logotipo Android, com preenchimento `var(--accent)`; seu fundo segue os valores de `LauncherIconPicker.kt`: `#101010` no tema escuro e `#F3F4F7` no claro. O favicon também se adapta à cor e ao tema.
+- O logo **continua visível quando o menu é recolhido**. Na barra lateral, o eixo horizontal de todos os ícones é fixo; apenas os textos mudam de opacidade/recorte ao alternar o estado. O logo na versão recolhida funciona como botão de expansão ao receber clique/toque, mostrando o ícone de dividir painel quando o cursor passa por ele.
+- O bloco inferior de texto extenso da barra lateral foi removido. O estado de dados e sincronização é apresentado em **Ajustes**.
+- Implementação: `docs/smooth-sidebar.css`, `docs/sidebar.js` e `docs/settings.js`.
+
+## Salvamento privado em qualquer dispositivo
+
+- Arquivos: `docs/cloud.js`, `docs/cloud.css`, `docs/cloud-config.json` e `firestore.rules`.
+- **Antes de ativar:** o navegador mantém as alterações localmente, como anteriormente. Nenhuma gravação na nuvem é prometida.
+- **Depois de ativar e entrar:** usa autenticação Google, registros por UID e atualizações do Firestore. Notas e fotos também podem ser transferidas entre dispositivos. A primeira conexão resolve diferenças entre versão local e remota antes de substituir registros.
+- O `cloud-config.json` público não pode conter segredos administrativos. O site no GitHub Pages continua publicamente acessível, mas as coleções privadas só autorizam leitura/escrita do respectivo UID autenticado; regras ainda precisam ser **implantadas no Firebase**, pois um commit GitHub não as publica automaticamente.
+- Fotos são armazenadas em partes privadas no Firestore, evitando a exigência atual de plano Blaze para Cloud Storage. O acesso gratuito depende das quotas do Firestore e do banco escolhido. Backups JSON continuam recomendados.
