@@ -79,14 +79,14 @@ function render(){
  const result=all.filter(n=>(filter==='Todas'||n.kind===filter)&&(!query||[n.title,n.body,n.kind].join(' ').toLocaleLowerCase('pt-BR').includes(query))).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  counter.textContent=result.length+' de '+all.length+' notas · salvas neste navegador';
  if(!result.length){
-  grid.innerHTML='<div class="notes-empty panel"><span class="notes-empty-glyph" aria-hidden="true">'+APP.icon("notes")+'</span><h2>'+(all.length?'Nenhuma nota encontrada':'Um lugar para suas ideias.')+'</h2><p>'+(all.length?'Experimente outra busca ou categoria.':'Guarde inspirações, capturas de tela, referências e rascunhos sobre o Quadrinheiro.')+'</p><button type="button" class="btn primary" data-new-note>Escrever uma nota</button></div>';
+  grid.innerHTML='<div class="notes-empty panel"><span class="notes-empty-glyph" aria-hidden="true">'+app.icon("notes")+'</span><h2>'+(all.length?'Nenhuma nota encontrada':'Um lugar para suas ideias.')+'</h2><p>'+(all.length?'Experimente outra busca ou categoria.':'Guarde inspirações, capturas de tela, referências e rascunhos sobre o Quadrinheiro.')+'</p><button type="button" class="btn primary" data-new-note>Escrever uma nota</button></div>';
   return
  }
  grid.innerHTML=result.map(note=>{
   const photos=Array.isArray(note.photos)?note.photos:[];
   const preview=String(note.body||'').replace(/\s+/g,' ').trim();
   return '<article class="panel notes-card" data-note-open="'+esc(note.id)+'" tabindex="0" role="button" aria-label="Abrir nota '+esc(note.title||'Sem título')+'">'+
-    '<div class="notes-card-top"><span class="notes-type">'+esc(kinds.includes(note.kind)?note.kind:'Ideia')+'</span><button type="button" class="notes-pin'+(note.pinned?' is-pinned':'')+'" data-note-pin="'+esc(note.id)+'" aria-label="'+(note.pinned?'Desafixar':'Fixar')+' nota" title="'+(note.pinned?'Desafixar':'Fixar')+'">⌑</button></div>'+
+    '<div class="notes-card-top"><span class="notes-type">'+esc(kinds.includes(note.kind)?note.kind:'Ideia')+'</span><div class="notes-card-actions"><button type="button" class="notes-download" data-note-download="'+esc(note.id)+'" aria-label="Baixar '+esc(note.title||'nota')+' em Markdown" title="Baixar nota .md">'+app.icon('download')+'</button><button type="button" class="notes-pin'+(note.pinned?' is-pinned':'')+'" data-note-pin="'+esc(note.id)+'" aria-label="'+(note.pinned?'Desafixar':'Fixar')+' nota" title="'+(note.pinned?'Desafixar':'Fixar')+'">⌑</button></div></div>'+
     '<h3>'+esc(note.title||'Sem título')+'</h3>'+
     (preview?'<p class="notes-snippet">'+esc(preview.slice(0,240))+(preview.length>240?'…':'')+'</p>':'<p class="notes-snippet notes-placeholder">Toque para escrever seu rascunho.</p>')+
     (photos.length?'<div class="notes-cover" data-note-cover="'+esc(photos[0].id)+'"><img alt="Imagem anexada à nota" loading="lazy"><span>'+photos.length+' foto'+(photos.length>1?'s':'')+'</span></div>':'')+
@@ -95,6 +95,62 @@ function render(){
  const token=++renderToken;
  grid.querySelectorAll('[data-note-cover]').forEach(box=>{if(token===renderToken)thumbFor(box,box.dataset.noteCover)})
 }
+
+function markdownDate(value){
+ if(!value)return 'Não informada';
+ const date=new Date(value);
+ return Number.isNaN(date.getTime())?'Não informada':date.toISOString().replace('T',' ').slice(0,16)+' UTC';
+}
+function slugifyNote(title){
+ const slug=String(title||'nota').normalize('NFKD')
+   .replace(/[\u0300-\u036f]/g,'')
+   .replace(/[^a-zA-Z0-9_-]+/g,'-')
+   .replace(/^-+|-+$/g,'').slice(0,72);
+ return slug||'nota';
+}
+function markdownTitle(title){
+ return String(title||'Sem título').replace(/[\r\n]+/g,' ').replace(/([\\*_{}[\]()#+.!|>~-])/g,'\\$1');
+}
+function noteAsMarkdown(note){
+ const title=markdownTitle(note.title);
+ const kind=kinds.includes(note.kind)?note.kind:'Ideia';
+ const photos=Array.isArray(note.photos)?note.photos:[];
+ const metadata=[
+   '# '+title,
+   '',
+   '**Categoria:** '+kind,
+   '**Criada em:** '+markdownDate(note.createdAt),
+   '**Atualizada em:** '+markdownDate(note.updatedAt||note.createdAt),
+   '',
+   '---',
+   '',
+   String(note.body||'').replace(/\r\n?/g,'\n').trim(),
+   ''
+ ];
+ if(photos.length){
+   metadata.push('## Fotos anexadas','','As fotos são armazenadas neste navegador e não são incluídas no arquivo Markdown. Use **Exportar backup JSON** para preservar as imagens.','');
+   for(const photo of photos)metadata.push('- '+String(photo.name||'Imagem').replace(/[\r\n]/g,' ').slice(0,160));
+   metadata.push('');
+ }
+ return metadata.join('\n').replace(/\n{3,}/g,'\n\n')+'\n';
+}
+function downloadNote(id){
+ const note=notes().find(n=>n.id===id);
+ if(!note){app.notify('Nota não encontrada.',true);return}
+ try{
+   const blob=new Blob([noteAsMarkdown(note)],{type:'text/markdown;charset=utf-8'});
+   const url=URL.createObjectURL(blob);
+   const link=document.createElement('a');
+   link.href=url;
+   link.download=slugifyNote(note.title)+'.md';
+   document.body.appendChild(link);
+   link.click();
+   link.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),15000);
+   app.notify((note.photos||[]).length?'Markdown baixado. As fotos permanecem no backup JSON.':'Nota exportada em Markdown.');
+ }catch(error){app.notify(error.message||'Falha ao exportar nota.',true)}
+}
+
 function createNote(){
  const stamp=timeNow();
  const note={id:uid(),title:'',body:'',kind:'Ideia',pinned:false,createdAt:stamp,updatedAt:stamp,photos:[]};
@@ -115,7 +171,7 @@ function openNote(id){
   '<input id="noteImageInput" type="file" accept="image/*" multiple hidden>'+
   '<p class="notes-storage-message" id="notesUploadStatus">Fotos salvas somente neste navegador. O backup JSON inclui os anexos.</p>'+
   '</div>';
- const foot='<span class="notes-save-status" id="notesSaveStatus">Salvo automaticamente</span><div class="notes-editor-actions"><button type="button" class="btn small ghost danger" id="deleteNote">Excluir</button><button type="button" class="btn small" id="pinNote">'+(note.pinned?'Desafixar':'Fixar')+'</button><button type="button" class="btn primary" id="doneNote">Concluir</button></div>';
+ const foot='<span class="notes-save-status" id="notesSaveStatus">Salvo automaticamente</span><div class="notes-editor-actions"><button type="button" class="btn small ghost danger" id="deleteNote">Excluir</button><button type="button" class="btn small" id="pinNote">'+(note.pinned?'Desafixar':'Fixar')+'</button><button type="button" class="btn small ghost" id="downloadNote">'+app.icon('download')+' Baixar .md</button><button type="button" class="btn primary" id="doneNote">Concluir</button></div>';
  app.modal(note.title||'Nova nota',body,foot);
  byId('modalBg').classList.add('notes-editor-open');
  const modalBody=byId('modalBody');
@@ -131,6 +187,7 @@ function openNote(id){
  byId('pinNote').onclick=()=>{note.pinned=!note.pinned;byId('pinNote').textContent=note.pinned?'Desafixar':'Fixar';sync()};
  byId('doneNote').onclick=()=>{app.closeModal();render()};
  byId('deleteNote').onclick=()=>removeNote(note.id);
+ byId('downloadNote').onclick=()=>downloadNote(note.id);
  const input=byId('noteImageInput'),drop=byId('notesDropZone');
  drop.onclick=()=>input.click();
  drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();input.click()}};
@@ -218,6 +275,7 @@ async function removeNote(id){
 }
 document.addEventListener('click',event=>{
  if(event.target.closest('[data-new-note]')){createNote();return}
+ const download=event.target.closest('[data-note-download]');if(download){event.stopPropagation();downloadNote(download.dataset.noteDownload);return}
  const pin=event.target.closest('[data-note-pin]');if(pin){event.stopPropagation();const note=notes().find(n=>n.id===pin.dataset.notePin);if(note){note.pinned=!note.pinned;note.updatedAt=timeNow();app.save();render()}return}
  const card=event.target.closest('[data-note-open]');if(card)openNote(card.dataset.noteOpen)
 });
