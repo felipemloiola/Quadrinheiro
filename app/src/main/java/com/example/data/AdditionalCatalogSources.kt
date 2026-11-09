@@ -71,6 +71,7 @@ internal object AdditionalCatalogSources {
         return fetch(url)
     }
     internal fun enabledSources(provider: String, language: String): List<String> {
+        if (provider == "VERIFIED_COMICS") return listOf("catalog", "kitsu", "mangadex")
         if (provider == "MANGA") return listOf("kitsu", "mangadex")
         val books = mutableListOf("catalog", "apple-br", "google-pt", "open-library")
         if (language != "PT") books.add("apple-us")
