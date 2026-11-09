@@ -286,6 +286,19 @@ byId('notesSearch')?.addEventListener('input',render);
 byId('notesFilter')?.addEventListener('change',render);
 byId('addNote')?.addEventListener('click',createNote);
 byId('notesImportHint')?.addEventListener('click',()=>byId('importBtn')?.click());
-window.QuadrinheiroNotes={render,exportImages,importImages};
+async function getLocalImageRecords(){
+ const referenced=new Set(notes().flatMap(note=>(note.photos||[]).map(photo=>photo.id)));
+ if(!referenced.size)return [];
+ return (await imageList()).filter(record=>referenced.has(record.id)&&validImage(record.dataUrl))
+}
+async function upsertCloudImages(records){
+ if(!Array.isArray(records)||!records.length)return;
+ for(const item of records){
+  if(!item||typeof item.id!=='string'||!validImage(item.dataUrl))throw Error('Imagem da nuvem inválida');
+ }
+ await writeImages(store=>{for(const item of records)store.put(item)});
+ render();
+}
+window.QuadrinheiroNotes={render,exportImages,importImages,getLocalImageRecords,upsertCloudImages};
 render();
 })();
