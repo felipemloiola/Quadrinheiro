@@ -323,7 +323,10 @@ function getLegacySnapshot(){
    if(!raw)continue;
    const data=JSON.parse(raw);
    if(data.schema!==1||!Array.isArray(data.tasks)||!Array.isArray(data.decisions)||!Array.isArray(data.measurements))continue;
-   return {key,data:{...deepClone(seed),...data,notes:Array.isArray(data.notes)?data.notes:[]}}
+   let uiSettings=null,sidebarMode='expanded';
+   try{uiSettings=JSON.parse(localStorage.getItem('quadrinheiro-ui-settings-v1')||'null')}catch{}
+   try{sidebarMode=localStorage.getItem('quadrinheiro-sidebar-v1')==='collapsed'?'collapsed':'expanded'}catch{}
+   return {key,data:{...deepClone(seed),...data,notes:Array.isArray(data.notes)?data.notes:[]},uiSettings,sidebarMode}
   }
  }catch{}
  return null
