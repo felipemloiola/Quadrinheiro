@@ -12,7 +12,7 @@ const box=document.createElement('section');
 box.className='panel settings-card';
 box.setAttribute('aria-labelledby','cloudHeading');
 box.innerHTML=
- '<div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">'+APP.icon('shield')+'</span><div><h2 id="cloudHeading">Sincronização entre dispositivos</h2><p>Salve alterações privadas e continue em outro aparelho.</p></div></div>'+
+ '<div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">'+APP.icon('shield')+'</span><div><h2 id="cloudHeading">Seus dados na nuvem</h2><p>A conta Google mantém seus registros no Firestore, sem cópias locais.</p></div></div>'+
  '<div class="cloud-status" id="cloudStatus" role="status" aria-live="polite">Verificando configuração…</div>'+
  '<p class="settings-note" id="cloudAccount"></p>'+
  '<div class="settings-inline-actions cloud-actions">'+
@@ -26,7 +26,7 @@ box.innerHTML=
  '<button type="button" class="btn small ghost" id="cloudUpload">Enviar dados deste aparelho</button>'+
  '</div></div>'+
  '<p class="settings-note" id="cloudSetup">Conta Google autenticada e dados privados no Firestore. <a class="plain-link" href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Informações de segurança ↗</a></p>'+
- '<p class="settings-note">Notas, fotos, tarefas e preferências são sincronizadas. Uma cópia local continua disponível se a conexão cair.</p>';
+ '<p class="settings-note">Notas, fotos, tarefas e preferências ficam no Firestore. Sem conexão, aguarde a sincronização antes de fechar a aba.</p>';
 column.insertBefore(box,column.firstChild);
 const $=id=>document.getElementById(id);
 const workspace=$('workspace');
@@ -54,7 +54,6 @@ const notice=(message,isError=false)=>{
 };
 const CONFIG_URL='cloud-config.json';
 const SDK='https://www.gstatic.com/firebasejs/13.2.0/';
-const LAST_PREFIX='quadrinheiro-cloud-snapshot-';
 const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
@@ -89,13 +88,15 @@ function photoMeta(photoId){return cloudDoc(['photos',photoId])}
 function photoPart(photoId,index){return cloudDoc(['photos',photoId,'pieces',String(index)])}
 function imageIds(data){return new Set((data.notes||[]).flatMap(n=>(n.photos||[]).map(p=>p.id)))}
 function validId(v){return typeof v==='string'&&/^[a-zA-Z0-9_-]{5,120}$/.test(v)}
-function localStamp(){try{return localStorage.getItem(LAST_PREFIX+user.uid)||''}catch{return ''}}
-function saveStamp(data){try{localStorage.setItem(LAST_PREFIX+user.uid,hash(data))}catch{}}
 function setDecisionVisible(value){$('cloudDecisions').hidden=!value}
 function resetSession(){
  clearTimeout(timer);
- APP.setUserScope?.(null);if(subscribed){subscribed();subscribed=null}
+ if(subscribed){subscribed();subscribed=null}
  user=null;active=false;dirty=false;queued=false;uploading=false;remoteDoc=null;remoteRef=null;
+ APP.setUserScope?.(null);
+ NOTES()?.resetSession?.();
+ window.QuadrinheiroSettings?.resetSession?.();
+ window.QuadrinheiroSidebar?.resetSession?.();
  $('cloudLogout').hidden=true;
  if($('sidebarSignOut'))$('sidebarSignOut').hidden=true;
  $('cloudLogin').hidden=true;
@@ -119,6 +120,10 @@ async function openFirebase(config){
   appId:config.appId
  },'QuadrinheiroProjectDashboard');
  auth=sdk.getAuth(services);
+ // Somente a credencial da conta fica persistida no dispositivo.
+ // Os dados do projeto usam cache Firestore em RAM (sem IndexedDB).
+ await sdk.setPersistence(auth,sdk.browserLocalPersistence);
+ if(auth.authStateReady)await auth.authStateReady();
  db=config.databaseId&&config.databaseId!=='(default)'?
    sdk.getFirestore(services,config.databaseId):sdk.getFirestore(services);
  $('cloudLogin').disabled=false;
@@ -129,8 +134,14 @@ async function openFirebase(config){
    showGate('signed-out',reason||'Entre com sua conta Google para continuar.',reason?'error':'normal');
    return
   }
-  if(!signed.providerData?.some(p=>p.providerId==='google.com')||!signed.emailVerified){
-   authDenyReason='Este painel aceita somente contas Google.';await sdk.signOut(auth);return
+  let providerIsGoogle=signed.providerData?.some(p=>p.providerId==='google.com')===true;
+  try{
+   const token=await sdk.getIdTokenResult(signed);
+   providerIsGoogle=providerIsGoogle||token?.signInProvider==='google.com'||token?.claims?.firebase?.sign_in_provider==='google.com';
+  }catch(err){showGate('error',safeMessage(err),'error');return}
+  if(!providerIsGoogle||!signed.emailVerified){
+   authDenyReason='Este painel exige uma conta Google com e-mail verificado.';
+   await sdk.signOut(auth);return
   }
   if(allowEmails.length&&!allowEmails.includes(String(signed.email||'').toLowerCase())){
    authDenyReason='Esta conta Google não está autorizada a acessar o painel.';await sdk.signOut(auth);return
@@ -149,41 +160,30 @@ async function openFirebase(config){
 async function inspectRemote(){
  if(!user)return;
  const expectedUid=user.uid;
- remoteRef=sdk.doc(db,'dashboardUsers',expectedUid);
- const snapshot=await sdk.getDoc(remoteRef);
+ const ref=sdk.doc(db,'dashboardUsers',expectedUid);
+ const snapshot=await sdk.getDocFromServer(ref);
  if(!user||user.uid!==expectedUid)return;
+ remoteRef=ref;
  remoteDoc=snapshot.exists()?snapshot.data().state:null;
- const own=cloudState();
- if(remoteDoc&&hash(remoteDoc)===hash(own)){
-  activate(remoteDoc,'Dados já correspondem à nuvem.');return
+ if(remoteDoc){
+  await hydrate(remoteDoc);
+  activate(remoteDoc,'Dados carregados diretamente do Firestore.');
+  return
  }
- if(remoteDoc&&localStamp()===hash(own)){
-  await hydrate(remoteDoc);activate(remoteDoc,'Dados atualizados da nuvem.');return
- }
- if(remoteDoc&&APP.isDefaultLocal?.()){
-  await hydrate(remoteDoc);activate(remoteDoc,'Dados carregados da nuvem.');return
- }
- if(!remoteDoc){await uploadLocal();return}
- setDecisionVisible(true);showMigration(true,true);
- showGate('conflict','Encontramos versões diferentes. Escolha qual deve ser mantida.');
- notice('Dados locais e da nuvem diferem. Escolha qual versão manter.');
- $('cloudLoad').disabled=!remoteDoc;
- $('cloudDecisionHint').textContent=remoteDoc?
-  'Escolha “Carregar” para usar a versão da nuvem; ou “Enviar” para substituí-la pelos dados deste aparelho. Faça um backup JSON antes de substituir.' :
-  'Não existe um backup na nuvem. Use “Enviar dados deste aparelho” para criar um.';
+ await createCloudWorkspace();
 }
 function activate(data,description){
  if(!user||!remoteRef)return;
- active=true;dirty=false;retries=0;remoteHash=hash(data);saveStamp(data);
+ active=true;dirty=false;retries=0;remoteHash=hash(data);remoteDoc=data;
  setDecisionVisible(false);showMigration(false,false);
  showGate('authenticated','');
  notice(description||'Nuvem conectada e sincronizando.');
  if(subscribed)subscribed();
  subscribed=sdk.onSnapshot(remoteRef,async snapshot=>{
-  if(!active||!snapshot.exists()||snapshot.metadata.hasPendingWrites||dirty||uploading)return;
+  if(!active||!snapshot.exists()||snapshot.metadata.hasPendingWrites||snapshot.metadata.fromCache||dirty||uploading)return;
   const incoming=snapshot.data().state;
   if(!incoming||hash(incoming)===remoteHash)return;
-  try{await hydrate(incoming);remoteHash=hash(incoming);saveStamp(incoming);notice('Alterações recebidas de outro dispositivo.')}
+  try{await hydrate(incoming);remoteHash=hash(incoming);remoteDoc=incoming;notice('Alterações recebidas de outro dispositivo.')}
   catch(err){notice(safeMessage(err),true)}
  },err=>notice(safeMessage(err),true));
 }
@@ -254,7 +254,7 @@ async function push(){
   if(new TextEncoder().encode(raw).length>MAX_DOC_BYTES)throw Error('Registros muito grandes para um documento. Exporte um backup JSON.');
   await uploadPhotos(payload);
   await sdk.setDoc(remoteRef,{ownerId:user.uid,state:payload,updatedAt:sdk.serverTimestamp()});
-  remoteHash=hash(payload);saveStamp(payload);
+  remoteHash=hash(payload);remoteDoc=payload;
   retries=0;
   dirty=hash(cloudState())!==remoteHash;
   notice(dirty?'Novas alterações aguardando salvamento.':'Tudo salvo na nuvem.');
@@ -269,26 +269,18 @@ function notifyLocalChange(){
  if(!active||applyingRemote)return;
  dirty=true;retries=0;
  clearTimeout(timer);
- timer=setTimeout(push,1400);
+ timer=setTimeout(push,650);
  notice('Alterações locais aguardando sincronização…');
 }
-async function loadCloud(){
- if(!user||!remoteDoc)return;
- try{
-  notice('Carregando dados privados…');
-  await hydrate(remoteDoc);
-  activate(remoteDoc,'Dados da nuvem carregados e sincronização ativa.');
- }catch(err){notice(safeMessage(err),true)}
-}
-async function uploadLocal(){
+async function createCloudWorkspace(){
  if(!user||!remoteRef)return;
- if(remoteDoc&&!confirm('Substituir a versão da nuvem pelos dados atuais deste aparelho? Essa ação afeta outros dispositivos. Faça antes um backup JSON.'))return;
- active=true;dirty=true;setDecisionVisible(false);
+ active=true;dirty=true;
+ notice('Criando espaço privado no Firestore…');
  await push();
- if(!dirty)activate(cloudState(),'Dados enviados à nuvem e sincronização ativa.');
- else {
-  active=false;setDecisionVisible(true);showMigration(true,!!remoteDoc);
-  showGate('error','Não foi possível salvar na nuvem. Confira as regras do Firestore e tente novamente.','error');
+ if(!dirty)activate(cloudState(),'Espaço criado no Firestore.');
+ else{
+  active=false;
+  showGate('error','Não foi possível criar seus dados na nuvem. Verifique a conexão e tente novamente.','error');
  }
 }
 async function googleSignIn(){
@@ -305,8 +297,6 @@ async function googleSignIn(){
  }
 }
 $('loginGoogle')?.addEventListener('click',googleSignIn);
-$('loginUseCloud')?.addEventListener('click',loadCloud);
-$('loginUseLocal')?.addEventListener('click',uploadLocal);
 $('loginRetry')?.addEventListener('click',async()=>{
  if(!user)return;showGate('loading','Conectando novamente…');
  try{await inspectRemote()}catch(err){showGate('error',safeMessage(err),'error')}
@@ -323,7 +313,7 @@ async function signOutFromDashboard(){
  if(active&&dirty){
   clearTimeout(timer);
   await push();
-  if(dirty&&!confirm('Algumas alterações ainda não foram enviadas à nuvem. Elas continuarão neste navegador. Deseja sair mesmo assim?'))return;
+  if(dirty){notice('Não foi possível salvar na nuvem. Conclua a sincronização antes de sair.',true);return}
  }
  const controls=[$('cloudLogout'),$('sidebarSignOut')].filter(Boolean);
  controls.forEach(button=>button.disabled=true);
@@ -337,11 +327,9 @@ async function signOutFromDashboard(){
 }
 $('cloudLogout').addEventListener('click',signOutFromDashboard);
 $('sidebarSignOut')?.addEventListener('click',signOutFromDashboard);
-$('cloudLoad').addEventListener('click',loadCloud);
-$('cloudUpload').addEventListener('click',uploadLocal);
 window.addEventListener('online',()=>{if(active&&dirty){clearTimeout(timer);timer=setTimeout(push,500)}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&dirty){clearTimeout(timer);timer=setTimeout(push,750)}});
-window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,connected:active,pending:dirty,user:user?.email||null})};
+window.QuadrinheiroCloud={notifyLocalChange,uploadImage,deleteImage,getStatus:()=>({configured:!!auth,connected:active,pending:dirty||uploading,user:user?.email||null})};
 (async()=>{
  try{
   const response=await fetch(CONFIG_URL+'?v=20261109c',{cache:'no-store'});
@@ -349,7 +337,7 @@ window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,co
   const conf=await response.json();
   if(!conf.enabled||!conf.apiKey||!conf.projectId||!conf.appId||!conf.authDomain){
    showGate('setup','A configuração do Firebase Web ainda não está completa.','error');
-   notice('Sincronização privada ainda não configurada. Seus dados permanecem no navegador.',true);
+   notice('Sincronização privada ainda não configurada. O painel continua bloqueado.',true);
    return
   }
   if(!Array.isArray(conf.allowedEmails)||!conf.allowedEmails.length){
