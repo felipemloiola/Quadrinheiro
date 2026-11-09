@@ -1,3 +1,4 @@
+
 # Quadrinheiro
 
 <p align="center">
@@ -18,7 +19,7 @@
 
 ## App preview
 
-[**Watch the 12-second Quadrinheiro demo (English, MP4)**](QuadrinheiroPromo-12s-EN.mp4)
+https://github.com/user-attachments/assets/651c7d4e-e995-4a12-a539-594bf86fcc77
 
 The video highlights the real Home, Explore, and Profile screens, along with the comic library and reading features. The original in-app screenshots are shown in Portuguese; the promotional captions are in English.
 
