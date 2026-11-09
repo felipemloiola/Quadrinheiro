@@ -48,7 +48,7 @@ Preencha com os dados do aplicativo Web Firebase:
 
 Altere os campos de exemplo pelos valores reais do Firebase Web. **Não cole service accounts, tokens privados, senhas ou chaves de API do GitHub.**
 
-Preencha **allowedEmails** com os endereços Google que podem entrar (por exemplo, somente o seu). Essa verificação melhora a experiência de acesso no navegador, mas **não é um controle de segurança do backend**: se deseja impedir que outras contas Google usem o serviço, também restrinja o e-mail/UID nas regras Firestore publicadas e teste as regras. Para a privacidade das suas próprias notas, a regra atual já separa os documentos por UID.
+O campo **allowedEmails** é obrigatório para ativar o login do painel; se ficar vazio, o site mantém a tela de configuração pendente. Preencha **allowedEmails** com os endereços Google que podem entrar (por exemplo, somente o seu). Essa verificação melhora a experiência de acesso no navegador, mas **não é um controle de segurança do backend**: se deseja impedir que outras contas Google usem o serviço, também restrinja o e-mail/UID nas regras Firestore publicadas e teste as regras. Para a privacidade das suas próprias notas, a regra atual já separa os documentos por UID.
 
 Faça o commit na branch `main`; o GitHub Pages publicará a configuração. Como é a mesma configuração Web em todos os aparelhos, você não terá de preencher essas informações novamente no celular.
 
