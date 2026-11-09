@@ -1,38 +1,38 @@
 {
-  "updatedAt": "2026-11-09T20:38:45.643Z",
+  "updatedAt": "2026-11-09T21:17:06.489Z",
   "summary": "Revisão de fluidez e consumo do Android, preservando os gestos, as molas e o Liquid Glass. Os itens abaixo distinguem implementação, testes e validação física.",
   "items": [
     {
       "title": "Versão e contexto",
       "status": "done",
-      "detail": "Conferidas a release 1.0.84 e a main posterior; o contexto local registra a nova base e os limites de validação.",
+      "detail": "Conferidas a release 1.0.84, a main posterior e a integração da aba Progresso. O contexto atualizado permanece local.",
       "evidence": "Base: 25977ad. APK da release: d3128af. A consulta de metadados não é teste de temperatura."
     },
     {
       "title": "Desenho do vidro",
-      "status": "review",
+      "status": "done",
       "detail": "Reativar a captura reutilizável nas duas camadas principais, evitando desenhar o conteúdo duas vezes. A página interativa continuará atualizando durante a rolagem.",
-      "evidence": "Gargalo identificado em MainActivity e LayerBackdropModifier. Contagem de desenho e atualização de pixels serão testadas no Android."
+      "evidence": "Testes Android verificaram redução do trabalho de desenho e atualização dos pixels. Não há promessa de ganho térmico sem comparação física."
     },
     {
       "title": "Capas e memória",
-      "status": "review",
+      "status": "done",
       "detail": "Reter imagens decodificadas em cache de memória limitado pelo heap e pela classe de RAM. Transferir a migração de caches da abertura para uma tarefa de IO.",
       "evidence": "O limite de disco das capas permanece em 16 MiB; biblioteca, contas e backups serão preservados."
     },
     {
       "title": "Manutenção de armazenamento",
-      "status": "review",
+      "status": "done",
       "detail": "Evitar descartar capas por causa do tamanho de snapshots ou arquivos de execução que a limpeza de imagens não consegue reduzir."
     },
     {
       "title": "Testes e compatibilidade",
-      "status": "pending",
-      "detail": "Executar testes de regressão, compilar e validar os caminhos de renderização. Ganhos de FPS, bateria e temperatura só serão registrados quando medidos."
+      "status": "review",
+      "detail": "Última rodada completa: 268 testes de host/regras sem falhas ou casos ignorados. Também passaram 24 testes do catálogo, sete cenários Android e dois testes do painel. Os últimos ajustes e a prévia assinada seguem em validação."
     },
     {
       "title": "Reenvios na sincronização",
-      "status": "review",
+      "status": "done",
       "detail": "Revisada a interação entre timeouts de corrotinas e Tasks do Firestore. O cancelamento da espera não deve causar uma nova gravação enquanto a operação anterior continua pendente.",
       "evidence": "A implementação agora mantém uma operação em andamento por conta. Os testes verificam cancelamento, concorrência e isolamento entre contas."
     },
@@ -40,12 +40,18 @@
       "title": "Fila de sincronização",
       "status": "review",
       "detail": "Implementada contenção por conta: timeouts e tentativas concorrentes aguardam a Task existente, em vez de acrescentar mutações duplicadas. Removido o fallback que reenviava o perfil após timeout.",
-      "evidence": "Gravações e dados offline existentes não são removidos por essa alteração. Recuperação e validação em aparelho continuam em andamento."
+      "evidence": "Revisão de código no PR #5. Gravações e dados offline existentes não são removidos automaticamente."
+    },
+    {
+      "title": "Recuperação com cópia de segurança",
+      "status": "review",
+      "detail": "Preparada uma revisão antes de iniciar uma fila local muito grande. Reconstruir exige confirmação explícita e cópia privada verificada. Cancelar preserva o original; uma interrupção pode ser retomada.",
+      "evidence": "Testes de backup de múltiplas contas, falha, retomada e cancelamento passaram. A confirmação no aparelho continua pendente; nenhuma recuperação foi executada sem autorização."
     },
     {
       "title": "Arquivos internos",
-      "status": "review",
-      "detail": "Retirar auditorias e instruções/contexto de agentes da árvore pública e impedir novos envios. Manter cópias locais e os arquivos necessários para build e licenças.",
+      "status": "done",
+      "detail": "Auditorias e contexto de agentes foram retirados da árvore pública, com cópias locais preservadas e regras para impedir novos envios.",
       "evidence": "A remoção da branch atual não torna privadas as versões presentes no histórico do Git."
     }
   ]
