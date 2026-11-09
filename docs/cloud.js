@@ -33,6 +33,7 @@ const workspace=$('workspace');
 let allowEmails=[],authDenyReason='';
 function showGate(mode,message,kind='normal'){
  document.documentElement.dataset.auth=mode;
+ window.QuadrinheiroSettings?.syncFavicon?.();
  if(workspace)workspace.inert=mode!=='authenticated';
  const splash=$('authSplashMessage');
  if(splash&&['checking','loading'].includes(mode))splash.textContent=message||'Carregando seu espaço…';
@@ -62,6 +63,7 @@ const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
 let sdk=null,retries=0,applyingRemote=false,pendingPhotoUploads=0,migratingLegacy=false;
+let preferencesWrite=Promise.resolve(),pendingPreferenceWrites=0;
 function cloudState(){
  const s=APP.getState();
  return {
@@ -76,6 +78,24 @@ function cloudState(){
  };
 }
 function hash(data){return JSON.stringify(data)}
+function preferenceDoc(){
+ return user?sdk.doc(db,'dashboardUsers',user.uid,'preferences','appearance'):null
+}
+// Preferências individuais têm gravação própria, serializada: o último clique
+// prevalece mesmo após alterações rápidas de tema ou cor.
+function savePreferences(settings){
+ if(!active||!user||!remoteRef)return Promise.reject(Error('Aguarde a conexão com o Firestore antes de salvar o tema.'));
+ if(!settings||typeof settings!=='object'||Array.isArray(settings))return Promise.reject(Error('Preferências inválidas.'));
+ const owner=user.uid,ref=preferenceDoc(),snapshot={...settings};
+ notifyLocalChange(); // preserva cópia de compatibilidade no documento principal.
+ pendingPreferenceWrites++;
+ const write=preferencesWrite.catch(()=>{}).then(async()=>{
+  if(!user||user.uid!==owner)throw Error('A sessão mudou antes do salvamento.');
+  await sdk.setDoc(ref,{ownerId:owner,settings:snapshot,updatedAt:sdk.serverTimestamp()});
+ });
+ preferencesWrite=write;
+ return write.finally(()=>{pendingPreferenceWrites=Math.max(0,pendingPreferenceWrites-1)})
+}
 function safeMessage(err){
  const name=String(err?.code||'');
  if(name==='permission-denied'||name==='firestore/permission-denied')return 'Acesso negado: confira as regras publicadas no banco Firestore do painel.';
@@ -95,7 +115,7 @@ function setDecisionVisible(value){$('cloudDecisions').hidden=!value}
 function resetSession(){
  clearTimeout(timer);
  if(subscribed){subscribed();subscribed=null}
- user=null;active=false;dirty=false;queued=false;uploading=false;migratingLegacy=false;remoteDoc=null;remoteRef=null;
+ user=null;active=false;dirty=false;queued=false;uploading=false;migratingLegacy=false;remoteDoc=null;remoteRef=null;preferencesWrite=Promise.resolve();pendingPreferenceWrites=0;
  APP.setUserScope?.(null);
  NOTES()?.resetSession?.();
  window.QuadrinheiroSettings?.resetSession?.();
@@ -240,7 +260,18 @@ async function hydrate(data){
  try{
   await downloadPhotos(data);
   APP.replaceCloudState(data);
-  if(data.uiSettings)window.QuadrinheiroSettings?.importPrefs(data.uiSettings);
+  let uiSettings=data.uiSettings;
+  const prefsRef=preferenceDoc();
+  if(prefsRef){
+   const prefSnapshot=await sdk.getDocFromServer(prefsRef);
+   if(prefSnapshot.exists()&&prefSnapshot.data()?.settings){
+    uiSettings=prefSnapshot.data().settings;
+   }else if(uiSettings&&Object.keys(uiSettings).length){
+    // Migração automática das preferências do documento principal anterior.
+    await sdk.setDoc(prefsRef,{ownerId:user.uid,settings:uiSettings,updatedAt:sdk.serverTimestamp()});
+   }
+  }
+  if(uiSettings)window.QuadrinheiroSettings?.importPrefs(uiSettings);
   if(['collapsed','expanded'].includes(data.sidebarMode))window.QuadrinheiroSidebar?.setMode(data.sidebarMode);
  }finally{applyingRemote=false}
 }
@@ -396,7 +427,11 @@ async function signOutFromDashboard(event){
    clearTimeout(timer);
    await Promise.race([push(),new Promise(resolve=>setTimeout(resolve,5000))]);
   }
-  if(active&&(dirty||uploading||pendingPhotoUploads>0)){
+  if(pendingPreferenceWrites>0){
+   try{await Promise.race([preferencesWrite,new Promise((_,reject)=>setTimeout(()=>reject(Error('Tempo esgotado ao salvar preferências.')),5000))])}
+   catch(err){notice('Falha ao salvar preferências: '+safeMessage(err),true)}
+  }
+  if(active&&(dirty||uploading||pendingPhotoUploads>0||pendingPreferenceWrites>0)){
    const ok=window.confirm('Existem alterações ainda não confirmadas na nuvem. Sair agora descartará essas alterações. Deseja sair mesmo assim?');
    if(!ok){notice('Saída cancelada: aguarde o salvamento dos registros.',true);return}
   }
@@ -417,13 +452,13 @@ async function signOutFromDashboard(event){
 $('cloudLogout').addEventListener('click',signOutFromDashboard);
 $('sidebarSignOut')?.addEventListener('click',signOutFromDashboard);
 window.addEventListener('beforeunload',event=>{
- if(active&&(dirty||uploading||pendingPhotoUploads)){
+ if(active&&(dirty||uploading||pendingPhotoUploads||pendingPreferenceWrites>0)){
   event.preventDefault();event.returnValue='';
  }
 });
 window.addEventListener('online',()=>{if(active&&dirty){clearTimeout(timer);timer=setTimeout(push,500)}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&dirty){clearTimeout(timer);timer=setTimeout(push,750)}});
-window.QuadrinheiroCloud={notifyLocalChange,uploadImage,deleteImage,getStatus:()=>({configured:!!auth,connected:active,pending:dirty||uploading||pendingPhotoUploads>0,user:user?.email||null})};
+window.QuadrinheiroCloud={notifyLocalChange,savePreferences,uploadImage,deleteImage,getStatus:()=>({configured:!!auth,connected:active,pending:dirty||uploading||pendingPhotoUploads>0||pendingPreferenceWrites>0,user:user?.email||null})};
 (async()=>{
  try{
   const response=await fetch(CONFIG_URL+'?v=20261109c',{cache:'no-store'});
