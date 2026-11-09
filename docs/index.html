@@ -394,6 +394,11 @@ document.getElementById('closeModal').onclick=closeModal;document.getElementById
 
 
 function autoSyncEnabled(){try{return JSON.parse(localStorage.getItem('quadrinheiro-ui-settings-v1')||'{}').autoSync!==false}catch{return true}}
+function isDefaultLocal(){
+ return JSON.stringify(state.tasks)===JSON.stringify(seed.tasks) &&
+   JSON.stringify(state.decisions)===JSON.stringify(seed.decisions) &&
+   !(state.measurements||[]).length && !(state.notes||[]).length && !(state.nextActions||[]).length;
+}
 function replaceCloudState(cloudData){
  if(!cloudData||typeof cloudData!=='object'||!Array.isArray(cloudData.tasks)||!Array.isArray(cloudData.decisions)||!Array.isArray(cloudData.measurements)||!Array.isArray(cloudData.notes))throw Error('Dados da nuvem inválidos');
  const currentRepo=state.repo;
@@ -401,7 +406,7 @@ function replaceCloudState(cloudData){
  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
  render();
 }
-window.QuadrinheiroPanel={getState:()=>state,save,replaceCloudState,escapeHtml,modal,closeModal,notify,go,icon:ico};
+window.QuadrinheiroPanel={getState:()=>state,save,replaceCloudState,isDefaultLocal,escapeHtml,modal,closeModal,notify,go,icon:ico};
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
