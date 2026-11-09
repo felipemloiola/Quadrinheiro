@@ -25,8 +25,8 @@ box.innerHTML=
  '<button type="button" class="btn small primary" id="cloudLoad">Carregar da nuvem</button>'+
  '<button type="button" class="btn small ghost" id="cloudUpload">Enviar dados deste aparelho</button>'+
  '</div></div>'+
- '<p class="settings-note" id="cloudSetup">Para ativar, configure o aplicativo Firebase Web, autenticação Google e regras de acesso. <a class="plain-link" href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Instruções ↗</a></p>'+
- '<p class="settings-note">As fotos também são sincronizadas, em partes privadas no Firestore. Dados e configurações locais permanecem disponíveis mesmo sem conexão.</p>';
+ '<p class="settings-note" id="cloudSetup">Conta Google autenticada e dados privados no Firestore. <a class="plain-link" href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Informações de segurança ↗</a></p>'+
+ '<p class="settings-note">Notas, fotos, tarefas e preferências são sincronizadas. Uma cópia local continua disponível se a conexão cair.</p>';
 column.insertBefore(box,column.firstChild);
 const $=id=>document.getElementById(id);
 const workspace=$('workspace');
@@ -316,7 +316,9 @@ $('cloudLogout').addEventListener('click',async()=>{
 });
 $('cloudLoad').addEventListener('click',loadCloud);
 $('cloudUpload').addEventListener('click',uploadLocal);
-window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,connected:active,user:user?.email||null})};
+window.addEventListener('online',()=>{if(active&&dirty){clearTimeout(timer);timer=setTimeout(push,500)}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&dirty){clearTimeout(timer);timer=setTimeout(push,750)}});
+window.QuadrinheiroCloud={notifyLocalChange,getStatus:()=>({configured:!!auth,connected:active,pending:dirty,user:user?.email||null})};
 (async()=>{
  try{
   const response=await fetch(CONFIG_URL+'?v=20261109a',{cache:'no-store'});
