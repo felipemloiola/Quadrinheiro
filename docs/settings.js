@@ -3,8 +3,6 @@
 'use strict';
 const APP=window.QuadrinheiroPanel;
 const root=document.documentElement;
-const key='quadrinheiro-ui-settings-v1';
-const oldThemeKey='quadrinheiro-theme-v2';
 const options=[
  {id:'BLUE',name:'Azul',light:'#2E7CF6',dark:'#4C94FF'},
  {id:'WHITE',name:'Branco',light:'#52525B',dark:'#FFFFFF',lightSecondary:'#8E8E93',darkSecondary:'#D4D4D8'},
@@ -24,16 +22,8 @@ function validate(input){const s=input&&typeof input==='object'&&!Array.isArray(
  reduceTransparency:s.reduceTransparency===true,
  autoSync:s.autoSync!==false
 }}
-function load(){
- try{
-  const stored=localStorage.getItem(key);
-  if(stored)return validate(JSON.parse(stored));
-  const legacy=localStorage.getItem(oldThemeKey);
-  return validate({...defaults,themeMode:oneOf(legacy,['dark','light'],defaults.themeMode)})
- }catch{return {...defaults}}
-}
-let preferences=load();
-function persist(){try{localStorage.setItem(key,JSON.stringify(preferences));window.QuadrinheiroCloud?.notifyLocalChange()}catch{APP?.notify('O navegador não permitiu salvar os ajustes.',true)}}
+let preferences={...defaults};
+function persist(){window.QuadrinheiroCloud?.notifyLocalChange()}
 function rgb(hex){const s=hex.replace('#','');return [0,2,4].map(n=>parseInt(s.slice(n,n+2),16))}
 function hex(rgbValue){return '#'+rgbValue.map(x=>Math.round(x).toString(16).padStart(2,'0')).join('').toUpperCase()}
 function mixed(a,b,amount){const x=rgb(a),y=rgb(b);return hex(x.map((n,i)=>n+(y[i]-n)*amount))}
@@ -106,7 +96,8 @@ function render(){
   storage.innerHTML=rows.map(([label,value])=>'<div class="settings-storage-row"><span>'+escape(label)+'</span><strong>'+value+'</strong></div>').join('')
  }
 }
-function importPrefs(data){preferences=validate(data);persist();apply();render()}
+function importPrefs(data){preferences=validate(data);apply();render()}
+function resetSession(){preferences={...defaults};apply();render()}
 function reset(){
  if(!confirm('Restaurar apenas as preferências visuais e de sincronização? Tarefas, notas, fotos e decisões serão preservadas.'))return;
  preferences={...defaults};persist();apply();render();APP?.notify('Ajustes restaurados, sem alterar seus registros.')
@@ -138,10 +129,10 @@ if(page)page.innerHTML=`
       <div class="settings-inline-actions"><button type="button" class="btn small" data-settings-action="sync">Sincronizar agora ↻</button></div>
     </section>
     <section class="panel settings-card" aria-labelledby="settingsDataTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("folder")}</span><div><h2 id="settingsDataTitle">Dados e backups</h2><p>Registros armazenados no navegador.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("folder")}</span><div><h2 id="settingsDataTitle">Dados e backups</h2><p>Registros armazenados na sua conta Google no Firestore.</p></div></div>
       <div class="settings-storage-table" id="settingsStorageStats"></div>
       <div class="settings-inline-actions"><button type="button" class="btn small primary" data-settings-action="export">Exportar backup ↗</button><button type="button" class="btn small ghost" data-settings-action="import">Importar backup ↗</button></div>
-      <p class="settings-note">O backup inclui tarefas, notas, fotos, decisões, medições e preferências. Para transferir a outro aparelho, é necessário importar o arquivo.</p>
+      <p class="settings-note">O backup JSON é opcional. Entre com a mesma conta Google em outro aparelho para encontrar seus registros automaticamente.</p>
     </section>
     <section class="panel settings-card" aria-labelledby="settingsResetTitle">
       <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("refresh")}</span><div><h2 id="settingsResetTitle">Restaurar preferências</h2><p>Volta à aparência padrão sem apagar dados.</p></div></div>
@@ -166,6 +157,6 @@ page?.addEventListener('change',event=>{
  controls[event.target.id]?.()
 });
 systemQuery?.addEventListener?.('change',()=>{if(preferences.themeMode==='system'){apply();render()}});
-window.QuadrinheiroSettings={getPrefs:()=>({...preferences}),importPrefs,render,apply,colors:options.map(o=>({...o}))};
+window.QuadrinheiroSettings={getPrefs:()=>({...preferences}),importPrefs,resetSession,render,apply,colors:options.map(o=>({...o}))};
 apply();render();
 })();
