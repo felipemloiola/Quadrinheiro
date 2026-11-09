@@ -245,3 +245,77 @@ html[data-motion="reduced"] .sidebar .nav .nav-btn>span:not(.count){transition:n
  background:transparent!important;box-shadow:none!important;border:0!important;border-radius:0!important;
 }
 .sidebar .brand-logo .brand-q{transform:none!important;width:42px!important;height:42px!important}
+
+/* Conta: ícone ancorado no mesmo eixo dos itens da navegação.
+   O rótulo surge suavemente ao expandir sem deslocar o ícone. */
+.sidebar .sidebar-session{
+ flex:none;
+ min-height:59px;
+ border-top:1px solid var(--separator);
+ padding-top:12px;
+ margin-top:12px;
+}
+.sidebar .sidebar-signout{
+ display:grid;
+ grid-template-columns:40px minmax(0,1fr);
+ grid-template-rows:45px;
+ align-items:center;
+ column-gap:8px;
+ width:100%;
+ min-height:45px;
+ margin:0;
+ padding:0 4px;
+ border:1px solid transparent;
+ border-radius:11px;
+ background:transparent;
+ color:var(--muted);
+ font-size:12px;
+ font-weight:600;
+ text-align:left;
+ white-space:nowrap;
+ cursor:pointer;
+ transition:background-color .18s ease,color .18s ease,border-color .18s ease;
+}
+.sidebar .sidebar-signout[hidden]{display:none!important}
+.sidebar .sidebar-signout svg{
+ display:block;width:19px;height:19px;
+ justify-self:center;align-self:center;
+}
+.sidebar .sidebar-signout>span{
+ display:block;
+ min-width:0;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+ opacity:1;
+ transform:translateX(0);
+ transition:opacity .16s ease .08s,transform .28s cubic-bezier(.22,1,.36,1);
+}
+.sidebar .sidebar-signout:hover{
+ background:var(--surface-2);
+ color:var(--text);
+}
+.sidebar .sidebar-signout:focus-visible{
+ outline:2px solid var(--accent);
+ outline-offset:2px;
+}
+.sidebar .sidebar-signout:disabled{opacity:.45;cursor:wait}
+@media(min-width:871px){
+ html[data-sidebar="collapsed"] .sidebar .sidebar-signout>span{
+   opacity:0;
+   pointer-events:none;
+   transform:translateX(-8px);
+   clip-path:inset(0 100% 0 0);
+   transition:opacity .1s ease,transform .24s ease,clip-path .24s ease;
+ }
+}
+@media(max-width:870px){
+ /* Em telas pequenas, a mesma ação continua disponível em Ajustes. */
+ .sidebar .sidebar-session{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+ .sidebar .sidebar-signout,
+ .sidebar .sidebar-signout>span{transition:none!important}
+}
+html[data-motion="reduced"] .sidebar .sidebar-signout,
+html[data-motion="reduced"] .sidebar .sidebar-signout>span{transition:none!important}
