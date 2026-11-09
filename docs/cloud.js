@@ -122,7 +122,7 @@ async function inspectRemote(){
  if(remoteDoc&&localStamp()===hash(own)){
   await hydrate(remoteDoc);activate(remoteDoc,'Dados atualizados da nuvem.');return
  }
- if(remoteDoc&&!localStorage.getItem('quadrinheiro-painel-v1')){
+ if(remoteDoc&&APP.isDefaultLocal?.()){
   await hydrate(remoteDoc);activate(remoteDoc,'Dados carregados da nuvem.');return
  }
  setDecisionVisible(true);
