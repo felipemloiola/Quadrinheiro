@@ -70,3 +70,23 @@ html[data-motion=reduced] *,html[data-motion=reduced] *::before,html[data-motion
 @media(max-width:620px){.settings-layout,.settings-column{grid-template-columns:1fr;gap:11px}.settings-card{padding:18px;border-radius:18px}.settings-appearance-options{gap:7px}.settings-appearance-option{padding:11px 4px 10px;gap:8px;font-size:10px}.settings-theme-preview{height:61px;padding:6px}.settings-colors{gap:3px}.settings-color{font-size:8px;padding:8px 1px 7px}.settings-color-swatch{width:33px;height:33px}.settings-color-swatch i{width:12px;height:12px}.settings-row{padding:13px 0}.settings-row p{font-size:11px}.settings-inline-actions .btn{flex:1}.nav{grid-template-columns:repeat(8,minmax(0,1fr))}.nav-btn span{font-size:7px}.nav-btn svg{height:19px;width:19px}}
 @media(max-width:355px){.settings-colors{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.settings-color{font-size:10px}.nav-btn span{font-size:6px}.nav-btn{gap:4px}}
 @media(prefers-reduced-motion:reduce){.settings-appearance-option,.settings-switch,.settings-switch:after{transition:none!important}}
+
+/* Fundos e superfícies definidos em getIOS27ThemeColors(), Theme.kt. */
+html[data-theme="dark"]{
+  --bg:#000000;
+  --side:#1C1C1E;
+  --surface:#1C1C1E;
+  --surface-2:#2C2C2E;
+  --surface-3:#3A3A3C;
+  --glass:rgba(28,28,30,.94);
+  --glass-strong:rgba(28,28,30,.98);
+}
+html[data-theme="light"]{
+  --bg:#F2F2F7;
+  --side:#FFFFFF;
+  --surface:#FFFFFF;
+  --surface-2:#E5E5EA;
+  --surface-3:#D1D1D6;
+  --glass:rgba(255,255,255,.94);
+  --glass-strong:rgba(255,255,255,.98);
+}
