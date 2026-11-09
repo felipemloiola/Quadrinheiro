@@ -458,3 +458,142 @@ html[data-motion="reduced"] .sidebar .sidebar-signout>span{transition:none!impor
 }
 html[data-motion="reduced"] .sidebar .brand-logo,
 html[data-motion="reduced"] .sidebar .brand .sidebar-toggle{transition:none!important}
+
+/* Rodapé único: Ajustes e Sair ficam ancorados no mesmo ponto,
+   independente da largura da sidebar ou da área rolável do menu. */
+.sidebar .sidebar-footer{
+ display:flex;
+ flex-direction:column;
+ flex:none;
+ gap:8px;
+ margin-top:auto;
+ padding-top:12px;
+ border-top:1px solid var(--hairline,var(--border));
+ min-width:0;
+}
+.sidebar .sidebar-footer>.nav-btn{
+ position:relative!important;
+ display:grid!important;
+ grid-template-columns:40px minmax(0,1fr)!important;
+ grid-template-rows:45px;
+ align-items:center;
+ gap:8px!important;
+ width:100%!important;
+ height:45px!important;
+ min-height:45px!important;
+ margin:0!important;
+ padding:0 4px!important;
+ border-radius:11px!important;
+ white-space:nowrap;
+ overflow:hidden;
+ text-align:left;
+ font-size:12px;
+}
+.sidebar .sidebar-footer>.nav-btn svg{
+ display:block!important;
+ justify-self:center;
+ align-self:center;
+ width:19px!important;
+ height:19px!important;
+ min-width:19px;
+ margin:0!important;
+}
+.sidebar .sidebar-footer>.nav-btn>span:not(.count){
+ display:block!important;
+ min-width:0;
+ white-space:nowrap;
+ overflow:hidden;
+ text-overflow:ellipsis;
+ opacity:1;
+ transform:translateX(0);
+ transition:opacity .16s ease .08s,transform .28s cubic-bezier(.22,1,.36,1);
+}
+.sidebar .sidebar-footer .sidebar-session{
+ position:static!important;
+ left:auto!important;
+ right:auto!important;
+ bottom:auto!important;
+ display:block;
+ flex:none;
+ min-height:45px!important;
+ padding:0!important;
+ margin:0!important;
+ border:0!important;
+}
+.sidebar .sidebar-footer .sidebar-session:has(.sidebar-signout[hidden]){display:none!important}
+@media(min-width:871px){
+ .sidebar .sidebar-footer{
+  position:relative;
+  flex:none;
+  margin-top:auto!important;
+ }
+ .sidebar .sidebar-footer>.nav-btn{
+  position:relative!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  width:100%!important;
+ }
+ html[data-sidebar="collapsed"] .sidebar .sidebar-footer>.nav-btn>span:not(.count){
+  opacity:0;
+  pointer-events:none;
+  transform:translateX(-8px);
+  clip-path:inset(0 100% 0 0);
+  transition:opacity .1s ease,transform .24s ease,clip-path .24s ease;
+ }
+}
+@media(min-width:621px) and (max-width:870px){
+ .sidebar .sidebar-footer>.nav-btn>span:not(.count){opacity:0;pointer-events:none}
+ .sidebar .sidebar-footer .sidebar-session{display:none!important}
+}
+@media(max-width:620px){
+ /* Os sete itens principais e Ajustes ocupam as mesmas oito colunas
+    da barra inferior sem duplicar botões ou estado de navegação. */
+ .sidebar{
+  display:grid!important;
+  grid-template-columns:repeat(8,minmax(0,1fr));
+  grid-template-rows:58px;
+  gap:1px;
+  align-items:center!important;
+  justify-items:stretch;
+ }
+ .sidebar .nav,.sidebar .sidebar-footer{
+  display:contents!important;
+ }
+ .sidebar .sidebar-footer>.nav-btn[data-page="settings"]{
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:center!important;
+  align-items:center!important;
+  min-width:0!important;
+  width:100%!important;
+  height:58px!important;
+  min-height:58px!important;
+  margin:0!important;
+  padding:6px 1px 5px!important;
+  gap:5px!important;
+  border-radius:14px!important;
+ }
+ .sidebar .sidebar-footer>.nav-btn[data-page="settings"]>span:not(.count){
+  display:block!important;
+  opacity:1!important;
+  font-size:8px;
+  line-height:1.1;
+  transform:none!important;
+  text-align:center;
+  max-width:100%;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+ }
+ .sidebar .sidebar-footer>.nav-btn[data-page="settings"] svg{
+  height:19px!important;
+  width:19px!important;
+  min-width:19px!important;
+ }
+ .sidebar .sidebar-footer .sidebar-session{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+ .sidebar .sidebar-footer>.nav-btn>span:not(.count){transition:none!important}
+}
+html[data-motion="reduced"] .sidebar .sidebar-footer>.nav-btn>span:not(.count){transition:none!important}
