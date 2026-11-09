@@ -400,11 +400,13 @@ async function signOutFromDashboard(event){
    const ok=window.confirm('Existem alterações ainda não confirmadas na nuvem. Sair agora descartará essas alterações. Deseja sair mesmo assim?');
    if(!ok){notice('Saída cancelada: aguarde o salvamento dos registros.',true);return}
   }
+  showGate('loading','Encerrando sua sessão Google…');
   await sdk.signOut(auth);
   // Garante o bloqueio imediato mesmo que o observador do Firebase demore.
   resetSession();
   showGate('signed-out','Você saiu da conta. Entre com Google para continuar.');
  }catch(err){
+  if(user)showGate('authenticated','');
   const message='Não foi possível sair da conta: '+safeMessage(err);
   notice(message,true);
   window.alert(message);
