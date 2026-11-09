@@ -83,6 +83,7 @@ internal object PortugueseBookSources {
         return (0 until rows.length()).mapNotNull { index ->
             val j = rows.optJSONObject(index) ?: return@mapNotNull null
             val v = j.optJSONObject("volumeInfo") ?: return@mapNotNull null
+            if(v.optString("language").lowercase().substringBefore('-') !in setOf("", "pt", "en")) return@mapNotNull null
             val categories = v.optJSONArray("categories")
             val category = (0 until (categories?.length() ?: 0)).joinToString(" ") { categories!!.optString(it) }
             val id = text(j, "id"); val title = text(v, "title")

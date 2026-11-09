@@ -2583,7 +2583,8 @@ class QuadrinheiroViewModel(
     suspend fun hydrateRecommendationsForActiveAccountAsync() = withContext(Dispatchers.IO) {
         val targetUid = activeOwnerUid()
         val snapshot = storage.loadAccountRecommendationsSnapshot(targetUid)
-        if (snapshot != null) {
+        if (snapshot != null && snapshot.tasteFingerprint == com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
+                _comics.value, _appSettings.value, _profile.value.favoriteUniverse)) {
             val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations, _comics.value)
             withContext(Dispatchers.Main) {
                 if (activeOwnerUid() == targetUid) {
@@ -2684,9 +2685,8 @@ class QuadrinheiroViewModel(
                         taste, com.example.data.MultiApiSearchEngine(), currentUid)
                 }
 
-                val catalogPool = (com.example.data.ModernCatalog.current.ifEmpty {
-                    com.example.data.CuratedCatalog.curatedComicsCatalog
-                } + cachedOrLocalPool).distinctBy { it.id }
+                // Personal selections use only taste-driven candidates, never old search/catalog pages.
+                val catalogPool = cachedOrLocalPool.distinctBy { it.id }
 
                 val ranked = com.example.data.PersonalizedDiscovery.recommendWithReasons(
                     catalog = catalogPool,

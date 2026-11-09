@@ -8,6 +8,13 @@ import java.security.MessageDigest
 
 /** Metadata ranking only. No account history or favorite list is sent to a provider. */
 object PersonalizedDiscovery {
+    internal fun verifiedCandidate(c: ComicEntry): ComicEntry? {
+        if (PortugueseComicTranslator.isUnwantedForeignOrBundleResult(c.title, c.synopsis)) return null
+        // A cached translation must not invent a character absent from the original title.
+        val title = PortugueseComicTranslator.translateTitleToPtBr(c.title)
+        val series = c.seriesName.takeIf { it.isNotBlank() && normalized(title).contains(normalized(it)) }.orEmpty()
+        return c.copy(titlePtBr = title, seriesName = series)
+    }
     private val stopWords = setOf("the", "and", "uma", "com", "para", "das", "dos", "vol", "volume", "edicao", "edition", "deluxe", "encadernado")
     private val genericGenres = setOf("graphic novel", "quadrinhos", "comics", "hq", "edicao", "encadernado", "colecao", "collection")
     private data class Features(val comic: ComicEntry, val title: String, val titleWords: Set<String>, val series: String,
@@ -25,7 +32,7 @@ object PersonalizedDiscovery {
         val genres = c.genre.split(',', ';', '/', '|').map(::normalized).filter { it.isNotBlank() && it !in genericGenres }.toSet()
         return Features(c, title, title.split(' ').filter { it.length >= 3 && it.any(Char::isLetter) && it !in stopWords }.toSet(),
             normalized(c.seriesName), authors, genres, normalized(c.publisher),
-            " " + normalized(c.displayTitle + " " + c.seriesName + " " + c.synopsisPtBr.ifBlank { c.synopsis }.take(6000)) + " ")
+            " " + normalized(c.displayTitle + " " + c.seriesName + " " + c.synopsis.ifBlank { c.synopsisPtBr }.take(6000)) + " ")
     }
     private fun affinity(candidate: Features, seed: Features): Float {
         var score = 0f
@@ -134,7 +141,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v3|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v4|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -154,7 +161,7 @@ object PersonalizedDiscovery {
         val ownedIsbns = known.mapNotNull { it.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }.takeIf { s -> s.length >= 10 } }.toSet()
         val ownedWorks = known.mapTo(HashSet(), ::workKey)
 
-        val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool, "PT")
+        val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool.mapNotNull(::verifiedCandidate), "PT")
             .sortedByDescending { CatalogSearchPolicy.isPortugueseEdition(it) }.filter { c ->
             val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
@@ -203,13 +210,10 @@ object PersonalizedDiscovery {
             if (score < 110) {
                 for (char in taste.favoriteCharacters) {
                     val aliases = aliases(char)
-                    val isCanonical = CatalogSearchPolicy.verifiedCanonicalWorks.entries.any { (k, works) ->
-                        aliases.any { it.contains(k) || k.contains(it) } && works.any { feat.title.contains(it) }
-                    }
                     if (aliases.any { feat.text.contains(" $it ") }) {
-                        score += if (isCanonical) 155 else 110
+                        score += 110
                         val charDisplay = char.substringBefore('(').trim()
-                        reason = if (isCanonical) "Clássico de $charDisplay" else "Com seu favorito: $charDisplay"
+                        reason = "Com seu favorito: $charDisplay"
                         signal = "FAVORITE_CHARACTER"
                         break
                     }
@@ -300,6 +304,7 @@ object PersonalizedDiscovery {
         // Aplica diversidade MMR: no máximo 2 edições da mesma série e 3 do mesmo autor no topo
         val seriesCount = mutableMapOf<String, Int>()
         val authorCount = mutableMapOf<String, Int>()
+        val reasonCount = mutableMapOf<String, Int>()
         val diverseList = mutableListOf<RecommendedComic>()
         val deferredList = mutableListOf<RecommendedComic>()
 
@@ -310,10 +315,11 @@ object PersonalizedDiscovery {
             val currentSeriesCount = seriesCount.getOrDefault(seriesKey, 0)
             val currentAuthorCount = authorCount.getOrDefault(authorKey, 0)
 
-            if (currentSeriesCount < 2 && currentAuthorCount < 3) {
+            if (currentSeriesCount < 2 && currentAuthorCount < 3 && reasonCount.getOrDefault(item.reasonLabel, 0) < 2) {
                 diverseList.add(item)
                 seriesCount[seriesKey] = currentSeriesCount + 1
                 authorCount[authorKey] = currentAuthorCount + 1
+                reasonCount[item.reasonLabel] = reasonCount.getOrDefault(item.reasonLabel, 0) + 1
             } else {
                 deferredList.add(item)
             }
