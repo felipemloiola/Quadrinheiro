@@ -43,9 +43,7 @@ const systemQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
 function currentTheme(){return preferences.themeMode==='system'?(systemQuery?.matches?'dark':'light'):preferences.themeMode}
 function updateBrandFavicon(theme,accent){
  // Os três contornos são os mesmos da marca Android, pintados com theme.accent.
- const bg=theme==='dark'?'#101010':'#F3F4F7';
- const icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">'+
-   '<rect width="108" height="108" rx="25" fill="'+bg+'"/>'+
+ const icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="21 21 70 70">'+
    '<g fill="'+accent+'">'+
    '<path d="M44.8 26.3 28.9 32.9 25 54l6.6 21.1 7.9-5.3 3.3-9.2-2.7-7.9 3.3-13.2z"/>'+
    '<path d="M49.4 26.3h17.8l13.2 9.2v15.2H63.9l-2-5.9-8.6-6-5.2.7z"/>'+
