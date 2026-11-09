@@ -1,8 +1,10 @@
-# Ativar salvamento privado do painel em qualquer dispositivo
+# Ativar login Google obrigatório e salvamento privado do Quadrinheiro
 
-O Quadrinheiro tem um painel estático publicado no GitHub Pages. A navegação e os dados públicos podem ser vistos sem login, mas **as notas, imagens e alterações pessoais podem ficar privadas no Firestore por conta Google** após a ativação abaixo.
+O painel agora tem uma **tela de entrada própria** e só abre a área de trabalho depois de autenticação via Google **e conexão com a versão privada dos dados no Firestore**. O site continua publicado no GitHub Pages, mas a interface fica bloqueada antes do login.
 
-> **Estado atual:** a integração está implementada no código, mas não está ativa enquanto `docs/cloud-config.json` contiver `"enabled": false`. Não existe um serviço de sincronização que funcione sem configurar um backend e autenticação.
+**Estado atual:** o código está pronto no GitHub. A autenticação não entra em funcionamento enquanto `docs/cloud-config.json` permanecer com `"enabled": false`, ou enquanto login Google e regras do Firestore não tiverem sido configurados no Firebase Console. Nesse estado, o site mostra a tela de entrada informando a configuração pendente. Os dados que estavam no navegador não são apagados.
+
+O conector Firebase pode estar instalado no ChatGPT, mas a instalação de um conector não ativa automaticamente um app Firebase Web, domínios OAuth ou regras. Eles precisam ser configurados e implantados no projeto correto.
 
 ## 1. Preparar Firebase Web
 
@@ -39,25 +41,29 @@ Preencha com os dados do aplicativo Web Firebase:
   "authDomain": "ID_DO_PROJETO.firebaseapp.com",
   "projectId": "ID_DO_PROJETO",
   "appId": "1:...:web:...",
+  "allowedEmails": ["seu-email@gmail.com"],
   "databaseId": "ai-studio-android-quadrinh-d0141987-7d2c-491d-b885-fc910c102b71"
 }
 ```
 
 Altere os campos de exemplo pelos valores reais do Firebase Web. **Não cole service accounts, tokens privados, senhas ou chaves de API do GitHub.**
 
+Preencha **allowedEmails** com os endereços Google que podem entrar (por exemplo, somente o seu). Essa verificação melhora a experiência de acesso no navegador, mas **não é um controle de segurança do backend**: se deseja impedir que outras contas Google usem o serviço, também restrinja o e-mail/UID nas regras Firestore publicadas e teste as regras. Para a privacidade das suas próprias notas, a regra atual já separa os documentos por UID.
+
 Faça o commit na branch `main`; o GitHub Pages publicará a configuração. Como é a mesma configuração Web em todos os aparelhos, você não terá de preencher essas informações novamente no celular.
 
 ### Nota sobre privacidade
 
-O GitHub Pages deste repositório é público: não é possível impedir que outras pessoas acessem o HTML do painel apenas usando essas regras. O que fica privado são os dados sincronizados no Firebase, separados por conta Google. A chave Web Firebase não protege os dados por si só; a proteção depende das regras acima.
+O GitHub Pages deste repositório é público: não é possível impedir que outras pessoas baixem o HTML/JavaScript público apenas com uma tela de login. A interface bloqueia a navegação até a autenticação e o Firestore protege os dados de cada UID. Para **restringir até a existência de contas** a um único usuário, é necessário também implementar/validar uma restrição de UID ou e-mail nas regras do servidor, não apenas no JavaScript. A chave Web Firebase não protege os dados por si só; a proteção depende das regras acima.
 
 ## 4. Sincronizar os registros
 
-1. Abra [Ajustes](https://felipemloiola.github.io/Quadrinheiro/#settings).
-2. Na seção **Sincronização entre dispositivos**, clique em **Entrar com Google** e use a mesma conta em todos os aparelhos.
-3. **Na primeira vez**, clique em **Enviar dados deste aparelho** para criar sua versão privada na nuvem.
-4. No celular ou outro computador, entre com a mesma conta. Escolha **Carregar da nuvem** se houver dados locais diferentes. Se o navegador for novo, a versão remota é carregada automaticamente.
-5. Depois da primeira conexão, as alterações em tarefas, notas, métricas, decisões, preferências e fotos são salvas automaticamente. Outra aba autenticada recebe atualizações pela API do Firestore.
+1. Abra [o painel](https://felipemloiola.github.io/Quadrinheiro/). A tela de login aparecerá antes de qualquer seção.
+2. Clique em **Continuar com Google** e utilize o endereço autorizado no `cloud-config.json`.
+3. No primeiro acesso, se não houver versão remota, o painel envia seus registros locais para sua conta automaticamente. Dados legados são vinculados apenas à primeira conta autenticada nesse navegador.
+4. Em outro dispositivo, entre com **a mesma conta Google**. Se ele estiver vazio, os dados da nuvem serão carregados; se já contiver registros diferentes, o painel apresentará opções antes de substituir a versão.
+5. Após ativar, alterações em tarefas, notas, métricas, decisões, preferências e fotos são salvas e recebidas pelo Firestore. É possível encerrar a sessão em **Ajustes**.
+6. Se ocorrer erro de conexão ou falta de regras, a área de trabalho permanece bloqueada, em vez de permitir acesso sem autenticação.
 
 **Conflitos:** se houver dados locais diferentes na primeira conexão, o painel pede que você escolha qual versão manter. Em edições simultâneas no mesmo conteúdo, a última gravação pode prevalecer; não use edição colaborativa simultânea. Faça backups JSON antes de sobrescrever uma versão.
 
@@ -79,3 +85,9 @@ Os dados locais continuam no navegador se a rede falhar. A interface informa err
 - **Erro de capacidade:** exporte o JSON e reduza imagens/quantidade de dados.
 
 Fontes oficiais: [Firebase Web](https://firebase.google.com/docs/web/setup), [Google Sign-in](https://firebase.google.com/docs/auth/web/google-signin), [Firestore Rules](https://firebase.google.com/docs/firestore/security/get-started), [Quotas Firestore](https://firebase.google.com/docs/firestore/quotas).
+
+## Sobre o modo exclusivo do Google
+
+As regras em `firestore.rules` exigem que os documentos do painel sejam acessados pelo mesmo UID autenticado, com provedor `google.com` e e-mail verificado. A configuração `allowedEmails` restringe as contas aceitas pela interface, mas qualquer lista de e-mails publicada em código estático é visível e não deve ser tratada como segredo. A configuração Web do Firebase é **pública por design**; nunca coloque um service-account JSON nela.
+
+O projeto guarda os dados no navegador em uma chave separada por UID; o conteúdo legado da instalação anterior é migrado somente para a primeira conta Google usada nesse navegador. Para migrar outra conta, exporte/importa um backup JSON conscientemente. A saída da conta recolhe a área de trabalho e não apaga o backup anterior do dispositivo.
