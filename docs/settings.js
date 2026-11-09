@@ -23,7 +23,17 @@ function validate(input){const s=input&&typeof input==='object'&&!Array.isArray(
  autoSync:s.autoSync!==false
 }}
 let preferences={...defaults};
-function persist(){window.QuadrinheiroCloud?.notifyLocalChange()}
+function persist(){
+ const save=window.QuadrinheiroCloud?.savePreferences;
+ if(!save){
+  APP?.notify('Aguardando conexão com o Firestore para salvar os ajustes.',true);
+  return
+ }
+ const snapshot={...preferences};
+ Promise.resolve().then(()=>save(snapshot))
+  .then(()=>APP?.notify('Preferências salvas na nuvem.'))
+  .catch(err=>APP?.notify('Não foi possível salvar os ajustes no Firestore: '+(err?.message||String(err)),true))
+}
 function rgb(hex){const s=hex.replace('#','');return [0,2,4].map(n=>parseInt(s.slice(n,n+2),16))}
 function hex(rgbValue){return '#'+rgbValue.map(x=>Math.round(x).toString(16).padStart(2,'0')).join('').toUpperCase()}
 function mixed(a,b,amount){const x=rgb(a),y=rgb(b);return hex(x.map((n,i)=>n+(y[i]-n)*amount))}
@@ -31,7 +41,15 @@ function luminance(color){return rgb(color).map(c=>c/255).map(c=>c<=.04045?c/12.
 function colorFor(accent,mode){const target=options.find(o=>o.id===accent)||options[0];const active=target[mode];const secondary=target[mode+'Secondary']||mixed(active,mode==='dark'?'#FFFFFF':'#000000',mode==='dark'?.28:.15);return {active,secondary,onAccent:luminance(active)>.23?'#141418':'#FFFFFF'}}
 const systemQuery=window.matchMedia?.('(prefers-color-scheme: dark)');
 function currentTheme(){return preferences.themeMode==='system'?(systemQuery?.matches?'dark':'light'):preferences.themeMode}
+const defaultFavicon='quadrinheiro-login-logo.svg?v=20261109c';
 function updateBrandFavicon(theme,accent){
+ // O ícone da marca permanece colorido durante splash, login e saída.
+ // O Q personalizado é usado EXCLUSIVAMENTE após autenticar.
+ if(root.dataset.auth!=='authenticated'){
+  const url=new URL(defaultFavicon,document.baseURI).href;
+  for(const link of document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]'))link.href=url;
+  return
+ }
  // Os três contornos são os mesmos da marca Android, pintados com theme.accent.
  const icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="21 21 70 70">'+
    '<g fill="'+accent+'">'+
@@ -58,8 +76,9 @@ function apply(){
 }
 function update(changes,{announce=true}={}){
  preferences=validate({...preferences,...changes});
- persist();apply();render();
- if(announce)APP?.notify('Ajustes salvos.');
+ apply();render();
+ if(announce)APP?.notify('Salvando preferências na nuvem…');
+ persist();
 }
 function escape(str){return APP?.escapeHtml?APP.escapeHtml(str):String(str)}
 function render(){
@@ -98,9 +117,10 @@ function render(){
 }
 function importPrefs(data){preferences=validate(data);apply();render()}
 function resetSession(){preferences={...defaults};apply();render()}
+function syncFavicon(){const t=currentTheme();updateBrandFavicon(t,colorFor(preferences.accent,t).active)}
 function reset(){
  if(!confirm('Restaurar apenas as preferências visuais e de sincronização? Tarefas, notas, fotos e decisões serão preservadas.'))return;
- preferences={...defaults};persist();apply();render();APP?.notify('Ajustes restaurados, sem alterar seus registros.')
+ preferences={...defaults};apply();render();APP?.notify('Salvando ajustes padrão no Firestore…');persist()
 }
 const page=document.getElementById('settings');
 if(page)page.innerHTML=`
@@ -157,6 +177,6 @@ page?.addEventListener('change',event=>{
  controls[event.target.id]?.()
 });
 systemQuery?.addEventListener?.('change',()=>{if(preferences.themeMode==='system'){apply();render()}});
-window.QuadrinheiroSettings={getPrefs:()=>({...preferences}),importPrefs,resetSession,render,apply,colors:options.map(o=>({...o}))};
+window.QuadrinheiroSettings={getPrefs:()=>({...preferences}),importPrefs,resetSession,syncFavicon,render,apply,colors:options.map(o=>({...o}))};
 apply();render();
 })();
