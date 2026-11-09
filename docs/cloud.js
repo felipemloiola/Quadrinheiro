@@ -40,7 +40,7 @@ const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
-let sdk=null;
+let sdk=null,retries=0;
 function cloudState(){
  const s=APP.getState();
  return {
@@ -134,15 +134,14 @@ async function inspectRemote(){
   'Não existe um backup na nuvem. Use “Enviar dados deste aparelho” para criar um.';
 }
 function activate(data,description){
- active=true;dirty=false;remoteHash=hash(data);saveStamp(data);
+ active=true;dirty=false;retries=0;remoteHash=hash(data);saveStamp(data);
  setDecisionVisible(false);notice(description||'Nuvem conectada e sincronizando.');
  if(subscribed)subscribed();
  subscribed=sdk.onSnapshot(remoteRef,async snapshot=>{
   if(!active||!snapshot.exists()||snapshot.metadata.hasPendingWrites||dirty||uploading)return;
   const incoming=snapshot.data().state;
   if(!incoming||hash(incoming)===remoteHash)return;
-  remoteHash=hash(incoming);
-  try{await hydrate(incoming);saveStamp(incoming);notice('Alterações recebidas de outro dispositivo.')}
+  try{await hydrate(incoming);remoteHash=hash(incoming);saveStamp(incoming);notice('Alterações recebidas de outro dispositivo.')}
   catch(err){notice(safeMessage(err),true)}
  },err=>notice(safeMessage(err),true));
 }
@@ -211,18 +210,19 @@ async function push(){
   await uploadPhotos(payload);
   await sdk.setDoc(remoteRef,{ownerId:user.uid,state:payload,updatedAt:sdk.serverTimestamp()});
   remoteHash=hash(payload);saveStamp(payload);
+  retries=0;
   dirty=hash(cloudState())!==remoteHash;
   notice(dirty?'Novas alterações aguardando salvamento.':'Tudo salvo na nuvem.');
  }catch(err){
-  dirty=true;notice(safeMessage(err),true);
+  dirty=true;retries++;notice(safeMessage(err),true);
  }finally{
   uploading=false;
-  if(queued||dirty){queued=false;if(active)timer=setTimeout(push,4000)}
+  if(queued||(dirty&&retries<3)){queued=false;if(active)timer=setTimeout(push,4000)}
  }
 }
 function notifyLocalChange(){
  if(!active)return;
- dirty=true;
+ dirty=true;retries=0;
  clearTimeout(timer);
  timer=setTimeout(push,1400);
  notice('Alterações locais aguardando sincronização…');
