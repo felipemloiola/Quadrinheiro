@@ -83,3 +83,16 @@ Acesse **Ajustes** pelo menu lateral/inferior ou pelo atalho no cabeçalho. As p
 - **Restaurar ajustes padrão**: redefine apenas preferências, sem apagar registros do projeto.
 
 **Arquivos:** `docs/settings.js` implementa os controles, a persistência e os valores das cores; `docs/settings.css` contém os estilos. Nenhum token secreto de serviço é armazenado nesses controles. Esses ajustes pertencem ao painel web e não alteram as preferências do aplicativo Android.
+
+## Navegação, ícones e organização do painel
+
+A navegação do site foi simplificada para a finalidade deste painel: **Visão geral, Repositório, Backlog, Integrações, Performance, Decisões, Notas e Ajustes**. Todos são módulos do acompanhamento do desenvolvimento do Quadrinheiro; não representam opções do menu do app Android.
+
+- Os ícones da navegação, Repositório, Integrações, resumos, medição e Ajustes agora compartilham o mesmo conjunto de SVGs de linha, com dimensões, espessura de traço e fundos padronizados. As integrações não usam mais letras como substituto dos ícones.
+- O botão **Expandir/Recolher** no topo da barra lateral funciona em desktop e salva o modo em `localStorage`, chave `quadrinheiro-sidebar-v1`. Com a barra recolhida, os botões mantêm rótulos acessíveis e `title`; no celular, a navegação permanece como barra inferior.
+- **Ajustes** fica apenas na navegação lateral ou inferior, sem um botão duplicado no cabeçalho. No desktop, aparece no final da lista.
+- O estado expandido/recolhido acompanha o backup como `sidebarMode`.
+- Foram mantidos os recursos pertinentes ao trabalho: consultas públicas ao GitHub, planejamento, evidências, métricas registradas, comparativo de referências técnicas, decisões e notas locais. A entrada `mobile-native`, voltada à interface web e não à performance do aplicativo Android, foi retirada da lista de skills de performance.
+- Não foram adicionadas funcionalidades fictícias nem alterado o código do app. O painel continua sendo somente leitura em relação ao GitHub e os dados de progresso continuam locais.
+
+Arquivos: `docs/navigation.css` e `docs/sidebar.js`. Os ícones SVG são renderizados pelo componente `ico()` no `docs/index.html`, reutilizado em `settings.js` e `notes.js`.
