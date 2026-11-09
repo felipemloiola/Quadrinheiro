@@ -58,7 +58,7 @@ const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
-let sdk=null,retries=0,applyingRemote=false;
+let sdk=null,retries=0,applyingRemote=false,pendingPhotoUploads=0;
 function cloudState(){
  const s=APP.getState();
  return {
@@ -206,13 +206,13 @@ async function downloadPhotos(data){
  const imported=[];
  for(const id of missing){
   if(!validId(id))throw Error('Identificador de imagem inválido.');
-  const meta=await sdk.getDoc(photoMeta(id));
+  const meta=await sdk.getDocFromServer(photoMeta(id));
   if(!meta.exists())throw Error('Uma foto ainda não foi publicada. Tente sincronizar novamente.');
   const count=meta.data().parts;
   if(!Number.isInteger(count)||count<1||count>100)throw Error('Quantidade de partes da imagem inválida.');
   const values=[];
   for(let i=0;i<count;i++){
-   const part=await sdk.getDoc(photoPart(id,i));
+   const part=await sdk.getDocFromServer(photoPart(id,i));
    if(!part.exists())throw Error('Parte de imagem ausente na nuvem.');
    values.push(part.data().value||'');
   }
@@ -230,7 +230,7 @@ async function uploadPhotos(data){
  for(const id of refs){
   if(!validId(id))throw Error('Identificador de imagem inválido.');
   const meta=photoMeta(id);
-  if((await sdk.getDoc(meta)).exists())continue;
+  if((await sdk.getDocFromServer(meta)).exists())continue;
   const local=byId.get(id);
   if(!local)throw Error('Uma foto existe na nota, mas não neste aparelho. Carregue primeiro os dados da nuvem.');
   const payload=local.dataUrl;
@@ -242,6 +242,36 @@ async function uploadPhotos(data){
   }
   await sdk.setDoc(meta,{ownerId:user.uid,name:String(local.name||'Imagem').slice(0,160),parts:chunks.length,updatedAt:sdk.serverTimestamp()});
  }
+}
+// Anexos chegam ao Firestore antes de aparecerem como anexados à nota.
+async function uploadImage(record){
+ if(!active||!user||!remoteRef)throw Error('Entre com Google e aguarde o carregamento do Firestore.');
+ if(pendingPhotoUploads>0&&record?.id===undefined)throw Error('Selecione uma imagem válida.');
+ if(!record||!validId(record.id)||typeof record.dataUrl!=='string'||!/^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(record.dataUrl))throw Error('Imagem inválida.');
+ pendingPhotoUploads++;
+ try{
+  const photoId=record.id;
+  const current=await sdk.getDocFromServer(photoMeta(photoId));
+  if(current.exists())return;
+  const chunks=[];
+  for(let i=0;i<record.dataUrl.length;i+=CHUNK_SIZE)chunks.push(record.dataUrl.slice(i,i+CHUNK_SIZE));
+  if(!chunks.length||chunks.length>100)throw Error('Imagem excede o tamanho suportado pelo Firestore.');
+  for(let i=0;i<chunks.length;i++)
+   await sdk.setDoc(photoPart(photoId,i),{ownerId:user.uid,value:chunks[i]});
+  await sdk.setDoc(photoMeta(photoId),{ownerId:user.uid,name:String(record.name||'Imagem').slice(0,160),parts:chunks.length,updatedAt:sdk.serverTimestamp()});
+ }finally{pendingPhotoUploads--}
+}
+async function deleteImage(id){
+ if(!active||!user||!validId(id))throw Error('Não foi possível remover a imagem no Firestore.');
+ pendingPhotoUploads++;
+ try{
+  const meta=await sdk.getDocFromServer(photoMeta(id));
+  if(!meta.exists())return;
+  const count=meta.data().parts;
+  if(!Number.isInteger(count)||count<1||count>100)throw Error('Metadados da foto inválidos.');
+  for(let i=0;i<count;i++)await sdk.deleteDoc(photoPart(id,i));
+  await sdk.deleteDoc(photoMeta(id));
+ }finally{pendingPhotoUploads--}
 }
 async function push(){
  if(!active||!user||!remoteRef)return;
@@ -306,8 +336,8 @@ $('cloudLogin').addEventListener('click',googleSignIn);
 // A mesma saída funciona em Ajustes e na barra lateral. Nenhum dado é apagado.
 async function signOutFromDashboard(){
  if(!auth||!user)return;
- if(uploading){
-  notice('Salvamento em andamento. Tente sair novamente após a conclusão.');
+ if(uploading||pendingPhotoUploads){
+  notice('Salvamento de registros ou fotos em andamento. Tente sair novamente após a conclusão.');
   return
  }
  if(active&&dirty){
@@ -327,9 +357,14 @@ async function signOutFromDashboard(){
 }
 $('cloudLogout').addEventListener('click',signOutFromDashboard);
 $('sidebarSignOut')?.addEventListener('click',signOutFromDashboard);
+window.addEventListener('beforeunload',event=>{
+ if(active&&(dirty||uploading||pendingPhotoUploads)){
+  event.preventDefault();event.returnValue='';
+ }
+});
 window.addEventListener('online',()=>{if(active&&dirty){clearTimeout(timer);timer=setTimeout(push,500)}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&active&&dirty){clearTimeout(timer);timer=setTimeout(push,750)}});
-window.QuadrinheiroCloud={notifyLocalChange,uploadImage,deleteImage,getStatus:()=>({configured:!!auth,connected:active,pending:dirty||uploading,user:user?.email||null})};
+window.QuadrinheiroCloud={notifyLocalChange,uploadImage,deleteImage,getStatus:()=>({configured:!!auth,connected:active,pending:dirty||uploading||pendingPhotoUploads>0,user:user?.email||null})};
 (async()=>{
  try{
   const response=await fetch(CONFIG_URL+'?v=20261109c',{cache:'no-store'});
