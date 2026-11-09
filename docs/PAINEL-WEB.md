@@ -4,13 +4,13 @@ O centro de trabalho do Quadrinheiro é publicado em [felipemloiola.github.io/Qu
 
 ## Arquitetura
 
-O site é um projeto estático com HTML, CSS e JavaScript. A interface usa a tipografia e os temas inspirados no aplicativo Android, um menu lateral expansível e a logo colorida na tela de entrada. A palavra **“continuar.”** apresenta uma onda de gradiente diagonal (125°), que atravessa o texto da direita para a esquerda a cada 2,65 segundos, respeitando `prefers-reduced-motion`.
+O site é um projeto estático com HTML, CSS e JavaScript. A interface usa a tipografia e os temas inspirados no aplicativo Android, um menu lateral expansível e a logo colorida na tela de entrada. A palavra **“continuar.”** apresenta uma onda diagonal (135°) com gradiente repetitivo de período exato de 200 px, atravessando o texto a cada 2,65 segundos, sem salto na repetição, e respeitando `prefers-reduced-motion`.
 
 O painel exige login Google com a conta autorizada. O acesso aos registros depende das regras publicadas no Firestore. Apesar da tela de entrada, os arquivos públicos do GitHub Pages continuam publicamente acessíveis; **somente os dados protegidos pelo backend são privados**.
 
 ### Dados somente na nuvem
 
-- **Firestore:** documento `dashboardUsers/{uid}` para tarefas, backlog, checklists, notas, decisões, métricas, próximos passos e preferências.
+- **Firestore:** documento `dashboardUsers/{uid}` para tarefas, backlog, checklists, notas, decisões, métricas e próximos passos. O painel mantém uma cópia compatível de `uiSettings`, mas a fonte autoritativa do tema e da cor é `dashboardUsers/{uid}/preferences/appearance`.
 - **Fotos:** documentos sob `dashboardUsers/{uid}/photos/{id}/pieces/{n}`. O upload da imagem termina no servidor antes de ela ser referenciada pela nota.
 - **Sem armazenamento local do conteúdo:** não há gravações de registros em `localStorage` e não há novas fotos salvas em `IndexedDB`. Uma cópia temporária em **RAM** é utilizada durante a sessão e descartada após recarregar ou sair.
 - **Autenticação persistente:** o Firebase Authentication usa `browserLocalPersistence` **somente para manter a sessão Google ativa** após F5. Isso é necessário para não precisar fazer login sempre; não armazena as notas, fotos ou o backlog.
@@ -67,3 +67,11 @@ A primeira tela exibida pelo HTML é o **splash com a marca colorida** e uma bar
 Com a barra **recolhida**, o `Q` é o próprio botão para expandir. Com a barra **aberta**, o `Q` permanece estático e o botão de recolher aparece em uma coluna própria do cabeçalho. Nenhum dos dois controles é desenhado por cima do outro. Os ícones de navegação permanecem ancorados; apenas os textos aparecem/desaparecem. `aria-expanded` e os rótulos acessíveis acompanham cada estado.
 
 **Ajustes** e **Sair da conta** ficam em um rodapé próprio, fixo no fim da barra nos dois modos, não dentro da lista rolável de páginas. No celular, Ajustes continua sendo a oitava opção da barra inferior, e Sair da conta permanece nos Ajustes. Ao sair, o Firebase mostra o estado de encerramento imediatamente; uma alteração ainda pendente exige confirmação explícita antes de descartar o que não foi sincronizado.
+
+## Favicon e preferências por conta (09/11/2026)
+
+- Enquanto a sessão estiver em **carregamento**, **login** ou **logout**, a guia usa a marca **colorida oficial** `quadrinheiro-login-logo.svg`.
+- Após a autenticação (`data-auth="authenticated"`), o favicon passa ao **Q personalizado** com a cor selecionada. Sair da conta restaura a marca colorida.
+- Temas e cores são gravados explicitamente em `dashboardUsers/{uid}/preferences/appearance` no Firestore. Gravações consecutivas são serializadas para que a última escolha prevaleça.
+- Na entrada ou após F5, o site recupera essas preferências diretamente do servidor, aplicando-as antes de mostrar o painel. Se o documento ainda não existir, importa as preferências do documento principal e cria a configuração dedicada.
+- Uma falha de gravação é mostrada ao usuário; selecionar uma cor não significa, por si só, que o servidor confirmou a persistência.
