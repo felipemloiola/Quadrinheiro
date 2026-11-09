@@ -10,6 +10,12 @@ import org.junit.Test
 import org.junit.rules.ExternalResource
 import java.io.File
 import java.io.RandomAccessFile
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 /** Synthetic SDK-size fixture in the emulator/test install. No recovery is confirmed. */
 class CloudCacheRecoveryConsentTest {
@@ -33,5 +39,15 @@ class CloudCacheRecoveryConsentTest {
         compose.onNodeWithText("Cancelar").performClick()
         compose.onNodeWithText("Revisar sincronização").assertExists()
         assertTrue(fixture.exists());assertTrue(fixture.length()>0)
+    }
+    @Test fun sdkCanClearBeforeOpeningItsClient(): Unit=runBlocking {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val app=FirebaseApp.initializeApp(context,FirebaseOptions.Builder()
+            .setProjectId("demo-recovery-api").setApiKey("fake-api-key-for-local-test")
+            .setApplicationId("1:1234567890:android:abcdef").build(),"recovery-local-api-test")
+        val db=FirebaseFirestore.getInstance(app)
+        db.useEmulator("127.0.0.1",8085)
+        try {withTimeout(5000){db.clearPersistence().await()}}
+        finally {withTimeout(5000){db.terminate().await()};app.delete()}
     }
 }

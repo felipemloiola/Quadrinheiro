@@ -18,6 +18,8 @@ import java.security.MessageDigest
 /** A large SDK queue must never be discarded silently or opened before the user can review it. */
 internal object CloudCacheRecovery {
     @Volatile private var allowedForProcess=false
+    @Volatile private var reviewForProcess: Boolean?=null
+    private val reviewLock=Any()
     private val recoveryMutex=Mutex()
     internal fun reviewThresholdBytes(heap: Long): Long =
         (heap/2).coerceIn(64L*1024*1024,256L*1024*1024)
@@ -33,11 +35,17 @@ internal object CloudCacheRecovery {
     }
 
     private fun pendingFile(context: Context)=context.noBackupFilesDir.resolve("sync-recovery-backups/pending")
-    fun needsReview(context: Context): Boolean = !allowedForProcess &&
-        (pendingFile(context).exists() || databaseFiles(context).sumOf {it.length()} > reviewThresholdBytes(Runtime.getRuntime().maxMemory()))
+    fun isRepairInProgress(context: Context): Boolean = pendingFile(context).isFile
+    fun needsReview(context: Context): Boolean {
+        if(allowedForProcess)return false
+        return reviewForProcess ?: synchronized(reviewLock) {
+            reviewForProcess ?: (pendingFile(context).exists() || databaseFiles(context).sumOf {it.length()} > reviewThresholdBytes(Runtime.getRuntime().maxMemory()))
+                .also{reviewForProcess=it}
+        }
+    }
 
     fun continueWithoutRepair() { allowedForProcess=true }
-    internal fun resetForTests() {allowedForProcess=false}
+    internal fun resetForTests() {allowedForProcess=false;reviewForProcess=null}
 
     suspend fun repair(context: Context): File = repair(context) {
         // This is deliberately the first Firestore operation in the recovery boot.
