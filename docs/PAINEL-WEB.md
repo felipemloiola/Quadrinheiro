@@ -13,6 +13,7 @@ O painel é publicado automaticamente pelo GitHub Pages, a partir da branch `mai
 - **Performance:** registro manual de medições e avaliação de desempenho.
 - **Decisões:** histórico de decisões e próximos passos.
 - **Notas:** ideias, rascunhos, pesquisas e referências com fotos, busca, fixação e salvamento automático.
+- **Ajustes:** tema, cor de destaque, densidade da interface, acessibilidade, sincronização e backups.
 
 ## Dados e sincronização
 
@@ -67,3 +68,18 @@ A página inicial agora adota uma organização compacta inspirada em painéis d
 - **Registros recentes**: notas, decisões e benchmarks criados no próprio navegador; nenhum deles é publicado pelo site no repositório.
 
 A camada visual desta revisão fica em `docs/dashboard.css`, carregada depois de `visual.css` e `notes.css`. O HTML e as rotinas de exibição permanecem em `docs/index.html`. A versão móvel mantém as sete abas acessíveis pela barra inferior. Tema claro, movimento reduzido e contraste reforçado continuam disponíveis.
+
+## Ajustes do painel (tema e cor como no app Android)
+
+Acesse **Ajustes** pelo menu lateral/inferior ou pelo atalho no cabeçalho. As preferências são salvas no navegador em `quadrinheiro-ui-settings-v1` e acompanham a exportação/importação de JSON.
+
+- **Modo de aparência**: Sistema (segue `prefers-color-scheme`), Claro ou Escuro. Uma preferência anterior do painel é preservada na primeira visita.
+- **Cor de destaque**: Azul, Branco, Preto, Vermelho, Verde, Roxo e Laranja. Valores idênticos aos acentos efetivos de `AppTheme` e `getIOS27ThemeColors` em `app/src/main/java/com/example/ui/theme/Theme.kt` (variam entre claro e escuro). Branco e Preto usam os acentos especiais de contraste definidos pelo app, não apenas os valores das amostras da paleta.
+- **Layout compacto**: reduz o espaçamento dos cartões, tabelas e conteúdos.
+- **Reduzir animações**: desativa transições CSS sem remover controles ou funções.
+- **Reduzir transparência**: troca materiais translúcidos por superfícies sólidas.
+- **Sincronização automática**: quando ligada, consulta metadados GitHub ao abrir o painel e a cada hora enquanto a página estiver visível. Quando desligada, mantém o botão **Sincronizar GitHub** para atualização manual.
+- **Dados e backups**: resumo dos registros locais e atalhos para exportar/importar um arquivo JSON que inclui as preferências e os anexos das notas.
+- **Restaurar ajustes padrão**: redefine apenas preferências, sem apagar registros do projeto.
+
+**Arquivos:** `docs/settings.js` implementa os controles, a persistência e os valores das cores; `docs/settings.css` contém os estilos. Nenhum token secreto de serviço é armazenado nesses controles. Esses ajustes pertencem ao painel web e não alteram as preferências do aplicativo Android.
