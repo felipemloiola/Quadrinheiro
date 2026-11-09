@@ -105,14 +105,14 @@ if(page)page.innerHTML=`
 <div class="settings-layout">
   <div class="settings-column">
     <section class="panel settings-card" aria-labelledby="settingsAppearanceTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">◐</span><div><h2 id="settingsAppearanceTitle">Aparência</h2><p>Temas e cores iguais aos do aplicativo.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("spark")}</span><div><h2 id="settingsAppearanceTitle">Aparência</h2><p>Temas e cores iguais aos do aplicativo.</p></div></div>
       <h3 class="settings-field-title">Modo de aparência</h3><div class="settings-appearance-options" id="settingsThemeOptions" role="group" aria-label="Modo de aparência"></div>
       <p class="settings-appearance-meta" id="settingsThemeInfo"></p><hr class="settings-option-divider">
       <h3 class="settings-field-title">Cor de destaque</h3><div class="settings-colors" id="settingsColorOptions" role="group" aria-label="Cor de destaque"></div>
       <p class="settings-appearance-meta" id="settingsAccentInfo"></p>
     </section>
     <section class="panel settings-card" aria-labelledby="settingsComfortTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">◫</span><div><h2 id="settingsComfortTitle">Visualização e acessibilidade</h2><p>Adapte a interface à sua preferência.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("shield")}</span><div><h2 id="settingsComfortTitle">Visualização e acessibilidade</h2><p>Adapte a interface à sua preferência.</p></div></div>
       <label class="settings-row" for="settingsDensity"><div><strong>Layout compacto</strong><p>Mostra mais informações por tela.</p></div><input class="settings-switch" type="checkbox" id="settingsDensity" role="switch"></label>
       <label class="settings-row" for="settingsMotion"><div><strong>Reduzir animações</strong><p>Desativa transições visuais sem alterar funcionalidades.</p></div><input class="settings-switch" type="checkbox" id="settingsMotion" role="switch"></label>
       <label class="settings-row" for="settingsTransparency"><div><strong>Reduzir transparência</strong><p>Utiliza superfícies sólidas.</p></div><input class="settings-switch" type="checkbox" id="settingsTransparency" role="switch"></label>
@@ -120,19 +120,19 @@ if(page)page.innerHTML=`
   </div>
   <div class="settings-column">
     <section class="panel settings-card" aria-labelledby="settingsGithubTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">↻</span><div><h2 id="settingsGithubTitle">GitHub</h2><p>Atualização das informações públicas.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("branch")}</span><div><h2 id="settingsGithubTitle">GitHub</h2><p>Atualização das informações públicas.</p></div></div>
       <label class="settings-row" for="settingsAutoSync"><div><strong>Sincronização automática</strong><p>Consulta commits, releases e estrutura ao abrir o painel e periodicamente.</p></div><input class="settings-switch" type="checkbox" id="settingsAutoSync" role="switch"></label>
       <p class="settings-note" id="settingsSyncSummary"></p>
       <div class="settings-inline-actions"><button type="button" class="btn small" data-settings-action="sync">Sincronizar agora ↻</button></div>
     </section>
     <section class="panel settings-card" aria-labelledby="settingsDataTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">▤</span><div><h2 id="settingsDataTitle">Dados e backups</h2><p>Registros armazenados no navegador.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("folder")}</span><div><h2 id="settingsDataTitle">Dados e backups</h2><p>Registros armazenados no navegador.</p></div></div>
       <div class="settings-storage-table" id="settingsStorageStats"></div>
       <div class="settings-inline-actions"><button type="button" class="btn small primary" data-settings-action="export">Exportar backup ↗</button><button type="button" class="btn small ghost" data-settings-action="import">Importar backup ↗</button></div>
       <p class="settings-note">O backup inclui tarefas, notas, fotos, decisões, medições e preferências. Para transferir a outro aparelho, é necessário importar o arquivo.</p>
     </section>
     <section class="panel settings-card" aria-labelledby="settingsResetTitle">
-      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">⌁</span><div><h2 id="settingsResetTitle">Restaurar preferências</h2><p>Volta à aparência padrão sem apagar dados.</p></div></div>
+      <div class="settings-card-head"><span class="settings-card-icon" aria-hidden="true">${APP.icon("refresh")}</span><div><h2 id="settingsResetTitle">Restaurar preferências</h2><p>Volta à aparência padrão sem apagar dados.</p></div></div>
       <button type="button" class="btn small ghost" data-settings-action="reset">Restaurar ajustes padrão</button>
       <p class="settings-note">Não remove tarefas, notas, fotos, decisões nem medições.</p>
     </section>
