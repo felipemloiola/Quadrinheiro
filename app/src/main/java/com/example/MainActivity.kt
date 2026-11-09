@@ -618,8 +618,9 @@ fun QuadrinheiroApp(
                         .background(themeColors.bgPrimary)
                         .layerBackdrop(
                             backdrop = mainContentBackdrop,
-                            reuseRecordedContent = false,
-                            freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
+                            reuseRecordedContent = true,
+                            // Never freeze the interactive page while it is scrolling.
+                            freezeSnapshot = isAnyModalSheetOpen
                         )
                 ) {
                     // 1.1 Iluminação de Fundo gravada no backgroundBackdrop:
@@ -638,7 +639,7 @@ fun QuadrinheiroApp(
                             .background(themeColors.bgPrimary)
                             .layerBackdrop(
                                 backdrop = backgroundBackdrop,
-                                reuseRecordedContent = false,
+                                reuseRecordedContent = true,
                                 freezeSnapshot = isExtremeFling || isAnyModalSheetOpen
                             )
                     ) {

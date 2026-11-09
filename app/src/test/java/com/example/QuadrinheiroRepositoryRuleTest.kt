@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -322,6 +325,30 @@ class QuadrinheiroRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertEquals(1, dirtyToPush.size)
         assertEquals("hq-2", dirtyToPush.first().id)
     }
+    @Test fun profileListenerSkipsPendingEchoAndDeliversMetadataOnlyAcknowledgement()=runBlocking {
+        val uid=signInTestUser("pending-echo@example.com")
+        val repo=QuadrinheiroCloudRepository(context,db,auth)
+        repo.saveUserProfile(uid,ReaderProfile(name="Initial",handle="@pendingecho"),AppSettings())
+        db.disableNetwork().await()
+        val committed=async(Dispatchers.Default) {
+            withTimeout(10000){repo.observeUserProfile(uid).first{it?.name=="Pending revision"}}
+        }
+        try {
+            delay(200)
+            val ref=db.collection("users").document(uid)
+            val write=ref.update("name","Pending revision")
+            withTimeout(3000){while(!ref.get(com.google.firebase.firestore.Source.CACHE).await().metadata.hasPendingWrites())delay(20)}
+            delay(200)
+            assertFalse("A local pending echo must not be presented as a remote revision",committed.isCompleted)
+            db.enableNetwork().await()
+            withTimeout(5000){write.await()}
+            assertEquals("Pending revision",committed.await()?.name)
+        } finally {
+            committed.cancel()
+            db.enableNetwork().await()
+        }
+    }
+
     @Test fun unknownPaginationRoundTripsAndCannotHavePositiveProgress()=runBlocking {
         val uid=signInTestUser("pages52@example.com")
         val repo=QuadrinheiroCloudRepository(context,db,auth)

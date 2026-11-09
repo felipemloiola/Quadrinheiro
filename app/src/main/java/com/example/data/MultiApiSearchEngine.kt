@@ -54,8 +54,7 @@ open class MultiApiSearchEngine {
         @Synchronized fun initHttpCache(context: android.content.Context) {
             if (isCacheInitialized) return
             try {
-                // Remove qualquer resquício de cache HTTP antigo em disco
-                runCatching { java.io.File(context.cacheDir, "quadrinheiro_http_cache").deleteRecursively() }
+                // Legacy file removal belongs to CacheMaintenance's IO migration.
                 // MultiApiSearchEngine já possui cache LRU em memória (48 requisições completas).
                 // Não adicionamos cache OkHttp em disco para buscas e navegação para evitar inchaço progressivo.
                 isCacheInitialized = true

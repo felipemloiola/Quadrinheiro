@@ -17,7 +17,22 @@ object CacheMaintenance {
     fun schedule(context: Context) {
         val appCtx = context.applicationContext
         scope.launch {
+            runCatching { migrateLegacyImageCaches(appCtx) }
             runCatching { StorageMaintenance.autoCompactIfNeeded(appCtx) }
+        }
+    }
+
+    @Synchronized
+    internal fun migrateLegacyImageCaches(context: Context) {
+        val storage = SafeStorage(context)
+        val migrations = listOf(
+            "quadrinheiro_legacy_http_cache_purged_v1" to "quadrinheiro_http_cache",
+            "quadrinheiro_heif_cache_purged_v1" to "quadrinheiro_covers_disk_cache"
+        )
+        for ((flag, directory) in migrations) {
+            if (storage.getItem(flag) == "true") continue
+            val target = context.cacheDir.resolve(directory)
+            if (!target.exists() || target.deleteRecursively()) storage.setItem(flag, "true")
         }
     }
 
