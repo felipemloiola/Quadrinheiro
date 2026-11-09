@@ -79,7 +79,7 @@ function render(){
  const result=all.filter(n=>(filter==='Todas'||n.kind===filter)&&(!query||[n.title,n.body,n.kind].join(' ').toLocaleLowerCase('pt-BR').includes(query))).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  counter.textContent=result.length+' de '+all.length+' notas · salvas neste navegador';
  if(!result.length){
-  grid.innerHTML='<div class="notes-empty panel"><span class="notes-empty-glyph" aria-hidden="true">✎</span><h2>'+(all.length?'Nenhuma nota encontrada':'Um lugar para suas ideias.')+'</h2><p>'+(all.length?'Experimente outra busca ou categoria.':'Guarde inspirações, capturas de tela, referências e rascunhos sobre o Quadrinheiro.')+'</p><button type="button" class="btn primary" data-new-note>Escrever uma nota</button></div>';
+  grid.innerHTML='<div class="notes-empty panel"><span class="notes-empty-glyph" aria-hidden="true">'+APP.icon("notes")+'</span><h2>'+(all.length?'Nenhuma nota encontrada':'Um lugar para suas ideias.')+'</h2><p>'+(all.length?'Experimente outra busca ou categoria.':'Guarde inspirações, capturas de tela, referências e rascunhos sobre o Quadrinheiro.')+'</p><button type="button" class="btn primary" data-new-note>Escrever uma nota</button></div>';
   return
  }
  grid.innerHTML=result.map(note=>{
