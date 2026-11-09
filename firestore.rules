@@ -321,42 +321,21 @@ service cloud.firestore {
       }
     }
 
-    // Painel web do projeto (GitHub Pages). Dados privados por Firebase Auth UID.
-    // Diferente de /users/{uid}, esta coleção não altera os dados do app Android.
-    match /projectDashboards/{uid} {
-      allow get: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
-      allow list: if false;
-      allow create, update: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true &&
-        request.resource.data.keys().hasOnly(['ownerId', 'state', 'updatedAt']) &&
-        request.resource.data.ownerId == uid &&
-        request.resource.data.state is map &&
-        request.resource.data.updatedAt == request.time;
-      allow delete: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
+    // Painel privado: corresponde às regras publicadas no banco nomeado do Firebase.
+    // Mantém intactas as permissões do aplicativo Android.
+    match /dashboardUsers/{userId} {
+      function isDashboardOwner() {
+        return request.auth != null
+          && request.auth.uid == userId
+          && request.auth.token.firebase.sign_in_provider == 'google.com'
+          && request.auth.token.email_verified == true
+          && request.auth.token.email == 'felipe.mloiola@gmail.com';
+      }
+      allow read, write: if isDashboardOwner();
 
-      // Fotos de notas em partes pequenas para usar Firestore sem Cloud Storage.
-      match /photos/{photoId} {
-        allow get: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
-        allow list: if false;
-        allow create, update: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true &&
-          photoId.size() <= 120 &&
-          request.resource.data.keys().hasOnly(['ownerId', 'name', 'parts', 'updatedAt']) &&
-          request.resource.data.ownerId == uid &&
-          request.resource.data.name is string && request.resource.data.name.size() <= 160 &&
-          request.resource.data.parts is int &&
-          request.resource.data.parts >= 1 && request.resource.data.parts <= 100 &&
-          request.resource.data.updatedAt == request.time;
-        allow delete: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
-
-        match /pieces/{pieceId} {
-          allow get: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
-          allow list: if false;
-          allow create, update: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true &&
-            request.resource.data.keys().hasOnly(['ownerId', 'value']) &&
-            request.resource.data.ownerId == uid &&
-            request.resource.data.value is string &&
-            request.resource.data.value.size() <= 170000;
-          allow delete: if request.auth != null && request.auth.uid == uid && request.auth.token.firebase.sign_in_provider == 'google.com' && request.auth.token.email_verified == true;
-        }
+      // Dados do painel e partes de anexos em subcoleções da mesma conta.
+      match /{document=**} {
+        allow read, write: if isDashboardOwner();
       }
     }
 
