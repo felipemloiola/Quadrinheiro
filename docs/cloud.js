@@ -40,7 +40,7 @@ const MAX_DOC_BYTES=850000;
 const CHUNK_SIZE=150000;
 let services=null,auth=null,db=null,user=null,remoteDoc=null,remoteRef=null,active=false,dirty=false;
 let subscribed=null,timer=null,uploading=false,queued=false,remoteHash='',lastRemoteVersion='';
-let sdk=null,retries=0;
+let sdk=null,retries=0,applyingRemote=false;
 function cloudState(){
  const s=APP.getState();
  return {
@@ -147,10 +147,13 @@ function activate(data,description){
 }
 async function hydrate(data){
  if(!data||!Array.isArray(data.tasks)||!Array.isArray(data.notes)||!Array.isArray(data.decisions)||!Array.isArray(data.measurements))throw Error('O backup da nuvem é inválido.');
- await downloadPhotos(data);
- APP.replaceCloudState(data);
- if(data.uiSettings)window.QuadrinheiroSettings?.importPrefs(data.uiSettings);
- if(['collapsed','expanded'].includes(data.sidebarMode))window.QuadrinheiroSidebar?.setMode(data.sidebarMode);
+ applyingRemote=true;
+ try{
+  await downloadPhotos(data);
+  APP.replaceCloudState(data);
+  if(data.uiSettings)window.QuadrinheiroSettings?.importPrefs(data.uiSettings);
+  if(['collapsed','expanded'].includes(data.sidebarMode))window.QuadrinheiroSidebar?.setMode(data.sidebarMode);
+ }finally{applyingRemote=false}
 }
 async function downloadPhotos(data){
  const refs=imageIds(data);
@@ -221,7 +224,7 @@ async function push(){
  }
 }
 function notifyLocalChange(){
- if(!active)return;
+ if(!active||applyingRemote)return;
  dirty=true;retries=0;
  clearTimeout(timer);
  timer=setTimeout(push,1400);
