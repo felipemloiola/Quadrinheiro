@@ -19,6 +19,7 @@ object PersonalizedDiscovery {
         }
         val title = c.titlePtBr.takeIf { it.isNotBlank() && !inventedCharacter }
             ?: PortugueseComicTranslator.translateTitleToPtBr(c.title)
+        if (!normalized(title).any { it in 'a'..'z' }) return null
         val series = c.seriesName.takeIf { it.isNotBlank() && normalized(title).contains(normalized(it)) }.orEmpty()
         return c.copy(titlePtBr = title, seriesName = series)
     }
@@ -148,7 +149,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v4|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v5|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -188,8 +189,8 @@ object PersonalizedDiscovery {
                 val base = normalized(s)
                 val candBase = normalized(SeriesSequenceEngine.inferBaseSeriesTitle(candidate).ifBlank { candidate.seriesName.ifBlank { candidate.title } })
                 val candIssue = SeriesSequenceEngine.inferIssueNumber(candidate)
-                (candBase.contains(base) || base.contains(candBase)) &&
-                    (lastIssue == 0 || candIssue == lastIssue + 1)
+                base.isNotBlank() && candBase.isNotBlank() && base == candBase &&
+                    lastIssue > 0 && candIssue == lastIssue + 1
             }
             if (readingMatch != null) {
                 score += 140
@@ -203,7 +204,7 @@ object PersonalizedDiscovery {
                     val base = normalized(s)
                     val candBase = normalized(SeriesSequenceEngine.inferBaseSeriesTitle(candidate).ifBlank { candidate.seriesName.ifBlank { candidate.title } })
                     val candIssue = SeriesSequenceEngine.inferIssueNumber(candidate)
-                    (candBase.contains(base) || base.contains(candBase)) &&
+                    base.isNotBlank() && candBase.isNotBlank() && base == candBase &&
                         (lastIssue > 0 && candIssue == lastIssue + 1)
                 }
                 if (readMatch != null) {
@@ -231,7 +232,7 @@ object PersonalizedDiscovery {
             if (score < 90) {
                 val topAuthorMatch = taste.topAuthors.firstOrNull { author ->
                     val normAuth = normalized(author)
-                    feat.authors.any { it.contains(normAuth) || normAuth.contains(it) }
+                    normAuth.isNotBlank() && feat.authors.any { it.contains(normAuth) || normAuth.contains(it) }
                 }
                 if (topAuthorMatch != null) {
                     score += 90
@@ -257,7 +258,7 @@ object PersonalizedDiscovery {
             if (score < 65) {
                 val wtrMatch = taste.wantToReadSeries.firstOrNull { s ->
                     val base = normalized(s)
-                    feat.series.contains(base) || feat.title.contains(base)
+                    base.isNotBlank() && (feat.series.contains(base) || feat.title.contains(base))
                 }
                 if (wtrMatch != null) {
                     score += 65

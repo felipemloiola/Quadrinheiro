@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-09T22:36:26.197Z",
+  "updatedAt": "2026-11-09T22:56:16.271Z",
   "summary": "Revisão de armazenamento e descoberta: sessões online, recomendações estáveis por conta e seleções editoriais independentes.",
   "items": [
     {
@@ -79,7 +79,7 @@
     {
       "title": "Integridade das sugestões",
       "status": "done",
-      "detail": "Validação do idioma informado pelas fontes e dos títulos originais, evitando traduções em cache que inventem afinidade. Seleções pessoais não reaproveitam páginas antigas de busca; o topo limita repetição do mesmo motivo."
+      "detail": "Validação do idioma informado pelas fontes e dos títulos originais, evitando traduções em cache que inventem afinidade. Seleções pessoais não reaproveitam páginas antigas de busca; o topo limita repetição do mesmo motivo. Continuações exigem uma série identificada e a próxima edição comprovada; títulos vazios após normalização não geram afinidade."
     }
   ]
 }
