@@ -250,7 +250,7 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent;
-    animation: quadrinheiro-logo-colors 6s linear infinite;
+    animation: quadrinheiro-logo-colors 4s linear infinite;
     will-change: background-position;
   }
 }
