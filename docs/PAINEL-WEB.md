@@ -96,3 +96,13 @@ A navegação do site foi simplificada para a finalidade deste painel: **Visão 
 - Não foram adicionadas funcionalidades fictícias nem alterado o código do app. O painel continua sendo somente leitura em relação ao GitHub e os dados de progresso continuam locais.
 
 Arquivos: `docs/navigation.css` e `docs/sidebar.js`. Os ícones SVG são renderizados pelo componente `ico()` no `docs/index.html`, reutilizado em `settings.js` e `notes.js`.
+
+## Revisão de alinhamento e animação (09/11/2026)
+
+- `docs/polish.css` padroniza os alinhamentos dos títulos, botões, cartões, grades e linhas de atividade na Visão geral. As colunas usam `minmax(0, 1fr)` para evitar conteúdo cortado; *container queries* reorganizam os painéis conforme a largura disponível, mesmo com a barra lateral recolhida.
+- O botão de expandir/recolher da barra lateral utiliza o símbolo de **painel dividido** da referência: um retângulo de cantos arredondados com divisória vertical, sem setas que alteram a aparência a cada clique.
+- A página ganhou transições curtas de entrada, feedback de toque e mudanças suaves de estado. A implementação segue os princípios de movimento funcional das [Human Interface Guidelines da Apple](https://developer.apple.com/design/human-interface-guidelines/motion): movimento breve, com significado e possibilidade de redução. Os controles de redução de movimento do painel e `prefers-reduced-motion` desativam esses efeitos.
+- Notas agora têm **Baixar .md** no cartão e no editor. O arquivo usa UTF-8 e contém título, categoria, datas e texto escrito pelo usuário. Para evitar links quebrados, fotos locais não são incluídas nem representadas como URLs inventadas no Markdown; seus nomes são listados, e os binários continuam disponíveis por **Exportar backup JSON**.
+- Foi corrigido também o estado vazio da aba Notas, que apontava para um identificador inválido do componente compartilhado de ícones.
+
+A atualização foi projetada para manter todos os registros locais e as oito abas existentes.
