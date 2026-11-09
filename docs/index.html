@@ -158,6 +158,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="cloud.css?v=20261109a">
 <link rel="stylesheet" href="login.css?v=20261109j">
   <link rel="stylesheet" href="mobile.css?v=20261109c">
+<link rel="stylesheet" href="progress.css?v=20261109-perf1">
 </head>
 <body>
 <section id="authSplash" role="status" aria-live="polite" aria-label="Carregando Quadrinheiro">
@@ -200,6 +201,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <button class="nav-btn" data-page="repository" title="Repositório"></button>
       <button class="nav-btn" data-page="backlog" title="Backlog"></button>
       <button class="nav-btn" data-page="integrations" title="Integrações"></button>
+      <button class="nav-btn" data-page="progress" title="Progresso"></button>
       <button class="nav-btn" data-page="performance" title="Performance"></button>
       <button class="nav-btn" data-page="decisions" title="Decisões"></button>
       <button class="nav-btn" data-page="notes" title="Notas"></button>
@@ -227,6 +229,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
     <div class="mobile-more-links">
       <button type="button" class="mobile-nav-link" data-mobile-goto="repository" aria-label="Abrir Repositório"></button>
       <button type="button" class="mobile-nav-link" data-mobile-goto="integrations" aria-label="Abrir Integrações"></button>
+      <button type="button" class="mobile-nav-link" data-mobile-goto="progress" aria-label="Abrir Progresso"></button>
       <button type="button" class="mobile-nav-link" data-mobile-goto="performance" aria-label="Abrir Performance"></button>
       <button type="button" class="mobile-nav-link" data-mobile-goto="decisions" aria-label="Abrir Decisões"></button>
     </div>
@@ -234,7 +237,11 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
   <main class="main">
     <header class="topbar"><div class="crumb">Quadrinheiro <span>/</span> <strong id="crumbName">Visão geral</strong></div><div class="top-actions"><button class="btn ghost" id="importBtn" title="Importar backup JSON" aria-label="Importar backup JSON"></button><button class="btn ghost" id="exportBtn" title="Exportar dados JSON" aria-label="Exportar dados JSON"></button><button class="btn primary" id="syncBtn" title="Sincronizar metadados públicos do GitHub" aria-label="Sincronizar metadados públicos do GitHub"></button><input type="file" accept="application/json,.json" id="fileInput" hidden></div></header>
     <div class="content">
-      <section class="page active" id="overview">
+      <section class="page" id="progress" aria-labelledby="progressTitle">
+<div class="progress-heading"><div><div class="eyebrow">Alterações atuais</div><h1 class="page-title" id="progressTitle">Progresso</h1><p class="page-desc" id="progressSummary">Consultando a revisão atual…</p><p class="progress-meta" id="progressUpdated" role="status" aria-live="polite"></p></div><button class="btn" type="button" id="refreshProgress">Atualizar progresso</button></div>
+<div class="progress-list" id="progressEntries" aria-busy="true"></div>
+</section>
+<section class="page active" id="overview">
         <div class="head-row dashboard-heading">
           <div><div class="eyebrow">Painel do projeto</div><h1 class="page-title">Visão geral</h1><p class="page-desc">Evolução do Quadrinheiro, backlog, decisões e movimentações recentes em um só lugar.</p></div>
           <div class="dashboard-repo-indicator" id="dashboardRepoBadge" role="status"><span class="dot" aria-hidden="true"></span><span id="dashboardRepoBadgeText">Consultando GitHub</span></div>
@@ -308,6 +315,7 @@ try{if('scrollRestoration' in history)history.scrollRestoration='manual'}catch{}
 // Dados do projeto vivem apenas na memória durante a sessão e no Firestore.
 let activeAccountId=null;
 const ICONS={"overview":"<rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/>","repository":"<path d=\"m16 18 6-6-6-6M8 6l-6 6 6 6m6-15-4 18\"/>","backlog":"<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"m8 9 1.5 1.5L12 8M14 9h3M8 15h9\"/>","integrations":"<rect x=\"3\" y=\"3\" width=\"6\" height=\"6\" rx=\"1.5\"/><rect x=\"15\" y=\"15\" width=\"6\" height=\"6\" rx=\"1.5\"/><path d=\"M9 6h6a3 3 0 0 1 3 3v6M6 9v6a3 3 0 0 0 3 3h6\"/>","performance":"<path d=\"M2 12h4l3-8 5 16 3-8h5\"/>","decisions":"<rect x=\"4\" y=\"5\" width=\"16\" height=\"17\" rx=\"2\"/><path d=\"M9 3h6v4H9zM8 13l2 2 3-3M15 14h2M8 19h9\"/>","notes":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M8 3v18M12 8h5M12 12h5M12 16h3\"/>","settings":"<path d=\"M4 7h5m4 0h7M4 17h11m4 0h1\"/><circle cx=\"11\" cy=\"7\" r=\"2\"/><circle cx=\"17\" cy=\"17\" r=\"2\"/>","refresh":"<path d=\"M20 11a8 8 0 0 0-15-3M4 4v4h4M4 13a8 8 0 0 0 15 3M20 20v-4h-4\"/>","download":"<path d=\"M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4\"/>","upload":"<path d=\"M12 17V5m-4 4 4-4 4 4M4 17v4h16v-4\"/>","plus":"<path d=\"M12 5v14M5 12h14\"/>","check":"<polyline points=\"5 12 10 17 20 7\"/>","branch":"<circle cx=\"6\" cy=\"4\" r=\"2\"/><circle cx=\"6\" cy=\"20\" r=\"2\"/><circle cx=\"18\" cy=\"7\" r=\"2\"/><path d=\"M6 6v12M18 9a7 7 0 0 1-12 4\"/>","target":"<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"5\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/>","folder":"<path d=\"M3 7h7l2 2h9v11H3z\"/><path d=\"M3 7V4h7l2 3\"/>","shield":"<path d=\"M12 2 20 5v6c0 5-3 9-8 11-5-2-8-6-8-11V5z\"/><path d=\"m9 12 2 2 4-4\"/>","calendar":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M7 3v4M17 3v4M3 10h18\"/>","chart":"<path d=\"M4 20V4M4 20h16M7 16l4-5 3 2 6-7\"/>","spark":"<path d=\"m12 2 2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z\"/>","layers":"<path d=\"m12 2 9 5-9 5-9-5 9-5Zm-9 10 9 5 9-5M3 17l9 5 9-5\"/>"};
+ICONS.progress=ICONS.performance;
 function ico(name){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" aria-hidden="true">'+(ICONS[name]||ICONS.target)+'</svg>'}
 const seedTasks=[
 {id:'Q-001',title:'Estabelecer baseline de fluidez em dispositivos',area:'Performance',priority:'P0',status:'Backlog',desc:'Medir p95/p99, jank, tempo de GPU e memória nos fluxos de biblioteca, catálogo e modais, antes/depois das otimizações.',checks:['Definir cenários repetíveis e coleção de referência','Executar Macrobenchmark / Perfetto em 60 Hz e 120 Hz','Registrar dispositivos, build e resultados no painel','Comparar baseline com a nova implementação'],source:'docs/INTERACOES-E-BENCHMARKS.md'},
@@ -397,8 +405,8 @@ function completion(t){let c=Array.isArray(t.checks)?t.checks:[];return c.length
 function statusPill(s){let cl={'Concluída':'done','Em andamento':'work','Em revisão':'review','Bloqueada':'block','Backlog':'wait','Documentada':'done','Em avaliação':'work','Revisar':'block'}[s]||'wait';return `<span class="pill ${cl}">${escapeHtml(s)}</span>`}
 function priorityPill(p){return `<span class="pill ${escapeHtml((p||'P2').toLowerCase())}">${escapeHtml(p)}</span>`}
 function notify(msg,error=false){let el=document.getElementById('toast');el.textContent=msg;el.style.background=error?'#53303d':'#243c44';el.classList.add('show');clearTimeout(notify.timer);notify.timer=setTimeout(()=>el.classList.remove('show'),3100)}
-function go(page){if(!document.getElementById(page))return;currentPage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===page));document.querySelectorAll('.nav-btn').forEach(el=>{let active=el.dataset.page===page;el.classList.toggle('active',active);el.setAttribute('aria-current',active?'page':'false')});document.getElementById('crumbName').textContent={overview:'Visão geral',repository:'Repositório',backlog:'Backlog',integrations:'Integrações',performance:'Performance',decisions:'Decisões',notes:'Notas',settings:'Ajustes'}[page];try{history.replaceState(null,'','#'+page)}catch{}window.scrollTo({top:0,behavior:'instant'});render();window.QuadrinheiroMobileNav?.sync(page);}
-function hydrateIcons(){const nav=[['overview','Visão geral'],['repository','Repositório'],['backlog','Backlog'],['integrations','Integrações'],['performance','Performance'],['decisions','Decisões'],['notes','Notas'],['settings','Ajustes']];nav.forEach(([k,title])=>(()=>{const button=document.querySelector(`.nav-btn[data-page="${k}"]`);button.innerHTML=ico(k)+`<span>${title}</span>${k==='backlog'?'<span class="count" id="navBacklog">0</span>':''}`;button.setAttribute('aria-label',title)})());document.getElementById('syncBtn').innerHTML=ico('refresh')+'<span class="hide-mobile">Sincronizar GitHub</span>';document.getElementById('importBtn').innerHTML=ico('upload')+'<span class="hide-mobile">Importar</span>';document.getElementById('exportBtn').innerHTML=ico('download')+'<span class="hide-mobile">Exportar</span>';document.getElementById('addTask').innerHTML=ico('plus')+' Nova tarefa';document.getElementById('addMetric').innerHTML=ico('plus')+' Registrar medição';document.getElementById('addDecision').innerHTML=ico('plus')+' Nova decisão';document.getElementById('bannerIcon').innerHTML=ico('shield')}
+function go(page){if(!document.getElementById(page))return;currentPage=page;document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===page));document.querySelectorAll('.nav-btn').forEach(el=>{let active=el.dataset.page===page;el.classList.toggle('active',active);el.setAttribute('aria-current',active?'page':'false')});document.getElementById('crumbName').textContent={overview:'Visão geral',repository:'Repositório',backlog:'Backlog',integrations:'Integrações',progress:'Progresso',performance:'Performance',decisions:'Decisões',notes:'Notas',settings:'Ajustes'}[page];try{history.replaceState(null,'','#'+page)}catch{}window.scrollTo({top:0,behavior:'instant'});render();window.QuadrinheiroMobileNav?.sync(page);}
+function hydrateIcons(){const nav=[['overview','Visão geral'],['repository','Repositório'],['backlog','Backlog'],['integrations','Integrações'],['progress','Progresso'],['performance','Performance'],['decisions','Decisões'],['notes','Notas'],['settings','Ajustes']];nav.forEach(([k,title])=>(()=>{const button=document.querySelector(`.nav-btn[data-page="${k}"]`);button.innerHTML=ico(k)+`<span>${title}</span>${k==='backlog'?'<span class="count" id="navBacklog">0</span>':''}`;button.setAttribute('aria-label',title)})());document.getElementById('syncBtn').innerHTML=ico('refresh')+'<span class="hide-mobile">Sincronizar GitHub</span>';document.getElementById('importBtn').innerHTML=ico('upload')+'<span class="hide-mobile">Importar</span>';document.getElementById('exportBtn').innerHTML=ico('download')+'<span class="hide-mobile">Exportar</span>';document.getElementById('addTask').innerHTML=ico('plus')+' Nova tarefa';document.getElementById('addMetric').innerHTML=ico('plus')+' Registrar medição';document.getElementById('addDecision').innerHTML=ico('plus')+' Nova decisão';document.getElementById('bannerIcon').innerHTML=ico('shield')}
 function render(){renderOverview();renderRepo();renderTasks();renderIntegrations();renderPerformance();renderDecisions();window.QuadrinheiroNotes?.render();window.QuadrinheiroSettings?.render()}
 function renderOverview(){
  const tasks=Array.isArray(state.tasks)?state.tasks:[];
@@ -537,7 +545,8 @@ hydrateIcons();go(['overview','repository','backlog','integrations','performance
 </script>
 <script src="settings.js?v=20261109h"></script>
 <script src="sidebar.js?v=20261109i"></script>
-<script src="mobile.js?v=20261109b"></script>
+<script src="mobile.js?v=20261109-perf1"></script>
+<script src="progress.js?v=20261109-perf1"></script>
 <script src="notes.js?v=20261109f"></script>
 <script type="module" src="cloud.js?v=20261109s"></script>
 </body>

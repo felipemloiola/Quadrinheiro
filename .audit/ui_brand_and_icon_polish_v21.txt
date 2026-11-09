@@ -1,4 +1,0 @@
-OK app/src/main/res/values/ic_launcher_colors.xml
-OK app/src/main/java/com/example/ui/components/SocialShareCardSheet.kt
-OK app/src/main/java/com/example/ui/screens/WelcomeIntroScreen.kt
-Launcher icon background darkened to pure black in dark theme, brand typography unified across screens, and social share brand mark aligned.

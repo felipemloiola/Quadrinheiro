@@ -1,3 +1,0 @@
-OK app/src/main/java/com/example/ui/components/SocialShareCardSheet.kt
-SKIP app/src/main/java/com/example/ui/screens/WelcomeIntroScreen.kt
-Pure black #000000 launcher background and pixel-perfect social brand alignment applied.

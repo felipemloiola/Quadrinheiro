@@ -1,4 +1,0 @@
-OK app/src/main/java/com/example/MainActivity.kt
-OK app/src/main/java/com/example/widget/UpdatePageAction.kt
-OK app/src/main/java/com/example/ui/components/LiquidGlassComponents.kt
-Startup widget storm decoupled and blur radius clamped for optimal thermals and smooth 120 FPS.

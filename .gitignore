@@ -41,3 +41,19 @@ catalog-service/.wrangler/
 catalog-service/.dev.vars*
 /.wrangler/
 /.codex-attachments/
+
+# Local agent context and private diagnostics
+/AGENTS.md
+/.audit/
+/.claude/
+/.codex/
+/.agents/
+/CONTEXTO-DO-APP.md
+/apple-design-research/
+*.hprof
+*.trace
+*.perfetto-trace
+*.jks
+*.p12
+*.pem
+*.key

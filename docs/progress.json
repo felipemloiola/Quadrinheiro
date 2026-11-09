@@ -1,0 +1,52 @@
+{
+  "updatedAt": "2026-11-09T20:38:45.643Z",
+  "summary": "Revisão de fluidez e consumo do Android, preservando os gestos, as molas e o Liquid Glass. Os itens abaixo distinguem implementação, testes e validação física.",
+  "items": [
+    {
+      "title": "Versão e contexto",
+      "status": "done",
+      "detail": "Conferidas a release 1.0.84 e a main posterior; o contexto local registra a nova base e os limites de validação.",
+      "evidence": "Base: 25977ad. APK da release: d3128af. A consulta de metadados não é teste de temperatura."
+    },
+    {
+      "title": "Desenho do vidro",
+      "status": "review",
+      "detail": "Reativar a captura reutilizável nas duas camadas principais, evitando desenhar o conteúdo duas vezes. A página interativa continuará atualizando durante a rolagem.",
+      "evidence": "Gargalo identificado em MainActivity e LayerBackdropModifier. Contagem de desenho e atualização de pixels serão testadas no Android."
+    },
+    {
+      "title": "Capas e memória",
+      "status": "review",
+      "detail": "Reter imagens decodificadas em cache de memória limitado pelo heap e pela classe de RAM. Transferir a migração de caches da abertura para uma tarefa de IO.",
+      "evidence": "O limite de disco das capas permanece em 16 MiB; biblioteca, contas e backups serão preservados."
+    },
+    {
+      "title": "Manutenção de armazenamento",
+      "status": "review",
+      "detail": "Evitar descartar capas por causa do tamanho de snapshots ou arquivos de execução que a limpeza de imagens não consegue reduzir."
+    },
+    {
+      "title": "Testes e compatibilidade",
+      "status": "pending",
+      "detail": "Executar testes de regressão, compilar e validar os caminhos de renderização. Ganhos de FPS, bateria e temperatura só serão registrados quando medidos."
+    },
+    {
+      "title": "Reenvios na sincronização",
+      "status": "review",
+      "detail": "Revisada a interação entre timeouts de corrotinas e Tasks do Firestore. O cancelamento da espera não deve causar uma nova gravação enquanto a operação anterior continua pendente.",
+      "evidence": "A implementação agora mantém uma operação em andamento por conta. Os testes verificam cancelamento, concorrência e isolamento entre contas."
+    },
+    {
+      "title": "Fila de sincronização",
+      "status": "review",
+      "detail": "Implementada contenção por conta: timeouts e tentativas concorrentes aguardam a Task existente, em vez de acrescentar mutações duplicadas. Removido o fallback que reenviava o perfil após timeout.",
+      "evidence": "Gravações e dados offline existentes não são removidos por essa alteração. Recuperação e validação em aparelho continuam em andamento."
+    },
+    {
+      "title": "Arquivos internos",
+      "status": "review",
+      "detail": "Retirar auditorias e instruções/contexto de agentes da árvore pública e impedir novos envios. Manter cópias locais e os arquivos necessários para build e licenças.",
+      "evidence": "A remoção da branch atual não torna privadas as versões presentes no histórico do Git."
+    }
+  ]
+}

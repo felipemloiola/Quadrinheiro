@@ -25,6 +25,7 @@ Backups JSON e downloads Markdown são opções manuais. Não são usados para m
 ## Seções
 
 - **Visão geral:** indicadores, atividade pública do GitHub, progresso e registros recentes.
+- **Progresso:** acompanhamento da revisão atual, separando implementação, testes, evidências e validação física. A seção também está no menu Mais do celular.
 - **Repositório:** organização do app Android, do serviço de catálogo e das automações.
 - **Backlog:** prioridades, status, responsáveis, checklists e evidências.
 - **Integrações:** acompanhamento de Apple skills, Apple Design Skill e Prismal.
@@ -34,6 +35,8 @@ Backups JSON e downloads Markdown são opções manuais. Não são usados para m
 - **Ajustes:** temas/cor de destaque, acessibilidade, backup manual, status da nuvem e **Sair da conta**.
 
 A sincronização automática dos metadados públicos do repositório usa a API GitHub em modo leitura; não modifica o código Android.
+
+O progresso técnico vem de `progress.json`, versionado no Git e consultado uma vez por abertura, com atualização manual. Ele não grava nem substitui notas, tarefas ou preferências do Firestore. Esse JSON é público: deve conter apenas informações técnicas sanitizadas, nunca contas, logs completos, capturas de tela pessoais ou credenciais.
 
 ## Arquivos
 

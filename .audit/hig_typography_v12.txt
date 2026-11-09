@@ -1,3 +1,0 @@
-SKIP text styles already applied
-SKIP theme adaptation already applied
-Android native sans-serif, not SF Pro. Explicit per-screen sizes are preserved. Compilation, tests, font-scale layouts and device visual checks remain to be verified.

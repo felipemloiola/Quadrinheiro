@@ -1,2 +1,0 @@
-SKIP (already patched): app/src/main/java/com/example/viewmodel/QuadrinheiroViewModel.kt
-SKIP (already patched): app/src/main/java/com/example/MainActivity.kt
