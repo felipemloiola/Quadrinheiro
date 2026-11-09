@@ -34,6 +34,8 @@ Quadrinheiro pairs a comic-book library with reading goals, personalized discove
 - Jump back into recently added books and your personal library.
 - Track reading activity through a chronological journal.
 
+An internet connection is required. Firestore uses memory-only caching; small image and per-account recommendation caches avoid repeated downloads without providing an offline editing mode.
+
 ### Explore — discover your next read
 
 - Browse editions and recommendations informed by your library, ratings, favorite publisher, and other preferences.

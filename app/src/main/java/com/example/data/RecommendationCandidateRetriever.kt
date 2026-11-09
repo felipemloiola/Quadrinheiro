@@ -77,8 +77,8 @@ object RecommendationCandidateRetriever {
     }
 
     /**
-     * Executa até 4 consultas simultâneas em paralelo (async/awaitAll) com orçamento de 4500ms,
-     * retendo lotes parciais já recebidos caso ocorra timeout antes da conclusão total.
+     * Até 12 sinais, com duas consultas simultâneas e 4500ms por consulta.
+     * Retém lotes parciais; a seleção persistida evita repetir a busca ao navegar.
      */
     suspend fun retrieveCandidates(
         taste: UserTasteProfile,
@@ -90,48 +90,28 @@ object RecommendationCandidateRetriever {
         }
 
         val queries = mutableListOf<String>()
-
-        // 1. Próxima edição das séries em leitura
+        queries += taste.favoriteCharacters.take(4).map { it.substringBefore('(').trim() }
+        queries += taste.favoriteComics.take(4).map { it.displayTitle.take(80) }
         taste.readingSeries.firstOrNull()?.let { (series, issue) ->
-            if (issue > 0) queries.add("$series #${issue + 1}")
-            else queries.add(series)
+            queries += if(issue > 0) "$series #${issue + 1}" else series
         }
-
-        // 2. Personagem favorito clássico
-        taste.favoriteCharacters.firstOrNull()?.let { char ->
-            val clean = char.substringBefore('(').trim()
-            if (clean.isNotBlank()) queries.add(clean)
-        }
-
-        // 3. Autor mais aclamado na estante
-        taste.topAuthors.firstOrNull()?.let { author ->
-            if (author.isNotBlank() && author.length >= 4) queries.add(author)
-        }
-
-        // 4. HQ favorita ou Fila Quero Ler
-        if (queries.size < 4) {
-            taste.favoriteComics.firstOrNull()?.let { fav ->
-                val title = PortugueseComicTranslator.translateTitleToPtBr(fav.displayTitle).take(40)
-                if (title.isNotBlank()) queries.add(title)
-            }
-        }
-        if (queries.size < 4) {
-            taste.wantToReadSeries.firstOrNull()?.let { wtr ->
-                if (wtr.isNotBlank()) queries.add(wtr)
-            }
-        }
-
-        val limitedQueries = queries.distinct().take(4)
+        queries += taste.wantToReadSeries.take(1)
+        queries += taste.topAuthors.take(1)
+        queries += taste.favoriteUniverse
+        val limitedQueries = queries.filter(String::isNotBlank).distinct().take(12)
         if (limitedQueries.isEmpty()) {
             return@withContext emptyList()
         }
 
+        val permits = kotlinx.coroutines.sync.Semaphore(2)
         val queryDeferreds = limitedQueries.map { q ->
             async(Dispatchers.IO) {
+                permits.acquire()
+                try {
                 var partialBatch = emptyList<ComicEntry>()
                 withTimeoutOrNull(4500L) {
                     runCatching {
-                        searchEngine.searchOnlineProgressive(q, searchLanguage = "ALL").collect { batch ->
+                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT").collect { batch ->
                             if (batch.isNotEmpty()) {
                                 partialBatch = batch
                             }
@@ -139,11 +119,12 @@ object RecommendationCandidateRetriever {
                     }
                 }
                 partialBatch
+                } finally { permits.release() }
             }
         }
 
         val allResults = queryDeferreds.awaitAll().flatten()
-        val deduplicated = CatalogSearchPolicy.deduplicateByCanonicalWork(allResults)
+        val deduplicated = CatalogSearchPolicy.deduplicateByCanonicalWork(allResults, "PT")
         updateCache(taste.tasteHash, deduplicated, ownerUid)
         deduplicated
     }

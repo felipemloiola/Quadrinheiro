@@ -32,7 +32,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.IgnoreExtraProperties
-import com.google.firebase.firestore.PersistentCacheSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ServerTimestamp
 import com.google.firebase.firestore.Source
@@ -573,21 +572,7 @@ class QuadrinheiroCloudRepository(
 
     init {
         check(!CloudCacheRecovery.needsReview(appContext)) {"A revisão da sincronização local está pendente"}
-        // Target 10 MiB for evictable documents; pending mutations are not capped by this setting.
-        val dbKey = System.identityHashCode(db)
-        if (configuredDatabases.add(dbKey) &&
-            db.firestoreSettings.cacheSettings !is com.google.firebase.firestore.MemoryCacheSettings
-        ) {
-            runCatching {
-                val cacheSettings = PersistentCacheSettings.newBuilder()
-                    .setSizeBytes(FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES)
-                    .build()
-                val settings = FirebaseFirestoreSettings.Builder(db.firestoreSettings)
-                    .setLocalCacheSettings(cacheSettings)
-                    .build()
-                db.firestoreSettings = settings
-            }
-        }
+        OnlineFirestorePolicy.configure(db)
     }
 
     fun currentAuthUser(): CloudAuthUser? {
@@ -1251,9 +1236,7 @@ class QuadrinheiroCloudRepository(
     }
 
     companion object {
-        const val FIRESTORE_OFFLINE_CACHE_BUDGET_BYTES = 10L * 1024L * 1024L
         private val accountWrites=FirestoreWriteGate()
-        private val configuredDatabases = java.util.Collections.synchronizedSet(HashSet<Int>())
 
         /**
          * Resolve conflitos entre a lista local (`SafeStorage`) e a lista remota (`Firestore`)

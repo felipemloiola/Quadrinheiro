@@ -15,7 +15,8 @@ object PersonalizedDiscovery {
     private fun normalized(raw: String) = CatalogSearchPolicy.normalize(raw)
     private fun workKey(c: ComicEntry): String {
         val title = PortugueseComicTranslator.canonicalWorkKey(c.displayTitle).ifBlank { normalized(c.displayTitle).ifBlank { c.externalId.ifBlank { c.id } } }
-        return title + if (c.issueNumber > 0) ":#${c.issueNumber}" else ""
+        val collected = c.format.contains("Graphic", true) || c.format.contains("Encadernado", true) || c.format.contains("Coleção", true)
+        return title + if (c.issueNumber > 0 && !collected) ":#${c.issueNumber}" else ""
     }
     private fun features(c: ComicEntry): Features {
         val title = normalized(c.displayTitle)
@@ -133,7 +134,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v2|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v3|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -153,7 +154,8 @@ object PersonalizedDiscovery {
         val ownedIsbns = known.mapNotNull { it.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }.takeIf { s -> s.length >= 10 } }.toSet()
         val ownedWorks = known.mapTo(HashSet(), ::workKey)
 
-        val candidates = CatalogSearchPolicy.unique(pool).filter { c ->
+        val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool, "PT")
+            .sortedByDescending { CatalogSearchPolicy.isPortugueseEdition(it) }.filter { c ->
             val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
                 (c.externalId.isBlank() || c.externalId !in ownedIds) &&

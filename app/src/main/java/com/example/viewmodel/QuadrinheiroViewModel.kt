@@ -199,6 +199,7 @@ class QuadrinheiroViewModel(
     private val _exploreRecommendationState = MutableStateFlow(ExploreRecommendationUiState())
     val exploreRecommendationState: StateFlow<ExploreRecommendationUiState> = _exploreRecommendationState.asStateFlow()
     private var recommendationJob: Job? = null
+    private var requestedRecommendationKey = ""
     private val recommendationJobMutex = kotlinx.coroutines.sync.Mutex()
 
     private var cloudProfileJob: Job? = null
@@ -2615,6 +2616,7 @@ class QuadrinheiroViewModel(
      * Coalesce a geração de recomendações caso o tasteFingerprint mude ou haja migração legada provisória.
      * Nunca invalida nem recalcula sobre biblioteca vazia transitória.
      */
+    @Synchronized
     fun triggerRecommendationRefreshIfNeeded(forceRefresh: Boolean = false) {
         val currentUid = activeOwnerUid()
         val currentGeneration = authSessionGeneration
@@ -2625,6 +2627,14 @@ class QuadrinheiroViewModel(
         // Barreira: se restauração local não terminou, não roda sobre estado vazio
         if (!_isLocalRestoreComplete.value) return
 
+        val fingerprint = com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
+            librarySnapshot, settingsSnapshot, universeSnapshot)
+        val requestKey = "$currentUid:$currentGeneration:$fingerprint"
+        val existing = _exploreRecommendationState.value
+        if (!forceRefresh && ((recommendationJob?.isActive == true && requestedRecommendationKey == requestKey) ||
+            (existing.ownerUid == currentUid && existing.tasteFingerprint == fingerprint &&
+                existing.recommendations.isNotEmpty() && !existing.isLegacyProvisional))) return
+        requestedRecommendationKey = requestKey
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.IO) {
             recommendationJobMutex.lock()
@@ -2670,7 +2680,8 @@ class QuadrinheiroViewModel(
                 val cachedOrLocalPool = if (com.example.data.RecommendationCandidateRetriever.isCacheValid(taste.tasteHash, currentUid)) {
                     com.example.data.RecommendationCandidateRetriever.getCachedPool(currentUid)
                 } else {
-                    emptyList()
+                    com.example.data.RecommendationCandidateRetriever.retrieveCandidates(
+                        taste, com.example.data.MultiApiSearchEngine(), currentUid)
                 }
 
                 val catalogPool = (com.example.data.ModernCatalog.current.ifEmpty {
