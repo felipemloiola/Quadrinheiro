@@ -22,6 +22,7 @@ function setMode(value){
  mode=value==='collapsed'?'collapsed':'expanded';
  try{localStorage.setItem(KEY,mode)}catch{}
  paint();
+ window.QuadrinheiroCloud?.notifyLocalChange();
 }
 toggle.addEventListener('click',()=>setMode(mode==='expanded'?'collapsed':'expanded'));
 window.QuadrinheiroSidebar={getMode:()=>mode,setMode};
