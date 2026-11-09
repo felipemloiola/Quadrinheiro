@@ -81,7 +81,7 @@ internal object AdditionalCatalogSources {
         val q = query.trim().take(100)
         val safePage = page.coerceIn(0, 50)
         when (source) {
-            "catalog" -> ComicVineCatalog.search(q, page = safePage).items
+            "catalog" -> ComicVineCatalog.search(q, page = safePage, language = language).items
             "apple-br" -> PortugueseBookSources.appleBrazil(q, page = safePage)
             "google-pt" -> PortugueseBookSources.googlePortuguese(q, page = safePage)
             "apple-us" -> if (safePage > 0) emptyList() else parseAppleUs(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder().addQueryParameter("term", q).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook").addQueryParameter("country", "US").addQueryParameter("limit", "16").build()))

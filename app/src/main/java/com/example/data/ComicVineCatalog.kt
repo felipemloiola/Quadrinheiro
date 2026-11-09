@@ -84,14 +84,16 @@ object ComicVineCatalog {
             format = j.optString("format").ifBlank {if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição"}, pageCount = j.optInt("pageCount",0),isbn=j.optString("isbn"))
     }
     internal fun plain(html: String): String = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-    suspend fun search(query: String, page: Int = 0): MultiApiSearchEngine.CatalogPage {
+    suspend fun search(query: String, page: Int = 0, language: String = "ALL"): MultiApiSearchEngine.CatalogPage {
         val j = request("search", query, page = page)
-        return MultiApiSearchEngine.CatalogPage(j.objects("items").map(::comic), j.optBoolean("hasMore"))
+        return MultiApiSearchEngine.CatalogPage(j.objects("items").filter { language == "ALL" || supportedEdition(it) }.map(::comic), j.optBoolean("hasMore"))
     }
     suspend fun catalog(page: Int): MultiApiSearchEngine.CatalogPage {
         val j = request("catalog", page = page)
         return MultiApiSearchEngine.CatalogPage(j.objects("items").map(::comic), j.optBoolean("hasMore"))
     }
+    internal fun supportedEdition(j: JSONObject): Boolean = j.optString("language").lowercase().substringBefore('-') !in
+        setOf("de", "deu", "ger", "german", "it", "ita", "italian", "fr", "fra", "fre", "french", "es", "spa", "spanish")
     suspend fun characters(query: String): List<CharacterResult> {
         val normalized = CharacterDirectory.normalized(query)
         val english = CharacterDirectory.portuguese.entries.firstOrNull { CharacterDirectory.normalized(it.value) == normalized }?.key ?: query

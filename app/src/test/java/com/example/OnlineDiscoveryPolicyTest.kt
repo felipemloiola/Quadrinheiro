@@ -17,6 +17,28 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[34])
 class OnlineDiscoveryPolicyTest {
+    @Test fun cachedTranslationCannotInventAFavoriteCharacter() {
+        val entry=comic("siktc","Something is Killing the Children").copy(
+            authors="James Tynion IV",titlePtBr="Monstro do Pântano is Killing the Children",
+            seriesName="Monstro do Pântano")
+        val verified=PersonalizedDiscovery.verifiedCandidate(entry)!!
+        assertEquals("Something is Killing the Children",verified.displayTitle)
+        assertEquals("",verified.seriesName)
+        assertTrue(PersonalizedDiscovery.recommendWithReasons(listOf(entry),emptyList(),
+            settings=AppSettings(profileFavoriteCharacters=listOf("Monstro do Pântano"))).isEmpty())
+    }
+
+    @Test fun explicitlyForeignEditionsAndLegacyForeignTitlesAreExcluded() {
+        assertFalse(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","de")))
+        assertFalse(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","it")))
+        assertTrue(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","pt-BR")))
+        assertTrue(ComicVineCatalog.supportedEdition(org.json.JSONObject().put("language","en")))
+        assertNull(PersonalizedDiscovery.verifiedCandidate(comic("de","Swamp Thing: Grüne Hölle")))
+        assertNull(PersonalizedDiscovery.verifiedCandidate(comic("it","Swamp Thing di Alan Moore - Volume 3")))
+        assertEquals("Uma história em português",PersonalizedDiscovery.verifiedCandidate(
+            comic("translated","An unfamiliar story").copy(titlePtBr="Uma história em português"))?.displayTitle)
+    }
+
     private fun comic(id:String,title:String,publisher:String="DC Comics") = ComicEntry(
         id=id,externalId=id,title=title,authors="Frank Miller",publisher=publisher,
         format="Graphic Novel",pageCount=144,coverUrl="https://example.org/$id.jpg")

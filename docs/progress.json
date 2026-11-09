@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-09T22:11:26.220Z",
+  "updatedAt": "2026-11-09T22:36:26.197Z",
   "summary": "Revisão de armazenamento e descoberta: sessões online, recomendações estáveis por conta e seleções editoriais independentes.",
   "items": [
     {
@@ -75,6 +75,11 @@
       "title": "Seleções editoriais",
       "status": "done",
       "detail": "Para começar, DC e Marvel usam consultas editoriais próprias, com conferência do título, armazenamento limitado e novas tentativas explícitas. Não dependem das primeiras entradas do catálogo."
+    },
+    {
+      "title": "Integridade das sugestões",
+      "status": "done",
+      "detail": "Validação do idioma informado pelas fontes e dos títulos originais, evitando traduções em cache que inventem afinidade. Seleções pessoais não reaproveitam páginas antigas de busca; o topo limita repetição do mesmo motivo."
     }
   ]
 }

@@ -51,7 +51,7 @@ object PortugueseComicTranslator {
     // Palavras exclusivas de edições alemãs, francesas ou italianas que poluem buscas de HQs
     private val foreignEditionNoiseRegex by lazy(LazyThreadSafetyMode.PUBLICATION) {
         Regex(
-            """(?i)\b(?:der\s+beginn\s+einer|er\s+hat\s+nicht|band\s+\d+|bd\.\s*\d+|sammelband|ausgabe|panini\s+verlags|auf\s+deutsch|édition\s+intégrale|tome\s+\d+|edizione\s+italiana|fumetti)\b"""
+            """(?i)\b(?:der\s+beginn\s+einer|er\s+hat\s+nicht|band\s+\d+|bd\.\s*\d+|sammelband|ausgabe|panini\s+verlags|auf\s+deutsch|édition\s+intégrale|tome\s+\d+|edizione\s+italiana|fumetti|grüne\s+hölle|grune\s+holle|di\s+\p{L}+\s+\p{L}+\s*[-–:]\s*(?:volume|vol))\b"""
         )
     }
 
