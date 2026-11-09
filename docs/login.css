@@ -141,3 +141,9 @@ html[data-auth]:not([data-auth="authenticated"]) #loginScreen{
  .login-google:hover{transform:none!important}
 }
 html[data-motion="reduced"] .login-google{transition:none!important}
+
+.login-mark{background:transparent!important;border:0!important;border-radius:0!important;width:65px;height:65px;margin-left:-6px}
+.login-mark svg{width:65px!important;height:65px!important}
+.login-recovery{display:flex;align-items:center;justify-content:flex-start;gap:14px;flex-wrap:wrap}
+.login-recovery button{font-size:11px;color:var(--accent);padding:0;border:0;background:transparent;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.login-recovery button[hidden]{display:none!important}
