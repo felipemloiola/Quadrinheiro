@@ -139,6 +139,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="navigation.css?v=20261109b">
 <link rel="stylesheet" href="polish.css?v=20261109a">
 <link rel="stylesheet" href="smooth-sidebar.css?v=20261109a">
+<link rel="stylesheet" href="cloud.css?v=20261109a">
 </head>
 <body>
 <div class="app">
@@ -404,9 +405,9 @@ window.QuadrinheiroPanel={getState:()=>state,save,replaceCloudState,escapeHtml,m
 hydrateIcons();go(['overview','repository','backlog','integrations','performance','decisions','notes','settings'].includes(location.hash.slice(1))?location.hash.slice(1):'overview');window.addEventListener('hashchange',()=>{let p=location.hash.slice(1);if(p!==currentPage&&document.getElementById(p))go(p)});requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo(0,0)));if(autoSyncEnabled())syncGithub(true);setInterval(()=>{if(document.visibilityState==='visible'&&autoSyncEnabled())syncGithub(true)},60*60*1000);
 })();
 </script>
-<script src="settings.js?v=20261109b"></script>
-<script src="sidebar.js?v=20261109c"></script>
-<script src="notes.js?v=20261109c"></script>
-<script type="module" src="cloud.js?v=20261109a"></script>
+<script src="settings.js?v=20261109d"></script>
+<script src="sidebar.js?v=20261109d"></script>
+<script src="notes.js?v=20261109d"></script>
+<script type="module" src="cloud.js?v=20261109b"></script>
 </body>
 </html>
