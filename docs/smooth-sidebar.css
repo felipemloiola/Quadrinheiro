@@ -84,7 +84,7 @@ html[data-theme="dark"]{--brand-surface:#101010}
  min-width:0!important;
  height:40px!important;
  min-height:40px;
- padding:0 4px!important;
+ padding:0!important;
  margin:0;
  border-radius:10px;
  opacity:1!important;
@@ -239,6 +239,7 @@ html[data-theme="dark"]{--brand-surface:#101010}
    width:100%!important;
    height:40px!important;
    min-width:0!important;
+   column-gap:0!important;
    background:transparent;
    color:var(--muted);
    opacity:1!important;
