@@ -381,23 +381,33 @@ $('loginRetry')?.addEventListener('click',async()=>{
 $('loginSwitch')?.addEventListener('click',async()=>{if(auth)await sdk.signOut(auth)});
 $('cloudLogin').addEventListener('click',googleSignIn);
 // A mesma saída funciona em Ajustes e na barra lateral. Nenhum dado é apagado.
-async function signOutFromDashboard(){
- if(!auth||!user)return;
- if(uploading||pendingPhotoUploads){
-  notice('Salvamento de registros ou fotos em andamento. Tente sair novamente após a conclusão.');
+async function signOutFromDashboard(event){
+ event?.preventDefault?.();
+ if(!auth||!user){
+  showGate('signed-out','Sessão encerrada. Entre novamente com Google.');
   return
- }
- if(active&&dirty){
-  clearTimeout(timer);
-  await push();
-  if(dirty){notice('Não foi possível salvar na nuvem. Conclua a sincronização antes de sair.',true);return}
  }
  const controls=[$('cloudLogout'),$('sidebarSignOut')].filter(Boolean);
  controls.forEach(button=>button.disabled=true);
  try{
+  // A saída nunca deve parecer sem resposta: tentativa rápida de salvar,
+  // seguida de confirmação explícita caso haja trabalho não sincronizado.
+  if(active&&dirty&&!uploading&&pendingPhotoUploads===0){
+   clearTimeout(timer);
+   await Promise.race([push(),new Promise(resolve=>setTimeout(resolve,5000))]);
+  }
+  if(active&&(dirty||uploading||pendingPhotoUploads>0)){
+   const ok=window.confirm('Existem alterações ainda não confirmadas na nuvem. Sair agora descartará essas alterações. Deseja sair mesmo assim?');
+   if(!ok){notice('Saída cancelada: aguarde o salvamento dos registros.',true);return}
+  }
   await sdk.signOut(auth);
+  // Garante o bloqueio imediato mesmo que o observador do Firebase demore.
+  resetSession();
+  showGate('signed-out','Você saiu da conta. Entre com Google para continuar.');
  }catch(err){
-  notice(safeMessage(err),true);
+  const message='Não foi possível sair da conta: '+safeMessage(err);
+  notice(message,true);
+  window.alert(message);
  }finally{
   controls.forEach(button=>button.disabled=false);
  }
