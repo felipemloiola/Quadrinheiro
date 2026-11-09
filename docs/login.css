@@ -222,3 +222,44 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
 @media(prefers-reduced-motion:reduce){
  .login-google,.login-mark,.login-brand-q{transition:none!important;animation:none!important}
 }
+
+/* A palavra "continuar." percorre suavemente a paleta real do Q oficial.
+   Movimento apenas no preenchimento do texto; sem flashes nem deslocamento de layout. */
+@keyframes quadrinheiro-logo-colors {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+@supports ((background-clip:text) or (-webkit-background-clip:text)) {
+  #loginScreen .login-story h1 span {
+    background-image: linear-gradient(105deg,
+      #2563EB 0%,
+      #00B4D8 16%,
+      #FF1493 34%,
+      #E11D48 42%,
+      #FF9100 57%,
+      #FFD000 67%,
+      #2563EB 83%,
+      #00B4D8 100%);
+    background-size: 265% 100%;
+    background-position: 0% 50%;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: quadrinheiro-logo-colors 11s ease-in-out infinite alternate;
+    will-change: background-position;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #loginScreen .login-story h1 span {
+    animation: none !important;
+    background-position: 30% 50%;
+    will-change: auto;
+  }
+}
+html[data-motion="reduced"] #loginScreen .login-story h1 span {
+  animation: none !important;
+  background-position: 30% 50%;
+  will-change: auto;
+}
