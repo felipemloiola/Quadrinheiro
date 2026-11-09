@@ -374,3 +374,87 @@ html[data-motion="reduced"] .sidebar .sidebar-collapse-row .sidebar-toggle-text{
 }
 html[data-motion="reduced"] .sidebar .sidebar-signout,
 html[data-motion="reduced"] .sidebar .sidebar-signout>span{transition:none!important}
+
+/* Q é o próprio controle de expansão no modo compacto.
+   O controle de recolher vive na última coluna do cabeçalho aberto,
+   sem sobreposições e sem trocar os dois ícones por opacidade. */
+.sidebar .brand-logo{
+ appearance:none;
+ -webkit-appearance:none;
+ border:0!important;
+ cursor:default;
+}
+.sidebar .brand-logo:disabled{opacity:1!important;filter:none!important}
+.sidebar .brand-logo:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:11px!important}
+@media(min-width:871px){
+ .sidebar .brand{
+  grid-template-columns:42px minmax(0,1fr) 34px!important;
+  column-gap:8px!important;
+  margin-bottom:23px!important;
+  overflow:visible;
+ }
+ .sidebar .brand .sidebar-toggle{
+  display:grid!important;
+  position:relative!important;
+  inset:auto!important;
+  align-self:center;
+  justify-self:end;
+  width:34px!important;
+  min-width:34px!important;
+  height:38px!important;
+  padding:0!important;
+  opacity:1!important;
+  background:transparent;
+ }
+ .sidebar .brand .sidebar-toggle:hover{background:var(--surface-2)}
+ html[data-sidebar="collapsed"] .sidebar .brand{
+  grid-template-columns:42px minmax(0,1fr) 0px!important;
+  column-gap:0!important;
+  margin-bottom:23px!important;
+ }
+ html[data-sidebar="collapsed"] .sidebar .brand .sidebar-toggle{
+  display:none!important;
+  pointer-events:none;
+ }
+ html[data-sidebar="collapsed"] .sidebar .brand-logo{
+  cursor:pointer!important;
+  pointer-events:auto!important;
+ }
+ html[data-sidebar="collapsed"] .sidebar .brand-logo:hover{
+  background:color-mix(in srgb,var(--accent) 10%,transparent)!important;
+ }
+ /* O rodapé é ancorado à janela, não ao tamanho variável da navegação. */
+ .sidebar .nav{position:static!important}
+ .sidebar .nav .nav-btn[data-page="settings"]{
+  position:absolute!important;
+  left:12px!important;
+  right:12px!important;
+  bottom:88px!important;
+  width:calc(100% - 24px)!important;
+  margin:0!important;
+  flex:none!important;
+  z-index:1;
+ }
+ .sidebar .sidebar-session{
+  position:absolute!important;
+  left:12px!important;
+  right:12px!important;
+  bottom:15px!important;
+  margin:0!important;
+  min-height:58px!important;
+  padding:9px 0 0!important;
+  z-index:2;
+ }
+ .sidebar .sidebar-signout{
+  grid-template-columns:40px minmax(0,1fr);
+  padding:0 4px!important;
+ }
+ html[data-sidebar="collapsed"] .sidebar .nav .nav-btn[data-page="settings"]{
+  grid-template-columns:40px minmax(0,1fr)!important;
+ }
+}
+@media(prefers-reduced-motion:reduce){
+ .sidebar .brand-logo,.sidebar .brand .sidebar-toggle{transition:none!important}
+}
+html[data-motion="reduced"] .sidebar .brand-logo,
+html[data-motion="reduced"] .sidebar .brand .sidebar-toggle{transition:none!important}
