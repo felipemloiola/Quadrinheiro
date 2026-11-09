@@ -240,7 +240,8 @@ html[data-theme="dark"] .login-help a{color:#75B7FF}
       #FF9100 110px,
       #FFD000 150px,
       #2563EB 200px);
-    background-size: 100% 100%;
+    /* A textura é maior que o texto; ao transladar 141px nunca descobre uma borda. */
+    background-size: calc(100% + 320px) calc(100% + 320px);
     background-position: 0px 0px;
     background-repeat: no-repeat;
     -webkit-background-clip: text;
