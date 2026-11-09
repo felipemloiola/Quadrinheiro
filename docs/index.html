@@ -138,11 +138,12 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="settings.css?v=20261109b">
 <link rel="stylesheet" href="navigation.css?v=20261109b">
 <link rel="stylesheet" href="polish.css?v=20261109a">
+<link rel="stylesheet" href="smooth-sidebar.css?v=20261109a">
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-logo" aria-hidden="true"><img src="quadrinheiro-logo.svg" alt="" width="44" height="44"></div><div class="brandtext"><b>Quadrinheiro</b><small>Seu projeto</small></div><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Recolher barra lateral" aria-controls="mainNav" aria-expanded="true" title="Recolher barra lateral"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+    <div class="brand"><div class="brand-logo" aria-label="Quadrinheiro"><svg class="brand-q" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" aria-hidden="true"><path fill="currentColor" d="M44.8 26.3 28.9 32.9 25 54l6.6 21.1 7.9-5.3 3.3-9.2-2.7-7.9 3.3-13.2z"/><path fill="currentColor" d="M49.4 26.3h17.8l13.2 9.2v15.2H63.9l-2-5.9-8.6-6-5.2.7z"/><path fill="currentColor" d="M63.9 55.3h15.2l-2.7 8.6 9.3 13.9-2 5.9-14.5-5.3-13.9 2-15.2-3.3 6-11.2 7.9-2.7z"/></svg></div><div class="brandtext"><b>Quadrinheiro</b><small>Seu projeto</small></div><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Recolher barra lateral" aria-controls="mainNav" aria-expanded="true" title="Recolher barra lateral"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
     <div class="side-label">Acompanhar</div>
     <nav class="nav" id="mainNav" aria-label="Navegação principal">
       <button class="nav-btn active" data-page="overview" title="Visão geral"></button>
@@ -154,7 +155,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <button class="nav-btn" data-page="notes" title="Notas"></button>
       <button class="nav-btn" data-page="settings" title="Ajustes"></button>
     </nav>
-    <div class="side-bottom"><span class="repo-tag"><span class="dot"></span> Repositório público · somente leitura</span><p>Seus registros são mantidos <b>neste navegador</b>. Exporte um backup JSON para transferir o trabalho.</p><p><a href="https://github.com/felipemloiola/Quadrinheiro" target="_blank" rel="noopener noreferrer">Abrir repositório ↗</a></p></div>
+    
   </aside>
   <main class="main">
     <header class="topbar"><div class="crumb">Quadrinheiro <span>/</span> <strong id="crumbName">Visão geral</strong></div><div class="top-actions"><button class="btn ghost" id="importBtn" title="Importar backup JSON"></button><button class="btn ghost" id="exportBtn" title="Exportar dados JSON"></button><button class="btn primary" id="syncBtn" title="Sincronizar metadados públicos do GitHub" aria-label="Sincronizar metadados públicos do GitHub"></button><input type="file" accept="application/json,.json" id="fileInput" hidden></div></header>
