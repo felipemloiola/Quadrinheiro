@@ -167,3 +167,38 @@ body{background:var(--bg);letter-spacing:0}
 @media(max-width:365px){.dashboard-kpi{padding:10px}.dashboard-kpi .kpi-value{font-size:25px}.dashboard-activity-when{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.dashboard-activity-row,.dashboard-kpi{animation:none!important;transition:none!important}}
 @media(prefers-contrast:more){.dashboard-kpi,.dashboard-panel,.dashboard-area-card,.dashboard-mini-stat{border-color:var(--muted)!important}}
+
+/* Corrige o destaque largo nos cards do mapa do repositório.
+   O contêiner é um div: sem largura definida, o fundo ocupava a linha inteira. */
+.repo-card .repo-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  vertical-align:top;
+  width:38px;
+  height:38px;
+  min-width:38px;
+  border-radius:11px;
+  margin:0 0 13px;
+  padding:0;
+  flex:none;
+  background:color-mix(in srgb,var(--accent) 11%,var(--surface-2));
+  color:var(--accent);
+}
+.repo-card .repo-icon svg{
+  display:block;
+  width:21px;
+  height:21px;
+  flex:none;
+  stroke:currentColor;
+  fill:none;
+}
+/* Normaliza ícones de cards para não receberem dimensões herdadas. */
+.integration-head .integration-glyph{
+  display:inline-grid;
+  place-items:center;
+  width:40px;
+  height:40px;
+  min-width:40px;
+  flex:none;
+}
