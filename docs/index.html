@@ -140,12 +140,12 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
 <link rel="stylesheet" href="polish.css?v=20261109a">
 <link rel="stylesheet" href="smooth-sidebar.css?v=20261109b">
 <link rel="stylesheet" href="cloud.css?v=20261109a">
-<link rel="stylesheet" href="login.css?v=20261109b">
+<link rel="stylesheet" href="login.css?v=20261109c">
 </head>
 <body>
 <section id="loginScreen" aria-label="Entrar no Quadrinheiro">
  <div class="login-intro">
-  <div class="login-wordmark"><svg class="login-brand-q" xmlns="http://www.w3.org/2000/svg" viewBox="21 21 70 70" aria-hidden="true"><path fill="currentColor" d="M44.8 26.3 28.9 32.9 25 54l6.6 21.1 7.9-5.3 3.3-9.2-2.7-7.9 3.3-13.2z"/><path fill="currentColor" d="M49.4 26.3h17.8l13.2 9.2v15.2H63.9l-2-5.9-8.6-6-5.2.7z"/><path fill="currentColor" d="M63.9 55.3h15.2l-2.7 8.6 9.3 13.9-2 5.9-14.5-5.3-13.9 2-15.2-3.3 6-11.2 7.9-2.7z"/></svg><div><strong>Quadrinheiro</strong><span>Projeto · área de trabalho</span></div></div>
+  <div class="login-wordmark"><img class="login-brand-q" src="quadrinheiro-login-logo.svg?v=20261109a" alt="" width="64" height="64" decoding="async"><div><strong>Quadrinheiro</strong><span>Projeto · área de trabalho</span></div></div>
   <div class="login-story">
    <span class="login-overline">ESPAÇO DO PROJETO</span>
    <h1>Uma boa ideia merece <span>continuar.</span></h1>
@@ -156,7 +156,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
  </div>
  <div class="login-right">
   <div class="login-form-card">
-   <div class="login-mark"><svg class="login-brand-q" xmlns="http://www.w3.org/2000/svg" viewBox="21 21 70 70" aria-hidden="true"><path fill="currentColor" d="M44.8 26.3 28.9 32.9 25 54l6.6 21.1 7.9-5.3 3.3-9.2-2.7-7.9 3.3-13.2z"/><path fill="currentColor" d="M49.4 26.3h17.8l13.2 9.2v15.2H63.9l-2-5.9-8.6-6-5.2.7z"/><path fill="currentColor" d="M63.9 55.3h15.2l-2.7 8.6 9.3 13.9-2 5.9-14.5-5.3-13.9 2-15.2-3.3 6-11.2 7.9-2.7z"/></svg></div>
+   <div class="login-mark"><img class="login-brand-q" src="quadrinheiro-login-logo.svg?v=20261109a" alt="" width="64" height="64" decoding="async"></div>
    <h2>Bem-vindo ao seu espaço.</h2>
    <p class="login-subtitle">Entre para acessar suas notas, tarefas e decisões. Seu trabalho acompanha você em diferentes dispositivos.</p>
    <button class="login-google" type="button" id="loginGoogle" disabled><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.39 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.23 5.48-4.72 7.18l7.73 6C44.46 38.03 46.98 31.87 46.98 24.55z"/><path fill="#FBBC05" d="M10.53 28.59C10.05 27.12 9.77 25.58 9.77 24s.28-3.12.75-4.59l-7.98-6.2C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Continuar com Google</span></button>
@@ -172,7 +172,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
    </div>
    <div class="login-division"></div>
    <div class="login-privacy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>Entrada exclusiva pelo Google. Não armazenamos senhas no painel.</span></div>
-   <p class="login-help" id="loginHelp">Configuração do Firebase necessária? <a href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Ver instruções</a>.</p>
+   <p class="login-help" id="loginHelp">Acesso exclusivo à conta autorizada. <a href="CONFIGURAR-SYNC-FIREBASE.md" target="_blank" rel="noopener noreferrer">Problemas para entrar?</a></p>
   </div>
  </div>
 </section>
@@ -248,7 +248,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
       <section class="page" id="integrations"><div class="head-row"><div><div class="eyebrow">Compatibilidade</div><h1 class="page-title">Integrações e referências</h1><p class="page-desc">O que já foi documentado, o que foi adaptado e o que ainda precisa passar por análise técnica e testes.</p></div></div><div class="integration-grid" id="integrationGrid"></div><div class="panel panel-pad" style="margin-top:18px"><div class="panel-head"><div class="panel-title">Critério para incorporar uma dependência</div></div><div class="action-list"><div class="action-item"><div><b>Compatibilidade primeiro</b><p>Preservar minSdk 24, Compose, acessibilidade e o motor gráfico atual.</p></div><span class="pill p0">Obrigatório</span></div><div class="action-item"><div><b>Medição antes/depois</b><p>Benchmark de quadro, memória, carga da GPU e regressão visual por API.</p></div><span class="pill p0">Obrigatório</span></div><div class="action-item"><div><b>Licença, origem e manutenção</b><p>Revisar termos, atribuições e custo técnico antes de copiar código ou adicionar dependência.</p></div><span class="pill p1">Revisão</span></div></div></div></section>
       <section class="page" id="performance"><div class="head-row"><div><div class="eyebrow">Medições</div><h1 class="page-title">Performance e fluidez</h1><p class="page-desc">Registre medições reais, cenário, dispositivo e build. A ausência de dados permanece explícita; nenhuma métrica de FPS é simulada.</p></div><button class="btn primary" id="addMetric"></button></div><div class="metric-layout" id="metricCards"></div><div class="split"><div class="panel panel-pad"><div class="panel-head"><div class="panel-title">Evolução das medições</div><select class="field" id="metricFilter" aria-label="Selecionar métrica"><option value="frame_p95">Frame p95 · ms</option><option value="jank">Jank · %</option><option value="startup">Inicialização · ms</option><option value="memory">Memória · MB</option><option value="gpu">GPU frame · ms</option></select></div><div id="metricChart"></div></div><div class="panel panel-pad"><div class="panel-head"><div class="panel-title">Skills relevantes · Emil Kowalski</div><a class="plain-link tiny" href="https://github.com/emilkowalski/skills" target="_blank" rel="noopener noreferrer">Fonte ↗</a></div><div id="perfSkills"></div></div></div><div class="panel" style="margin-top:18px"><div class="panel-head" style="padding:21px 22px 0"><div class="panel-title">Histórico de benchmarks</div><span class="tiny muted" id="measurementCount"></span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Data</th><th>Métrica</th><th>Valor</th><th>Dispositivo / Build</th><th>Cenário</th><th></th></tr></thead><tbody id="metricRows"></tbody></table></div></div><p class="help" style="margin-top:12px">Para comparações válidas, mantenha dispositivo, temperatura, coleção e roteiro equivalentes; registre build e perfil no campo de cenário.</p></section>
       
-<section class="page" id="decisions"><div class="head-row"><div><div class="eyebrow">Registro do projeto</div><h1 class="page-title">Decisões e próximos passos</h1><p class="page-desc">Documente o porquê de cada escolha, suas alternativas e quando revisitá-la. Registros iniciais distinguem documentos já existentes de decisões futuras.</p></div><button class="btn primary" id="addDecision"></button></div><div class="split decisions-split"><div id="decisionList"></div><div><div class="panel panel-pad"><div class="panel-head"><div class="panel-title">Próximas ações</div><button class="btn small" id="addNextStep">+ Nova</button></div><div id="customNextSteps"></div><div class="smallcap" style="margin:16px 0 4px">Sugeridos do backlog</div><div id="nextSteps"></div></div><div class="panel panel-pad" style="margin-top:17px"><div class="panel-head"><div class="panel-title">Portabilidade</div></div><p class="small muted" style="line-height:1.7">As alterações neste painel são gravadas localmente no navegador. Para continuar em outro computador, exporte um JSON e importe-o na outra instalação.</p><button class="btn small" data-export="1">Exportar dados ↗</button><hr class="line"><p class="help">O painel não envia dados pessoais ou decisões ao GitHub. Para gestão colaborativa, vincule tarefas a GitHub Issues e registre a URL da evidência.</p></div></div></div></section>
+<section class="page" id="decisions"><div class="head-row"><div><div class="eyebrow">Registro do projeto</div><h1 class="page-title">Decisões e próximos passos</h1><p class="page-desc">Documente o porquê de cada escolha, suas alternativas e quando revisitá-la. Registros iniciais distinguem documentos já existentes de decisões futuras.</p></div><button class="btn primary" id="addDecision"></button></div><div class="split decisions-split"><div id="decisionList"></div><div><div class="panel panel-pad"><div class="panel-head"><div class="panel-title">Próximas ações</div><button class="btn small" id="addNextStep">+ Nova</button></div><div id="customNextSteps"></div><div class="smallcap" style="margin:16px 0 4px">Sugeridos do backlog</div><div id="nextSteps"></div></div><div class="panel panel-pad" style="margin-top:17px"><div class="panel-head"><div class="panel-title">Portabilidade</div></div><p class="small muted" style="line-height:1.7">As alterações são sincronizadas com sua conta Google pelo Firebase. O backup JSON continua disponível como uma cópia de segurança.</p><button class="btn small" data-export="1">Exportar dados ↗</button><hr class="line"><p class="help">O painel não envia dados pessoais ou decisões ao GitHub. Para gestão colaborativa, vincule tarefas a GitHub Issues e registre a URL da evidência.</p></div></div></div></section>
       <section class="page" id="notes">
         <div class="head-row"><div><div class="eyebrow">Seu espaço criativo</div><h1 class="page-title">Notas e ideias</h1><p class="page-desc">Guarde ideias, rascunhos, referências e fotos para a próxima evolução do Quadrinheiro.</p></div><button type="button" class="btn primary" id="addNote">＋ Nova nota</button></div>
         <div class="notes-toolbar"><div class="notes-filters"><input class="field notes-search" type="search" id="notesSearch" placeholder="Buscar nas notas…" aria-label="Buscar notas" autocomplete="off"><select class="field notes-type-select" id="notesFilter" aria-label="Filtrar notas por categoria"><option value="Todas">Todas as categorias</option><option value="Ideia">Ideias</option><option value="Rascunho">Rascunhos</option><option value="Referência">Referências</option><option value="Pesquisa">Pesquisas</option></select></div><span class="notes-count" id="notesCount" aria-live="polite">0 notas</span></div>
@@ -256,7 +256,7 @@ body{font-family:var(--native-font-text);letter-spacing:-.15px}
         <div class="notes-grid" id="notesGrid"></div>
       </section>
       <section class="page" id="settings" aria-label="Ajustes do painel"></section>
-      <footer class="footer"><span>Quadrinheiro · Site atualizado pelo GitHub Pages · Dados de progresso salvos neste navegador</span><span id="footerDate">Snapshot inicial: 08 nov 2026</span></footer>
+      <footer class="footer"><span>Quadrinheiro · Projeto privado · Sincronização protegida pelo Firebase</span><span id="footerDate">Snapshot inicial: 08 nov 2026</span></footer>
     </div>
   </main>
 </div>
@@ -464,6 +464,6 @@ hydrateIcons();go(['overview','repository','backlog','integrations','performance
 <script src="settings.js?v=20261109e"></script>
 <script src="sidebar.js?v=20261109d"></script>
 <script src="notes.js?v=20261109d"></script>
-<script type="module" src="cloud.js?v=20261109g"></script>
+<script type="module" src="cloud.js?v=20261109h"></script>
 </body>
 </html>
