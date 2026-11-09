@@ -147,3 +147,78 @@ html[data-motion="reduced"] .login-google{transition:none!important}
 .login-recovery{display:flex;align-items:center;justify-content:flex-start;gap:14px;flex-wrap:wrap}
 .login-recovery button{font-size:11px;color:var(--accent);padding:0;border:0;background:transparent;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .login-recovery button[hidden]{display:none!important}
+
+/* Paleta original do Q: rosa #FF1493, amarelo #FFD000, azul #2563EB, ciano #00B4D8.
+   A marca é colorida somente na entrada; demais temas permanecem configuráveis. */
+#loginScreen{
+ --brand-pink:#E11D48;
+ --brand-amber:#FFB020;
+ --brand-blue:#2563EB;
+ --brand-cyan:#00B4D8;
+ background:
+   radial-gradient(ellipse 420px 360px at 12% 39%,color-mix(in srgb,var(--brand-pink) 4%,transparent),transparent 72%),
+   radial-gradient(ellipse 420px 340px at 85% 65%,color-mix(in srgb,var(--brand-cyan) 5%,transparent),transparent 76%),
+   var(--bg);
+}
+#loginScreen:before{
+ background:radial-gradient(circle,color-mix(in srgb,var(--brand-blue) 8%,transparent),transparent 70%);
+ opacity:.72;
+}
+.login-wordmark .login-brand-q,
+.login-mark .login-brand-q{
+ display:block;
+ width:100%;height:100%;
+ min-width:0;
+ object-fit:contain;
+ color:unset;
+ filter:none;
+}
+.login-wordmark .login-brand-q{width:43px;height:43px;min-width:43px}
+.login-mark{
+ position:relative;
+ display:grid;place-items:center;
+ width:72px;height:72px;
+ margin:0 0 26px -7px;
+ background:transparent!important;
+ border:0!important;
+ box-shadow:none!important;
+}
+.login-mark .login-brand-q{width:72px;height:72px}
+.login-overline{color:var(--muted);letter-spacing:.095em}
+.login-overline:before{
+ background:var(--brand-pink);
+ box-shadow:0 0 0 4px color-mix(in srgb,var(--brand-pink) 9%,transparent);
+}
+.login-story h1 span{color:var(--text)}
+@supports (background-clip:text){
+ .login-story h1 span{
+  background:linear-gradient(97deg,var(--brand-blue) -5%,var(--brand-cyan) 90%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+ }
+}
+.login-feature:nth-child(1) svg{stroke:var(--brand-pink)}
+.login-feature:nth-child(2) svg{stroke:var(--brand-amber)}
+.login-feature:nth-child(3) svg{stroke:var(--brand-cyan)}
+.login-form-card{
+ box-shadow:0 25px 70px rgba(0,0,0,.10);
+ border-color:color-mix(in srgb,var(--brand-blue) 9%,var(--border));
+}
+.login-form-card:before{
+ height:2px;left:30px;right:30px;
+ background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--brand-pink) 40%,transparent) 24%,color-mix(in srgb,var(--brand-amber) 45%,transparent) 50%,color-mix(in srgb,var(--brand-cyan) 48%,transparent) 76%,transparent 100%);
+}
+.login-privacy svg{color:var(--brand-cyan)}
+.login-state:before{background:var(--brand-cyan)}
+.login-state[data-kind="error"]:before{background:var(--danger)}
+.login-google{border-radius:13px;transition:transform .18s cubic-bezier(.22,1,.36,1),box-shadow .18s ease}
+.login-google:hover:not(:disabled){box-shadow:0 7px 24px color-mix(in srgb,var(--brand-blue) 10%,transparent)}
+.login-help a{color:var(--brand-blue);text-decoration-color:color-mix(in srgb,var(--brand-blue) 45%,transparent)}
+html[data-theme="dark"] .login-help a{color:#75B7FF}
+@media(max-width:720px){
+ .login-wordmark .login-brand-q{width:37px;height:37px;min-width:37px}
+ .login-mark{width:61px;height:61px;margin-bottom:19px}
+ .login-mark .login-brand-q{width:61px;height:61px}
+}
+@media(prefers-reduced-motion:reduce){
+ .login-google,.login-mark,.login-brand-q{transition:none!important;animation:none!important}
+}
