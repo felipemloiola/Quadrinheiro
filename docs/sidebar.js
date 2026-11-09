@@ -14,9 +14,9 @@ function paint(){
  toggle.setAttribute('aria-label',expanded?'Recolher barra lateral':'Expandir barra lateral');
  toggle.title=expanded?'Recolher barra lateral':'Expandir barra lateral';
  const icon=toggle.querySelector('svg');
- if(icon){icon.innerHTML=expanded
- ?'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m16 9 3 3-3 3"/>'
- :'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m17 9-3 3 3 3"/>'}
+ // Mesmo símbolo de painel dividido nos dois estados, conforme a referência.
+ if(icon)icon.innerHTML='<rect x="3.3" y="4" width="17.4" height="16" rx="2.6"/><path d="M9.6 4v16"/>';
+
 }
 function setMode(value){
  mode=value==='collapsed'?'collapsed':'expanded';
