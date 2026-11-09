@@ -97,6 +97,7 @@ function resetSession(){
  APP.setUserScope?.(null);if(subscribed){subscribed();subscribed=null}
  user=null;active=false;dirty=false;queued=false;uploading=false;remoteDoc=null;remoteRef=null;
  $('cloudLogout').hidden=true;
+ if($('sidebarSignOut'))$('sidebarSignOut').hidden=true;
  $('cloudLogin').hidden=true;
  $('cloudAccount').textContent='';
  setDecisionVisible(false);showMigration(false,false);
@@ -136,6 +137,7 @@ async function openFirebase(config){
   }
   user=signed;APP.setUserScope?.(user.uid);
   $('cloudLogout').hidden=false;$('cloudLogin').hidden=true;
+  if($('sidebarSignOut'))$('sidebarSignOut').hidden=false;
   $('cloudAccount').textContent='Conta: '+(user.email||'Google')+' · seus dados ficam restritos ao seu UID.';
   showGate('loading','Carregando sua área de trabalho…');
   notice('Conferindo registros privados…');
@@ -311,10 +313,30 @@ $('loginRetry')?.addEventListener('click',async()=>{
 });
 $('loginSwitch')?.addEventListener('click',async()=>{if(auth)await sdk.signOut(auth)});
 $('cloudLogin').addEventListener('click',googleSignIn);
-$('cloudLogout').addEventListener('click',async()=>{
- try{await sdk.signOut(auth);notice('Conta desconectada. Os registros locais permanecem neste navegador.')}
- catch(err){notice(safeMessage(err),true)}
-});
+// A mesma saída funciona em Ajustes e na barra lateral. Nenhum dado é apagado.
+async function signOutFromDashboard(){
+ if(!auth||!user)return;
+ if(uploading){
+  notice('Salvamento em andamento. Tente sair novamente após a conclusão.');
+  return
+ }
+ if(active&&dirty){
+  clearTimeout(timer);
+  await push();
+  if(dirty&&!confirm('Algumas alterações ainda não foram enviadas à nuvem. Elas continuarão neste navegador. Deseja sair mesmo assim?'))return;
+ }
+ const controls=[$('cloudLogout'),$('sidebarSignOut')].filter(Boolean);
+ controls.forEach(button=>button.disabled=true);
+ try{
+  await sdk.signOut(auth);
+ }catch(err){
+  notice(safeMessage(err),true);
+ }finally{
+  controls.forEach(button=>button.disabled=false);
+ }
+}
+$('cloudLogout').addEventListener('click',signOutFromDashboard);
+$('sidebarSignOut')?.addEventListener('click',signOutFromDashboard);
 $('cloudLoad').addEventListener('click',loadCloud);
 $('cloudUpload').addEventListener('click',uploadLocal);
 window.addEventListener('online',()=>{if(active&&dirty){clearTimeout(timer);timer=setTimeout(push,500)}});
