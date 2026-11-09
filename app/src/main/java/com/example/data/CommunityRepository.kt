@@ -37,6 +37,7 @@ class CommunityRepository(context: Context,
     private val database=db
     private val db: FirebaseFirestore get() {
         check(!CloudCacheRecovery.needsReview(appContext)) {"A revisão da sincronização local está pendente"}
+        OnlineFirestorePolicy.configure(database)
         return database
     }
     fun currentUid(): String? = auth.currentUser?.uid

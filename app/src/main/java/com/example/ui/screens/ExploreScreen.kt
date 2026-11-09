@@ -171,41 +171,22 @@ fun ExploreScreen(
         mutableStateOf(ExploreShowcaseBuilder.memoMarvel)
     }
 
-    // 1. Garante restauração imediata do cache em disco do ModernCatalog e atualização silenciosa se TTL expirado
+    val editorial by com.example.data.EditorialDiscovery.shelves.collectAsStateWithLifecycle()
+    val editorialScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            ModernCatalog.load(context = appContext)
+        withContext(Dispatchers.IO) { com.example.data.EditorialDiscovery.load(appContext) }
+    }
+    LaunchedEffect(editorial) {
+        starterComicsState.value = editorial["Para começar"].orEmpty()
+        dcComicsState.value = editorial["Universo DC"].orEmpty()
+        marvelComicsState.value = editorial["Universo Marvel"].orEmpty()
+    }
+    fun openEditorial(title: String) {
+        collection = title
+        if(editorial[title].isNullOrEmpty()) editorialScope.launch(Dispatchers.IO) {
+            com.example.data.EditorialDiscovery.load(appContext, retry = true)
         }
     }
-
-    // 2. Publicação progressiva e independente das vitrines editoriais fora da Main Thread
-    LaunchedEffect(catalog) {
-        if (catalog.isEmpty()) return@LaunchedEffect
-        val stamp = ExploreShowcaseBuilder.catalogStamp(catalog)
-        val starter = withContext(Dispatchers.Default) {
-            ExploreShowcaseBuilder.filterStarter(catalog)
-        }
-        if (!ExploreShowcaseBuilder.hasSameComicIds(starterComicsState.value, starter)) {
-            starterComicsState.value = starter
-        }
-        val dc = withContext(Dispatchers.Default) {
-            ExploreShowcaseBuilder.filterDc(catalog)
-        }
-        if (!ExploreShowcaseBuilder.hasSameComicIds(dcComicsState.value, dc)) {
-            dcComicsState.value = dc
-        }
-        val marvel = withContext(Dispatchers.Default) {
-            ExploreShowcaseBuilder.filterMarvel(catalog)
-        }
-        if (!ExploreShowcaseBuilder.hasSameComicIds(marvelComicsState.value, marvel)) {
-            marvelComicsState.value = marvel
-        }
-        ExploreShowcaseBuilder.updateMemoizedSlices(stamp, starter, dc, marvel)
-        if (exploreRecommendationState.recommendations.isEmpty()) {
-            viewModel.triggerRecommendationRefreshIfNeeded(forceRefresh = false)
-        }
-    }
-
     BackHandler(collection != null) { collection = null }
     Column(Modifier.fillMaxSize()) {
         if (collection == null) Column(
@@ -256,8 +237,8 @@ fun ExploreScreen(
                         val recs = exploreRecommendationState.recommendations
                         val reasonMap = recs.associate { it.comic.id to it.reasonLabel }
                         val entries = when (selected) {
-                            "Para você" -> recs.map { it.comic }.ifEmpty { catalog.take(12) }
-                            "Para começar" -> starterComicsState.value.ifEmpty { catalog.take(12) }
+                            "Para você" -> recs.map { it.comic }
+                            "Para começar" -> starterComicsState.value
                             "Universo DC" -> dcComicsState.value
                             "Universo Marvel" -> marvelComicsState.value
                             else -> emptyList()
@@ -277,7 +258,7 @@ fun ExploreScreen(
                         }
                         if (entries.isEmpty()) {
                             item(key = "selected_empty", contentType = "explore_empty") {
-                                Text("Ainda não há sugestões compatíveis no catálogo carregado.", color = theme.textSecondary)
+                                Text("Suas sugestões aparecem aqui com base nas leituras e nos favoritos.", color = theme.textSecondary)
                             }
                         }
                         item(key = "explore_load_more", contentType = "explore_footer") {
@@ -323,7 +304,7 @@ fun ExploreScreen(
                             ExploreCatalogSection(
                                 title = "Para começar",
                                 entriesState = starterComicsState,
-                                onExpand = { collection = "Para começar" },
+                                onExpand = { openEditorial("Para começar") },
                                 onComic = onComic
                             )
                         }
@@ -331,7 +312,7 @@ fun ExploreScreen(
                             ExploreCatalogSection(
                                 title = "Universo DC",
                                 entriesState = dcComicsState,
-                                onExpand = { collection = "Universo DC" },
+                                onExpand = { openEditorial("Universo DC") },
                                 onComic = onComic
                             )
                         }
@@ -339,7 +320,7 @@ fun ExploreScreen(
                             ExploreCatalogSection(
                                 title = "Universo Marvel",
                                 entriesState = marvelComicsState,
-                                onExpand = { collection = "Universo Marvel" },
+                                onExpand = { openEditorial("Universo Marvel") },
                                 onComic = onComic
                             )
                         }
@@ -358,8 +339,8 @@ private fun ExploreForYouSection(
     onComic: (ComicEntry) -> Unit
 ) {
     val theme = LocalIOS27Theme.current
-    val entries = remember(recommendations, catalogFallback) {
-        if (recommendations.isNotEmpty()) recommendations.map { it.comic } else catalogFallback.take(12)
+    val entries = remember(recommendations) {
+        recommendations.map { it.comic }
     }
     val reasonMap = remember(recommendations) {
         recommendations.associate { it.comic.id to it.reasonLabel }
@@ -388,7 +369,7 @@ private fun ExploreForYouSection(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionHeading("Para você")
             Text(
-                "Ainda não há sugestões compatíveis no catálogo carregado.",
+                "Suas sugestões aparecem aqui com base nas leituras e nos favoritos.",
                 color = theme.textSecondary,
                 fontSize = 13.sp
             )
@@ -405,7 +386,7 @@ private fun ExploreCatalogSection(
 ) {
     val theme = LocalIOS27Theme.current
     val entries by entriesState
-    if (entries.isEmpty()) return
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onExpand),
@@ -415,6 +396,7 @@ private fun ExploreCatalogSection(
             SectionHeading(title)
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Ver seleção $title", tint = theme.textSecondary)
         }
+        if(entries.isEmpty()) Text("Seleção indisponível. Toque na seta para tentar novamente.", color = theme.textSecondary, fontSize = 13.sp)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(
                 items = entries.take(8),

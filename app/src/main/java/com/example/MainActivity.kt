@@ -235,10 +235,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             // APP_BACKGROUND_FOCUS_V5: settings and inline sheets inherit background tap dismissal.
             Box(Modifier.fillMaxSize().dismissFocusOnBackgroundTap()) {
+                com.example.ui.components.OnlineSessionGate {
                 QuadrinheiroApp(
                     pendingWidgetDeepLink = pendingWidgetIntentState,
                     onConsumeWidgetDeepLink = { pendingWidgetIntentState = null }
                 )
+                }
             }
         }
     }

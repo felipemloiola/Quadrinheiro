@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-09T21:46:20.182Z",
-  "summary": "Otimizações publicadas na versão 1.0.85, preservando gestos, molas e Liquid Glass. Implementação e testes concluídos; os limites de validação estão descritos abaixo.",
+  "updatedAt": "2026-11-09T22:11:26.220Z",
+  "summary": "Revisão de armazenamento e descoberta: sessões online, recomendações estáveis por conta e seleções editoriais independentes.",
   "items": [
     {
       "title": "Versão e contexto",
@@ -60,6 +60,21 @@
       "status": "done",
       "detail": "Versão estável 1.0.85 (código 1085) publicada com o certificado permanente e manifesto para atualização dentro do app.",
       "evidence": "Arquivo e assinatura conferidos. Release: https://github.com/felipemloiola/Quadrinheiro/releases/tag/v1.0.85"
+    },
+    {
+      "title": "Sessões online",
+      "status": "done",
+      "detail": "Firestore configurado com cache somente em memória. Interface e alterações de leitura pelos widgets exigem conexão; snapshots de recuperação existentes não são apagados automaticamente."
+    },
+    {
+      "title": "Recomendações estáveis",
+      "status": "done",
+      "detail": "Busca de candidatos guiada por favoritos, leitura, fila, autores e editora. Gerações iguais são agrupadas; edições do mesmo trabalho são deduplicadas, favorecendo português. A seleção fica salva por conta em até 64 KB."
+    },
+    {
+      "title": "Seleções editoriais",
+      "status": "done",
+      "detail": "Para começar, DC e Marvel usam consultas editoriais próprias, com conferência do título, armazenamento limitado e novas tentativas explícitas. Não dependem das primeiras entradas do catálogo."
     }
   ]
 }
