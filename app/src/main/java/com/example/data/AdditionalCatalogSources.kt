@@ -114,7 +114,8 @@ internal object AdditionalCatalogSources {
             val poster = a.optJSONObject("posterImage"); val key = "kt-$id"
             ComicEntry(key, key, title.take(300), titlePtBr = pt(titles).take(300), authors = "", publisher = "", genre = "Mangá", format = "Série de mangá",
                 releaseYear = text(a, "startDate").take(4).toIntOrNull() ?: 0, pageCount = 0, currentPage = 0,
-                coverUrl = image(text(poster, "medium").ifBlank { text(poster, "small") }),
+                coverUrl = image(text(poster, "medium").ifBlank { text(poster, "small") }
+                    .ifBlank { text(poster, "large") }.ifBlank { text(poster, "original") }),
                 synopsis = ComicVineCatalog.plain(text(a, "synopsis")).take(8000), sourceLabel = "Catálogo online", isOnlineResult = true)
         }
     }

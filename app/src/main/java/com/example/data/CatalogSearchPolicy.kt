@@ -166,6 +166,7 @@ internal object CatalogSearchPolicy {
         return "edition:${normalize(c.displayTitle)}|${normalize(c.authors)}|${normalize(c.publisher)}|${c.releaseYear}|${normalize(c.format)}|${c.issueNumber}"
     }
     private fun quality(c: ComicEntry) =
+        (if (c.editionLanguage == "pt") 30 else 0) +
         (if (canonicalIsbn(c.isbn) != null) 4 else 0) +
         (if (c.pageCount > 0) 6 else 0) +
         (if (c.coverUrl.isNotBlank()) 3 else 0) +
@@ -183,7 +184,11 @@ internal object CatalogSearchPolicy {
             val first = result[key]
             if (key.startsWith("manga-series:") && first != null && first.authors.isNotBlank() && candidate.authors.isNotBlank() && normalize(first.authors) != normalize(candidate.authors)) key += "|authors:${normalize(candidate.authors)}"
             val existing = result[key]
-            if (existing == null || quality(candidate) > quality(existing)) result[key] = candidate
+            if (existing == null) result[key] = candidate
+            else if(key.startsWith("manga-series:")) {
+                result[key] = if(quality(candidate) > quality(existing)) mergeComplementaryEditionData(candidate,existing)
+                    else mergeComplementaryEditionData(existing,candidate)
+            } else if(quality(candidate) > quality(existing)) result[key] = candidate
         }
         return result.values.toList()
     }
@@ -312,7 +317,7 @@ internal object CatalogSearchPolicy {
             pageCount = if (primary.pageCount > 0) primary.pageCount else secondary.pageCount,
             releaseYear = if (primary.releaseYear > 0) primary.releaseYear else secondary.releaseYear,
             isbn = selectedIsbn,
-            coverUrl = selectedCoverUrl
+            coverUrl = CoverImagePolicy.preferred(selectedCoverUrl,secondary.coverUrl)
         )
     }
 

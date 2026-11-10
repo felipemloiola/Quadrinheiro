@@ -1205,7 +1205,7 @@ fun SocialShareCardSheetModal(
     onDismiss: () -> Unit
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val shareSheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = {})
+    val shareSheet = rememberFluidSheet(initialHeightFraction = 1f, onDismiss = onDismiss, onExpand = {})
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1414,7 +1414,8 @@ fun SocialShareCardSheetModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 560.dp)
-                .heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * .94f)
+                .fillMaxHeight(.94f)
+                .testTag("social_share_sheet")
                 .graphicsLayer { translationY = shareSheet.offset }
                 .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
 
@@ -1431,7 +1432,8 @@ fun SocialShareCardSheetModal(
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Grabber superior
             Box(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).then(shareSheet.dragModifier)
+                    .testTag("social_share_grabber").padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(

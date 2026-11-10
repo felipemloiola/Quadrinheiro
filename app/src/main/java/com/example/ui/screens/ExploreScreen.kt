@@ -157,6 +157,9 @@ fun ExploreScreen(
     val settings by viewModel.appSettings.collectAsStateWithLifecycle()
     var collection by remember { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(viewModel) {
+        viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
+    }
     val catalog by ModernCatalog.entries.collectAsState()
 
     val exploreRecommendationState by viewModel.exploreRecommendationState.collectAsStateWithLifecycle()

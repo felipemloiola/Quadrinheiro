@@ -9,6 +9,12 @@ import java.security.MessageDigest
 /** Metadata ranking only. No account history or favorite list is sent to a provider. */
 object PersonalizedDiscovery {
     internal fun verifiedCandidate(c: ComicEntry): ComicEntry? {
+        val language = c.editionLanguage.lowercase().substringBefore('-')
+        val original = c.title.trim()
+        val translated = PortugueseComicTranslator.translateTitleToPtBr(original)
+        val neutral = normalized(original) in setOf("batman", "superman", "watchmen", "maus", "marvels", "sandman", "hellboy", "flashpoint")
+        if (language.isNotBlank() && language != "pt") return null
+        if ((c.isOnlineResult || c.id.startsWith("ab-") || c.id.startsWith("gb-") || c.id.startsWith("cv-") || c.id.startsWith("mt-")) && language.isBlank() && !neutral) return null
         if (PortugueseComicTranslator.isUnwantedForeignOrBundleResult(c.title, c.synopsis)) return null
         // A cached translation must not invent a character absent from the original title.
         val rawTitle = " " + normalized(c.title) + " "
@@ -149,7 +155,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v6|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v14|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -169,8 +175,10 @@ object PersonalizedDiscovery {
         val ownedIsbns = known.mapNotNull { it.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }.takeIf { s -> s.length >= 10 } }.toSet()
         val ownedWorks = known.mapTo(HashSet(), ::workKey)
 
+        val prefersManga = normalized(favoriteUniverse).contains("manga") || library.any { normalized(it.genre).contains("manga") }
         val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool.mapNotNull(::verifiedCandidate), "PT")
             .sortedByDescending { CatalogSearchPolicy.isPortugueseEdition(it) }.filter { c ->
+            if (!prefersManga && (c.sourceLabel.contains("MangaDex", true) || c.sourceLabel.contains("Kitsu", true))) return@filter false
             val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
                 (c.externalId.isBlank() || c.externalId !in ownedIds) &&
@@ -276,7 +284,10 @@ object PersonalizedDiscovery {
 
             if (score > 0) {
                 // Desempate por metadados reais apenas quando há sinal real de afinidade
+                if (CatalogSearchPolicy.isPortugueseEdition(candidate) && PortugueseComicTranslator.isPortugueseText(candidate.title)) score += 45
                 if (candidate.coverUrl.isNotBlank()) score += 10
+                val publisher = normalized(candidate.publisher)
+                if (publisher.contains("dc comics") || publisher.contains("marvel") || publisher.contains("vertigo")) score += 25
                 if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
                 if (candidate.releaseYear > 0) score += 2
                 RecommendedComic(candidate, reason.ifBlank { "Sugerido para você" }.take(42), score, signal)
@@ -315,9 +326,14 @@ object PersonalizedDiscovery {
         val reasonCount = mutableMapOf<String, Int>()
         val diverseList = mutableListOf<RecommendedComic>()
         val deferredList = mutableListOf<RecommendedComic>()
+        val monthlySeries = HashSet<String>()
 
         for (item in effectiveScored) {
-            val seriesKey = SeriesSequenceEngine.inferBaseSeriesTitle(item.comic).ifBlank { item.comic.title }
+            val seriesKey = normalized(SeriesSequenceEngine.inferBaseSeriesTitle(item.comic).ifBlank { item.comic.title })
+            val format = normalized(item.comic.format)
+            val monthly = item.comic.issueNumber > 0 &&
+                listOf("encadernado", "graphic", "capa dura", "omnibus", "colecao", "manga").none { format.contains(it) }
+            if(monthly && !monthlySeries.add(seriesKey)) continue
             val authorKey = SeriesSequenceEngine.extractPrimaryAuthor(item.comic.authors)
 
             val currentSeriesCount = seriesCount.getOrDefault(seriesKey, 0)
@@ -369,6 +385,7 @@ object PersonalizedDiscovery {
                     put("id", c.id.take(90))
                     put("externalId", c.externalId.take(90))
                     put("title", c.title.take(160))
+                    put("editionLanguage", c.editionLanguage)
                     put("titlePtBr", c.titlePtBr.take(160))
                     put("authors", c.authors.take(120))
                     put("publisher", c.publisher.take(80))
@@ -432,6 +449,7 @@ object PersonalizedDiscovery {
                     externalId = obj.optString("externalId", ""),
                     title = title,
                     titlePtBr = obj.optString("titlePtBr", ""),
+                    editionLanguage = obj.optString("editionLanguage"),
                     authors = obj.optString("authors", ""),
                     publisher = obj.optString("publisher", ""),
                     genre = obj.optString("genre", "Graphic Novel"),

@@ -31,12 +31,15 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .components {
+                add(com.example.data.BoundedAvifDecoder())
                 add(RejectHeifAvifDecoderFactory())
             }
             .okHttpClient {
                 MultiApiSearchEngine.initHttpCache(this)
                 // Evita duplicar binários de imagem no cache HTTP do OkHttp, mantendo-os apenas no DiskCache do Coil
-                MultiApiSearchEngine.sharedHttpClient.newBuilder().cache(null).build()
+                MultiApiSearchEngine.sharedHttpClient.newBuilder().cache(null)
+                    .dispatcher(okhttp3.Dispatcher().apply { maxRequests=8;maxRequestsPerHost=4 })
+                    .callTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
             }
             .memoryCache {
                 MemoryCache.Builder(this)

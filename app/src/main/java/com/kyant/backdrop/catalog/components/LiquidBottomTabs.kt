@@ -67,6 +67,7 @@ fun LiquidBottomTabs(
     tabsCount: Int,
     modifier: Modifier = Modifier,
     collapsedFraction: () -> Float = { 0f },
+    compact: Boolean = false,
     isLightTheme: Boolean = !isSystemInDarkTheme(),
     accentColor: Color = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF0091FF),
     unselectedContentColor: Color = if (isLightTheme) Color(0xFF1A1A1A) else Color.White,
@@ -81,8 +82,8 @@ fun LiquidBottomTabs(
     val tabsBackdrop = rememberLayerBackdrop()
 
     val collapsed = collapsedFraction().fastCoerceIn(0f, 1f)
-    val containerHeight = lerp(64f.dp, 54f.dp, collapsed)
-    val indicatorHeight = lerp(56f.dp, 46f.dp, collapsed)
+    val containerHeight = if (compact) 44.dp else lerp(64f.dp, 54f.dp, collapsed)
+    val indicatorHeight = if (compact) 36.dp else lerp(56f.dp, 46f.dp, collapsed)
 
     val currentSelectedIndex = selectedTabIndex()
     val isIndicatorVisible = currentSelectedIndex in 0 until tabsCount
@@ -96,7 +97,7 @@ fun LiquidBottomTabs(
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)
     val currentSelectedTabIndexLambda by rememberUpdatedState(selectedTabIndex)
 
-    val effectiveRefraction = refractionMultiplier.coerceIn(0.2f, 2.4f)
+    val effectiveRefraction = refractionMultiplier.coerceIn(0f, 2.4f)
     val effectiveBlur = blurRadius.coerceIn(2f.dp, 24f.dp)
 
     val density = LocalDensity.current
@@ -129,7 +130,7 @@ fun LiquidBottomTabs(
                 val maxW = containerWidthPx.toFloat().coerceAtLeast(1f)
                 val fraction = (offsetAnimation.value / maxW).fastCoerceIn(-1f, 1f)
                 with(density) {
-                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+                    if (compact) 0f else 4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
                 }
             }
         }
@@ -146,7 +147,7 @@ fun LiquidBottomTabs(
                 valueRange = 0f..(tabsCount - 1).toFloat(),
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
-                pressedScale = 78f / 56f,
+                pressedScale = if (compact) 48f / 36f else 78f / 56f,
                 onDragStarted = {
                     didDrag = false
                     totalDragDistance = 0f
@@ -256,7 +257,7 @@ fun LiquidBottomTabs(
                     },
                     layerBlock = {
                         val progress = dampedDragAnimation.pressProgress
-                        val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width.coerceAtLeast(1f), progress)
+                        val scale = if (compact) 1f else lerp(1f, 1f + 16f.dp.toPx() / size.width.coerceAtLeast(1f), progress)
                         scaleX = scale
                         scaleY = scale
                     },
@@ -374,6 +375,11 @@ fun LiquidBottomTabs(
                         val velocity = dampedDragAnimation.velocity / 10f
                         scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
                         scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                        if (compact) {
+                            // Allow a small, bounded protrusion beyond the track, including spring overshoot.
+                            scaleX = scaleX.coerceAtMost(1f + 14.dp.toPx() / size.width.coerceAtLeast(1f))
+                            scaleY = scaleY.coerceAtMost(48f / 36f)
+                        }
                     },
                     onDrawSurface = {
                         val progress = dampedDragAnimation.pressProgress

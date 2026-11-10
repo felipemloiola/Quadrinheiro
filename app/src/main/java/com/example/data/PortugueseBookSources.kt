@@ -62,10 +62,20 @@ internal object PortugueseBookSources {
         .addQueryParameter("printType", "books")
         .addQueryParameter("langRestrict", "pt").build()))
 
+    internal fun supportedPortugueseDescription(raw: String): Boolean {
+        val words = Regex("[\\p{L}]+ ".trim()).findAll(raw.lowercase()).map { it.value }.toSet()
+        return words.intersect(setOf("não", "uma", "você", "são", "história", "quadrinhos", "edição", "leitores", "também", "suas", "seus")).size >= 3
+    }
+
     internal fun parseApple(root: JSONObject): List<ComicEntry> {
         val rows = root.optJSONArray("results") ?: return emptyList()
         return (0 until rows.length()).mapNotNull { index ->
             val j = rows.optJSONObject(index) ?: return@mapNotNull null
+            // Storefront BR is not proof of Portuguese: foreign ebooks are also sold there.
+            val languages = j.optJSONArray("languageCodesISO2A")
+            if (languages != null && languages.length() > 0 && (0 until languages.length()).none {
+                    languages.optString(it).lowercase().substringBefore('-') in setOf("pt", "en")
+                }) return@mapNotNull null
             val genres = j.optJSONArray("genres")
             val category = (0 until (genres?.length() ?: 0)).joinToString(" ") { genres!!.optString(it) }
             val id = j.optLong("trackId"); val title = text(j, "trackName")
@@ -74,7 +84,7 @@ internal object PortugueseBookSources {
             ComicEntry(id = key, externalId = key, title = title.take(300), authors = text(j, "artistName").take(500), publisher = "",
                 genre = "Quadrinhos", format = "Edição", releaseYear = text(j, "releaseDate").take(4).toIntOrNull() ?: 0,
                 pageCount = 0, currentPage = 0, coverUrl = cover(text(j, "artworkUrl100").replace("100x100bb", "600x600bb")),
-                synopsis = ComicVineCatalog.plain(text(j, "description")).take(8000), sourceLabel = "Catálogo online", isOnlineResult = true)
+                synopsis = ComicVineCatalog.plain(text(j, "description")).take(8000), sourceLabel = "Catálogo online", editionLanguage = languages?.optString(0)?.lowercase()?.substringBefore('-') ?: if (supportedPortugueseDescription(text(j, "description"))) "pt" else "", isOnlineResult = true)
         }.take(16)
     }
 
@@ -103,7 +113,7 @@ internal object PortugueseBookSources {
                 pageCount = v.optInt("pageCount").takeIf { it in 1..20000 } ?: 0, currentPage = 0,
                 coverUrl = cover(v.optJSONObject("imageLinks")?.optString("thumbnail").orEmpty()),
                 synopsis = ComicVineCatalog.plain(text(v, "description")).take(8000), isbn = isbn,
-                sourceLabel = "Catálogo online", isOnlineResult = true)
+                sourceLabel = "Catálogo online", editionLanguage = v.optString("language").lowercase().substringBefore('-'), isOnlineResult = true)
         }.take(16)
     }
 }

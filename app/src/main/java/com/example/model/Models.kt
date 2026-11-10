@@ -569,6 +569,7 @@ data class ComicEntry(
     val synopsis: String = "",
     val synopsisPtBr: String = "",
     val sourceLabel: String = "Catálogo Base",
+    val editionLanguage: String = "",
     val isOnlineResult: Boolean = false,
     val moments: List<ComicMoment> = emptyList(),
     val seriesName: String = "",

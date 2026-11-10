@@ -90,7 +90,17 @@ object RecommendationCandidateRetriever {
         }
 
         val queries = mutableListOf<String>()
-        queries += taste.favoriteCharacters.take(4).map { it.substringBefore('(').trim() }
+        val characterPicks = mapOf(
+            "Batman" to listOf("Batman Silêncio", "Batman O Cavaleiro das Trevas", "Batman A Corte das Corujas"),
+            "Superman" to listOf("Grandes Astros Superman", "Superman As Quatro Estações", "Superman Entre a Foice e o Martelo"),
+            "Homem-Aranha" to listOf("Homem-Aranha Azul", "Homem-Aranha A Última Caçada de Kraven"),
+            "Lanterna Verde" to listOf("Lanterna Verde Renascimento", "Lanterna Verde A Guerra dos Anéis", "Lanterna Verde A Noite Mais Densa"),
+            "Hal Jordan" to listOf("Lanterna Verde Renascimento", "Lanterna Verde A Guerra dos Anéis"),
+            "Mulher-Maravilha" to listOf("Mulher-Maravilha Hiketeia", "Mulher-Maravilha Ano Um")
+        )
+        queries += taste.favoriteCharacters.take(4).flatMap { character ->
+            characterPicks[character.substringBefore('(').trim()] ?: listOf(character.substringBefore('(').trim())
+        }.take(12)
         queries += taste.favoriteComics.take(4).map { it.displayTitle.take(80) }
         taste.readingSeries.firstOrNull()?.let { (series, issue) ->
             queries += if(issue > 0) "$series #${issue + 1}" else series
@@ -103,7 +113,7 @@ object RecommendationCandidateRetriever {
             return@withContext emptyList()
         }
 
-        val permits = kotlinx.coroutines.sync.Semaphore(2)
+        val permits = kotlinx.coroutines.sync.Semaphore(3)
         val queryDeferreds = limitedQueries.map { q ->
             async(Dispatchers.IO) {
                 permits.acquire()
@@ -111,10 +121,19 @@ object RecommendationCandidateRetriever {
                 var partialBatch = emptyList<ComicEntry>()
                 withTimeoutOrNull(4500L) {
                     runCatching {
-                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT", provider = "VERIFIED_COMICS").collect { batch ->
+                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT", provider = if (taste.favoriteUniverse.contains("Mang", true)) "VERIFIED_COMICS" else "BOOKS").collect { batch ->
                             if (batch.isNotEmpty()) {
                                 partialBatch = batch
                             }
+                        }
+                    }
+                }
+                // A failed comic provider must not leave this taste signal with no candidates.
+                // Query complementary book editions only when the primary pool is empty.
+                if (taste.favoriteUniverse.contains("Mang", true) && partialBatch.none { !it.sourceLabel.contains("Kitsu", true) && !it.sourceLabel.contains("MangaDex", true) }) {
+                    withTimeoutOrNull(5500L) {
+                        searchEngine.searchOnlineProgressive(q, searchLanguage = "PT", provider = "BOOKS").collect { batch ->
+                            if (batch.isNotEmpty()) partialBatch = batch
                         }
                     }
                 }

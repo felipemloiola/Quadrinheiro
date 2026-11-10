@@ -11,9 +11,9 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Prevents Android's native SkHeifCodec / HeifDecoderImpl from ever being invoked on
- * HEIF/HEIC/AVIF (`ftyp`) or non-raster streams, which otherwise logs
- * `E/HeifDecoderImpl: getSize: not supported!` on devices/emulators without HEIF hardware decoders.
+ * Guards legacy BitmapFactory paths against HEIF/HEIC/AVIF and non-raster streams.
+ * Coil separately supports bounded AVIF decoding through ImageDecoder on API 31+;
+ * devices without that platform support retain this raster fallback.
  */
 object SafeImageFormats {
 

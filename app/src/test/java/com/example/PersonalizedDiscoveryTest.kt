@@ -14,6 +14,50 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PersonalizedDiscoveryTest {
+    @Test fun originalDescriptionNeedsMultiplePortugueseSignals() {
+        assertTrue(com.example.data.PortugueseBookSources.supportedPortugueseDescription("Uma edição de quadrinhos que conta uma história para seus leitores."))
+        assertFalse(com.example.data.PortugueseBookSources.supportedPortugueseDescription("Eine Geschichte über Batman und seine Rückkehr."))
+        assertFalse(com.example.data.PortugueseBookSources.supportedPortugueseDescription("La notte più profonda di Batman."))
+    }
+    @Test fun declaredLanguageSurvivesRecommendationCacheAndRejectsGerman() {
+        val german = book("ab-BR-de", "Batman: Die Rückkehr").copy(editionLanguage="de", titlePtBr="Batman: O Retorno")
+        assertNull(PersonalizedDiscovery.verifiedCandidate(german))
+        val pt = book("gb-pt", "Batman: A Corte das Corujas").copy(editionLanguage="pt")
+        assertNotNull(PersonalizedDiscovery.verifiedCandidate(pt))
+        val restored=PersonalizedDiscovery.decodeCachedRecommendations(PersonalizedDiscovery.encodeCachedRecommendations(listOf(com.example.data.RecommendedComic(pt,"Teste",1,"TEST"))))
+        assertEquals("pt",restored.single().comic.editionLanguage)
+        assertNull(PersonalizedDiscovery.verifiedCandidate(book("ab-BR-unknown", "Batman: Die Rückkehr")))
+        assertNull(PersonalizedDiscovery.verifiedCandidate(book("ab-BR-mixed", "Spider-Man/Deadpool - Finché morte non ci separi").copy(titlePtBr="Homem-Aranha/Deadpool - Finché morte non ci separi")))
+    }
+
+    @Test fun foreignEditionTitlesAreRejectedDespiteBrazilStorefront() {
+        listOf("Lanterna Verde presenta: Il corpo delle Lanterne Verdi - Vol. 1", "Lanterna Verde - La notte più profonda", "Batman: La nuit des hiboux", "Batman: Un Mal Día", "Batman: Un Mal Día: Dos caras").forEach {
+            assertNull(PersonalizedDiscovery.verifiedCandidate(book("ab-BR-foreign", it)))
+        }
+        assertNotNull(PersonalizedDiscovery.verifiedCandidate(book("pt", "Lanterna Verde: A Noite Mais Densa")))
+        assertNotNull(PersonalizedDiscovery.verifiedCandidate(book("en", "Batman The Long Halloween")))
+    }
+
+    @Test fun oneMonthlyPerSeriesEvenWhenThereAreNoOtherSuggestions() {
+        val issues=(1..8).map { n -> book("issue$n","Batman #$n").copy(
+            issueNumber=n,seriesName="Batman",format="Mensal",pageCount=24) }
+        val results=PersonalizedDiscovery.recommend(issues,emptyList(),"DC")
+        assertEquals(1,results.size)
+    }
+    @Test fun coverAlternativesAreBoundedAndKeepOriginalFirst() {
+        val url="https://media.kitsu.app/manga/poster_images/35820/medium.jpg"
+        assertEquals(listOf(url,url.replace("medium.jpg","small.jpg")),com.example.data.CoverImagePolicy.candidates(url))
+        assertEquals(emptyList<String>(),com.example.data.CoverImagePolicy.candidates(""))
+        assertEquals(1,com.example.data.CoverImagePolicy.candidates("https://example.org/cover.jpg").size)
+    }
+    @Test fun mangaMergeKeepsMetadataAndTheComplementaryRasterCover() {
+        val primary=book("md-book","Batman and the Justice League").copy(format="Série de mangá",
+            releaseYear=2017,coverUrl="https://uploads.mangadex.org/covers/example.jpg")
+        val secondary=primary.copy(id="kt-book",externalId="kt-book",authors="",coverUrl="https://media.kitsu.app/example.jpg")
+        val merged=com.example.data.CatalogSearchPolicy.unique(listOf(primary,secondary)).single()
+        assertEquals(primary.authors,merged.authors)
+        assertEquals(secondary.coverUrl,merged.coverUrl)
+    }
     private fun book(id: String, title: String, author: String = "Autora diferente", publisher: String = "DC") =
         ComicEntry(id, id, title, authors = author, publisher = publisher)
     @Test fun favoritePublisherStillInfluencesColdStart() {
