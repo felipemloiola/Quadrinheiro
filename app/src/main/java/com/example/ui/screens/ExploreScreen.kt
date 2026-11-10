@@ -213,27 +213,30 @@ fun ExploreScreen(
                 label = "explore_collection"
             ) { selected ->
                 val expandedState = rememberLazyListState()
+                val isCollectionScrolled by remember(expandedState) {
+                    androidx.compose.runtime.derivedStateOf {
+                        expandedState.firstVisibleItemIndex > 0 || expandedState.firstVisibleItemScrollOffset > 24
+                    }
+                }
+                Box(Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = if (selected == null) listState else expandedState,
                     modifier = Modifier.fillMaxSize().testTag(if (selected == null) "explore_page" else "explore_collection"),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 208.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = if (selected == null) 16.dp else 68.dp, bottom = 208.dp),
                     verticalArrangement = Arrangement.spacedBy(26.dp)
                 ) {
                     if (selected != null) {
                         item(key = "selected_header", contentType = "explore_header") {
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                SettingsBackButton({ collection = null }, label = "Explorar")
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Text(selected, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                                    }
-                                    IconButton(onClick = { onSearch("") }) {
-                                        Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
-                                    }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text(selected, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+                                }
+                                IconButton(onClick = { onSearch("") }) {
+                                    Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
                                 }
                             }
                         }
@@ -328,6 +331,17 @@ fun ExploreScreen(
                             )
                         }
                     }
+                }
+                if (selected != null) {
+                    SettingsBackButton(
+                        onBack = { collection = null },
+                        collapsed = isCollectionScrolled,
+                        label = "Explorar",
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 16.dp, top = 12.dp)
+                    )
+                }
                 }
             }
         }

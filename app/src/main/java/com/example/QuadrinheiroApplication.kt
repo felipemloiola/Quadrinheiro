@@ -16,6 +16,7 @@ class QuadrinheiroApplication : Application(), ImageLoaderFactory {
         if(com.example.data.CloudCacheRecovery.needsReview(this))return
         // Filesystem migrations run on CacheMaintenance's IO scope, never on first draw.
         com.example.data.CacheMaintenance.schedule(this)
+        com.example.data.ShowcaseDataSeeder.seedIfNecessary(this)
         runCatching { LauncherAppearance.schedule(this) }
     }
 

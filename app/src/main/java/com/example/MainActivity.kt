@@ -510,6 +510,15 @@ fun QuadrinheiroApp(
             return@QuadrinheiroTheme
         }
 
+        val networkMonitor = remember(context) { com.example.data.NetworkMonitor(context) }
+        val isOnline by networkMonitor.isOnline.collectAsStateWithLifecycle()
+        if (!isOnline) {
+            com.example.ui.screens.OfflineRequiredScreen(
+                onRetry = { networkMonitor.refresh() }
+            )
+            return@QuadrinheiroTheme
+        }
+
         // WELCOME_ONBOARDING_FLOW_V18: Welcome Intro Screen exclusively on fresh install
         val contextApp = androidx.compose.ui.platform.LocalContext.current
         val safeStorage = remember { com.example.data.SafeStorage(contextApp) }
@@ -838,7 +847,9 @@ fun QuadrinheiroApp(
                                         onHandleChange = viewModel::onHandleInputChanged, handleFeedback = viewModel.usernameVerification.collectAsStateWithLifecycle().value.message,
                                         onCommitProfile = { next, banner -> viewModel.updateProfile { next }; viewModel.updateSettings { it.copy(profileBannerUrl = banner) } },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
-                                        onStatistics = { viewModel.openReadingStatistics() }
+                                        onStatistics = { viewModel.openReadingStatistics() },
+                                        isGuest = (authUiState == AuthUiState.Guest),
+                                        onLogin = { viewModel.openAuthModalForLinking() }
                                     )
                                     "explore" -> com.example.ui.screens.ExploreScreen(comics, routeListState,
                                         profile = profile, onLogin = { viewModel.openAuthModalForLinking() },

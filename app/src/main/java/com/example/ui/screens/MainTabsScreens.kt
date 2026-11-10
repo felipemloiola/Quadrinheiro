@@ -133,7 +133,7 @@ private fun TabScrollBackdropContainer(
     showFloatingMenu: Boolean,
     onOpenSidebar: () -> Unit,
     onQuickRegister: () -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         content()
@@ -892,6 +892,12 @@ fun ShelfLibraryTab(
         }
     }
 
+    val backCollapsed by remember(listState) {
+        androidx.compose.runtime.derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
+        }
+    }
+
     TabScrollBackdropContainer(
         listState = listState,
         hasComics = comics.isNotEmpty(),
@@ -905,12 +911,11 @@ fun ShelfLibraryTab(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = 12.dp,
+                top = 68.dp,
                 bottom = 88.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "library-parent") { SettingsBackButton(onBackToProfile, label = "Perfil") }
             item(key = "shelf-header", contentType = "tab_header") {
                 Row(
                     modifier = Modifier
@@ -1520,7 +1525,15 @@ fun ShelfLibraryTab(
                 }
             }
         }
-    }
+        }
+        SettingsBackButton(
+            onBack = onBackToProfile,
+            collapsed = backCollapsed,
+            label = "Perfil",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 12.dp)
+        )
     }
 }
 

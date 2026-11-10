@@ -36,7 +36,10 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     onEditProfile: () -> Unit, onUpdateShowcase: (List<String>, List<String>, Map<String, String>) -> Unit,
     onCommitProfile: (ReaderProfile, String) -> Unit = { _, _ -> },
     onHandleChange: (String) -> Unit = {}, handleFeedback: String = "",
-    onComic: (ComicEntry) -> Unit, onStatistics: () -> Unit) {
+    onComic: (ComicEntry) -> Unit, onStatistics: () -> Unit,
+    isGuest: Boolean = false,
+    onLogin: () -> Unit = {}
+) {
     val theme = LocalIOS27Theme.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var slotMenu by remember { mutableStateOf(false) }
@@ -243,7 +246,9 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                 .clickable(
                                     interactionSource = editProfileInteraction,
                                     indication = null
-                                ) { editorOpen = true }
+                                ) {
+                                    if (isGuest) onLogin() else editorOpen = true
+                                }
                                 .padding(horizontal = 14.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -288,7 +293,16 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         val comic = settings.profileFavoriteComicIds.getOrNull(slot)?.let(byId::get)
                         Column(Modifier.weight(1f).testTag("favorite-comic-$slot"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(theme.bgSecondary)
-                                .clickable { characters = false; editSlot = slot; slotMenu = settings.profileFavoriteComicIds.getOrNull(slot) != null; query = "" }, contentAlignment = Alignment.Center) {
+                                .clickable {
+                                    if (isGuest) {
+                                        onLogin()
+                                    } else {
+                                        characters = false
+                                        editSlot = slot
+                                        slotMenu = settings.profileFavoriteComicIds.getOrNull(slot) != null
+                                        query = ""
+                                    }
+                                }, contentAlignment = Alignment.Center) {
                                 if (comic != null) BookCover(comic.coverUrl, comic.displayTitle, modifier = Modifier.fillMaxSize())
                                 else Icon(Icons.Default.Add, "Escolher HQ favorita ${slot + 1}", tint = theme.textTertiary)
                             }
@@ -304,7 +318,16 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     repeat(4) { slot ->
                         val name = settings.profileFavoriteCharacters.getOrNull(slot)
-                        Column(Modifier.weight(1f).clickable { characters = true; editSlot = slot; slotMenu = settings.profileFavoriteCharacters.getOrNull(slot) != null; query = "" }
+                        Column(Modifier.weight(1f).clickable {
+                            if (isGuest) {
+                                onLogin()
+                            } else {
+                                characters = true
+                                editSlot = slot
+                                slotMenu = settings.profileFavoriteCharacters.getOrNull(slot) != null
+                                query = ""
+                            }
+                        }
                             .testTag("favorite-character-$slot"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(theme.bgSecondary), contentAlignment = Alignment.Center) {
                                 if (name == null) Icon(Icons.Default.Add, "Escolher personagem ${slot + 1}", tint = theme.textTertiary)

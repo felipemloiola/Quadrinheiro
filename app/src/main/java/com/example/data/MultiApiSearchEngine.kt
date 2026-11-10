@@ -38,6 +38,10 @@ open class MultiApiSearchEngine {
                 if (original.header("User-Agent") == null) {
                     builder.header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                 }
+                val host = original.url.host
+                if (host.contains("comicvine") || host.contains("gamespot.com")) {
+                    builder.header("Referer", "https://comicvine.gamespot.com/")
+                }
                 val accept = original.header("Accept")
                 if (accept == null || accept == "*/*" || accept == "image/*") {
                     builder.header("Accept", SafeImageFormats.ACCEPT_RASTER_HEADER)

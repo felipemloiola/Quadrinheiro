@@ -472,7 +472,7 @@ fun SettingsTabScreen(
                         SettingsMenuRow(
                             icon = { Icon(Icons.Outlined.Storage, null, tint = themeColors.accent, modifier = Modifier.size(16.dp)) },
                             title = "Armazenamento",
-                            subtitle = "Backups e cache",
+                            subtitle = "Nuvem e cache de imagens",
                             trailingValue = "",
                             onClick = {
                                 viewModel.scrollMemory[routeKey] =
@@ -2129,52 +2129,6 @@ fun SettingsTabScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { exportJsonLauncher.launch("quadrinheiro-backup.json") }
-                                        .padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Icon(Icons.Default.Download, null, tint = s.textSecondary, modifier = Modifier.size(18.dp))
-                                        Column {
-                                            Text("Exportar backup (.JSON)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
-                                            Text("${comics.size} obras e $totalPagesRead páginas registradas", fontSize = 12.sp, color = s.textSecondary)
-                                        }
-                                    }
-                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = s.textTertiary, modifier = Modifier.size(18.dp))
-                                }
-
-                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { importJsonLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
-                                        .padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Icon(Icons.Default.Upload, null, tint = s.textSecondary, modifier = Modifier.size(18.dp))
-                                        Column {
-                                            Text("Restaurar backup (.JSON)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
-                                            Text("Importar arquivo salvo anteriormente", fontSize = 12.sp, color = s.textSecondary)
-                                        }
-                                    }
-                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = s.textTertiary, modifier = Modifier.size(18.dp))
-                                }
-
-                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
                                         .clickable { viewModel.resetAppearanceDefaults() }
                                         .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -2183,65 +2137,7 @@ fun SettingsTabScreen(
                                     Icon(Icons.Default.Replay, null, tint = s.textSecondary, modifier = Modifier.size(18.dp))
                                     Column {
                                         Text("Restaurar aparência padrão", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
-                                        Text("Redefine o Liquid Glass para 26% sem apagar seus quadrinhos", fontSize = 12.sp, color = s.textSecondary)
-                                    }
-                                }
-
-                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-
-                                if (!confirmClearAll) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { confirmClearAll = true }
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Icon(Icons.Default.DeleteOutline, null, tint = Color(0xFFF43F5E), modifier = Modifier.size(18.dp))
-                                        Column {
-                                            Text("Limpar todo o acervo", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFF43F5E))
-                                            Text("Remove todas as HQs salvas neste aparelho", fontSize = 12.sp, color = Color(0xFFF43F5E).copy(alpha = 0.75f))
-                                        }
-                                    }
-                                } else {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color(0xFFF43F5E).copy(alpha = 0.10f))
-                                            .padding(16.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Confirmar exclusão de ${comics.size} obras?",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color(0xFFFB7185),
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .inputWellSurface(RoundedCornerShape(999.dp))
-                                                    .clickable { confirmClearAll = false }
-                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                            ) {
-                                                Text("Cancelar", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary)
-                                            }
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(999.dp))
-                                                    .background(Color(0xFFF43F5E))
-                                                    .clickable {
-                                                        viewModel.clearAllComics()
-                                                        confirmClearAll = false
-                                                    }
-                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                            ) {
-                                                Text("Apagar tudo", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                                            }
-                                        }
+                                        Text("Redefine o Liquid Glass para 26% sem afetar suas configurações", fontSize = 12.sp, color = s.textSecondary)
                                     }
                                 }
                             }

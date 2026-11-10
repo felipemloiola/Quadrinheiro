@@ -49,14 +49,20 @@ internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(Comi
                 if(last>=entries.size-6)load()
             }
         }
-        Column(Modifier.fillMaxSize().background(t.bgPrimary).windowInsetsPadding(WindowInsets.systemBars).testTag("catalog_browser")){
-            Column(Modifier.padding(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                SettingsBackButton(onClose,label="Perfil")
-                Text("Catálogo",color=t.textPrimary,fontSize=32.sp,fontWeight=FontWeight.Bold)
-                Text("Edições para descobrir e registrar.",color=t.textSecondary,fontSize=14.sp)
+        val isScrolled by remember(state) {
+            androidx.compose.runtime.derivedStateOf {
+                state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 24
             }
-            LazyVerticalGrid(columns=GridCells.Fixed(3),state=state,modifier=Modifier.weight(1f),contentPadding=PaddingValues(20.dp),
+        }
+        Box(Modifier.fillMaxSize().background(t.bgPrimary).windowInsetsPadding(WindowInsets.systemBars).testTag("catalog_browser")){
+            LazyVerticalGrid(columns=GridCells.Fixed(3),state=state,modifier=Modifier.fillMaxSize(),contentPadding=PaddingValues(start=20.dp,end=20.dp,top=68.dp,bottom=40.dp),
                 horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(20.dp)){
+                item(span={GridItemSpan(3)}){
+                    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+                        Text("Catálogo",color=t.textPrimary,fontSize=32.sp,fontWeight=FontWeight.Bold)
+                        Text("Edições para descobrir e registrar.",color=t.textSecondary,fontSize=14.sp)
+                    }
+                }
                 items(entries,key={it.id}){comic->Column(Modifier.clickable{onComic(comic)},verticalArrangement=Arrangement.spacedBy(8.dp)){
                     BookCover(comic.coverUrl,comic.displayTitle,spine3d=false,modifier=Modifier.fillMaxWidth().aspectRatio(2f/3f))
                     Text(comic.displayTitle,color=t.textPrimary,fontSize=12.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
@@ -70,6 +76,12 @@ internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(Comi
                     }
                 }
             }
+            SettingsBackButton(
+                onBack = onClose,
+                collapsed = isScrolled,
+                label = "Perfil",
+                modifier = Modifier.align(androidx.compose.ui.Alignment.TopStart).padding(start = 16.dp, top = 12.dp)
+            )
         }
     }
 }

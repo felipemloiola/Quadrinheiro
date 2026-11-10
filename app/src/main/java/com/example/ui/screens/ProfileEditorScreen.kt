@@ -6,6 +6,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.ReaderProfile
@@ -80,20 +86,29 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         }
     }
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().testTag("profile_editor"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 200.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                SettingsBackButton(onBack, label = "Perfil")
-                Text("Editar perfil", color = theme.textPrimary, fontSize = 18.sp)
-                TextButton(enabled = name.isNotBlank() && !imageBusy, onClick = {
-                    onSave(profile.copy(name = name.trim().take(80), bio = bio.trim().take(400), avatarUrl = avatar,
-                        favoriteUniverse = universe, avatarPreset = preset,
-                        yearlyGoal = yearly.toIntOrNull()?.coerceIn(1, 1000) ?: profile.yearlyGoal,
-                        dailyPagesGoal = daily.toIntOrNull()?.coerceIn(1, 2000) ?: profile.dailyPagesGoal), banner)
-                    onBack()
-                }, modifier = Modifier.testTag("save_profile")) { Text("Salvar", color = theme.accent) }
-            }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val isScrolled by remember(listState) {
+        androidx.compose.runtime.derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
         }
+    }
+
+    Box(Modifier.fillMaxSize().background(theme.bgPrimary)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().testTag("profile_editor"),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 68.dp, bottom = 200.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            item {
+                Text(
+                    text = "Editar perfil",
+                    color = theme.textPrimary,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Aparência do perfil", "Toque na foto ou escolha uma arte para o banner.")
@@ -325,6 +340,54 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                         AppleStepper(daily.toIntOrNull() ?: 1, min = 1, max = 2000, onChange = { daily = it.toString() })
                     }
                 }
+            }
+        }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingsBackButton(onBack, label = "Perfil", collapsed = isScrolled)
+            AnimatedVisibility(
+                visible = isScrolled,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Text(
+                    "Editar perfil",
+                    color = theme.textPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            TextButton(
+                enabled = name.isNotBlank() && !imageBusy,
+                onClick = {
+                    onSave(
+                        profile.copy(
+                            name = name.trim().take(80),
+                            bio = bio.trim().take(400),
+                            avatarUrl = avatar,
+                            favoriteUniverse = universe,
+                            avatarPreset = preset,
+                            yearlyGoal = yearly.toIntOrNull()?.coerceIn(1, 1000) ?: profile.yearlyGoal,
+                            dailyPagesGoal = daily.toIntOrNull()?.coerceIn(1, 2000) ?: profile.dailyPagesGoal
+                        ),
+                        banner
+                    )
+                    onBack()
+                },
+                modifier = Modifier.testTag("save_profile").heightIn(min = 44.dp)
+            ) {
+                Text(
+                    "Salvar",
+                    color = if (name.isNotBlank() && !imageBusy) theme.accent else theme.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

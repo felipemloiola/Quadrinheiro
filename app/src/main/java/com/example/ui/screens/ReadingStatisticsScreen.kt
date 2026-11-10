@@ -879,6 +879,13 @@ fun ReadingStatisticsScreen(
         label = "statsChartProgress"
     )
 
+    val backCollapsed by remember(listState) {
+        androidx.compose.runtime.derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -896,34 +903,11 @@ fun ReadingStatisticsScreen(
         item(key = "stats-top-bar", contentType = "stats_header") {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .testTag("stats_back_button")
-                            .liquidGlassNavSurface(RoundedCornerShape(999.dp), elevation = 6.dp)
-                            .clickable { onBack() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Voltar",
-                            tint = s.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Resumo",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = s.textPrimary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
+                    Spacer(Modifier.width(96.dp))
 
                     Text(
                         text = "${stats.monthlyBuckets.getOrNull(selectedMonthIndex)?.fullName ?: stats.currentMonthName}, 2026",
@@ -1948,6 +1932,16 @@ fun ReadingStatisticsScreen(
                 }
             }
         }
+    }
+    SettingsBackButton(
+        onBack = onBack,
+        collapsed = backCollapsed,
+        label = "Resumo",
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(start = 16.dp, top = 12.dp)
+            .testTag("stats_back_button")
+    )
     }
 }
 
