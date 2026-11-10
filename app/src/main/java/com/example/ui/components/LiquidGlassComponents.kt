@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.ui.platform.testTag
 
+import com.kyant.backdrop.catalog.components.LiquidBottomTab
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
@@ -945,7 +946,14 @@ fun BookCover(
             raw
         }
     }
-    var hasFailed by remember(cleanSrc) { mutableStateOf(false) }
+    val coverCandidates = remember(cleanSrc) { com.example.data.CoverImagePolicy.candidates(cleanSrc) }
+    var coverAttempt by remember(cleanSrc) { mutableIntStateOf(0) }
+    var retried by remember(cleanSrc) { mutableStateOf(false) }
+    var retryPending by remember(cleanSrc) { mutableStateOf(false) }
+    val hasFailed = coverAttempt >= coverCandidates.size
+    LaunchedEffect(retryPending) {
+        if(retryPending) { kotlinx.coroutines.delay(1000);retried=true;coverAttempt=0;retryPending=false }
+    }
     var isImageLoaded by remember(cleanSrc) { mutableStateOf(false) }
 
     Box(
@@ -1027,9 +1035,10 @@ fun BookCover(
             val diskPolicy = remember(cleanSrc) {
                 com.example.data.LibraryDiskCacheRegistry.diskCachePolicyFor(cleanSrc)
             }
-            val imageRequest = remember(cleanSrc, context, diskPolicy) {
+            val currentCover = coverCandidates[coverAttempt]
+            val imageRequest = remember(currentCover, context, diskPolicy) {
                 ImageRequest.Builder(context)
-                    .data(cleanSrc)
+                    .data(currentCover)
                     .size(240, 360)
                     .precision(coil.size.Precision.INEXACT)
                     .crossfade(false)
@@ -1052,7 +1061,12 @@ fun BookCover(
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
                 onSuccess = { isImageLoaded = true },
-                onError = { hasFailed = true },
+                onError = {
+                    if(com.example.BuildConfig.DEBUG) android.util.Log.d("CoverLoad",
+                        it.result.throwable.javaClass.simpleName + ":" + (it.result.throwable.cause?.javaClass?.simpleName ?: ""))
+                    coverAttempt++
+                    if(coverAttempt >= coverCandidates.size && !retried) retryPending=true
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = coverAlpha }
@@ -1595,6 +1609,33 @@ fun LiquidGlassSegmentedControl(
 ) {
     val isLightTheme = !LocalIsDarkTheme.current
     val settings = com.example.ui.theme.LocalAppSettings.current
+    // Use the navigation bar renderer and gestures, rather than a second optical implementation.
+    if (!settings.reduceTransparency) {
+        com.kyant.backdrop.catalog.components.LiquidBottomTabs(
+            selectedTabIndex = { selectedIndex }, onTabSelected = onTabSelected,
+            backdrop = backdrop, tabsCount = tabs.size.coerceAtLeast(1),
+            modifier = modifier.fillMaxWidth().selectableGroup(), compact = true,
+            isLightTheme = isLightTheme,
+            accentColor = if (isLightTheme) Color.Black else Color.White,
+            unselectedContentColor = if (isLightTheme) Color.Black else Color.White,
+            containerColor = if (isLightTheme) Color.White.copy(alpha = 0.4f) else Color(0xFF121212).copy(alpha = 0.4f),
+            refractionMultiplier = if (settings.enableLensRefraction) settings.glassIntensity else 0f,
+            chromaticAberrationEnabled = settings.enableChromaticAberration
+        ) {
+            tabs.forEachIndexed { index, title ->
+                LiquidBottomTab(
+                    onClick = { onTabSelected(index) },
+                    modifier = Modifier.semantics { stateDescription = if (index == selectedIndex) "Selecionado" else "Não selecionado" }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tabIcons?.getOrNull(index)?.let { Icon(it, null, modifier = Modifier.size(16.dp), tint = if (isLightTheme) Color.Black else Color.White) }
+                        BasicText(title, style = TextStyle(color = if (isLightTheme) Color.Black else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1)
+                    }
+                }
+            }
+        }
+        return
+    }
     val containerColor =
         if (isLightTheme) Color(0xFFEAEAEF).copy(alpha = 0.72f)
         else Color(0xFF2B2B30).copy(alpha = 0.62f)
@@ -1771,7 +1812,7 @@ fun LiquidGlassSegmentedControl(
                             vibrancy()
                             blur(8f.dp.toPx())
                             if (settings.enableLensRefraction && !settings.reduceTransparency) {
-                                lens(16f.dp.toPx(), 16f.dp.toPx())
+                                lens(24f.dp.toPx() * settings.glassIntensity, 32f.dp.toPx() * settings.glassIntensity, depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
                             }
                         },
                         layerBlock = {
@@ -1801,7 +1842,7 @@ fun LiquidGlassSegmentedControl(
                     .alpha(0f)
                     .layerBackdrop(
                         backdrop = tabsBackdrop,
-                        freezeSnapshot = dampedDragAnimation.pressProgress <= 0.005f
+                        reuseRecordedContent = true
                     )
                     .graphicsLayer {
                         translationX = panelOffset
@@ -1819,7 +1860,7 @@ fun LiquidGlassSegmentedControl(
                                 vibrancy()
                                 blur(8f.dp.toPx())
                                 if (settings.enableLensRefraction && !settings.reduceTransparency) {
-                                    lens(16f.dp.toPx() * progress, 16f.dp.toPx() * progress)
+                                    lens(24f.dp.toPx() * progress * settings.glassIntensity, 32f.dp.toPx() * progress * settings.glassIntensity, depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
                                 }
                             }
                         },
@@ -1867,12 +1908,13 @@ fun LiquidGlassSegmentedControl(
                     },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        if (progress > 0.005f) {
+                        val opticalProgress = 0.2f + 0.8f * progress
+                        if (opticalProgress > 0.005f) {
                             val chromatic = !settings.reduceTransparency && settings.enableChromaticAberration
                             if (settings.enableLensRefraction && !settings.reduceTransparency) {
                                 lens(
-                                    10f.dp.toPx() * progress,
-                                    18f.dp.toPx() * progress,
+                                    lerp(4f.dp.toPx(), 12f.dp.toPx(), progress) * settings.glassIntensity,
+                                    lerp(6f.dp.toPx(), 18f.dp.toPx(), progress) * settings.glassIntensity,
                                     depthEffect = true,
                                     chromaticAberration = chromatic
                                 )

@@ -1072,6 +1072,7 @@ class SafeStorage(context: Context) {
             obj.put("synopsis", c.synopsis)
             obj.put("synopsisPtBr", c.synopsisPtBr)
             obj.put("sourceLabel", c.sourceLabel)
+            obj.put("editionLanguage", c.editionLanguage)
             val momentsArr = JSONArray()
             c.moments.forEach { m ->
                 val mObj = JSONObject()
@@ -1186,6 +1187,7 @@ class SafeStorage(context: Context) {
                     synopsis = savedSynopsis.ifBlank { savedSynopsisPtBr },
                     synopsisPtBr = savedSynopsisPtBr,
                     sourceLabel = obj.optString("sourceLabel", "Catálogo Base"),
+                    editionLanguage = obj.optString("editionLanguage"),
                     moments = momentsList,
                     seriesName = obj.optString("seriesName", ""),
                     issueNumber = obj.optInt("issueNumber", 0),

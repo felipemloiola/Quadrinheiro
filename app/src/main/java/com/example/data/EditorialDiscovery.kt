@@ -21,7 +21,7 @@ import java.io.File
 object EditorialDiscovery {
     val selections = linkedMapOf(
         "Para começar" to listOf("Batman: Ano Um", "Watchmen", "Maus"),
-        "Universo DC" to listOf("Batman: O Longo Dia das Bruxas", "Superman: As Quatro Estações"),
+        "Universo DC" to listOf("Batman: O Longo Dia das Bruxas", "Superman: As Quatro Estações", "Batman: Ano Um", "Watchmen", "Sandman", "V de Vingança"),
         "Universo Marvel" to listOf("Marvels", "Homem-Aranha: Azul", "Demolidor: A Queda de Murdock")
     )
     private val mutable = MutableStateFlow<Map<String, List<ComicEntry>>>(emptyMap())
@@ -29,14 +29,27 @@ object EditorialDiscovery {
     private val mutex = Mutex()
     private var attempted = false
 
+    private val originalTitles = mapOf(
+        "Batman: O Longo Dia das Bruxas" to "Batman The Long Halloween",
+        "Superman: As Quatro Estações" to "Superman For All Seasons",
+        "Batman: Ano Um" to "Batman Year One",
+        "Homem-Aranha: Azul" to "Spider-Man Blue",
+        "Demolidor: A Queda de Murdock" to "Daredevil Born Again",
+        "V de Vingança" to "V for Vendetta"
+    )
+
     internal fun select(seed: String, items: List<ComicEntry>): ComicEntry? {
         val words = CatalogSearchPolicy.normalize(PortugueseComicTranslator.translateTitleToPtBr(seed))
             .split(' ').filter { it.length > 2 && it !in setOf("das", "dos", "the") }
         return CatalogSearchPolicy.deduplicateByCanonicalWork(items, "PT")
             .filter { c ->
                 val title = CatalogSearchPolicy.normalize(PortugueseComicTranslator.translateTitleToPtBr(c.displayTitle))
-                words.isNotEmpty() && words.all { title.contains(it) } &&
-                    (words.size > 1 || title.startsWith(words.single()))
+                (words.isNotEmpty() && words.all { title.contains(it) } &&
+                    (words.size > 1 || title.startsWith(words.single()))) ||
+                    originalTitles[seed]?.let { original ->
+                        val raw = CatalogSearchPolicy.normalize(c.title)
+                        CatalogSearchPolicy.normalize(original).split(' ').filter { it.length > 2 && it !in setOf("the", "for") }.all(raw::contains)
+                    } == true
             }.maxByOrNull { c ->
                 (if(PortugueseComicTranslator.canonicalWorkKey(c.displayTitle) == PortugueseComicTranslator.canonicalWorkKey(seed)) 1000 else 0) +
                     (if (CatalogSearchPolicy.isPortugueseEdition(c)) 100 else 0) +
@@ -47,7 +60,7 @@ object EditorialDiscovery {
     suspend fun load(context: Context, retry: Boolean = false) = mutex.withLock {
         if (attempted && !retry) return@withLock
         attempted = true
-        val file = AtomicFile(File(context.filesDir, "discovery-editorial-v1.json"))
+        val file = AtomicFile(File(context.filesDir, "discovery-editorial-v2.json"))
         if (mutable.value.isEmpty()) runCatching {
             check(file.baseFile.length() <= 192 * 1024)
             val bytes = file.openRead().use { it.readBytes() }
@@ -60,14 +73,14 @@ object EditorialDiscovery {
         val permits = Semaphore(2)
         val engine = MultiApiSearchEngine()
         for ((title, seeds) in selections) {
-            if (mutable.value[title]?.isNotEmpty() == true) continue
+            if ((mutable.value[title]?.size ?: 0) >= minOf(3, seeds.size)) continue
             val entries = coroutineScope {
                 seeds.map { seed -> async {
                     permits.withPermit {
                         var best: ComicEntry? = null
                         try {
-                            withTimeoutOrNull(6500) {
-                                engine.searchOnlineProgressive(seed, searchLanguage = "PT").collect { batch ->
+                            withTimeoutOrNull(12000) {
+                                engine.searchOnlineProgressive(originalTitles[seed] ?: seed, searchLanguage = "PT").collect { batch ->
                                     best = select(seed, listOfNotNull(best) + batch)
                                 }
                             }
@@ -77,7 +90,7 @@ object EditorialDiscovery {
                     }
                 } }.awaitAll().filterNotNull()
             }
-            mutable.value = mutable.value + (title to CatalogSearchPolicy.deduplicateByCanonicalWork(entries, "PT"))
+            mutable.value = mutable.value + (title to CatalogSearchPolicy.deduplicateByCanonicalWork(mutable.value[title].orEmpty() + entries, "PT"))
             if (entries.isNotEmpty()) runCatching {
                 val json = JSONObject()
                 mutable.value.forEach { (key, comics) ->

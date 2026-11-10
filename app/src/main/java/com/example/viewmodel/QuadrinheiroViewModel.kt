@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import kotlinx.coroutines.flow.asSharedFlow
 import coil.imageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -273,6 +274,8 @@ class QuadrinheiroViewModel(
     // Trigger para animação suave de rolagem até o topo ao clicar novamente no ícone da aba ativa na raiz
     private val _scrollToTopTrigger = MutableStateFlow(0L)
     val scrollToTopTrigger: StateFlow<Long> = _scrollToTopTrigger.asStateFlow()
+    private val _exploreReselectEvents = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity=1)
+    val exploreReselectEvents = _exploreReselectEvents.asSharedFlow()
 
     // Trigger para focar e abrir a caixa de pesquisa ao clicar no ícone Buscar já estando no topo da aba Buscar
     private val _searchFocusTrigger = MutableStateFlow(0L)
@@ -1671,6 +1674,7 @@ class QuadrinheiroViewModel(
         }
 
         if (nextTab == _activeTab.value) {
+            if(nextTab == "explore") _exploreReselectEvents.tryEmit(Unit)
             if (!wasStatsOpen) requestScrollToTop()
             return
         }
@@ -2583,9 +2587,8 @@ class QuadrinheiroViewModel(
     suspend fun hydrateRecommendationsForActiveAccountAsync() = withContext(Dispatchers.IO) {
         val targetUid = activeOwnerUid()
         val snapshot = storage.loadAccountRecommendationsSnapshot(targetUid)
-        if (snapshot != null && snapshot.tasteFingerprint == com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
-                _comics.value, _appSettings.value, _profile.value.favoriteUniverse)) {
-            val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations, _comics.value)
+        if (snapshot != null) {
+            val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations.filter { com.example.data.PersonalizedDiscovery.verifiedCandidate(it.comic) != null }, _comics.value)
             withContext(Dispatchers.Main) {
                 if (activeOwnerUid() == targetUid) {
                     _exploreRecommendationState.value = ExploreRecommendationUiState(
@@ -2695,7 +2698,7 @@ class QuadrinheiroViewModel(
                     settings = settingsSnapshot
                 ).take(com.example.data.PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS)
 
-                val enhanced = com.example.data.FirebaseAiRecommendationEnhancer.enhanceOrFallback(
+                val enhancedUnverified = com.example.data.FirebaseAiRecommendationEnhancer.enhanceOrFallback(
                     taste = taste,
                     candidates = ranked
                 )
@@ -2703,6 +2706,7 @@ class QuadrinheiroViewModel(
                 ensureActive()
                 if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration) return@launch
 
+                val enhanced = com.example.data.RecommendationCoverCheck.filter(appContext, enhancedUnverified)
                 if (enhanced.isNotEmpty()) {
                     // Grava snapshot durável de 24 itens em filesDir
                     storage.saveAccountRecommendationsSnapshot(
