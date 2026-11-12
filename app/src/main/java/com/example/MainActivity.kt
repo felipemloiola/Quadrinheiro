@@ -370,13 +370,15 @@ fun QuadrinheiroApp(
         viewModel.getCurrentRouteKey(activeTab, settingsSubPage, shelfSection, isStatisticsOpen)
     }
 
-    val activeListState = remember(currentRouteKey) {
-        val saved = viewModel.scrollMemory[currentRouteKey]
+    val routeListStates = remember { mutableMapOf<String, LazyListState>() }
+    fun listStateForRoute(route: String): LazyListState = routeListStates.getOrPut(route) {
+        val saved = viewModel.scrollMemory[route]
         LazyListState(
             firstVisibleItemIndex = saved?.first ?: 0,
             firstVisibleItemScrollOffset = saved?.second ?: 0
         )
     }
+    val activeListState = listStateForRoute(currentRouteKey)
 
     LaunchedEffect(currentRouteKey, activeListState) {
         androidx.compose.runtime.snapshotFlow {
@@ -466,8 +468,7 @@ fun QuadrinheiroApp(
             infoModalComic != null ||
             showManualModal ||
             isSidebarOpen ||
-            isStatisticsOpen ||
-            (activeTab != "home" && !(activeTab == "settings" && settingsSubPage != null))
+            (activeTab == "shelf" && shelfSection != "shelf")
     ) {
         when {
             socialShareRequest != null -> viewModel.closeSocialShareSheet()
@@ -678,8 +679,26 @@ fun QuadrinheiroApp(
                                 .widthIn(max = 600.dp)
                                 .align(Alignment.TopCenter)
                         ) {
-                            com.example.ui.components.AppPageTransition(com.example.ui.components.AppPage(activeTab, settingsSubPage, settingsParentPage, isStatisticsOpen)) { page ->
-                                val routeListState = remember(page) { activeListState }
+                            com.example.ui.components.AppPageTransition(
+                                page = com.example.ui.components.AppPage(activeTab, settingsSubPage, settingsParentPage, isStatisticsOpen),
+                                backEnabled = socialShareRequest == null && selectedComic == null && infoModalComic == null &&
+                                    !showManualModal && !isSidebarOpen && !(activeTab == "shelf" && shelfSection != "shelf"),
+                                onBack = {
+                                    when {
+                                        isStatisticsOpen -> viewModel.closeReadingStatistics()
+                                        activeTab == "settings" && settingsSubPage != null -> viewModel.goBackSettings()
+                                        activeTab == "shelf" || activeTab == "settings" -> viewModel.switchMainTab("profile")
+                                        else -> viewModel.switchMainTab("home")
+                                    }
+                                }
+                            ) { page ->
+                                val pageRouteKey = viewModel.getCurrentRouteKey(page.tab, page.settings, shelfSection, page.statistics)
+                                val routeListState = listStateForRoute(pageRouteKey)
+                                DisposableEffect(pageRouteKey, routeListState) {
+                                    onDispose {
+                                        if (routeListStates[pageRouteKey] === routeListState) routeListStates.remove(pageRouteKey)
+                                    }
+                                }
                                 val activeTab = page.tab
                                 val settingsSubPage = page.settings
                                 val settingsParentPage = page.parent

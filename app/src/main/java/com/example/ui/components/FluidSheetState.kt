@@ -1,6 +1,6 @@
 package com.example.ui.components
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -24,6 +24,7 @@ import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 
 internal fun projectSheetEndpoint(position: Float, velocity: Float): Float =
@@ -48,6 +49,7 @@ class FluidSheetState internal constructor(
     private var job: Job? = null
     private val tracker = VelocityTracker()
     private var rawPosition = initialOffset
+    private var backStartOffset = initialOffset
     val offset: Float get() = held ?: animation.value
     val isMoving: Boolean get() = held != null || animation.isRunning
     val scrimFraction: Float get() = (1f - offset / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
@@ -56,6 +58,18 @@ class FluidSheetState internal constructor(
     fun enter() = settle(initialOffset, 0f)
     fun expandToTop() = settle(0f, 0f)
     fun snapToRest() = settle(initialOffset, 0f)
+
+    fun beginBack() {
+        backStartOffset = offset
+        job?.cancel()
+        held = backStartOffset
+    }
+
+    fun updateBack(progress: Float) {
+        if (!reduced()) held = backStartOffset + (height - backStartOffset) * progress.coerceIn(0f, 1f)
+    }
+
+    fun cancelBack() = settle(backStartOffset, 0f)
 
     private fun settle(target: Float, velocity: Float, dismiss: Boolean = false) {
         val current = offset
@@ -121,6 +135,15 @@ fun rememberFluidSheet(
         FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced, { dismiss.value() }, { expand.value() })
     }
     LaunchedEffect(state) { state.enter() }
-    BackHandler { state.dismiss() }
+    PredictiveBackHandler {
+        state.beginBack()
+        try {
+            it.collect { event -> state.updateBack(event.progress) }
+            state.dismiss()
+        } catch (cancelled: CancellationException) {
+            state.cancelBack()
+            throw cancelled
+        }
+    }
     return state
 }

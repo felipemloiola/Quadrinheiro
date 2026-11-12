@@ -1,10 +1,5 @@
 package com.example.ui.screens
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -190,7 +185,6 @@ fun ExploreScreen(
             com.example.data.EditorialDiscovery.load(appContext, retry = true)
         }
     }
-    BackHandler(collection != null) { collection = null }
     Column(Modifier.fillMaxSize()) {
         if (collection == null) Column(
             Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -207,11 +201,13 @@ fun ExploreScreen(
         if (collection == null && tab == 1) {
             CommunityScreen(comics, profile, onLogin)
         } else {
-            AnimatedContent(
-                collection,
-                transitionSpec = { fadeIn(motion.tween(180)) togetherWith fadeOut(motion.tween(120)) },
-                label = "explore_collection"
-            ) { selected ->
+            com.example.ui.components.AppPageTransition(
+                page = com.example.ui.components.AppPage("explore", collection, null, false),
+                backEnabled = collection != null,
+                backPage = com.example.ui.components.AppPage("explore", null, null, false),
+                onBack = { collection = null }
+            ) { destination ->
+                val selected = destination.settings
                 val expandedState = rememberLazyListState()
                 LazyColumn(
                     state = if (selected == null) listState else expandedState,

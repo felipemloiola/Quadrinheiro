@@ -34,7 +34,7 @@ internal fun GuestProfilePanel(
     onLogout: (() -> Unit)? = null
 ) {
     val theme = LocalIOS27Theme.current
-    BackHandler(onBack = onBack)
+    BackHandler(enabled = !com.example.ui.components.LocalPageBackManaged.current, onBack = onBack)
     Column(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)

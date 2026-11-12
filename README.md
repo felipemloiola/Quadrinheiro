@@ -64,6 +64,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 
 - Dark and light surfaces, accent and launcher-icon color options, adjustable text size, contrast, transparency, and reduced-motion preferences.
 - Reading-progress notifications and optional Live Updates / Now Bar behavior on compatible Android devices.
+- Predictive Back previews for pages, Explore collections, and glass sheets, with cancellation and reduced-motion support.
 - Home-screen widgets for current reading, recent comics, and goals, with theme-aware appearance.
 - Shareable reading, completion, and goal cards.
 - Google sign-in and per-account storage with Firebase synchronization.
@@ -163,6 +164,7 @@ Storage tools account for overlapping application directories without double-cou
 ## References
 
 - [UI and reading progress review](docs/REVISAO-HIG-NOW-BAR.md)
+- [Predictive Back and Live Updates](docs/PREDICTIVE-BACK-LIVE-UPDATES.md)
 - [Typography guidelines and Android adaptation](docs/TIPOGRAFIA.md)
 - [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
 - [AndroidLiquidGlass / Backdrop](https://github.com/Kyant0/AndroidLiquidGlass)

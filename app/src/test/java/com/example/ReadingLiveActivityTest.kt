@@ -120,4 +120,41 @@ class ReadingLiveActivityTest {
         ReadingLiveActivity.refresh(context)
         assertNotNull(notification())
     }
+
+    @Test fun blockedChannelDoesNotReportAnActiveSession() = runBlocking {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(android.app.NotificationChannel(ReadingLiveActivity.CHANNEL, "Leitura", NotificationManager.IMPORTANCE_NONE))
+        ReadingLiveActivity.start(context, "first")
+        assertNull(notification())
+        assertFalse(ReadingLiveActivity.active.value)
+        assertFalse(ReadingLiveActivity.isActive(context))
+    }
+
+    @Test fun missingPageCountUsesIndeterminateProgressInsteadOfInventingATotal() = runBlocking {
+        storage.saveState(listOf(comics.first().copy(pageCount = 0, currentPage = 12)), ReaderProfile(activeReadingComicId = "first"),
+            AppSettings(showReadingNowBar = true), "live-owner-a")
+        ReadingLiveActivity.start(context, "first")
+        val posted = notification()!!
+        assertTrue(posted.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
+        assertEquals("Pág. 12 · Total não informado", posted.extras.getString(Notification.EXTRA_TEXT))
+    }
+
+    @Test fun progressPercentageDoesNotOverflowForLargePageCounts() {
+        assertEquals("Pág. 50000000 de 100000000 · 50%", com.example.reading.readingProgressText(comics.first().copy(pageCount = 100_000_000, currentPage = 50_000_000)))
+    }
+
+    @Test @Config(sdk = [24]) fun androidSevenUsesAppDetailsForNotificationSettings() {
+        val intent = com.example.reading.readingNotificationSettingsIntent(context)
+        assertEquals(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, intent.action)
+        assertEquals("package:${context.packageName}", intent.dataString)
+    }
+
+    @Test @Config(sdk = [36]) fun androidSixteenUsesNativePromotableProgressStyle() = runBlocking {
+        ReadingLiveActivity.start(context, "first")
+        val posted = notification()!!
+        assertEquals("android.app.Notification\$ProgressStyle", posted.extras.getString(Notification.EXTRA_TEMPLATE))
+        assertTrue("Promotion requested", posted.extras.getBoolean("android.requestPromotedOngoing"))
+        assertTrue(posted.hasPromotableCharacteristics())
+        assertNull(posted.contentView)
+    }
 }

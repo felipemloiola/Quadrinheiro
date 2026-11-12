@@ -194,7 +194,7 @@ fun SettingsTabScreen(
     }
 
     // Back handler inside Settings sub-pages
-    BackHandler(enabled = settingsSubPage != null) {
+    BackHandler(enabled = settingsSubPage != null && !com.example.ui.components.LocalPageBackManaged.current) {
         viewModel.goBackSettings()
     }
 
@@ -1185,6 +1185,7 @@ fun SettingsTabScreen(
                                     HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                                     com.example.reading.ReadingNowBarPreference(
                                         enabled = appSettings.showReadingNowBar,
+                                        comic = com.example.model.activeReadingComic(comics, profile.activeReadingComicId),
                                         onChange = { enabled -> viewModel.updateSettings { it.copy(showReadingNowBar = enabled) } }
                                     )
                                     HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)

@@ -841,7 +841,7 @@ fun ReadingStatisticsScreen(
     onShareGoalSummary: (String) -> Unit = {}
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    BackHandler(onBack = onBack)
+    BackHandler(enabled = !com.example.ui.components.LocalPageBackManaged.current, onBack = onBack)
 
     val mat = LocalAppleMaterials.current
     val s = mat.scheme

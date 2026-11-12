@@ -72,6 +72,10 @@ object ReadingLiveActivity {
 
     private suspend fun activate(context: Context, snapshot: SafeStorage.WidgetSessionSnapshot, comic: ComicEntry) {
         val owner = snapshot.ownerUid ?: return
+        if (!canShowReadingNotifications(context)) {
+            stop(context)
+            return
+        }
         val revision = synchronized(publicationLock) {
             if (currentOwner(context) != owner) return
             preferences(context).edit().putString("owner", owner).putString("comic", comic.id).apply()
@@ -93,25 +97,26 @@ object ReadingLiveActivity {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC; setShowBadge(false)
         })
         val open = PendingIntent.getActivity(context, ID, QuadrinheiroWidgetIntents.buildOpenReadingComicIntent(context, comic.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val total = comic.pageCount.coerceAtLeast(1)
-        val page = comic.currentPage.coerceIn(0, total)
-        val percentage = page * 100 / total
+        val total = comic.pageCount.coerceAtLeast(0)
+        val page = if (total > 0) comic.currentPage.coerceIn(0, total) else comic.currentPage.coerceAtLeast(0)
+        val percentage = if (total > 0) (page.toLong() * 100 / total).toInt() else null
+        val progressText = readingProgressText(comic)
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_reading_notification).setLargeIcon(cover)
-            .setContentTitle(comic.displayTitle).setContentText("Pág. $page de $total · $percentage%")
+            .setContentTitle(comic.displayTitle).setContentText(progressText)
             .setSubText("Lendo agora").setContentIntent(open)
-            .setProgress(total, page, false).setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
+            .setProgress(total, page, total == 0).setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(palette.outerRingColor.toArgb()).setRequestPromotedOngoing(true)
-            .setShortCriticalText("$percentage%")
+            .setShortCriticalText(percentage?.let { "$it%" } ?: "Lendo")
             .addAction(0, "− 1 pág.", action(context, owner, comic.id, -1))
             .addAction(0, "+ 1 pág.", action(context, owner, comic.id, 1))
             .addAction(0, "Encerrar", action(context, owner, comic.id, 0))
             .setDeleteIntent(action(context, owner, comic.id, 0))
-        if (Build.VERSION.SDK_INT >= 36) builder.setStyle(NotificationCompat.ProgressStyle()
+        if (Build.VERSION.SDK_INT >= 36 && total > 0) builder.setStyle(NotificationCompat.ProgressStyle()
             .setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(total).setColor(palette.outerRingColor.toArgb())))
             .setProgress(page).setProgressTrackerIcon(IconCompat.createWithBitmap(cover)))
-        val notification = builder.build()
+        val notification = buildPromotableReadingNotification(builder)
         synchronized(publicationLock) {
             if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return
             preferences(context).edit().putString("comic", comic.id).apply()
@@ -142,6 +147,31 @@ object ReadingLiveActivity {
         refresh(context)
         QuadrinheiroWidgetsSync.updateAllWidgets(context)
     }
+}
+
+internal fun canShowReadingNotifications(context: Context): Boolean {
+    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+    return Build.VERSION.SDK_INT < 26 || context.getSystemService(NotificationManager::class.java)
+        .getNotificationChannel(ReadingLiveActivity.CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+}
+
+internal fun readingProgressText(comic: ComicEntry): String {
+    val total = comic.pageCount.coerceAtLeast(0)
+    val page = if (total > 0) comic.currentPage.coerceIn(0, total) else comic.currentPage.coerceAtLeast(0)
+    return if (total > 0) "Pág. $page de $total · ${page.toLong() * 100 / total}%"
+    else "Pág. $page · Total não informado"
+}
+
+/** Early Android 16 required colorization; newer 16 QPRs and 17 forbid it.
+ * Ask the installed framework instead of guessing an OEM/QPR from the SDK number.
+ */
+internal fun buildPromotableReadingNotification(builder: NotificationCompat.Builder): Notification {
+    val standard = builder.setColorized(false).build()
+    if (Build.VERSION.SDK_INT == 36 && !standard.hasPromotableCharacteristics()) {
+        val legacy = builder.setColorized(true).build()
+        if (legacy.hasPromotableCharacteristics()) return legacy
+    }
+    return standard
 }
 
 class ReadingSessionAction : BroadcastReceiver() {
