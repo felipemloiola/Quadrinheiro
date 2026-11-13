@@ -1532,6 +1532,7 @@ class QuadrinheiroViewModel(
         persistJob = viewModelScope.launch(Dispatchers.IO) {
             if (!sessionChanged) delay(80)
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
+            com.example.reading.ReadingLiveActivity.refreshAsync(appContext)
             if (sessionChanged) QuadrinheiroWidgetsSync.refreshSessionWidgetsAsync(appContext)
             else QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
         }
@@ -1544,6 +1545,7 @@ class QuadrinheiroViewModel(
         val settingsSnapshot = _appSettings.value
         viewModelScope.launch(Dispatchers.IO) {
             storage.saveState(comicsSnapshot, profileSnapshot, settingsSnapshot, resolvedUid)
+            com.example.reading.ReadingLiveActivity.refreshAsync(appContext)
             QuadrinheiroWidgetsSync.refreshAllWidgetsAsync(appContext)
         }
     }

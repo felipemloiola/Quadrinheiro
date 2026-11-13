@@ -89,7 +89,6 @@ object ReadingLiveActivity {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val owner = snapshot.ownerUid ?: return
         val palette = WidgetVisualRenderer.resolvePaletteForThemeId(snapshot.state.settings.themeId)
-        val cover = WidgetVisualRenderer.loadOrRenderCoverBitmap(context, comic, palette, 120, 180)
         if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return
         val manager = context.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(CHANNEL, "Sessão de leitura", NotificationManager.IMPORTANCE_LOW).apply {
@@ -102,7 +101,7 @@ object ReadingLiveActivity {
         val percentage = if (total > 0) (page.toLong() * 100 / total).toInt() else null
         val progressText = readingProgressText(comic)
         val builder = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_reading_notification).setLargeIcon(cover)
+            .setSmallIcon(R.drawable.ic_reading_notification)
             .setContentTitle(comic.displayTitle).setContentText(progressText)
             .setSubText("Lendo agora").setContentIntent(open)
             .setProgress(total, page, total == 0).setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
@@ -113,18 +112,30 @@ object ReadingLiveActivity {
             .addAction(0, "+ 1 pág.", action(context, owner, comic.id, 1))
             .addAction(0, "Encerrar", action(context, owner, comic.id, 0))
             .setDeleteIntent(action(context, owner, comic.id, 0))
-        if (Build.VERSION.SDK_INT >= 36 && total > 0) builder.setStyle(NotificationCompat.ProgressStyle()
+        val style = if (Build.VERSION.SDK_INT >= 36 && total > 0) NotificationCompat.ProgressStyle()
             .setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(total).setColor(palette.outerRingColor.toArgb())))
-            .setProgress(page).setProgressTrackerIcon(IconCompat.createWithBitmap(cover)))
-        val notification = buildPromotableReadingNotification(builder)
-        synchronized(publicationLock) {
-            if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return
-            preferences(context).edit().putString("comic", comic.id).apply()
-            try { NotificationManagerCompat.from(context).notify(ID, notification) }
-            catch (_: SecurityException) { stop(context); return }
-            active.value = true
-        }
+            .setProgress(page).setProgressTrackerIcon(IconCompat.createWithResource(context, R.drawable.ic_reading_notification)) else null
+        if (style != null) builder.setStyle(style)
+        // Publish immediately: image loading or repeated widget refreshes must not starve the Live Update.
+        if (!notifyCurrent(context, owner, comic.id, revision, buildPromotableReadingNotification(builder))) return
+        val cover = try { WidgetVisualRenderer.loadOrRenderCoverBitmap(context, comic, palette, 120, 180) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { return }
+        builder.setLargeIcon(cover)
+        style?.setProgressTrackerIcon(IconCompat.createWithBitmap(cover))
+        notifyCurrent(context, owner, comic.id, revision, buildPromotableReadingNotification(builder))
     }
+
+    @Suppress("MissingPermission")
+    private fun notifyCurrent(context: Context, owner: String, comicId: String, revision: Long, notification: Notification): Boolean =
+        synchronized(publicationLock) {
+            if (revision != generation.get() || preferences(context).getString("owner", null) != owner || currentOwner(context) != owner) return@synchronized false
+            preferences(context).edit().putString("comic", comicId).apply()
+            try { NotificationManagerCompat.from(context).notify(ID, notification) }
+            catch (_: SecurityException) { stop(context); return@synchronized false }
+            active.value = true
+            true
+        }
 
     private fun action(context: Context, owner: String, comic: String, delta: Int): PendingIntent =
         PendingIntent.getBroadcast(context, ID + delta, Intent(context, ReadingSessionAction::class.java)
@@ -167,11 +178,13 @@ internal fun readingProgressText(comic: ComicEntry): String {
  */
 internal fun buildPromotableReadingNotification(builder: NotificationCompat.Builder): Notification {
     val standard = builder.setColorized(false).build()
+    var notification = standard
     if (Build.VERSION.SDK_INT == 36 && !standard.hasPromotableCharacteristics()) {
         val legacy = builder.setColorized(true).build()
-        if (legacy.hasPromotableCharacteristics()) return legacy
+        if (legacy.hasPromotableCharacteristics()) notification = legacy
     }
-    return standard
+    com.example.reading.samsung.SamsungNowBarCompatibility.applyTo(notification)
+    return notification
 }
 
 class ReadingSessionAction : BroadcastReceiver() {

@@ -268,6 +268,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.example.reading.ReadingLiveActivity.refreshAsync(applicationContext)
         LauncherAppearance.foreground = true
         com.kyant.backdrop.BackdropFirstFrameGate.firstFrameReady = true
     }

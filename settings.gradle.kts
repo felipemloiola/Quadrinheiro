@@ -26,3 +26,9 @@ rootProject.name = "Quadrinheiro"
 
 include(":app")
 include(":macrobenchmark")
+
+// Explicitly opt in to the isolated hardware probe; never bundled in the production APK.
+if (providers.gradleProperty("includeNowBarProbe").orNull == "true") {
+    include(":nowbar-probe")
+    project(":nowbar-probe").projectDir = file("tools/nowbar-probe")
+}

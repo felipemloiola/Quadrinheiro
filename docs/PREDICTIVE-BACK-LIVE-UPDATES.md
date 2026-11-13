@@ -24,6 +24,18 @@ O Android e o fabricante decidem a apresentação na tela bloqueada, chip de sta
 
 Isolamento por conta e validação das ações antigas permanecem ativos. Não foram adicionados polling, serviço em primeiro plano ou animações contínuas. A preferência continua opcional.
 
+### Compatibilidade Samsung em avaliação
+
+Em aparelhos Samsung com API 35+, a notificação contínua recebe campos opcionais de atividade contínua e, quando acessível, o bit legado `semFlags=0x8000`. Essa extensão não documentada foi investigada no projeto [MukulBolt9/xz](https://github.com/MukulBolt9/xz); não garante aceitação pela Now Bar. A identidade do pacote permanece a do Quadrinheiro. O app não se identifica como Kakao Taxi, não altera listas de aplicativos permitidos e mantém a notificação Android quando a extensão é ignorada.
+
+A publicação inicial não espera pela capa. A capa chega em uma segunda atualização, com a mesma validação de conta e geração. Salvar o progresso e voltar ao app também reavaliam a sessão, sem depender do debounce dos widgets.
+
+O módulo opcional `tools/nowbar-probe` permite comparar a promoção Android e a extensão Samsung com dados fictícios, sem substituir a instalação de produção. No S23 com Android 17/One UI 9, o sistema aceitou a promoção padrão e a flag Samsung; em ambos os testes o usuário observou apenas uma notificação comum. Liberar o conteúdo bloqueado somente para o teste não resolveu. Na variante Samsung simples, sem solicitação de promoção e sem `ProgressStyle`, o usuário não viu nenhuma notificação. Portanto, a apresentação na Now Bar **não está validada nesse aparelho**. A configuração de conteúdo na tela bloqueada foi conferida conforme a [orientação da Samsung](https://www.samsung.com/ie/support/mobile-devices/how-to-use-the-now-bar-on-the-lock-screen-of-your-samsung-galaxy-device/); a política interna do fabricante pode impor outros critérios.
+
+O teste físico foi feito com outro pacote e dados fictícios: não equivale a validar uma atualização do Quadrinheiro instalado. O APK de produção usa outra chave de assinatura e não pode ser substituído pelo debug preservando a instalação. Diagnósticos e identificadores privados do aparelho não integram o repositório.
+
+Validação adicional dessa adaptação: 15 testes unitários aprovados (`ReadingLiveActivityTest` e `SamsungNowBarCompatibilityTest`), dois testes instrumentados aprovados (`LiveUpdatesPresentationTest`) somente no emulador API 37, APK principal e módulo isolado compilados. A sessão fictícia no S23 foi encerrada ao finalizar.
+
 ## Validação
 
 Os testes de regressão cobrem cancelamento/confirmação do gesto, ambas as bordas, botão Voltar com movimento reduzido, restauração de folha expandida, notificação padrão/promovível, canal bloqueado, total desconhecido e compatibilidade do destino de permissões na API 24. Um teste de apresentação usa uma HQ fictícia, texto ampliado e transparência reduzida.
