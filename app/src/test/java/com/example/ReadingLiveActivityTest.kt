@@ -150,11 +150,14 @@ class ReadingLiveActivityTest {
     }
 
     @Test @Config(sdk = [36]) fun androidSixteenUsesNativePromotableProgressStyle() = runBlocking {
+        org.robolectric.util.ReflectionHelpers.setStaticField(android.os.Build::class.java, "MANUFACTURER", "samsung")
         ReadingLiveActivity.start(context, "first")
         val posted = notification()!!
         assertEquals("android.app.Notification\$ProgressStyle", posted.extras.getString(Notification.EXTRA_TEMPLATE))
         assertTrue("Promotion requested", posted.extras.getBoolean("android.requestPromotedOngoing"))
         assertTrue(posted.hasPromotableCharacteristics())
         assertNull(posted.contentView)
+        assertFalse("Samsung uses public Live Updates, not undocumented vendor extras",
+            posted.extras.keySet().any { it.startsWith("android.ongoingActivityNoti.") })
     }
 }

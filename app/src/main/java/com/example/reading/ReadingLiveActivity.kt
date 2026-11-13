@@ -173,20 +173,6 @@ internal fun readingProgressText(comic: ComicEntry): String {
     else "Pág. $page · Total não informado"
 }
 
-/** Early Android 16 required colorization; newer 16 QPRs and 17 forbid it.
- * Ask the installed framework instead of guessing an OEM/QPR from the SDK number.
- */
-internal fun buildPromotableReadingNotification(builder: NotificationCompat.Builder): Notification {
-    val standard = builder.setColorized(false).build()
-    var notification = standard
-    if (Build.VERSION.SDK_INT == 36 && !standard.hasPromotableCharacteristics()) {
-        val legacy = builder.setColorized(true).build()
-        if (legacy.hasPromotableCharacteristics()) notification = legacy
-    }
-    com.example.reading.samsung.SamsungNowBarCompatibility.applyTo(notification)
-    return notification
-}
-
 class ReadingSessionAction : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val result = goAsync()

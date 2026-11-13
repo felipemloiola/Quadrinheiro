@@ -3,7 +3,7 @@ package com.example.reading.samsung
 import android.app.Notification
 import android.os.Build
 
-/** Optional Samsung extension. Standard Android notification fields remain the source of truth.
+/** Diagnostic-only Samsung extension; never compiled into the production APK.
  * Field names/legacy bit were investigated using MukulBolt9/xz (Apache-2.0).
  * Never changes package identity, requests overlays, or disables hidden-API enforcement.
  */

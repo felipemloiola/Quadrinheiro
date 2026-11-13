@@ -14,6 +14,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.reading.samsung.SamsungNowBarCompatibility
+import com.example.reading.buildPromotableReadingNotification
+import androidx.core.app.NotificationCompat
 
 /** No network, accounts, library access, service, overlay or periodic updates. */
 class ProbeActivity : Activity() {
@@ -53,7 +55,7 @@ class ProbeActivity : Activity() {
         manager.createNotificationChannel(NotificationChannel(channel, "Teste de leitura", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, ProbeActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getActivity(this, 1, Intent(this, ProbeActivity::class.java).putExtra("mode", "stop"), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val builder = Notification.Builder(this, channel)
+        val builder = NotificationCompat.Builder(this, channel)
             .setSmallIcon(android.R.drawable.ic_menu_agenda)
             .setContentTitle("Teste de leitura · Quadrinheiro")
             .setContentText("Pág. 24 de 120 · 20%")
@@ -61,11 +63,11 @@ class ProbeActivity : Activity() {
             .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setCategory(Notification.CATEGORY_PROGRESS).setContentIntent(open)
-            .addAction(Notification.Action.Builder(null, "Encerrar teste", stop).build())
+            .addAction(0, "Encerrar teste", stop)
         if (mode != "samsung_plain") builder.setRequestPromotedOngoing(true).setColorized(false)
-            .setStyle(Notification.ProgressStyle().setProgress(24)
-                .setProgressSegments(listOf(Notification.ProgressStyle.Segment(120))))
-        val notification = builder.build()
+            .setStyle(NotificationCompat.ProgressStyle().setProgress(24)
+                .setProgressSegments(listOf(NotificationCompat.ProgressStyle.Segment(120))))
+        val notification = if (mode == "samsung_plain") builder.build() else buildPromotableReadingNotification(builder)
         val bridge = if (mode.startsWith("samsung")) SamsungNowBarCompatibility.applyTo(notification).name else "NATIVE"
         manager.notify(notificationId, notification)
         status.text = "Modo: $mode\nCompatibilidade: $bridge\nElegível: ${notification.hasPromotableCharacteristics()}\nPromoção permitida: ${manager.canPostPromotedNotifications()}"

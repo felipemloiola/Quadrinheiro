@@ -14,6 +14,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    // Compile the exact same compatibility implementation used by the app.
-    sourceSets.getByName("main").kotlin.srcDir("../../app/src/main/java/com/example/reading/samsung")
+    // Compile the exact public notification builder used by the app.
+    sourceSets.getByName("main").kotlin.srcDir("../../app/src/main/java/com/example/reading/notification")
 }
+
+dependencies { implementation(libs.androidx.core.ktx) }
