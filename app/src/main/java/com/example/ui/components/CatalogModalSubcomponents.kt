@@ -39,6 +39,10 @@ import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1667,6 +1671,7 @@ internal fun CatalogReadingProgressSection(
         // SINGLE_PAGE_PROGRESS_CONTROL_V9: keep only the interactive page slider.
 
         AppleSlider(
+            modifier = Modifier.testTag("reading_page_slider").semantics { contentDescription = "Páginas lidas" },
             value = currentPage.toFloat(),
             valueProvider = { currentPageProvider().coerceIn(0, safeTotal).toFloat() },
             min = 0f,
@@ -1680,6 +1685,23 @@ internal fun CatalogReadingProgressSection(
                 }
             }
         )
+    }
+}
+
+@Composable
+internal fun CatalogReadingPagesUnavailable(loading: Boolean, onRetry: () -> Unit) {
+    val s = LocalAppleMaterials.current.scheme
+    Column(Modifier.fillMaxWidth().inputWellSurface(RoundedCornerShape(16.dp)).padding(14.dp)
+        .testTag("reading_pages_unavailable"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Progresso da leitura", color = s.textPrimary, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (loading) "Buscando o total de páginas na API…" else "A API não informou o total de páginas desta edição.",
+            color = s.textSecondary, fontSize = 12.sp)
+        if (!loading) {
+            Text("O controle de páginas aparecerá quando esse dado estiver disponível.", color = s.textSecondary, fontSize = 12.sp)
+            TextButton(onClick = onRetry, modifier = Modifier.testTag("retry_reading_pages")) {
+                Text("Buscar páginas novamente", color = s.accentColor)
+            }
+        }
     }
 }
 

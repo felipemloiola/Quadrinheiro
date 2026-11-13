@@ -70,6 +70,10 @@ internal object AdditionalCatalogSources {
         }
         return fetch(url)
     }
+    internal suspend fun pageMetadata(url: HttpUrl): JSONObject {
+        require(url.isHttps && url.host in setOf("www.googleapis.com", "openlibrary.org"))
+        return if (url.host == "openlibrary.org") openLibraryFetch(url) else fetch(url)
+    }
     internal fun enabledSources(provider: String, language: String): List<String> {
         if (provider == "VERIFIED_COMICS") return listOf("catalog", "kitsu", "mangadex")
         if (provider == "MANGA") return listOf("kitsu", "mangadex")

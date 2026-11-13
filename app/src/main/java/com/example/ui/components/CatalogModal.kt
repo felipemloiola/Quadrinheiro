@@ -175,13 +175,11 @@ fun CatalogSheetModal(
     var draftMoments by remember(selectedComic.id) { mutableStateOf(selectedComic.moments) }
 
     var fullPage by remember(selectedComic.id) { mutableStateOf(false) }
-    var totalPagesInput by remember(selectedComic.id) { mutableStateOf(if (selectedComic.pageCount <= 1) "" else selectedComic.pageCount.toString()) }
-    val editorScope=androidx.compose.runtime.rememberCoroutineScope()
-    var pagesEdited by remember(selectedComic.id){mutableStateOf(false)}
+    val totalPagesInput = draftComic.pageCount.takeIf { it > 0 }?.toString().orEmpty()
     var remoteInfo by remember(selectedComic.id){mutableStateOf<com.example.data.CatalogDetails?>(null)}
-    var pageEditorOpen by remember(selectedComic.id) { mutableStateOf(false) }
-    var metadataLoading by remember(selectedComic.id){mutableStateOf(false)}
-    var pagesError by remember(selectedComic.id) { mutableStateOf(false) }
+    var metadataLoading by remember(selectedComic.id){mutableStateOf(selectedComic.pageCount <= 0)}
+    var readingPagesLoading by remember(selectedComic.id) { mutableStateOf(selectedComic.pageCount <= 0) }
+    var metadataRetryToken by remember(selectedComic.id) { mutableIntStateOf(0) }
     var translationLoading by remember(selectedComic.id) { mutableStateOf(false) }
     var translationFailed by remember(selectedComic.id) { mutableStateOf(false) }
     var translationRetryToken by remember(selectedComic.id) { mutableIntStateOf(0) }
@@ -236,7 +234,7 @@ fun CatalogSheetModal(
     }
 
     fun buildFinalComicForSave(): ComicEntry {
-        val count = CatalogPagePolicy.count(totalPagesInput) ?: 0
+        val count = draftComic.pageCount.takeIf { it in 1..CatalogPagePolicy.MAX_PAGES } ?: 0
         var finalComic = CatalogPagePolicy.withCount(snapshotDraftComic(), count)
         val pendingTag = comicTagInput.trim().replace(",", "")
         if (pendingTag.isNotEmpty() && !finalComic.tags.contains(pendingTag)) {
@@ -271,13 +269,9 @@ fun CatalogSheetModal(
         else sheet.snapToRest()
     }
     fun saveDraft() {
-        if (totalPagesInput.isNotBlank() && CatalogPagePolicy.count(totalPagesInput) == null) {
-            pagesError = true
-            pageEditorOpen = true
-            editorScope.launch { sheetScrollState.animateScrollToItem(0) }
-        } else onSave(buildFinalComicForSave())
+        onSave(buildFinalComicForSave())
     }
-    LaunchedEffect(draftComic.id, draftComic.externalId) {
+    LaunchedEffect(draftComic.id, draftComic.externalId, metadataRetryToken) {
         val requested = draftComic
         remoteInfo = null
         val hasEssentialData = requested.synopsisPtBr.isNotBlank() &&
@@ -288,13 +282,29 @@ fun CatalogSheetModal(
 
         if (hasEssentialData) {
             metadataLoading = false
+            readingPagesLoading = false
             return@LaunchedEffect
         }
 
         metadataLoading = true
+        readingPagesLoading = true
         try {
+            val fetched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val details = try { com.example.data.ComicVineCatalog.resolve(requested) }
+                catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+                catch (_: Exception) { null }
+                details to com.example.data.CatalogPageCountResolver.resolve(requested, details)
+            }
+            readingPagesLoading = false
+            if (draftComic.id == requested.id && draftComic.externalId == requested.externalId) {
+                fetched.second?.let { count ->
+                    val updated = CatalogPagePolicy.withCount(snapshotDraftComic(), count)
+                    draftComic = updated
+                    draftCurrentPage = updated.currentPage
+                }
+            }
             val resolvedPair = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                val details = com.example.data.ComicVineCatalog.resolve(requested)
+                val details = fetched.first
                 val localPtSynopsis = if (details != null && details.description.isNotBlank() && !PortugueseComicTranslator.isPortugueseText(details.description)) {
                     PortugueseComicTranslator.translateSynopsisToPtBr(
                         rawSynopsis = details.description,
@@ -318,16 +328,6 @@ fun CatalogSheetModal(
             val resolvedAuthors = resolvedPair.third
             if (details != null && draftComic.id == requested.id && draftComic.externalId == requested.externalId) {
                 remoteInfo = details
-                CatalogPagePolicy.remoteCount(draftComic.pageCount, isExistingInShelf, pagesEdited, details.pageCount)?.let { count ->
-                    totalPagesInput = count.toString()
-                    val updatedWithCount = CatalogPagePolicy.withCount(
-                        draftComic.copy(status = draftStatus, currentPage = draftCurrentPage),
-                        count
-                    )
-                    draftComic = updatedWithCount
-                    draftCurrentPage = updatedWithCount.currentPage
-                    pagesError = false
-                }
                 if (draftAuthors.isBlank() && resolvedAuthors.isNotBlank()) {
                     draftAuthors = resolvedAuthors
                 }
@@ -343,7 +343,7 @@ fun CatalogSheetModal(
             }
         } catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
         catch (_: Exception) { }
-        finally { metadataLoading = false }
+        finally { metadataLoading = false; readingPagesLoading = false }
     }
 
     val sheetShape = remember { RoundedRectangle(24f.dp) }
@@ -527,7 +527,7 @@ fun CatalogSheetModal(
                                 value = draftStatus,
                                 onChange = { nextStatus ->
                                     draftStatus = nextStatus
-                                    if (nextStatus == ReadingStatus.READ && draftComic.pageCount > 1) {
+                                    if (nextStatus == ReadingStatus.READ && draftComic.pageCount > 0) {
                                         draftCurrentPage = draftComic.pageCount
                                     }
                                 }
@@ -587,18 +587,22 @@ fun CatalogSheetModal(
                                 )
                             }
 
-                            if (draftStatus == ReadingStatus.READING && draftComic.pageCount > 1) {
+                            if (draftStatus == ReadingStatus.READING) {
                                 item(key = "editor-progress", contentType = "reading_progress") {
-                                    CatalogReadingProgressSection(
-                                        currentPageProvider = { draftCurrentPage },
-                                        pageCount = draftComic.pageCount,
-                                        accentColor = s.accentColor,
-                                        onChangePage = { v ->
-                                            val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
-                                            draftCurrentPage = nextPage
-                                            momentPageInput = nextPage.toString()
-                                        }
-                                    )
+                                    if (draftComic.pageCount <= 0) {
+                                        CatalogReadingPagesUnavailable(readingPagesLoading) { metadataRetryToken++ }
+                                    } else {
+                                        CatalogReadingProgressSection(
+                                            currentPageProvider = { draftCurrentPage },
+                                            pageCount = draftComic.pageCount,
+                                            accentColor = s.accentColor,
+                                            onChangePage = { v ->
+                                                val nextPage = v.coerceIn(0, draftComic.pageCount.coerceAtLeast(1))
+                                                draftCurrentPage = nextPage
+                                                momentPageInput = nextPage.toString()
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

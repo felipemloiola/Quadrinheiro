@@ -59,6 +59,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Character information supported by the **Superhero API**.
 - Expandable synopses and a direct action to view a comic's source page.
 - Original-language edition details are kept distinct from translated metadata. Missing publisher, synopsis, credits, or page counts are not fabricated.
+- Reading sliders use page totals from the selected edition's APIs, with exact edition ID / ISBN lookup and a retry state when that data is unavailable. No manual page-total input is required.
 
 ### Personalization, reading, and updates
 
