@@ -43,6 +43,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Switch between **Discover** and **Community** inside Explore.
 - Read and share reviews, ratings, posts, and comments in the Community. A signed-in account is required for community participation.
 - Recent discovery improvements avoid filling a personalized feed with generic showcase recommendations when user preferences or collection signals already exist.
+- Open **Why this comic?** to inspect the saved recommendation signal, request more like it, or hide the work. Preferences can be undone and remain private to the account.
 
 ### Profile and Library — make the collection yours
 
@@ -52,6 +53,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Browse the shelf in grid, list, or sequence layouts; sort, search, and filter by reading status and genre.
 - Register comics manually and save tags, notes, ratings, reviews, and reading progress.
 - Keep notes and progress when moving a comic between **Read**, **Reading**, and **Want to Read**.
+- Create private **Lists** with descriptions, automatic cover mosaics, optional numbered rankings, manual order, and per-entry notes. Add library or catalog editions without registering a reading; deleting a list preserves the library. Lists and recommendation preferences are included in JSON backups.
 
 ### Catalog and comic details
 

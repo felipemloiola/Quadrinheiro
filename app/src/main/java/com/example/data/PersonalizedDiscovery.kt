@@ -34,6 +34,7 @@ object PersonalizedDiscovery {
     private data class Features(val comic: ComicEntry, val title: String, val titleWords: Set<String>, val series: String,
         val authors: Set<String>, val genres: Set<String>, val publisher: String, val text: String)
     private fun normalized(raw: String) = CatalogSearchPolicy.normalize(raw)
+    fun recommendationWorkKey(c: ComicEntry): String = workKey(c)
     private fun workKey(c: ComicEntry): String {
         val title = PortugueseComicTranslator.canonicalWorkKey(c.displayTitle).ifBlank { normalized(c.displayTitle).ifBlank { c.externalId.ifBlank { c.id } } }
         val collected = c.format.contains("Graphic", true) || c.format.contains("Encadernado", true) || c.format.contains("Coleção", true)
@@ -83,7 +84,8 @@ object PersonalizedDiscovery {
     fun extractTasteProfile(
         library: List<ComicEntry>,
         settings: AppSettings,
-        favoriteUniverse: String
+        favoriteUniverse: String,
+        feedback: RecommendationFeedback = RecommendationFeedback()
     ): UserTasteProfile {
         val reading = library.filter { it.status == ReadingStatus.READING }
             .map { SeriesSequenceEngine.inferBaseSeriesTitle(it) to SeriesSequenceEngine.inferIssueNumber(it) }
@@ -114,7 +116,7 @@ object PersonalizedDiscovery {
             .filter { it.isNotBlank() }
             .distinct()
 
-        val hash = computeCanonicalTasteFingerprint(library, settings, favoriteUniverse)
+        val hash = computeCanonicalTasteFingerprint(library, settings, favoriteUniverse, feedback)
 
         return UserTasteProfile(
             readingSeries = reading,
@@ -124,7 +126,8 @@ object PersonalizedDiscovery {
             favoriteComics = allFavorites,
             wantToReadSeries = wantToRead,
             favoriteUniverse = favoriteUniverse,
-            tasteHash = hash
+            tasteHash = hash,
+            moreLike = feedback.boosted.map { it.comic() }
         )
     }
 
@@ -135,7 +138,8 @@ object PersonalizedDiscovery {
     fun computeCanonicalTasteFingerprint(
         library: List<ComicEntry>,
         settings: AppSettings,
-        favoriteUniverse: String
+        favoriteUniverse: String,
+        feedback: RecommendationFeedback = RecommendationFeedback()
     ): String {
         val sortedComics = library.sortedWith(
             compareBy<ComicEntry> { it.id.ifBlank { it.externalId } }
@@ -155,7 +159,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v14|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}"
+        val canonicalPayload = "v15|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}|feedback:${feedback.canonical()}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -165,9 +169,10 @@ object PersonalizedDiscovery {
         catalog: List<ComicEntry>,
         library: List<ComicEntry>,
         favoriteUniverse: String = "",
-        settings: AppSettings = AppSettings()
+        settings: AppSettings = AppSettings(),
+        feedback: RecommendationFeedback = RecommendationFeedback()
     ): List<RecommendedComic> {
-        val taste = extractTasteProfile(library, settings, favoriteUniverse)
+        val taste = extractTasteProfile(library, settings, favoriteUniverse, feedback)
         val pool = catalog.ifEmpty { CuratedCatalog.curatedComicsCatalog }.takeLast(396)
 
         val known = library + taste.favoriteComics
@@ -178,6 +183,7 @@ object PersonalizedDiscovery {
         val prefersManga = normalized(favoriteUniverse).contains("manga") || library.any { normalized(it.genre).contains("manga") }
         val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool.mapNotNull(::verifiedCandidate), "PT")
             .sortedByDescending { CatalogSearchPolicy.isPortugueseEdition(it) }.filter { c ->
+            if (feedback.hides(c)) return@filter false
             if (!prefersManga && (c.sourceLabel.contains("MangaDex", true) || c.sourceLabel.contains("Kitsu", true))) return@filter false
             val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
@@ -191,6 +197,7 @@ object PersonalizedDiscovery {
             var score = 0
             var reason = ""
             var signal = ""
+            var reference = ""
 
             // 1. Continuação de série em leitura (READING)
             val readingMatch = taste.readingSeries.firstOrNull { (s, lastIssue) ->
@@ -204,6 +211,7 @@ object PersonalizedDiscovery {
                 score += 140
                 reason = "Continuação da sua leitura"
                 signal = "READING_CONTINUATION"
+                reference = readingMatch.first
             }
 
             // 2. Continuação de série lida (READ)
@@ -219,6 +227,7 @@ object PersonalizedDiscovery {
                     score += 125
                     reason = "Próxima edição de ${readMatch.first.take(24)}"
                     signal = "SERIES_NEXT"
+                    reference = readMatch.first
                 }
             }
 
@@ -231,6 +240,7 @@ object PersonalizedDiscovery {
                         val charDisplay = char.substringBefore('(').trim()
                         reason = "Com seu favorito: $charDisplay"
                         signal = "FAVORITE_CHARACTER"
+                        reference = charDisplay
                         break
                     }
                 }
@@ -246,6 +256,7 @@ object PersonalizedDiscovery {
                     score += 90
                     reason = "De $topAuthorMatch • Na sua estante"
                     signal = "FAVORITE_AUTHOR"
+                    reference = topAuthorMatch
                 }
             }
 
@@ -259,10 +270,20 @@ object PersonalizedDiscovery {
                     score += 80
                     reason = "Porque você curte ${favMatch.displayTitle.take(20)}"
                     signal = "FAVORITE_COMIC"
+                    reference = favMatch.displayTitle
                 }
             }
 
             // 6. Fila Quero Ler
+            if (score < 85) {
+                val more = taste.moreLike.firstOrNull { affinity(feat, features(it)) >= 5f }
+                if (more != null) {
+                    score += 85
+                    reason = "Mais como ${more.displayTitle.take(26)}"
+                    signal = "EXPLICIT_MORE"
+                    reference = more.displayTitle
+                }
+            }
             if (score < 65) {
                 val wtrMatch = taste.wantToReadSeries.firstOrNull { s ->
                     val base = normalized(s)
@@ -272,6 +293,7 @@ object PersonalizedDiscovery {
                     score += 65
                     reason = "Relacionado à sua fila Quero Ler"
                     signal = "WANT_TO_READ"
+                    reference = wtrMatch
                 }
             }
 
@@ -280,6 +302,7 @@ object PersonalizedDiscovery {
                 score += 45
                 reason = "Destaque do universo $favoriteUniverse"
                 signal = "FAVORITE_UNIVERSE"
+                reference = favoriteUniverse
             }
 
             if (score > 0) {
@@ -290,7 +313,19 @@ object PersonalizedDiscovery {
                 if (publisher.contains("dc comics") || publisher.contains("marvel") || publisher.contains("vertigo")) score += 25
                 if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
                 if (candidate.releaseYear > 0) score += 2
-                RecommendedComic(candidate, reason.ifBlank { "Sugerido para você" }.take(42), score, signal)
+                val detail = when (signal) {
+                    "READING_CONTINUATION" -> "É a próxima edição identificada de $reference, série que você está lendo."
+                    "SERIES_NEXT" -> "É a próxima edição identificada de $reference, presente nas suas leituras concluídas."
+                    "FAVORITE_CHARACTER" -> "Os metadados desta HQ mencionam $reference, um dos seus personagens favoritos."
+                    "FAVORITE_AUTHOR" -> "Tem autoria em comum com suas leituras: $reference."
+                    "FAVORITE_COMIC" -> "Compartilha sinais do catálogo com $reference, uma das suas HQs favoritas."
+                    "EXPLICIT_MORE" -> "Você pediu mais sugestões como $reference. Esta HQ compartilha sinais do catálogo com ela."
+                    "WANT_TO_READ" -> "Relacionada a $reference, que está na sua fila Quero Ler."
+                    "FAVORITE_UNIVERSE" -> "Os metadados correspondem à sua preferência por $reference."
+                    else -> "Seleção de catálogo. Não há um motivo pessoal detalhado registrado."
+                }
+                RecommendedComic(candidate, reason.ifBlank { "Sugerido para você" }.take(42), score, signal,
+                    RecommendationReason(signal,reference.take(300),detail.take(1000)))
             } else null
         }.sortedByDescending { it.score }
 
@@ -314,7 +349,8 @@ object PersonalizedDiscovery {
                 var score = 30
                 if (candidate.coverUrl.isNotBlank()) score += 10
                 if (candidate.authors.isNotBlank() && !candidate.authors.contains("Equipe criativa", true)) score += 8
-                RecommendedComic(candidate, reason, score, "CATALOG_SHOWCASE")
+                RecommendedComic(candidate, reason, score, "CATALOG_SHOWCASE",
+                    RecommendationReason("CATALOG_SHOWCASE","","Seleção editorial do catálogo, sem um sinal pessoal suficiente registrado."))
             }.sortedByDescending { it.score }
         } else {
             emptyList()
@@ -399,6 +435,8 @@ object PersonalizedDiscovery {
                     put("reasonLabel", rec.reasonLabel.take(42))
                     put("score", rec.score)
                     put("signalSource", rec.signalSource.take(32))
+                    rec.explanation?.let { e -> put("explanation",org.json.JSONObject().put("kind",e.kind.take(32))
+                        .put("reference",e.reference.take(300)).put("detail",e.detail.take(1000))) }
                 }
             }
 
@@ -465,7 +503,9 @@ object PersonalizedDiscovery {
                         comic = comic,
                         reasonLabel = obj.optString("reasonLabel", "Para você").take(42),
                         score = obj.optInt("score", 100),
-                        signalSource = obj.optString("signalSource", "CACHE")
+                        signalSource = obj.optString("signalSource", "CACHE"),
+                        explanation = obj.optJSONObject("explanation")?.let { e -> RecommendationReason(
+                            e.optString("kind").take(32),e.optString("reference").take(300),e.optString("detail").take(1000)) }
                     )
                 )
             }

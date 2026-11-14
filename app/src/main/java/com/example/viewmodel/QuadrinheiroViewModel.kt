@@ -194,13 +194,22 @@ class QuadrinheiroViewModel(
         val recommendations: List<com.example.data.RecommendedComic> = emptyList(),
         val tasteFingerprint: String = "",
         val isRefreshing: Boolean = false,
-        val isLegacyProvisional: Boolean = false
+        val isLegacyProvisional: Boolean = false,
+        val hasComputed: Boolean = false
     )
 
     private val _exploreRecommendationState = MutableStateFlow(ExploreRecommendationUiState())
     val exploreRecommendationState: StateFlow<ExploreRecommendationUiState> = _exploreRecommendationState.asStateFlow()
     private var recommendationJob: Job? = null
     private var requestedRecommendationKey = ""
+    val curation: com.example.data.CurationController = com.example.data.CurationController(appContext, viewModelScope, ::curationOwnerUid) {
+        val feedback = curationFeedback()
+        _exploreRecommendationState.value = _exploreRecommendationState.value.copy(
+            recommendations = _exploreRecommendationState.value.recommendations.filterNot { feedback.hides(it.comic) })
+        triggerRecommendationRefreshIfNeeded()
+    }
+    private fun curationFeedback(): com.example.data.RecommendationFeedback = curation.state.value.takeIf { it.owner==activeOwnerUid() }?.feedback
+        ?: com.example.data.RecommendationFeedback()
     private val recommendationJobMutex = kotlinx.coroutines.sync.Mutex()
 
     private var cloudProfileJob: Job? = null
@@ -386,6 +395,9 @@ class QuadrinheiroViewModel(
     }
 
     init {
+        viewModelScope.launch {
+            combine(_currentUserProfile,_cloudUser,_authUiState) { _,_,_->curationOwnerUid() }.collect { curation.activate() }
+        }
         com.example.data.LibraryDiskCacheRegistry.registerUrls(
             initial.comics.map { it.coverUrl } + listOfNotNull(initial.profile.avatarUrl, initial.settings.profileBannerUrl)
         )
@@ -1053,6 +1065,12 @@ class QuadrinheiroViewModel(
         }
     }
 
+    private fun curationOwnerUid(): String {
+        val local=_currentUserProfile.value
+        val remote=_cloudUser.value
+        if(local!=null && !local.isGuest && remote!=null && local.uid!=remote.uid) return "local_default"
+        return activeOwnerUid()
+    }
     private fun activeOwnerUid(): String {
         if (isCurrentSessionGuest()) return "guest_local"
         return _cloudUser.value?.uid
@@ -2551,12 +2569,20 @@ class QuadrinheiroViewModel(
     }
 
     fun exportBackupJson(): String {
-        return storage.buildBackupJsonString(_comics.value, _profile.value, _appSettings.value, pretty = true)
+        return org.json.JSONObject(storage.buildBackupJsonString(_comics.value, _profile.value, _appSettings.value, pretty = true))
+            .put("personalCuration",curation.export()).toString(2)
     }
 
     fun importBackupJson(rawJson: String): Boolean {
+        val backupOwner=activeOwnerUid()
+        val privateBackup = try { org.json.JSONObject(rawJson).optJSONObject("personalCuration")?.let(curation::validateBackup) }
+            catch (_: Exception) { showNotice("Listas ou preferências inválidas no backup"); return false }
         val restored = storage.importBackupJsonString(rawJson)
         return if (restored != null) {
+            if(privateBackup!=null) viewModelScope.launch {
+                if(curation.restore(privateBackup,backupOwner)) showNotice("Backup restaurado com sucesso")
+                else showNotice("Acervo restaurado; listas pendentes. Abra Listas e tente importar novamente.")
+            }
             _comics.value = restored.comics
             _profile.value = restored.profile
             _appSettings.value = restored.settings
@@ -2570,7 +2596,7 @@ class QuadrinheiroViewModel(
                     }
                 }
             }
-            showNotice("Backup restaurado com sucesso")
+            showNotice(if(privateBackup==null) "Backup restaurado com sucesso" else "Acervo restaurado. Restaurando listas e preferências…")
             true
         } else {
             showNotice("Arquivo de backup inválido")
@@ -2588,9 +2614,11 @@ class QuadrinheiroViewModel(
      */
     suspend fun hydrateRecommendationsForActiveAccountAsync() = withContext(Dispatchers.IO) {
         val targetUid = activeOwnerUid()
+        curation.awaitLocal()
+        if(!curation.isReady(targetUid)) return@withContext
         val snapshot = storage.loadAccountRecommendationsSnapshot(targetUid)
         if (snapshot != null) {
-            val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations.filter { com.example.data.PersonalizedDiscovery.verifiedCandidate(it.comic) != null }, _comics.value)
+            val unownedRecs = filterOwnedFromRecommendations(snapshot.recommendations.filter { com.example.data.PersonalizedDiscovery.verifiedCandidate(it.comic) != null && !curationFeedback().hides(it.comic) }, _comics.value)
             withContext(Dispatchers.Main) {
                 if (activeOwnerUid() == targetUid) {
                     _exploreRecommendationState.value = ExploreRecommendationUiState(
@@ -2613,6 +2641,7 @@ class QuadrinheiroViewModel(
         val ownedIds = library.map { it.id }.filter { it.isNotBlank() }.toSet()
         val ownedExt = library.map { it.externalId }.filter { it.isNotBlank() }.toSet()
         return recs.filter { rec ->
+            !curationFeedback().hides(rec.comic) &&
             rec.comic.id !in ownedIds &&
                 (rec.comic.externalId.isBlank() || rec.comic.externalId !in ownedExt)
         }
@@ -2629,17 +2658,19 @@ class QuadrinheiroViewModel(
         val librarySnapshot = _comics.value
         val settingsSnapshot = _appSettings.value
         val universeSnapshot = _profile.value.favoriteUniverse
+        val feedbackSnapshot = curationFeedback()
 
         // Barreira: se restauração local não terminou, não roda sobre estado vazio
         if (!_isLocalRestoreComplete.value) return
+        if(!curation.isReady(currentUid)) return
 
         val fingerprint = com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
-            librarySnapshot, settingsSnapshot, universeSnapshot)
+            librarySnapshot, settingsSnapshot, universeSnapshot, feedbackSnapshot)
         val requestKey = "$currentUid:$currentGeneration:$fingerprint"
         val existing = _exploreRecommendationState.value
         if (!forceRefresh && ((recommendationJob?.isActive == true && requestedRecommendationKey == requestKey) ||
             (existing.ownerUid == currentUid && existing.tasteFingerprint == fingerprint &&
-                existing.recommendations.isNotEmpty() && !existing.isLegacyProvisional))) return
+                (existing.recommendations.isNotEmpty() || existing.hasComputed) && !existing.isLegacyProvisional))) return
         requestedRecommendationKey = requestKey
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.IO) {
@@ -2651,14 +2682,15 @@ class QuadrinheiroViewModel(
                 val canonicalFingerprint = com.example.data.PersonalizedDiscovery.computeCanonicalTasteFingerprint(
                     library = librarySnapshot,
                     settings = settingsSnapshot,
-                    favoriteUniverse = universeSnapshot
+                    favoriteUniverse = universeSnapshot,
+                    feedback = feedbackSnapshot
                 )
 
                 val currentState = _exploreRecommendationState.value
                 val isSnapshotAlreadyValid = !forceRefresh &&
                     currentState.ownerUid == currentUid &&
                     currentState.tasteFingerprint == canonicalFingerprint &&
-                    currentState.recommendations.isNotEmpty() &&
+                    (currentState.recommendations.isNotEmpty() || currentState.hasComputed) &&
                     !currentState.isLegacyProvisional
 
                 if (isSnapshotAlreadyValid) {
@@ -2678,7 +2710,8 @@ class QuadrinheiroViewModel(
                 val taste = com.example.data.PersonalizedDiscovery.extractTasteProfile(
                     library = librarySnapshot,
                     settings = settingsSnapshot,
-                    favoriteUniverse = universeSnapshot
+                    favoriteUniverse = universeSnapshot,
+                    feedback = feedbackSnapshot
                 )
 
                 // Gera recomendações primariamente a partir do acervo local e candidatos em cache
@@ -2697,7 +2730,8 @@ class QuadrinheiroViewModel(
                     catalog = catalogPool,
                     library = librarySnapshot,
                     favoriteUniverse = universeSnapshot,
-                    settings = settingsSnapshot
+                    settings = settingsSnapshot,
+                    feedback = feedbackSnapshot
                 ).take(com.example.data.PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS)
 
                 val enhancedUnverified = com.example.data.FirebaseAiRecommendationEnhancer.enhanceOrFallback(
@@ -2709,6 +2743,8 @@ class QuadrinheiroViewModel(
                 if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration) return@launch
 
                 val enhanced = com.example.data.RecommendationCoverCheck.filter(appContext, enhancedUnverified)
+                ensureActive()
+                if(activeOwnerUid()!=currentUid || authSessionGeneration!=currentGeneration || requestedRecommendationKey!=requestKey) return@launch
                 if (enhanced.isNotEmpty()) {
                     // Grava snapshot durável de 24 itens em filesDir
                     storage.saveAccountRecommendationsSnapshot(
@@ -2731,14 +2767,16 @@ class QuadrinheiroViewModel(
                                 recommendations = unownedEnhanced,
                                 tasteFingerprint = canonicalFingerprint,
                                 isRefreshing = false,
-                                isLegacyProvisional = false
+                                isLegacyProvisional = false,
+                                hasComputed = true
                             )
                         }
                     }
                 } else {
                     withContext(Dispatchers.Main) {
                         if (activeOwnerUid() == currentUid) {
-                            _exploreRecommendationState.value = _exploreRecommendationState.value.copy(isRefreshing = false)
+                            _exploreRecommendationState.value = _exploreRecommendationState.value.copy(isRefreshing = false,
+                                tasteFingerprint=canonicalFingerprint,isLegacyProvisional=false,hasComputed=true)
                         }
                     }
                 }

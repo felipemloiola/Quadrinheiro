@@ -1,3 +1,8 @@
+// Private curation: users/{uid}/lists/{uuid}, recommendationPreferences/state.
+// Envelope: ownerId(string, immutable), revision(int, increments once), deleted(bool;
+// list tombstones cannot be resurrected), updatedAt(server timestamp), payload(string,
+// <=262144 characters). Payload is private bounded JSON, decoded/validated by the app;
+// it is never trusted for authorization, cross-user paths, community or server actions.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -274,6 +279,32 @@ service cloud.firestore {
           resource.data.ownerId == request.resource.data.ownerId &&
           isValidCloudComic(request.resource.data, userId);
         allow delete: if isOwner(userId);
+      }
+      function validPrivateCuration(data) {
+        return data.keys().hasAll(['ownerId','revision','deleted','payload','updatedAt']) &&
+          data.keys().hasOnly(['ownerId','revision','deleted','payload','updatedAt']) &&
+          data.ownerId is string && data.ownerId == userId && data.ownerId.size() <= 128 &&
+          data.revision is int && data.revision > 0 && data.revision <= 2147483647 &&
+          data.deleted is bool && data.payload is string && data.payload.size() >= 2 && data.payload.size() <= 262144 &&
+          data.updatedAt is timestamp && data.updatedAt == request.time;
+      }
+      match /lists/{listId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && listId.matches('^[a-fA-F0-9-]{36}$') &&
+          validPrivateCuration(request.resource.data) && request.resource.data.revision == 1 && !request.resource.data.deleted;
+        allow update: if isOwner(userId) && validPrivateCuration(request.resource.data) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.revision == resource.data.revision + 1 && !resource.data.deleted;
+        allow delete: if false;
+      }
+      match /recommendationPreferences/{stateId} {
+        allow read: if isOwner(userId) && stateId == 'state';
+        allow create: if isOwner(userId) && stateId == 'state' && validPrivateCuration(request.resource.data) &&
+          request.resource.data.revision == 1 && !request.resource.data.deleted;
+        allow update: if isOwner(userId) && stateId == 'state' && validPrivateCuration(request.resource.data) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.revision == resource.data.revision + 1 && !request.resource.data.deleted;
+        allow delete: if false;
       }
     }
 

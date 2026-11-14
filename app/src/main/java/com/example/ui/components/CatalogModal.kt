@@ -522,6 +522,10 @@ fun CatalogSheetModal(
                             }
                         }
 
+                        item(key = "private-list-action", contentType = "private_list_action") {
+                            val curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                            AddToListAction(draftComic,curationViewModel.curation)
+                        }
                         item(key = "editor-section-2", contentType = "status_picker") {
                             CatalogStatusSegmentedBar(
                                 value = draftStatus,

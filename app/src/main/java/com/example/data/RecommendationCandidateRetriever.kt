@@ -17,8 +17,11 @@ data class RecommendedComic(
     val comic: ComicEntry,
     val reasonLabel: String,
     val score: Int,
-    val signalSource: String
+    val signalSource: String,
+    val explanation: RecommendationReason? = null
 )
+
+data class RecommendationReason(val kind: String, val reference: String, val detail: String)
 
 /**
  * Perfil de gosto do usuário extraído de toda a biblioteca existente e dos favoritos.
@@ -32,7 +35,8 @@ data class UserTasteProfile(
     val favoriteComics: List<ComicEntry>,
     val wantToReadSeries: List<String>,
     val favoriteUniverse: String,
-    val tasteHash: String
+    val tasteHash: String,
+    val moreLike: List<ComicEntry> = emptyList()
 )
 
 object RecommendationCandidateRetriever {
@@ -90,6 +94,7 @@ object RecommendationCandidateRetriever {
         }
 
         val queries = mutableListOf<String>()
+        queries += taste.moreLike.take(2).map { it.authors.substringBefore(',').ifBlank { it.displayTitle }.take(80) }
         val characterPicks = mapOf(
             "Batman" to listOf("Batman Silêncio", "Batman O Cavaleiro das Trevas", "Batman A Corte das Corujas"),
             "Superman" to listOf("Grandes Astros Superman", "Superman As Quatro Estações", "Superman Entre a Foice e o Martelo"),

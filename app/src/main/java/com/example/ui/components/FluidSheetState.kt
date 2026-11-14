@@ -120,7 +120,8 @@ class FluidSheetState internal constructor(
 fun rememberFluidSheet(
     initialHeightFraction: Float = 0.82f,
     onDismiss: () -> Unit,
-    onExpand: () -> Unit
+    onExpand: () -> Unit,
+    backEnabled: Boolean = true
 ): FluidSheetState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -135,7 +136,7 @@ fun rememberFluidSheet(
         FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced, { dismiss.value() }, { expand.value() })
     }
     LaunchedEffect(state) { state.enter() }
-    PredictiveBackHandler {
+    PredictiveBackHandler(enabled = backEnabled) {
         state.beginBack()
         try {
             it.collect { event -> state.updateBack(event.progress) }

@@ -51,6 +51,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         if (libraryMatch != null) comic = libraryMatch
     }
     val t = LocalIOS27Theme.current
+    val curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val context = LocalContext.current
     var entity by remember { mutableStateOf<Pair<String, String>?>(null) }
     val history = remember { mutableStateListOf<Pair<ComicEntry, Pair<String, String>?>>() }
@@ -227,6 +228,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                     }
                 }
             }
+            if (isComic) item { com.example.ui.components.AddToListAction(comic,curationViewModel.curation) }
             if (isComic) item { DetailTabs(tab, { tab = it }) }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = t.accent) }
             if (failed) item { TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Tentar carregar informações novamente", color = t.accent) } }

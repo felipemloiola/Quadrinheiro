@@ -1,4 +1,5 @@
 package com.example.ui.screens
+import androidx.compose.material.icons.filled.FormatListNumbered
 
 import androidx.compose.ui.platform.testTag
 
@@ -807,8 +808,13 @@ fun ShelfLibraryTab(
     onOpenStatistics: () -> Unit = {},
     onShareComicReview: (ComicEntry) -> Unit = {},
     onShareGoalSummary: (String) -> Unit = {},
-    onBackToProfile: () -> Unit = {}
+    onBackToProfile: () -> Unit = {},
+    curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    if (shelfSection == "lists") {
+        com.example.ui.components.PersonalListsScreen(comics,curationViewModel.curation,onChangeShelfSection,onBackToProfile,onGoToSearch,onSelectComic)
+        return
+    }
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
 
@@ -985,7 +991,8 @@ fun ShelfLibraryTab(
                     onChange = onChangeShelfSection,
                     options = listOf(
                         SegmentOption("shelf", "Estante", LucideIcons.Library),
-                        SegmentOption("diary", "Diário", LucideIcons.Calendar)
+                        SegmentOption("diary", "Diário", LucideIcons.Calendar),
+                        SegmentOption("lists", "Listas", Icons.Default.FormatListNumbered)
                     )
                 )
             }

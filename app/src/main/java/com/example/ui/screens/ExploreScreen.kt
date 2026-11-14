@@ -153,6 +153,7 @@ fun ExploreScreen(
     var collection by remember { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(viewModel) {
+        viewModel.curation.load()
         viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
     }
     val catalog by ModernCatalog.entries.collectAsState()
@@ -250,7 +251,12 @@ fun ExploreScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 row.forEach { comic ->
                                     val reason = if (selected == "Para você") reasonMap[comic.id] else null
-                                    ExplorePoster(comic, Modifier.weight(1f), onComic, reason)
+                                    Column(Modifier.weight(1f)) {
+                                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, reason)
+                                        if(selected=="Para você") recs.firstOrNull {it.comic.id==comic.id}?.let {
+                                            com.example.ui.components.RecommendationExplanationAction(it,viewModel.curation,onComic)
+                                        }
+                                    }
                                 }
                                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                             }
@@ -296,7 +302,8 @@ fun ExploreScreen(
                                 recommendations = exploreRecommendationState.recommendations,
                                 catalogFallback = catalog,
                                 onExpand = { collection = "Para você" },
-                                onComic = onComic
+                                onComic = onComic,
+                                controller = viewModel.curation
                             )
                         }
                         item(key = "Para começar", contentType = "explore_shelf_section") {
@@ -335,7 +342,8 @@ private fun ExploreForYouSection(
     recommendations: List<RecommendedComic>,
     catalogFallback: List<ComicEntry>,
     onExpand: () -> Unit,
-    onComic: (ComicEntry) -> Unit
+    onComic: (ComicEntry) -> Unit,
+    controller: com.example.data.CurationController
 ) {
     val theme = LocalIOS27Theme.current
     val entries = remember(recommendations) {
@@ -360,7 +368,12 @@ private fun ExploreForYouSection(
                     key = { it.id },
                     contentType = { "explore_poster" }
                 ) { comic ->
-                    ExplorePoster(comic, Modifier.width(112.dp), onComic, reasonMap[comic.id])
+                    Column(Modifier.width(132.dp)) {
+                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, reasonMap[comic.id])
+                        recommendations.firstOrNull {it.comic.id==comic.id}?.let {
+                            com.example.ui.components.RecommendationExplanationAction(it,controller,onComic)
+                        }
+                    }
                 }
             }
         }
@@ -374,6 +387,7 @@ private fun ExploreForYouSection(
             )
         }
     }
+    com.example.ui.components.RecommendationPreferencesAction(controller)
 }
 
 @Composable
