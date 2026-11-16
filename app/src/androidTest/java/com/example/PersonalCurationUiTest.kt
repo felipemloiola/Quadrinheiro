@@ -54,11 +54,14 @@ class PersonalCurationUiTest {
                 }
             }
         }
-        compose.onNodeWithTag("list_editor_items").performScrollToNode(hasText("Nota"))
-        compose.onAllNodesWithText("Nota").onFirst().performClick()
+        val firstOptions="list_item_options_${list.items.first().key}"
+        compose.onNodeWithTag("list_editor_items").performScrollToNode(hasTestTag(firstOptions))
+        compose.onNodeWithTag(firstOptions).performClick()
+        compose.onNodeWithText("Nota").performClick()
         compose.onNode(hasSetTextAction() and hasText("Sua nota")).performTextInput("Minha primeira escolha")
         compose.onNodeWithText("Concluir").performClick()
-        compose.onAllNodesWithText("Mover").onFirst().performClick()
+        compose.onNodeWithTag(firstOptions).performClick()
+        compose.onNodeWithText("Mover").performClick()
         compose.onNode(hasSetTextAction() and hasText("Posição de 1 a 2")).performTextReplacement("2")
         compose.onAllNodesWithText("Mover").onLast().performClick()
         compose.onNodeWithText("Salvar lista").performClick()
@@ -135,6 +138,34 @@ class PersonalCurationUiTest {
         compose.waitUntil(10000) {controller.state.value.lists.any {it.id==pending.id}}
         assertEquals(2,storage.load("guest_local").lists.single().items.size)
         assertTrue(library.all {it.currentPage==0 && !it.favorite})
+    }
+    @Test fun selectingSeveralLibraryComicsIsAppliedOnlyOnConfirmation() {
+        val list=ComicList(name="Seleção em lote")
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
+            ListEditor(list,library,controller,null,{}) {}
+        }}
+        compose.onNodeWithTag("list_editor_items").performScrollToNode(hasText("Adicionar HQ da biblioteca"))
+        compose.onNodeWithText("Adicionar HQ da biblioteca").performClick()
+        compose.onNodeWithText(library.first().displayTitle).performClick()
+        compose.onNodeWithText(library.last().displayTitle).performClick()
+        assertTrue(controller.state.value.lists.isEmpty())
+        compose.onNodeWithText("Adicionar (2)").performClick()
+        compose.onNodeWithText("Salvar lista").performClick()
+        compose.waitUntil(10000) {controller.state.value.lists.any {it.id==list.id}}
+        assertEquals(2,storage.load("guest_local").lists.single().items.size)
+        assertTrue(library.all {it.currentPage==0})
+    }
+    @Test fun focusEditorKeepsArtworkChangesInTheDraftUntilConfirmed() {
+        val list=ComicList(name="Capa ajustável",items=library.map(ListComic::from))
+        var applied:ComicList?=null
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
+            ListArtworkEditor(list,{applied=it},{})
+        }}
+        compose.onNodeWithText(library.last().displayTitle).performClick()
+        assertNull(applied)
+        compose.onNodeWithText("Concluir").performClick()
+        assertEquals(list.items.last().key,applied!!.coverKey)
+        assertTrue(storage.load("guest_local").lists.isEmpty())
     }
     @Test fun deletedListsDoNotConsumeTheActiveListQuota() {
         storage.save("guest_local",CurationSnapshot(List(101) {ComicList(name="Lista excluída",deleted=true,revision=1)}))

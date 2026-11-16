@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -155,6 +157,18 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         catch (_: Exception) { }
     }
     val isComic = entity == null
+    val curationState by curationViewModel.curation.state.collectAsStateWithLifecycle()
+    LaunchedEffect(isComic, curationState.owner) { if (isComic) curationViewModel.curation.load() }
+    var listToOpen by remember(curationState.owner, comic.id) { mutableStateOf<ComicList?>(null) }
+    val currentReading = com.example.model.catalogEntryForEditing(comic, library)
+    val readingPresentation = ComicReadingPresentation.from(currentReading)
+    fun registerCurrent() {
+        onRegister(currentReading ?: comic.copy(
+            coverUrl = comic.coverUrl.ifBlank { detail?.image.orEmpty() },
+            pageCount = detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount,
+            isbn = comic.isbn.ifBlank { detail?.isbn.orEmpty() }
+        ))
+    }
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
     val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
@@ -174,14 +188,14 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         } else LazyColumn(
             state = listState,
             contentPadding = PaddingValues(
-                bottom = 32.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                bottom = (if (isComic) 112.dp else 32.dp) + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(22.dp)
         ) {
             item(key = "detail_header") {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val banner = detail?.banner.orEmpty().ifBlank { fallbackBanner }
-                    val heroHeight = maxWidth / 1.9f
+                    val banner = detail?.banner.orEmpty().ifBlank { fallbackBanner }.ifBlank { if (isComic) effectiveCover else "" }
+                    val heroHeight = (maxWidth / 2.8f).coerceAtLeast(112.dp)
                     if (banner.isNotBlank()) Box(Modifier.fillMaxWidth().height(heroHeight).testTag("comic_detail_banner")) {
                         ProfileImage(banner, null, Modifier.fillMaxSize())
                         Box(Modifier.matchParentSize().background(Brush.verticalGradient(
@@ -200,36 +214,15 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                                 if (isComic && authors.isNotBlank()) Text(authors, color = t.textSecondary, fontSize = 14.sp)
                                 if (isComic) {
                                     rating?.takeIf { it.count > 0 }?.let { Text("★ ${String.format(java.util.Locale.getDefault(), "%.1f", it.average)} · ${it.count} avaliações", color = t.textPrimary, fontSize = 13.sp) }
-                                    val currentLibraryEntry = com.example.model.catalogEntryForEditing(comic, library)
-                                    val actionLabel = when {
-                                        currentLibraryEntry != null && currentLibraryEntry.status == ReadingStatus.READING ->
-                                            if (currentLibraryEntry.pageCount > 0) "Em leitura · pág. ${currentLibraryEntry.currentPage}/${currentLibraryEntry.pageCount}"
-                                            else "Em leitura (pág. ${currentLibraryEntry.currentPage})"
-                                        currentLibraryEntry != null && currentLibraryEntry.status == ReadingStatus.READ ->
-                                            if (currentLibraryEntry.rating > 0f) "Concluída · ★ ${currentLibraryEntry.rating.toInt()}/5" else "Concluída ★"
-                                        currentLibraryEntry != null && currentLibraryEntry.status == ReadingStatus.WANT_TO_READ ->
-                                            "Na lista Quero Ler"
-                                        currentLibraryEntry != null -> "No acervo · Editar"
-                                        else -> "Registrar leitura"
-                                    }
-                                    TextButton(onClick = {
-                                        val target = currentLibraryEntry ?: comic.copy(
-                                            coverUrl = effectiveCover,
-                                            pageCount = detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount,
-                                            isbn = comic.isbn.ifBlank { detail?.isbn.orEmpty() }
-                                        )
-                                        onRegister(target)
-                                    }, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                                        Text(actionLabel, color = t.accent, fontWeight = FontWeight.SemiBold)
-                                    }
+
                                 }
                             }
                         }
                     }
                 }
             }
-            if (isComic) item { com.example.ui.components.AddToListAction(comic,curationViewModel.curation) }
             if (isComic) item { DetailTabs(tab, { tab = it }) }
+            if (isComic && tab == 0) item { ComicReadingSummary(readingPresentation, ::registerCurrent) }
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = t.accent) }
             if (failed) item { TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Tentar carregar informações novamente", color = t.accent) } }
             if (isComic && detail == null && !loading) item {
@@ -250,15 +243,28 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 }
                 item {
                     DetailSection("Detalhes") {
-                        val rows = if (isComic) listOf("Publicação" to detail?.date.orEmpty().ifBlank { comic.releaseYear.toString() },
+                        val rows = if (isComic) listOf("Publicação" to detail?.date.orEmpty().ifBlank { comic.releaseYear.takeIf { it > 0 }?.toString().orEmpty() },
                             "Formato" to detail?.format.orEmpty().ifBlank { comic.format }, "ISBN" to comic.isbn.ifBlank { detail?.isbn.orEmpty() },
                             "Páginas" to (detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount).takeIf { it > 0 }?.toString().orEmpty())
                         else listOf("Nome" to detail?.realName.orEmpty(), "Também conhecido como" to detail?.aliases.orEmpty(),
                             "Aparições" to detail?.appearances?.takeIf { it > 0 }?.toString().orEmpty(), "Poderes" to detail?.powers.orEmpty().joinToString(", "))
                         rows.filter { it.second.isNotBlank() }.forEach { (label, value) ->
-                            Text(label, color = t.textSecondary, fontSize = 12.sp)
-                            Text(value, color = t.textPrimary, fontSize = 15.sp)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Text(label, color = t.textSecondary, fontSize = 13.sp, modifier = Modifier.weight(.4f))
+                                Text(value, color = t.textPrimary, fontSize = 14.sp, modifier = Modifier.weight(.6f))
+                            }
                             HorizontalDivider(color = t.divider)
+                        }
+                    }
+                }
+                if (isComic) {
+                    val editionKey = ListComic.from(comic).key
+                    val memberships = curationState.lists.filter { !it.deleted && it.items.any { entry -> entry.key == editionKey } }
+                    if (memberships.isNotEmpty()) item {
+                        DetailSection("Suas listas") {
+                            memberships.forEach { list ->
+                                CompactListRow(list, { listToOpen = list })
+                            }
                         }
                     }
                 }
@@ -294,9 +300,24 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             .heightIn(min = 54.dp)
             .padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             SettingsBackButton({ goBack() }, collapsed = collapsed, label = if (isComic) "Voltar" else "HQ")
-            Spacer(Modifier.weight(1f))
+            if (collapsed) Text(if (isComic) comic.displayTitle else detail?.title.orEmpty(), color = t.textPrimary,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+            else Spacer(Modifier.weight(1f))
             if (isComic) IconButton(onClick = onShare) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.accent) }
         }
+        if (isComic && tab != 3) Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            .navigationBarsPadding().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 32.dp)
+            .contentMaterialSurface(RoundedCornerShape(28.dp)).padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            EditorialAction(readingPresentation.action, ::registerCurrent, Modifier.weight(1f))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                AddToListAction(comic, curationViewModel.curation, compact = true)
+            }
+        }
+    }
+    listToOpen?.let { selected ->
+        val list = curationState.lists.firstOrNull { it.id == selected.id && !it.deleted }
+        if (list != null) ListDetailSheet(list, { listToOpen = null }, onComic = { next -> listToOpen = null; openComic(next) })
     }
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->
         comic = comic.copy(externalId = edition.externalId, sourceLabel = edition.sourceLabel, publisher = edition.publisher.ifBlank { comic.publisher })
@@ -320,13 +341,10 @@ private fun DetailDescription(text: String, translating: Boolean, expanded: Bool
 @Composable
 private fun DetailTabs(tab: Int, onChange: (Int) -> Unit) {
     val t = LocalIOS27Theme.current
-    LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(4) { index ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TextButton(onClick = { onChange(index) }) { Text(listOf("Sobre", "Personagens", "Equipe", "Comunidade")[index], color = if (index == tab) t.accent else t.textSecondary) }
-                if (index == tab) Box(Modifier.size(24.dp, 2.dp).background(t.accent, RoundedCornerShape(2.dp)))
-            }
-        }
+    val labels = listOf("Sobre", "Personagens", "Equipe", "Comunidade")
+    Box(Modifier.padding(horizontal = 16.dp)) {
+        AppleSegmentedPicker(value = tab.toString(), onChange = { onChange(it.toInt()) },
+            options = labels.mapIndexed { index, label -> SegmentOption(index.toString(), label) })
     }
 }
 

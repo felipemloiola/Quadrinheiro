@@ -1,0 +1,44 @@
+# Listas e página da HQ — implementação dos rascunhos aprovados
+
+Status: primeira etapa implementada e validada localmente; acabamentos pendentes para retomada. Branch `codex/listas-recomendacoes-explicaveis`.
+
+## Decisões aceitas
+
+- Listas: um destaque na Biblioteca, demais linhas compactas; banner no detalhe de todas; capa escolhida entre os itens com enquadramento ajustável. Editor e seletores com capas, busca, seleção e hierarquia consistente.
+- Página da HQ: conceito C, ficha compacta, abas existentes, resumo de leitura e ações no rodapé, listas privadas associadas.
+- Preservar integralmente os formulários/painéis existentes de registro e progresso. Botões da página abrem o fluxo atual, sem salvar status automaticamente.
+- Recomendações: folha compacta com evidência real e ações existentes, sem alterar ranqueamento.
+- Não publicar código/artefatos nem alterar backend sem autorização. Rascunhos e contexto privados não entram no Git.
+
+## Etapas e retomada
+
+1. [x] Modelo retrocompatível de capa/foco/destaque; testes de codec/isolamento.
+2. [ ] Biblioteca e detalhe, capa/foco, menu de itens e seleção em lote implementados; falta consolidar catálogo dentro do seletor, ações diretas do menu e refinamento do editor.
+3. [x] Página HQ C mantendo registro existente e navegação de entidades/comunidade; revisão visual em andamento.
+4. [ ] Explicações receberam capa e botões lado a lado; falta reduzir a altura da folha preservando expansão e fontes grandes.
+5. [x] Testes afetados, build e revisão visual inicial em emulador mantido aberto (matriz ampliada fica para retomada).
+
+## Limite solicitado
+
+Usuário autorizou fazer o possível com saldo semanal informado de 9% e parar com retomada documentada se necessário. Não há leitura direta desse saldo disponível nesta sessão. Usar passos verificáveis, evitar reauditorias amplas/geração de imagens e registrar exatamente o que passou e o que falta antes de encerrar.
+
+## Invariantes
+
+minSdk24, materiais/movimento existentes, conta/UID e revisões, sem dados inventados do catálogo, páginas só da API, exclusão da lista não altera acervo. Mudanças visuais não devem criar consultas de rede por cartão ou animações contínuas.
+
+## Validação da etapa
+
+- Compilação Kotlin aprovada. Testes afetados:35 aprovados,0 falhas/ignorados; PersonalCuration em APIs24/34, apresentação de leitura e regressões de relações/metadados.
+- Build dos APKs aprovado;9 testes de interface aprovados (8 de listas +1 da página HQ, incluindo os três estados e callback de registro intacto). Logs locais ignorados `redesign-validation.log`, `redesign-final-build.log` e `redesign-native.log` em `.build-outputs/`.
+- Capturas reais inspecionadas: listas e estados Lendo/Lido com fixtures. Identificados e corrigidos espaço do rodapé em relação à barra de gestos e cabeçalho excessivo em lista sem imagem. Build final e2 testes focais dessas correções aprovados em `redesign-visual-fix-build.log` e `redesign-visual-fix-native.log`.
+- Registro existente em CatalogModal.kt não foi alterado. A página chama o callback atual com o registro intacto. Nenhuma escrita remota/deploy/release efetuado.
+- Emulador Medium_Phone_API_37.0 aberto para revisão; manter aberto. Nenhum aparelho físico conectado. Assinatura debug comparada com a instalação do emulador antes de atualizar; dados preservados por install-r.
+- Sem medição de regressão de CPU/GPU/jank/temperatura, nem matriz ampliada de UI concluída. Não declarar fidelidade/performance final. Nenhum teste ou serviço de catálogo alterado; sua suíte não foi repetida nesta etapa. As regras de listas da etapa anterior continuam locais, sem deploy: contas reais precisam dessa entrega posterior, não confundir APK debug com produção pronta.
+
+## Próximo ponto de retomada
+
+1. Conferir os resultados finais abaixo e o Git antes de mexer no código; não refazer o levantamento dos rascunhos.
+2. Terminar seletor de HQs com catálogo no mesmo fluxo; atualmente Buscar HQ no catálogo preserva rascunho e reutiliza a busca existente.
+3. Refinar editor/detalhe conforme rascunhos (ações de adicionar/capa/excluir diretas no menu; hierarquia do cabeçalho e confirmação de adição).
+4. Fazer folha de recomendação compacta com altura adaptativa e validar fontes grandes, modo claro, transparência/movimento reduzidos, API24/31/33+ e performance comparável.
+5. Somente depois preparar PR/publicação autorizada e regras/assinatura de produção; rascunhos, contexto e capturas pessoais ficam privados.

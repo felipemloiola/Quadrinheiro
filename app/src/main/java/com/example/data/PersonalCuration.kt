@@ -43,7 +43,19 @@ data class ListComic(val key: String, val id: String, val externalId: String, va
 
 data class ComicList(val id: String = UUID.randomUUID().toString(), val name: String = "",
     val description: String = "", val ranked: Boolean = false, val items: List<ListComic> = emptyList(),
-    val revision: Long = 0, val deleted: Boolean = false)
+    val revision: Long = 0, val deleted: Boolean = false,
+    val coverKey: String = "", val coverX: Float = .5f, val coverY: Float = .5f,
+    val coverZoom: Float = 1f, val featuredAt: Long = 0) {
+    fun coverItem(): ListComic? = items.firstOrNull { it.key == coverKey && it.cover.isNotBlank() }
+        ?: items.firstOrNull { it.cover.isNotBlank() }
+}
+
+/** One deterministic winner without cross-document writes; old backups remain valid. */
+fun featuredComicList(lists: List<ComicList>): ComicList? {
+    val active = lists.filterNot { it.deleted }
+    return active.filter { it.featuredAt > 0 }.maxWithOrNull(compareBy<ComicList> { it.featuredAt }.thenBy { it.id })
+        ?: active.firstOrNull { it.coverItem() != null } ?: active.firstOrNull()
+}
 
 data class RecommendationFeedback(val hidden: List<ListComic> = emptyList(), val boosted: List<ListComic> = emptyList(),
     val revision: Long = 0) {
@@ -75,14 +87,21 @@ internal object CurationCodec {
         require(list.name.isNotBlank() && list.name.length <= 100) { "Use um nome de até 100 caracteres." }
         require(list.description.length <= 2000 && list.items.size <= 200) { "Use até 200 HQs e descrição de até 2000 caracteres." }
         require(list.items.all { it.note.length <= 1000 } && list.items.distinctBy { it.key }.size == list.items.size)
+        require(list.coverKey.isEmpty() || list.coverKey.matches(Regex("[a-f0-9]{64}")))
+        require(list.coverX.isFinite() && list.coverY.isFinite() && list.coverZoom.isFinite())
+        require(list.coverX in 0f..1f && list.coverY in 0f..1f && list.coverZoom in 1f..3f && list.featuredAt >= 0)
         return bounded(JSONObject().put("id",list.id).put("name",list.name).put("description",list.description).put("ranked",list.ranked)
-            .put("items",JSONArray(list.items.map(::item))).put("revision",list.revision).put("deleted",list.deleted))
+            .put("items",JSONArray(list.items.map(::item))).put("revision",list.revision).put("deleted",list.deleted)
+            .put("coverKey",list.coverKey).put("coverX",list.coverX).put("coverY",list.coverY)
+            .put("coverZoom",list.coverZoom).put("featuredAt",list.featuredAt))
     }
     fun list(raw: String): ComicList {
         require(raw.toByteArray().size <= MAX_BYTES)
         val o=JSONObject(raw)
         return ComicList(o.getString("id"),o.getString("name"),o.optString("description"),o.optBoolean("ranked"),
-            entries(o.getJSONArray("items"),200),o.optLong("revision"),o.optBoolean("deleted")).also { encode(it) }
+            entries(o.getJSONArray("items"),200),o.optLong("revision"),o.optBoolean("deleted"),
+            o.optString("coverKey"),o.optDouble("coverX",.5).toFloat(),o.optDouble("coverY",.5).toFloat(),
+            o.optDouble("coverZoom",1.0).toFloat(),o.optLong("featuredAt")).also { encode(it) }
     }
     fun encode(f: RecommendationFeedback) = bounded(JSONObject().put("hidden",JSONArray(f.hidden.map(::item)))
         .put("boosted",JSONArray(f.boosted.map(::item))).put("revision",f.revision).also {

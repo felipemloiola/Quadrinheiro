@@ -13,6 +13,35 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[24,34])
 class PersonalCurationTest {
+    @Test fun oldListsStillDecodeAndArtworkSurvivesBackups() {
+        val item=ListComic.from(comic().copy(coverUrl="https://example.com/cover.jpg"))
+        val list=ComicList(name="Destaque",items=listOf(item),coverKey=item.key,coverX=.2f,coverY=.8f,coverZoom=2f,featuredAt=10)
+        assertEquals(list,CurationCodec.list(CurationCodec.encode(list)))
+        val legacy=org.json.JSONObject(CurationCodec.encode(list)).apply {
+            listOf("coverKey","coverX","coverY","coverZoom","featuredAt").forEach {remove(it)}
+        }
+        val old=CurationCodec.list(legacy.toString())
+        assertEquals(item,old.coverItem());assertEquals(1f,old.coverZoom);assertEquals(0L,old.featuredAt)
+        val storage=CurationStorage(ApplicationProvider.getApplicationContext())
+        assertEquals(list,storage.decode(storage.json(CurationSnapshot(lists=listOf(list)))).lists.single())
+    }
+    @Test fun invalidArtworkTransformsAreRejectedBeforePersistence() {
+        val base=ComicList(name="Lista")
+        listOf(base.copy(coverX=Float.NaN),base.copy(coverY=1.1f),base.copy(coverZoom=.5f),
+            base.copy(coverZoom=Float.POSITIVE_INFINITY),base.copy(coverKey="not-a-key"),base.copy(featuredAt=-1)).forEach {
+            assertTrue(runCatching {CurationCodec.encode(it)}.isFailure)
+        }
+    }
+    @Test fun removedCoverFallsBackAndOnlyOneListIsFeatured() {
+        val a=ListComic.from(comic().copy(coverUrl="https://example.com/a.jpg"))
+        val b=ListComic.from(comic("two","9781234567891").copy(coverUrl="https://example.com/b.jpg"))
+        val first=ComicList(name="Primeira",items=listOf(a,b),coverKey=b.key,featuredAt=10)
+        val second=ComicList(name="Segunda",featuredAt=20)
+        assertEquals(b,first.coverItem());assertEquals(a,first.copy(items=listOf(a)).coverItem())
+        assertEquals(second,featuredComicList(listOf(first,second)))
+        assertEquals(first,featuredComicList(listOf(first,second.copy(deleted=true))))
+        assertNull(featuredComicList(emptyList()))
+    }
     private fun comic(id: String="one", isbn: String="9781234567890") = ComicEntry(id,"external-$id","Batman: Silêncio",
         authors="Jeph Loeb",publisher="DC Comics",isbn=isbn,editionLanguage="pt",pageCount=120,genre="Mistério")
     @Test fun editionIdentityAndListRoundTripPreserveOrderNotesAndRanking() {

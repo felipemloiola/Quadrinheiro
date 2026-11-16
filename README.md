@@ -53,7 +53,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Browse the shelf in grid, list, or sequence layouts; sort, search, and filter by reading status and genre.
 - Register comics manually and save tags, notes, ratings, reviews, and reading progress.
 - Keep notes and progress when moving a comic between **Read**, **Reading**, and **Want to Read**.
-- Create private **Lists** with descriptions, automatic cover mosaics, optional numbered rankings, manual order, and per-entry notes. Add library or catalog editions without registering a reading; deleting a list preserves the library. Lists and recommendation preferences are included in JSON backups.
+- Create private **Lists** with descriptions, optional numbered rankings, manual order, and per-entry notes. Feature one list in the Library, choose artwork from its comics, and adjust its framing; other lists use compact cover rows. Select multiple library editions or add a catalog edition without registering a reading. Deleting a list preserves the library. Lists, artwork settings, and recommendation preferences are included in JSON backups.
 
 ### Catalog and comic details
 
@@ -61,6 +61,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Character information supported by the **Superhero API**.
 - Expandable synopses and a direct action to view a comic's source page.
 - Original-language edition details are kept distinct from translated metadata. Missing publisher, synopsis, credits, or page counts are not fabricated.
+- The comic page groups edition information, characters, creators, community, and your private lists, with reading-state summaries and persistent actions that open the existing registration flow.
 - Reading sliders use page totals from the selected edition's APIs, with exact edition ID / ISBN lookup and a retry state when that data is unavailable. No manual page-total input is required.
 
 ### Personalization, reading, and updates
