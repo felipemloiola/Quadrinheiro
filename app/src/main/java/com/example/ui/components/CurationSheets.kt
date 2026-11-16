@@ -163,6 +163,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         AppleSegmentedPicker(value="lists",onChange=onSection,options=listOf(SegmentOption("shelf","Estante",LucideIcons.Library),SegmentOption("diary","Diário",LucideIcons.Calendar),SegmentOption("lists","Listas",Icons.Default.FormatListNumbered)))
         CurationError(controller)
         if(state.error!=null) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
+        if(state.localOnly && state.owner!="guest_local") Text("Listas salvas nesta conta, neste aparelho",color=t.textSecondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
         LazyColumn(contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             items(drafts,key={"draft:${it.id}"}) {pending ->
                 CompactListRow(pending,{editing=pending},trailing="Continuar rascunho · ${pending.items.size} HQs")

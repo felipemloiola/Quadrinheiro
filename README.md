@@ -54,6 +54,7 @@ An internet connection is required. Firestore uses memory-only caching; small im
 - Register comics manually and save tags, notes, ratings, reviews, and reading progress.
 - Keep notes and progress when moving a comic between **Read**, **Reading**, and **Want to Read**.
 - Create private **Lists** with descriptions, optional numbered rankings, manual order, and per-entry notes. Feature one list in the Library, choose artwork from its comics, and adjust its framing; other lists use compact cover rows. Select multiple library editions or add a catalog edition without registering a reading. Deleting a list preserves the library. Lists, artwork settings, and recommendation preferences are included in JSON backups.
+- Lists follow the account's storage: local email accounts keep them on the device, isolated by account, while Google accounts use private cloud storage.
 
 ### Catalog and comic details
 

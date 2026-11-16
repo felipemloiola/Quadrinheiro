@@ -9,10 +9,12 @@ import org.json.JSONObject
 
 data class CurationState(val owner: String = "", val lists: List<ComicList> = emptyList(),
     val feedback: RecommendationFeedback = RecommendationFeedback(), val loading: Boolean = false,
-    val saving: Boolean = false, val error: String? = null, val ready: Boolean = false)
+    val saving: Boolean = false, val error: String? = null, val ready: Boolean = false,
+    val localOnly: Boolean = false)
 
 class CurationController internal constructor(context: Context, private val scope: CoroutineScope,
-    private val currentOwner: () -> String, private val onFeedbackChanged: () -> Unit) {
+    private val currentOwner: () -> String, private val onFeedbackChanged: () -> Unit,
+    private val isLocalOwner: (String) -> Boolean = {it=="guest_local"}) {
     private val storage=CurationStorage(context)
     private val cloud by lazy { CurationCloudRepository(context) }
     private val mutable=MutableStateFlow(CurationState())
@@ -24,9 +26,10 @@ class CurationController internal constructor(context: Context, private val scop
     private var generation=0L
     fun activate() {
         val uid=currentOwner()
-        if(mutable.value.owner==uid) return
+        val localOnly=isLocalOwner(uid)
+        if(mutable.value.owner==uid && mutable.value.localOnly==localOnly) return
         generation++; loadJob?.cancel();localJob?.cancel(); loaded=false;localReady=false
-        mutable.value=CurationState(owner=uid)
+        mutable.value=CurationState(owner=uid,localOnly=localOnly)
         val token=generation
         localJob=scope.launch(Dispatchers.IO) {
             val local=runCatching { storage.load(uid) }.getOrElse {
@@ -46,6 +49,7 @@ class CurationController internal constructor(context: Context, private val scop
         activate()
         if((!force && loaded) || loadJob?.isActive==true || mutable.value.saving) return
         val uid=currentOwner(); val token=generation
+        val localOnly=mutable.value.localOnly
         val pendingLocal=localJob
         if(uid=="local_default") { mutable.value=mutable.value.copy(error="Entre em uma conta ou use o modo convidado."); return }
         loadJob=scope.launch {
@@ -54,13 +58,13 @@ class CurationController internal constructor(context: Context, private val scop
             try {
                 var cacheIssue=false
                 val snapshot=withContext(Dispatchers.IO) {
-                    if(uid=="guest_local") storage.load(uid) else cloud.load(uid).also {
+                    if(localOnly) storage.load(uid) else cloud.load(uid).also {
                         cacheIssue=runCatching {storage.save(uid,it)}.isFailure
                     }
                 }
                 if(token==generation && currentOwner()==uid) {
                     loaded=true;localReady=true; mutable.value=CurationState(uid,snapshot.lists,snapshot.feedback,
-                        error=if(cacheIssue) "Dados carregados da conta, mas a cópia local não pôde ser atualizada. Verifique o espaço disponível ou reduza o tamanho das listas." else null,ready=true)
+                        error=if(cacheIssue) "Dados carregados da conta, mas a cópia local não pôde ser atualizada. Verifique o espaço disponível ou reduza o tamanho das listas." else null,ready=true,localOnly=localOnly)
                     onFeedbackChanged()
                 }
             } catch(cancelled: CancellationException) { throw cancelled }
@@ -103,7 +107,7 @@ class CurationController internal constructor(context: Context, private val scop
                 require(lists.count {!it.deleted}<=100 && lists.size<=2100) { "Limite de listas atingido. Exclua uma lista ativa antes de criar outra." }
                 list?.let { CurationCodec.encode(it); storage.saveDraft(uid,it) }
                 feedback?.let { CurationCodec.encode(it) }
-                if(uid!="guest_local") {
+                if(!old.localOnly) {
                     if(list!=null) cloud.saveList(uid,list)
                     if(feedback!=null) cloud.saveFeedback(uid,feedback)
                 } else if(list!=null) {
@@ -114,7 +118,7 @@ class CurationController internal constructor(context: Context, private val scop
                 }
                 CurationSnapshot(lists,feedback?.copy(revision=feedback.revision+1) ?: old.feedback).also {
                     try {storage.save(uid,it)} catch(e: Exception) {
-                        if(uid=="guest_local") throw e
+                        if(old.localOnly) throw e
                         cacheIssue=true // The server acknowledged the write. Never report it as unsaved or hide the new revision.
                     }
                     if(list!=null) storage.clearDraft(uid,list.id)
@@ -122,7 +126,7 @@ class CurationController internal constructor(context: Context, private val scop
             }
             if(token==generation && currentOwner()==uid) {
                 mutable.value=CurationState(uid,next.lists,next.feedback,
-                    error=if(cacheIssue) "Salvo na conta. A cópia local não pôde ser atualizada; verifique o espaço ou reduza o tamanho das listas." else null,ready=true)
+                    error=if(cacheIssue) "Salvo na conta. A cópia local não pôde ser atualizada; verifique o espaço ou reduza o tamanho das listas." else null,ready=true,localOnly=old.localOnly)
                 if(feedback!=null) onFeedbackChanged()
             }
             true

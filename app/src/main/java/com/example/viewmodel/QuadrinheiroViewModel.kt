@@ -202,12 +202,16 @@ class QuadrinheiroViewModel(
     val exploreRecommendationState: StateFlow<ExploreRecommendationUiState> = _exploreRecommendationState.asStateFlow()
     private var recommendationJob: Job? = null
     private var requestedRecommendationKey = ""
-    val curation: com.example.data.CurationController = com.example.data.CurationController(appContext, viewModelScope, ::curationOwnerUid) {
+    val curation: com.example.data.CurationController = com.example.data.CurationController(appContext, viewModelScope, ::curationOwnerUid, onFeedbackChanged = {
         val feedback = curationFeedback()
         _exploreRecommendationState.value = _exploreRecommendationState.value.copy(
             recommendations = _exploreRecommendationState.value.recommendations.filterNot { feedback.hides(it.comic) })
         triggerRecommendationRefreshIfNeeded()
-    }
+    }, isLocalOwner = { uid ->
+        uid=="guest_local" || (_cloudUser.value==null && _currentUserProfile.value?.let {
+            !it.isGuest && it.provider=="email" && it.uid==uid
+        }==true)
+    })
     private fun curationFeedback(): com.example.data.RecommendationFeedback = curation.state.value.takeIf { it.owner==activeOwnerUid() }?.feedback
         ?: com.example.data.RecommendationFeedback()
     private val recommendationJobMutex = kotlinx.coroutines.sync.Mutex()

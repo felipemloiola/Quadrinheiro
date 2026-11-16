@@ -60,3 +60,13 @@ minSdk24, materiais/movimento existentes, conta/UID e revisões, sem dados inven
 - IMPEDIMENTO REMANESCENTE COMPROVADO: `PrivateCuration: Load IllegalStateException code=none at CurationCloudRepository.owner(CurationCloudRepository.kt:17)`. A sessão Firebase não corresponde ao UID solicitado pelas listas (ainda não distinguido entre sessão ausente ou outra conta). Não remover a checagem de dono, não migrar automaticamente os dados para outro UID, não deslogar/apagar dados.
 - Rascunho real Teste com1HQ preservado. Salvamento na conta real ainda NÃO validado/resolvido; testes de convidado e regras não substituem essa verificação.
 - Próxima ação: verificar/reconectar a sessão da conta correta pelo fluxo existente, preservando rascunhos; ajustar a mensagem/ação de reconexão e validar leitura + salvamento real. Depois revisar as telas claras e confirmar a aparência com usuário. Não refazer geração de rascunhos nem auditoria ampla.
+
+### Retomada — diagnóstico completo
+
+O login por e-mail do aplicativo é deliberadamente local (`QuadrinheiroAuthManager.signInWithEmail` e `SafeStorage`, UID email_...), sem FirebaseAuth. A curadoria só reconhecia convidado como local e tentava abrir Firestore para a conta por e-mail. Não é necessário trocar conta/reconectar Google para corrigir esse caso.
+
+Correção: política explícita isLocalOwner fornecida pelo ViewModel, baseada no perfil/sessão reais; convidado e conta local por e-mail usam snapshots/rascunhos privados por UID. Google continua no Firestore, inclusive quando sua sessão falha (nenhum fallback local por falha de rede/auth). Mudança de modo/UID invalida o estado do controller. UI informa armazenamento neste aparelho. Registro de leitura/acervo/auth não alterados.
+
+Validar salvar e recarregar em conta por e-mail, rejeitar escrita tardia após troca de conta e preservar o rascunho real Teste. Teste nativo novo cobre esse ciclo com fixture e restaura os arquivos ao terminar.
+
+Resultado da retomada:27 testes unitários aprovados,10 nativos aprovados, APKs compilados e instalação no emulador preservando dados. Conta existente abriu listas sem erro; rascunho Teste(1HQ) foi salvo com seu conteúdo preservado. Após fechar/reabrir o processo, a lista reapareceu e o rascunho deixou de ser exibido. Captura privada do editor em `.build-outputs/curation-email-editor.png`; logs `curation-email-validation.log` e `curation-email-native.log`. Emulador mantido aberto em Listas. Impedimento de salvamento desta conta resolvido; pendências de acabamento anteriores continuam separadas acima.

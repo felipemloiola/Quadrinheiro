@@ -185,6 +185,34 @@ class PersonalCurationUiTest {
         compose.onNodeWithText("Salvar lista").assertIsNotEnabled()
         compose.onNodeWithText("Recarregar versão salva · preservar rascunho").assertDoesNotExist()
     }
+    @Test fun localEmailAccountSavesReloadsAndNeverLeaksIntoAnotherAccount() {
+        val uid="email-curation-fixture"
+        val before=storage.load(uid)
+        val beforeDrafts=storage.drafts(uid)
+        var owner=uid
+        val local=CurationController(InstrumentationRegistry.getInstrumentation().targetContext,scope,{owner},{},isLocalOwner={it==uid})
+        try {
+            compose.runOnIdle {local.load()}
+            compose.waitUntil(10000) {local.state.value.ready}
+            assertTrue(local.state.value.localOnly)
+            var saved=false
+            val list=ComicList(name="Lista da conta por e-mail",items=library.map(ListComic::from))
+            compose.runOnIdle {scope.launch {saved=local.save(list)}}
+            compose.waitUntil(10000) {saved}
+            val cold=CurationController(InstrumentationRegistry.getInstrumentation().targetContext,scope,{owner},{},isLocalOwner={it==uid})
+            compose.runOnIdle {cold.load()}
+            compose.waitUntil(10000) {cold.state.value.ready}
+            assertTrue(cold.state.value.lists.any {it.id==list.id && it.items.size==2})
+            compose.runOnIdle {owner="other-account";local.activate()}
+            var rejected=false
+            compose.runOnIdle {scope.launch {rejected=!local.save(list,uid)}}
+            compose.waitUntil(10000) {rejected}
+            assertFalse(local.state.value.localOnly)
+            assertFalse(local.state.value.lists.any {it.id==list.id})
+        } finally {
+            storage.save(uid,before);storage.clearDraft(uid);beforeDrafts.forEach {storage.saveDraft(uid,it)}
+        }
+    }
     @Test fun deletedListsDoNotConsumeTheActiveListQuota() {
         storage.save("guest_local",CurationSnapshot(List(101) {ComicList(name="Lista excluída",deleted=true,revision=1)}))
         compose.runOnIdle {controller.load(true)}
