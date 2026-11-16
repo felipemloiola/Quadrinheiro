@@ -45,9 +45,10 @@ data class ComicList(val id: String = UUID.randomUUID().toString(), val name: St
     val description: String = "", val ranked: Boolean = false, val items: List<ListComic> = emptyList(),
     val revision: Long = 0, val deleted: Boolean = false,
     val coverKey: String = "", val coverX: Float = .5f, val coverY: Float = .5f,
-    val coverZoom: Float = 1f, val featuredAt: Long = 0) {
+    val coverZoom: Float = 1f, val featuredAt: Long = 0, val isPublic: Boolean = false) {
     fun coverItem(): ListComic? = items.firstOrNull { it.key == coverKey && it.cover.isNotBlank() }
         ?: items.firstOrNull { it.cover.isNotBlank() }
+    fun publicSnapshot() = copy(items=items.map {it.copy(note="")},featuredAt=0,revision=0,deleted=false,isPublic=true)
 }
 
 /** One deterministic winner without cross-document writes; old backups remain valid. */
@@ -93,7 +94,7 @@ internal object CurationCodec {
         return bounded(JSONObject().put("id",list.id).put("name",list.name).put("description",list.description).put("ranked",list.ranked)
             .put("items",JSONArray(list.items.map(::item))).put("revision",list.revision).put("deleted",list.deleted)
             .put("coverKey",list.coverKey).put("coverX",list.coverX).put("coverY",list.coverY)
-            .put("coverZoom",list.coverZoom).put("featuredAt",list.featuredAt))
+            .put("coverZoom",list.coverZoom).put("featuredAt",list.featuredAt).put("isPublic",list.isPublic))
     }
     fun list(raw: String): ComicList {
         require(raw.toByteArray().size <= MAX_BYTES)
@@ -101,7 +102,7 @@ internal object CurationCodec {
         return ComicList(o.getString("id"),o.getString("name"),o.optString("description"),o.optBoolean("ranked"),
             entries(o.getJSONArray("items"),200),o.optLong("revision"),o.optBoolean("deleted"),
             o.optString("coverKey"),o.optDouble("coverX",.5).toFloat(),o.optDouble("coverY",.5).toFloat(),
-            o.optDouble("coverZoom",1.0).toFloat(),o.optLong("featuredAt")).also { encode(it) }
+            o.optDouble("coverZoom",1.0).toFloat(),o.optLong("featuredAt"),o.optBoolean("isPublic")).also { encode(it) }
     }
     fun encode(f: RecommendationFeedback) = bounded(JSONObject().put("hidden",JSONArray(f.hidden.map(::item)))
         .put("boosted",JSONArray(f.boosted.map(::item))).put("revision",f.revision).also {

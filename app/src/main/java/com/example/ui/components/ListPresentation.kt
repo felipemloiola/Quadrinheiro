@@ -71,7 +71,7 @@ internal fun CompactListRow(list: ComicList, onClick: () -> Unit, enabled: Boole
         ListCoverStack(list, Modifier.width(92.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(list.name, color = t.textPrimary, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(trailing ?: "${list.items.size} HQs · Privada", color = t.textSecondary, fontSize = 12.sp)
+            Text(trailing ?: "${list.items.size} HQs · ${if(list.isPublic) "Pública" else "Privada"}", color = t.textSecondary, fontSize = 12.sp)
         }
         Icon(if (trailing == "Já adicionada") Icons.Default.CheckCircle else Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = t.textSecondary)
     }
@@ -82,9 +82,12 @@ internal fun FeaturedListCard(list: ComicList, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color(0xFF111113))
         .clickable(onClickLabel = "Abrir lista ${list.name}", onClick = onClick)) {
         ListHero(list)
-        Row(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            list.items.take(4).forEach { entry ->
-                BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.weight(1f).aspectRatio(2f / 3f))
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(start=14.dp,end=14.dp,bottom=16.dp)) {
+            val coverWidth=((maxWidth-30.dp)/4).coerceIn(32.dp,64.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                list.items.take(4).forEach { entry ->
+                    BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.width(coverWidth).height(coverWidth*1.5f))
+                }
             }
         }
     }
@@ -99,8 +102,8 @@ internal fun ListHero(list: ComicList) {
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(list.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 25.sp, lineHeight = 29.sp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.Lock, null, tint = Color.White.copy(alpha = .8f), modifier = Modifier.size(14.dp))
-                Text("${list.items.size} HQs · Privada", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
+                Icon(if(list.isPublic) Icons.Default.Public else Icons.Default.Lock, null, tint = Color.White.copy(alpha = .8f), modifier = Modifier.size(14.dp))
+                Text("${list.items.size} HQs · ${if(list.isPublic) "Pública" else "Privada"}", color = Color.White.copy(alpha = .8f), fontSize = 13.sp)
             }
         }
     }
@@ -108,24 +111,23 @@ internal fun ListHero(list: ComicList) {
 
 @Composable
 internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (ComicEntry) -> Unit,
-    onEdit: (() -> Unit)? = null, onHighlight: (() -> Unit)? = null, busy: Boolean = false) {
+    onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null, busy: Boolean = false) {
     val t = LocalIOS27Theme.current
     var menu by remember { mutableStateOf(false) }
-    CurationSheet("Lista", onClose, busy = busy) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-            if (onEdit != null) TextButton(onClick = onEdit, enabled = !busy) { Text("Editar lista", color = t.textPrimary) }
+    CurationSheet(list.name, onClose, busy = busy, actionLabel=if(onEdit!=null) "Editar" else null,
+        onAction={onEdit?.invoke()}, headerActions={
             if (onHighlight != null) Box {
                 IconButton(onClick = { menu = true }, enabled = !busy) { Icon(Icons.Default.MoreHoriz, "Opções da lista", tint = t.textPrimary) }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(text = { Text("Destacar na Biblioteca") }, onClick = { menu = false; onHighlight() })
-                    if (onEdit != null) DropdownMenuItem(text = { Text("Escolher capa e enquadramento") }, onClick = { menu = false; onEdit() })
+                    if (onEdit != null) DropdownMenuItem(text = { Text("Escolher capa") }, onClick = { menu = false; onEdit() })
                 }
             }
-        }
+        }) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { ListHero(list) }
             if (list.description.isNotBlank()) item { Text(list.description, color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp)) }
-            if (onEdit != null) item { EditorialAction("Adicionar HQs", onEdit, Modifier.fillMaxWidth().padding(horizontal = 16.dp), !busy) }
+            if (onAdd != null) item { EditorialAction("Adicionar HQs", onAdd, Modifier.fillMaxWidth().padding(horizontal = 16.dp), !busy) }
             if (list.items.isEmpty()) item {
                 Text("Nenhuma HQ por aqui", color = t.textPrimary, modifier = Modifier.padding(24.dp), fontSize = 20.sp)
             }
@@ -150,20 +152,20 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
 internal fun ListArtworkEditor(list: ComicList, onApply: (ComicList) -> Unit, onClose: () -> Unit) {
     val t = LocalIOS27Theme.current
     var draft by remember(list.id) { mutableStateOf(list) }
-    var tab by remember { mutableStateOf("cover") }
+    var choosing by remember { mutableStateOf(true) }
     var previewSize by remember { mutableStateOf(IntSize.Zero) }
     var precise by remember { mutableStateOf(false) }
     val latest by rememberUpdatedState(draft)
-    CurationSheet("Capa da lista", onClose,actionLabel="Concluir",onAction={onApply(draft);onClose()}) {
-        AppleSegmentedPicker(value = tab, onChange = { tab = it }, options = listOf(SegmentOption("cover", "Escolher capa"), SegmentOption("focus", "Enquadramento")))
+    CurationSheet(if(choosing) "Escolher capa" else "Ajustar capa", {if(choosing) onClose() else choosing=true},actionLabel=if(choosing) null else "Usar capa",onAction={onApply(draft);onClose()}) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (tab == "cover") {
+            if (choosing) {
                 item { Text("Use uma HQ desta lista", color = t.textSecondary) }
                 items(list.items.chunked(2), key = { it.first().key }) { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         pair.forEach { entry ->
                             Column(Modifier.weight(1f).clickable(role = Role.RadioButton, onClickLabel = "Usar capa de ${entry.title}") {
-                                draft = draft.copy(coverKey = entry.key, coverX = .5f, coverY = .5f, coverZoom = 1f)
+                                draft = if(draft.coverKey==entry.key) draft else draft.copy(coverKey = entry.key, coverX = .5f, coverY = .5f, coverZoom = 1f)
+                                choosing=false
                             }.semantics { selected = (draft.coverKey.ifBlank { draft.coverItem()?.key.orEmpty() }) == entry.key }) {
                                 BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                                 Text((if (draft.coverKey.ifBlank { draft.coverItem()?.key.orEmpty() } == entry.key) "✓ " else "") + entry.title, color = t.textPrimary, modifier = Modifier.padding(vertical = 8.dp))

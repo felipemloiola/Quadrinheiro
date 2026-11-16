@@ -139,15 +139,15 @@ internal object ComicBannerResolver {
         }
         null
     }
-    suspend fun resolve(detail: CatalogDetails, title: String, force: Boolean = false): String = withContext(Dispatchers.IO) {
-        val key = "${detail.type}:${detail.id}"
+    suspend fun resolve(detail: CatalogDetails, title: String, force: Boolean = false, allowCharacterFallback: Boolean = true): String = withContext(Dispatchers.IO) {
+        val key = "${detail.type}:${detail.id}:$allowCharacterFallback"
         val saved = synchronized(cache) { cache[key] }
         if (!force && saved != null) {
             val age = System.currentTimeMillis() - saved.savedAt
             if (age in 0 until (if (saved.url.isBlank()) 60000L else 600000L)) return@withContext saved.url
         }
         val found = withTimeoutOrNull(6000L) {
-            first(detail) ?: creditedCharacter(detail, title)?.let { credit ->
+            first(detail) ?: (if(allowCharacterFallback) creditedCharacter(detail, title) else null)?.let { credit ->
                 val character = ComicVineCatalog.details("character", credit.id)
                 first(character)
             }.orEmpty()

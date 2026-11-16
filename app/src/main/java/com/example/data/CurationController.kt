@@ -101,6 +101,7 @@ class CurationController internal constructor(context: Context, private val scop
         if(!loaded || old.saving || old.loading || uid!=expectedOwner || uid!=currentOwner() || uid=="local_default") return false
         mutable.value=old.copy(saving=true,error=null)
         return try {
+            require(!old.localOnly || list?.isPublic!=true) {"Use uma conta Google para publicar. Suas listas locais permanecem privadas."}
             var cacheIssue=false
             val next=withContext(Dispatchers.IO) {
                 val lists=if(list==null) old.lists else (old.lists.filterNot { it.id==list.id }+list.copy(revision=list.revision+1))
@@ -171,7 +172,7 @@ class CurationController internal constructor(context: Context, private val scop
         if(state.value.error!=null || currentOwner()!=owner) return false
         for(list in snapshot.lists.filterNot { it.deleted }) {
             val previous=state.value.lists.firstOrNull { it.id==list.id && !it.deleted }
-            val target=list.copy(id=previous?.id ?: java.util.UUID.randomUUID().toString(),revision=previous?.revision ?: 0)
+            val target=list.copy(id=previous?.id ?: java.util.UUID.randomUUID().toString(),revision=previous?.revision ?: 0,isPublic=false)
             if(!save(target,owner)) return false
         }
         if(currentOwner()!=owner) return false

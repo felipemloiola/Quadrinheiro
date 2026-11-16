@@ -308,6 +308,32 @@ service cloud.firestore {
       }
     }
 
+    // Public lists are explicit, bounded copies. Never grant access to private lists.
+    // publicLists/{ownerId}_{listId}: ownerId/listId immutable strings, revision int,
+    // published bool, payload bounded JSON, updatedAt server timestamp.
+    function validPublicList(data, publicId) {
+      let privateList = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/lists/$(data.listId));
+      return data.keys().hasAll(['ownerId','listId','revision','published','payload','updatedAt']) &&
+        data.keys().hasOnly(['ownerId','listId','revision','published','payload','updatedAt']) &&
+        data.ownerId is string && data.ownerId == request.auth.uid && data.ownerId.size() <= 128 &&
+        data.listId is string && data.listId.matches('^[a-fA-F0-9-]{36}$') &&
+        publicId == data.ownerId + '_' + data.listId &&
+        data.revision is int && data.revision > 0 && data.revision <= 2147483647 &&
+        data.published is bool && data.payload is string && data.payload.size() >= 2 && data.payload.size() <= 262144 &&
+        data.updatedAt == request.time &&
+        privateList.data.ownerId == request.auth.uid && privateList.data.revision == data.revision &&
+        (!data.published || !privateList.data.deleted);
+    }
+    match /publicLists/{publicId} {
+      allow get: if resource.data.published == true;
+      allow list: if request.query.limit != null && request.query.limit <= 20 && resource.data.published == true;
+      allow create: if isSignedIn() && validPublicList(request.resource.data, publicId);
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId && request.resource.data.listId == resource.data.listId &&
+        request.resource.data.revision > resource.data.revision && validPublicList(request.resource.data, publicId);
+      allow delete: if false;
+    }
+
     // Community schema: explicit opt-in snapshots, never reads from users/{uid}/comics.
     // Reviews: ownerId, author(1..80), handle(0..60), avatar/cover(HTTPS or empty,
     // <=2000), comicKey(32), title(1..300), body(0..5000), rating(0..5),

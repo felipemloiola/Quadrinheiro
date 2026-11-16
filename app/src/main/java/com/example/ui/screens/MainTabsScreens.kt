@@ -1,4 +1,6 @@
 package com.example.ui.screens
+
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.FormatListNumbered
 
 import androidx.compose.ui.platform.testTag
@@ -812,7 +814,8 @@ fun ShelfLibraryTab(
     curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     if (shelfSection == "lists") {
-        com.example.ui.components.PersonalListsScreen(comics,curationViewModel.curation,onChangeShelfSection,onBackToProfile,onGoToSearch,onSelectComic)
+        val accountContext=LocalContext.current
+        com.example.ui.components.PersonalListsScreen(comics,curationViewModel.curation,onChangeShelfSection,onBackToProfile,onGoToSearch,onSelectComic,onConnectAccount={curationViewModel.loginWithGoogle(accountContext)})
         return
     }
     val mat = LocalAppleMaterials.current

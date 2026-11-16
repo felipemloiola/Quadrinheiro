@@ -147,14 +147,26 @@ object ComicVineCatalog {
             val results = search(searchTitle).items
             if (results.isEmpty()) null
             else {
-                val best = if (comic.issueNumber > 0) {
-                    results.firstOrNull { it.issueNumber == comic.issueNumber }
-                        ?: results.firstOrNull { it.displayTitle.contains("#${comic.issueNumber}") }
-                        ?: results.first()
-                } else results.first()
-                resolve(best)
+                matchingEdition(comic,results)?.let {resolve(it)}
             }
         }.getOrNull()
+    }
+    internal fun matchingEdition(comic:ComicEntry,results:List<ComicEntry>):ComicEntry? {
+        val isbn=comic.isbn.filter(Char::isLetterOrDigit)
+        if(isbn.length in listOf(10,13)) {
+            val exact=results.filter {it.isbn.filter(Char::isLetterOrDigit).equals(isbn,true)}
+            if(exact.size==1)return exact.single()
+        }
+        fun title(c:ComicEntry)=CatalogSearchPolicy.normalize(c.seriesName.ifBlank {c.displayTitle}
+            .replace(Regex("\\(\\d{4}\\)"),"").replace(Regex("#?\\s*\\d+$"),"").trim())
+        val base=title(comic)
+        val matches=results.filter {candidate ->
+            title(candidate)==base && base.length>=3 &&
+                (comic.issueNumber<=0 || candidate.issueNumber==comic.issueNumber) &&
+                (comic.releaseYear<=0 || candidate.releaseYear<=0 || candidate.releaseYear==comic.releaseYear) &&
+                (comic.editionLanguage.isBlank() || candidate.editionLanguage.isBlank() || comic.editionLanguage==candidate.editionLanguage)
+        }
+        return matches.singleOrNull()
     }
     suspend fun translated(details: CatalogDetails): CatalogDetails {
         if(details.description.isBlank()) return details

@@ -70,3 +70,11 @@ Correção: política explícita isLocalOwner fornecida pelo ViewModel, baseada 
 Validar salvar e recarregar em conta por e-mail, rejeitar escrita tardia após troca de conta e preservar o rascunho real Teste. Teste nativo novo cobre esse ciclo com fixture e restaura os arquivos ao terminar.
 
 Resultado da retomada:27 testes unitários aprovados,10 nativos aprovados, APKs compilados e instalação no emulador preservando dados. Conta existente abriu listas sem erro; rascunho Teste(1HQ) foi salvo com seu conteúdo preservado. Após fechar/reabrir o processo, a lista reapareceu e o rascunho deixou de ser exibido. Captura privada do editor em `.build-outputs/curation-email-editor.png`; logs `curation-email-validation.log` e `curation-email-native.log`. Emulador mantido aberto em Listas. Impedimento de salvamento desta conta resolvido; pendências de acabamento anteriores continuam separadas acima.
+
+### Acabamento e publicação — 16/11/2026
+
+Correções da rodada atual: miniaturas limitadas; cabeçalhos em área segura; rótulos únicos nos seletores; botão de capa visível; fluxo escolher → ajustar; pinch validado; adição direta pelo detalhe; visibilidade pública com confirmação e retirada; metadados automáticos sem escolher edição arbitrária; foco visual do banner, fade transparente, atmosfera discreta e capa ampliável. Registro existente preservado.
+
+Regras de listas públicas publicadas com autorização específica do usuário, somente no banco nomeado. Versão ativa idêntica ao arquivo local; consultas privadas preservadas. Nenhuma lista real publicada. Contas locais por e-mail continuam locais; publicação requer Firebase/Google e não migra dados automaticamente.
+
+Relatório e limitações: `docs/LISTAS-E-HQ-VALIDACAO.md`. Validação:24 testes do catálogo,47 unitários/regras e12 de interface na primeira rodada. Repetição final de interface após ajuste de borda/espaçamento registrada nos logs locais. Matriz física/performance e demais pendências de recomendações não foram declaradas concluídas.

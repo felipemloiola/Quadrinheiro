@@ -13,6 +13,16 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[24,34])
 class PersonalCurationTest {
+    @Test fun publishingNeverCopiesPrivateNotesOrPrivateRevision() {
+        val list=ComicList(name="Pública",items=listOf(ListComic.from(comic()).copy(note="Segredo")),revision=8,featuredAt=50,isPublic=true)
+        val public=CurationCodec.list(CurationCodec.encode(list.publicSnapshot()))
+        assertEquals("",public.items.single().note)
+        assertEquals(0L,public.revision)
+        assertEquals(0L,public.featuredAt)
+        assertEquals("Segredo",list.items.single().note)
+        val old=org.json.JSONObject(CurationCodec.encode(list)).apply {remove("isPublic")}
+        assertFalse(CurationCodec.list(old.toString()).isPublic)
+    }
     @Test fun oldListsStillDecodeAndArtworkSurvivesBackups() {
         val item=ListComic.from(comic().copy(coverUrl="https://example.com/cover.jpg"))
         val list=ComicList(name="Destaque",items=listOf(item),coverKey=item.key,coverX=.2f,coverY=.8f,coverZoom=2f,featuredAt=10)

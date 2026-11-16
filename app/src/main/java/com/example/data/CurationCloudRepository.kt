@@ -25,9 +25,9 @@ internal class CurationCloudRepository(context: Context,
         owner(uid)
         return CurationSnapshot(lists, if(feedback.exists()) CurationCodec.feedback(feedback.getString("payload")!!).copy(revision=feedback.getLong("revision")!!) else RecommendationFeedback())
     }
-    suspend fun saveList(uid: String, list: ComicList) = write(uid,"lists/${list.id}",list.revision,list.deleted,CurationCodec.encode(list))
+    suspend fun saveList(uid: String, list: ComicList) = write(uid,"lists/${list.id}",list.revision,list.deleted,CurationCodec.encode(list),list)
     suspend fun saveFeedback(uid: String, feedback: RecommendationFeedback) = write(uid,"recommendationPreferences/state",feedback.revision,false,CurationCodec.encode(feedback))
-    private suspend fun write(uid: String, path: String, revision: Long, deleted: Boolean, payload: String) {
+    private suspend fun write(uid: String, path: String, revision: Long, deleted: Boolean, payload: String, list:ComicList?=null) {
         owner(uid)
         val ref=db.document("users/$uid/$path")
         gate.execute(ref.path to db, Triple(revision,deleted,payload)) {
@@ -35,12 +35,28 @@ internal class CurationCloudRepository(context: Context,
                 owner(uid)
                 val previous=tx.get(ref)
                 if ((previous.getLong("revision") ?: 0L)!=revision || previous.getBoolean("deleted")==true) throw CurationConflict()
+                val wasPublic=previous.getString("payload")?.let {runCatching {CurationCodec.list(it).isPublic}.getOrDefault(false)} ?: false
                 tx.set(ref,mapOf("ownerId" to uid,"revision" to revision+1,"deleted" to deleted,
                     "payload" to payload,"updatedAt" to FieldValue.serverTimestamp()))
+                if(list!=null && (list.isPublic || wasPublic)) {
+                    val published=list.isPublic && !list.deleted
+                    tx.set(db.document("publicLists/${uid}_${list.id}"),mapOf("ownerId" to uid,"listId" to list.id,
+                        "revision" to revision+1,"published" to published,
+                        "payload" to if(published) CurationCodec.encode(list.publicSnapshot()) else "{}",
+                        "updatedAt" to FieldValue.serverTimestamp()))
+                }
                 null
             }
         }
         owner(uid)
     }
     companion object { private val gate=FirestoreWriteGate() }
+}
+
+internal class PublicListsRepository(context:Context,private val db:FirebaseFirestore=FirebaseFirestore.getInstance(context.getString(R.string.firestore_database_id))) {
+    suspend fun load():List<ComicList> {
+        OnlineFirestorePolicy.configure(db)
+        return db.collection("publicLists").whereEqualTo("published",true).limit(20).get(Source.SERVER).await().documents
+            .mapNotNull {document -> runCatching {CurationCodec.list(document.getString("payload")!!).publicSnapshot()}.getOrNull()}
+    }
 }

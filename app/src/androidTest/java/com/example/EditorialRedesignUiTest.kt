@@ -19,15 +19,23 @@ class EditorialRedesignUiTest {
 
     @Test fun detailUsesExistingRegistrationAndKeepsReadingStateUntouched() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        val image=java.io.File(context.getExternalFilesDir(null),"redesign-covers/batman.jpg")
+        val image=java.io.File(context.cacheDir,"detail-cover-fixture.png")
+        val bitmap=android.graphics.Bitmap.createBitmap(120,180,android.graphics.Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(android.graphics.Color.rgb(38,83,104))
+        image.outputStream().use {bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)}
+        bitmap.recycle()
         val base=ComicEntry("redesign-fixture","","Batman: Ano Um",authors="Frank Miller · David Mazzucchelli",publisher="Panini Comics",
             pageCount=144,currentPage=32,status=ReadingStatus.READING,coverUrl=if(image.exists()) image.toURI().toString() else "",
             synopsisPtBr="Uma história sobre os primeiros passos do Batman em Gotham.",releaseYear=2019)
         var shown by mutableStateOf(base)
         var registered:ComicEntry?=null
+        var resolved=false
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(colorScheme="dark",reduceMotion=true,reduceTransparency=true)) {
-            ComicDetailDialog(shown,ReaderProfile(),listOf(shown),{}, {registered=it},{},{},{})
+            ComicDetailDialog(shown,ReaderProfile(),listOf(shown),{}, {registered=it},{},{},{},resolveDetails={resolved=true;null})
         }}
+        compose.waitUntil(5000){resolved}
+        compose.onNodeWithContentDescription(base.displayTitle).performClick()
+        compose.onNodeWithContentDescription("Fechar capa").assertIsDisplayed().performClick()
         compose.onNodeWithText("Atualizar leitura").assertIsDisplayed().performClick()
         assertEquals(base,registered)
         capture("redesign-hq-lendo.png")

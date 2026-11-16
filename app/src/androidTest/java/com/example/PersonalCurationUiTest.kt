@@ -162,7 +162,7 @@ class PersonalCurationUiTest {
             ListArtworkEditor(list,{applied=it},{})
         }}
         compose.onNodeWithText(library.last().displayTitle).performClick()
-        compose.onNodeWithText("Enquadramento").performClick()
+        compose.onNodeWithText("Ajustar capa").assertIsDisplayed()
         compose.onNodeWithContentDescription("Enquadramento da capa.",substring=true).performTouchInput {
             down(0,androidx.compose.ui.geometry.Offset(centerX-25,centerY))
             down(1,androidx.compose.ui.geometry.Offset(centerX+25,centerY))
@@ -171,10 +171,19 @@ class PersonalCurationUiTest {
             up(0);up(1)
         }
         assertNull(applied)
-        compose.onNodeWithText("Concluir").performClick()
+        compose.onNodeWithText("Usar capa").performClick()
         assertEquals(list.items.last().key,applied!!.coverKey)
         assertTrue(applied!!.coverZoom>1f)
         assertTrue(storage.load("guest_local").lists.isEmpty())
+    }
+    @Test fun singleBookFeaturedListStaysCompact() {
+        val list=ComicList(name="Uma HQ",items=listOf(ListComic.from(library.first())))
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
+            FeaturedListCard(list,{})
+        }}
+        val bounds=compose.onNodeWithText("Uma HQ").fetchSemanticsNode().boundsInRoot
+        val density=InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        assertTrue("Card de uma HQ não pode ocupar toda a tela",bounds.height/density<400f)
     }
     @Test fun unavailableAccountCannotOfferAnApparentlySuccessfulSave() {
         val unavailable=CurationController(InstrumentationRegistry.getInstrumentation().targetContext,scope,{"local_default"},{})

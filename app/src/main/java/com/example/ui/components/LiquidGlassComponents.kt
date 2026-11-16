@@ -1643,7 +1643,6 @@ fun LiquidGlassSegmentedControl(
     val currentSelectedIndex by rememberUpdatedState(selectedIndex)
     val currentOnTabSelected by rememberUpdatedState(onTabSelected)
     val tabsCount = tabs.size.coerceAtLeast(1)
-    val tabsBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
         modifier = modifier
@@ -1833,54 +1832,6 @@ fun LiquidGlassSegmentedControl(
             )
         }
 
-        CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides contentColor
-        ) {
-            Row(
-                Modifier
-                    .clearAndSetSemantics {}
-                    .alpha(0f)
-                    .layerBackdrop(
-                        backdrop = tabsBackdrop,
-                        reuseRecordedContent = true
-                    )
-                    .graphicsLayer {
-                        translationX = panelOffset
-                    }
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { ContinuousCapsule },
-                        highlight = {
-                            val progress = dampedDragAnimation.pressProgress
-                            Highlight.Default.copy(alpha = progress)
-                        },
-                        effects = {
-                            val progress = dampedDragAnimation.pressProgress
-                            if (progress > 0.005f) {
-                                vibrancy()
-                                blur(8f.dp.toPx())
-                                if (settings.enableLensRefraction && !settings.reduceTransparency) {
-                                    lens(24f.dp.toPx() * progress * settings.glassIntensity, 32f.dp.toPx() * progress * settings.glassIntensity, depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
-                                }
-                            }
-                        },
-                        layerBlock = {
-                            val progress = dampedDragAnimation.pressProgress
-                            val expandPx = SegmentedControlGeometry.TRACK_PRESS_EXPAND_DP.dp.toPx()
-                            scaleX = SegmentedControlGeometry.computeTrackScaleX(size.width, expandPx, progress)
-                            scaleY = SegmentedControlGeometry.computeTrackScaleY(size.height, expandPx, progress)
-                        },
-                        onDrawSurface = { drawRect(containerColor) }
-                    )
-                    .then(interactiveHighlight.modifier)
-                    .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
-                    .fillMaxWidth()
-                    .padding(SegmentedControlGeometry.TRACK_INSET_DP.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = rowContent
-            )
-        }
-
         Box(
             Modifier
                 .padding(horizontal = SegmentedControlGeometry.TRACK_INSET_DP.dp)
@@ -1892,7 +1843,7 @@ fun LiquidGlassSegmentedControl(
                 .then(interactiveHighlight.gestureModifier)
                 .then(dampedDragAnimation.modifier)
                 .drawBackdrop(
-                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
+                    backdrop = backdrop,
                     shape = { ContinuousCapsule },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
