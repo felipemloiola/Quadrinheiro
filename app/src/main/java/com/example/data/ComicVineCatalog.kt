@@ -3,6 +3,7 @@ package com.example.data
 import com.example.model.ComicEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.json.JSONObject
@@ -20,7 +21,7 @@ data class CatalogDetails(val id: String, val type: String, val title: String, v
     val description: String, val publisher: String, val date: String, val url: String, val covers: List<String>,
     val characters: List<CatalogCredit>, val creators: List<CatalogCredit>, val issues: List<ComicEntry>,
     val realName: String = "", val aliases: String = "", val powers: List<String> = emptyList(), val appearances: Int = 0,
-    val creditsScope: String = "issue",val pageCount:Int=0,val isbn:String="",val format:String="")
+    val creditsScope: String = "issue",val pageCount:Int=0,val isbn:String="",val format:String="",val issueNumber:Int=0)
 
 /** The app only talks to our bounded catalog service. Provider credentials never enter the APK. */
 object ComicVineCatalog {
@@ -81,12 +82,19 @@ object ComicVineCatalog {
             authors = rawAuthors, publisher = j.optString("publisher"),
             coverUrl = j.optString("image"), releaseYear = year,
             synopsis = plain(j.optString("description")), sourceLabel = if(key.startsWith("mt-")) "Metron" else "Comic Vine", isOnlineResult=true, seriesName = if (standalone) "" else volume, issueNumber = if (standalone) 0 else issue,
-            format = j.optString("format").ifBlank {if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição"}, pageCount = j.optInt("pageCount",0),isbn=j.optString("isbn"))
+            format = j.optString("format").ifBlank {if (standalone) "Graphic Novel" else if(volumeEntry) "Coleção" else "Edição"}, pageCount = j.optInt("pageCount",0),isbn=j.optString("isbn"),editionLanguage=j.optString("language").lowercase().substringBefore('-'))
     }
     internal fun plain(html: String): String = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
     suspend fun search(query: String, page: Int = 0, language: String = "ALL"): MultiApiSearchEngine.CatalogPage {
         val j = request("search", query, page = page)
-        return MultiApiSearchEngine.CatalogPage(j.objects("items").filter { language == "ALL" || supportedEdition(it) }.map(::comic), j.optBoolean("hasMore"))
+        val entries=j.objects("items").filter { language == "ALL" || supportedEdition(it) }.map(::comic)
+        val enriched=kotlinx.coroutines.withTimeoutOrNull(4500L) {kotlinx.coroutines.coroutineScope {
+            entries.filter {CatalogWorkIdentity.collected(it) && it.pageCount==0}.take(3).map {entry -> async {
+                runCatching {resolve(entry)?.let {full -> entry.copy(title="${full.title} Vol. ${full.issueNumber}".takeIf {full.issueNumber>0} ?: entry.title,
+                    issueNumber=full.issueNumber,pageCount=full.pageCount,isbn=full.isbn,authors=full.creators.take(4).joinToString(", "){it.name},publisher=full.publisher,synopsis=full.description)}}.getOrNull()
+            }}.mapNotNull {it.await()}
+        }}.orEmpty().associateBy {it.id}
+        return MultiApiSearchEngine.CatalogPage(entries.map {enriched[it.id] ?: it}, j.optBoolean("hasMore"))
     }
     suspend fun catalog(page: Int): MultiApiSearchEngine.CatalogPage {
         val j = request("catalog", page = page)
@@ -126,7 +134,7 @@ object ComicVineCatalog {
         val combinedCovers = (strings("covers") + strings("portraits") + strings("artwork")).filter { it.isNotBlank() }.distinct().take(12)
         return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
             plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), combinedCovers,
-            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"))
+            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"),j.optString("issue").toIntOrNull() ?: 0)
             .also { synchronized(memory) { memory[key] = it } }
     }
     suspend fun resolve(comic: ComicEntry): CatalogDetails? {
@@ -141,13 +149,20 @@ object ComicVineCatalog {
     suspend fun autoResolve(comic: ComicEntry): CatalogDetails? {
         val direct = resolve(comic)
         if (direct != null) return direct
-        val searchTitle = (comic.seriesName.ifBlank { comic.displayTitle }).replace(Regex("#\\s*\\d+.*"), "").trim()
+        val searchTitle = CatalogWorkIdentity.series(comic.seriesName.ifBlank { comic.displayTitle })
         if (searchTitle.isBlank()) return null
         return runCatching {
             val results = search(searchTitle).items
             if (results.isEmpty()) null
             else {
-                matchingEdition(comic,results)?.let {resolve(it)}
+                matchingEdition(comic,results)?.let {resolve(it)} ?: kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                    if(!CatalogWorkIdentity.collected(comic)) return@withTimeoutOrNull null
+                    for(candidate in results.filter {CatalogWorkIdentity.collected(it) && CatalogWorkIdentity.series(it.seriesName.ifBlank {it.title})==searchTitle}.take(3)) {
+                        val full=resolve(candidate) ?: continue
+                        CatalogWorkIdentity.companion(comic,full)?.let {return@withTimeoutOrNull it}
+                    }
+                    null
+                }
             }
         }.getOrNull()
     }
@@ -164,6 +179,8 @@ object ComicVineCatalog {
             title(candidate)==base && base.length>=3 &&
                 (comic.issueNumber<=0 || candidate.issueNumber==comic.issueNumber) &&
                 (comic.releaseYear<=0 || candidate.releaseYear<=0 || candidate.releaseYear==comic.releaseYear) &&
+                (comic.isbn.isBlank() || candidate.isbn.isBlank() || comic.isbn.filter(Char::isLetterOrDigit)==candidate.isbn.filter(Char::isLetterOrDigit)) &&
+                (comic.pageCount<=0 || candidate.pageCount<=0 || kotlin.math.abs(comic.pageCount-candidate.pageCount)<=60) &&
                 (comic.editionLanguage.isBlank() || candidate.editionLanguage.isBlank() || comic.editionLanguage==candidate.editionLanguage)
         }
         return matches.singleOrNull()

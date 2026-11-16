@@ -3,6 +3,14 @@ package com.example.ui.components
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -52,7 +60,7 @@ internal fun ComicArtwork(url:String, modifier:Modifier=Modifier, fade:Boolean=f
         val fadeModifier=if(!fade) Modifier else Modifier.graphicsLayer {compositingStrategy=CompositingStrategy.Offscreen}
             .drawWithContent {
                 drawContent()
-                drawRect(Brush.verticalGradient(0f to Color.Black,.45f to Color.Black,.72f to Color.Black.copy(alpha=.8f),1f to Color.Transparent),blendMode=BlendMode.DstIn)
+                drawRect(Brush.verticalGradient(0f to Color.Black,.12f to Color.Black.copy(alpha=.98f),.3f to Color.Black.copy(alpha=.88f),.48f to Color.Black.copy(alpha=.65f),.65f to Color.Black.copy(alpha=.34f),.8f to Color.Black.copy(alpha=.12f),.94f to Color.Transparent,1f to Color.Transparent),blendMode=BlendMode.DstIn)
             }
         AsyncImage(request,null,Modifier.fillMaxSize().then(fadeModifier),contentScale=ContentScale.Crop,alignment=alignment,
             onSuccess={state ->
@@ -76,20 +84,46 @@ internal fun ComicArtwork(url:String, modifier:Modifier=Modifier, fade:Boolean=f
 }
 
 @Composable
-internal fun ExpandedComicCover(url:String,title:String,onClose:()->Unit) {
+internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClose:()->Unit) {
+    val motion=com.example.ui.theme.LocalAppMotion.current
+    val reduceTransparency=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
+    val progress=remember {Animatable(0f)}
+    var closing by remember {mutableStateOf(false)}
+    var viewport by remember {mutableStateOf<Rect?>(null)}
     var scale by remember(url){mutableFloatStateOf(1f)}
     var offset by remember(url){mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)}
-    Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
-        BackHandler {onClose()}
-        Box(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding()) {
-            Box(Modifier.fillMaxSize().clipToBounds()
+    LaunchedEffect(closing) {
+        progress.animateTo(if(closing)0f else 1f,motion.tween(if(closing)150 else 240))
+        if(closing)onClose()
+    }
+    BackHandler {closing=true}
+    Dialog(onDismissRequest={closing=true},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
+    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned {viewport=it.boundsInWindow()}) {
+        Box(Modifier.fillMaxSize().graphicsLayer {alpha=progress.value}
+            .background(Color.Black.copy(alpha=if(reduceTransparency).96f else .72f)).clickable(onClickLabel="Fechar capa ampliada") {closing=true})
+        val width=minOf(maxWidth*.82f,maxHeight*.74f*2f/3f)
+        Box(Modifier.align(Alignment.Center).width(width).aspectRatio(2f/3f)
+            .graphicsLayer {
+                val p=progress.value
+                val area=viewport
+                val destination=area?.let {Rect(it.center.x-size.width/2,it.center.y-size.height/2,it.center.x+size.width/2,it.center.y+size.height/2)}
+                val origin=source
+                val startX=if(origin!=null && destination!=null)origin.width/destination.width else .82f
+                val startY=if(origin!=null && destination!=null)origin.height/destination.height else .82f
+                scaleX=(startX+(1-startX)*p)*scale;scaleY=(startY+(1-startY)*p)*scale
+                if(origin!=null && destination!=null) {
+                    translationX=(origin.center.x-destination.center.x)*(1-p)+offset.x
+                    translationY=(origin.center.y-destination.center.y)*(1-p)+offset.y
+                }
+                alpha=p.coerceIn(0f,1f)
+            }.clip(RoundedCornerShape(12.dp)).clipToBounds()
                 .pointerInput(url){detectTransformGestures {_,pan,zoom,_ ->
                     scale=(scale*zoom).coerceIn(1f,5f)
-                    offset=if(scale==1f) androidx.compose.ui.geometry.Offset.Zero else offset+pan
+                    offset=if(scale==1f) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset((offset.x+pan.x).coerceIn(-size.width*(scale-1)/2,size.width*(scale-1)/2),(offset.y+pan.y).coerceIn(-size.height*(scale-1)/2,size.height*(scale-1)/2))
                 }}) {
-                AsyncImage(url,title,Modifier.fillMaxSize().graphicsLayer {scaleX=scale;scaleY=scale;translationX=offset.x.coerceIn(-size.width*(scale-1)/2,size.width*(scale-1)/2);translationY=offset.y.coerceIn(-size.height*(scale-1)/2,size.height*(scale-1)/2)},contentScale=ContentScale.Fit)
-            }
-            IconButton(onClick=onClose,modifier=Modifier.align(Alignment.TopEnd).padding(8.dp)) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
+            AsyncImage(url,title,Modifier.fillMaxSize(),contentScale=ContentScale.Fit)
         }
+        IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp).background(Color.White.copy(alpha=.12f),RoundedCornerShape(50))) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
+    }
     }
 }

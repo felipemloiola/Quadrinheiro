@@ -108,7 +108,7 @@ open class MultiApiSearchEngine {
             if (batch.isEmpty()) return
             mutex.withLock {
                 pool = CatalogSearchPolicy.unique(pool + batch.map(AdditionalCatalogSources::localize)).take(120)
-                emitted = CatalogSearchPolicy.ranked(pool, variants, searchLanguage).take(60)
+                emitted = CatalogWorkIdentity.preferred(CatalogSearchPolicy.ranked(pool, variants, searchLanguage)).take(60)
                 ModernCatalog.accept(emitted); send(emitted)
             }
         }
@@ -136,7 +136,7 @@ open class MultiApiSearchEngine {
             runCatching { withTimeoutOrNull(3500L) { PortugueseBookSources.googlePortuguese(extraTopic, page = page).map(AdditionalCatalogSources::localize) } }
                 .getOrNull().orEmpty()
         } else emptyList()
-        val combined = CatalogSearchPolicy.unique((primary?.items.orEmpty().map(AdditionalCatalogSources::localize)) + extra)
+        val combined = CatalogWorkIdentity.preferred(CatalogSearchPolicy.unique((primary?.items.orEmpty().map(AdditionalCatalogSources::localize)) + extra))
         val hasMore = (primary?.hasMore == true) || extra.isNotEmpty()
         return CatalogPage(combined, hasMore).also { ModernCatalog.accept(it.items) }
     }

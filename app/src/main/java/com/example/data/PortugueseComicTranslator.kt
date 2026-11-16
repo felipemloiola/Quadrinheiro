@@ -510,6 +510,9 @@ object PortugueseComicTranslator {
         val ptCount = portugueseSynopsisIndicators.findAll(clean).count()
         val enCount = englishSynopsisIndicators.findAll(clean).count()
         val deCount = germanSynopsisIndicators.findAll(clean).count()
+        val italianCount = Regex("(?i)\\b(?:mentre|della|delle|degli|nella|nello|sugli|crea|coinvolgere|questo|questa|cosa|succede|passato|contiene|continua|criminale|nuovi|nemici|pericoloso|loro|dell|nell)\\b").findAll(clean).count()
+        val spanishCount = Regex("(?i)\\b(?:los|las|una|pero|desde|sus|tiene|esta|este|historia|ciudad|contra)\\b").findAll(clean).count()
+        if (italianCount >= 3 || (spanishCount >= 4 && ptCount < 2)) return false
         if (deCount >= 3 || enCount >= 3) return false
         if (ptCount >= 2) return true
         val hasPtAccents = ptAccentsRegex.containsMatchIn(clean)
@@ -563,7 +566,12 @@ object PortugueseComicTranslator {
             synopsisTranslationCache[cacheKey]?.let { return it }
 
             if (allowNetworkTranslation) {
-                val translatedOnline = tryTranslateViaHttp(clean.take(550))
+                val pieces=mutableListOf<String>()
+                for(chunk in translationChunks(clean)) {
+                    if(Thread.currentThread().isInterrupted)return ""
+                    pieces+=tryTranslateViaHttp(chunk) ?: return ""
+                }
+                val translatedOnline = pieces.joinToString(" ")
                 if (!translatedOnline.isNullOrBlank() && isPortugueseText(translatedOnline)) {
                     synopsisTranslationCache[cacheKey] = translatedOnline
                     return translatedOnline
@@ -575,6 +583,16 @@ object PortugueseComicTranslator {
         return ""
     }
 
+    internal fun translationChunks(text:String):List<String> {
+        var remaining=text.take(10000).trim()
+        val result=mutableListOf<String>()
+        while(remaining.isNotEmpty()) {
+            val end=if(remaining.length<=480)remaining.length else remaining.lastIndexOf(' ',480).takeIf {it>=240} ?: 480
+            result+=remaining.substring(0,end);remaining=remaining.substring(end).trimStart()
+        }
+        return result
+    }
+
     private fun tryTranslateViaHttp(text: String): String? {
         return try {
             val encoded = URLEncoder.encode(text, "UTF-8")
@@ -584,7 +602,7 @@ object PortugueseComicTranslator {
                 .header("User-Agent", "Mozilla/5.0")
                 .get()
                 .build()
-            MultiApiSearchEngine.sharedHttpClient.newCall(req).execute().use { resp ->
+            MultiApiSearchEngine.sharedHttpClient.newBuilder().callTimeout(4,java.util.concurrent.TimeUnit.SECONDS).build().newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return null
                 val body = resp.body?.string() ?: return null
                 val outer = JSONArray(body)

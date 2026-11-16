@@ -78,3 +78,13 @@ Correções da rodada atual: miniaturas limitadas; cabeçalhos em área segura; 
 Regras de listas públicas publicadas com autorização específica do usuário, somente no banco nomeado. Versão ativa idêntica ao arquivo local; consultas privadas preservadas. Nenhuma lista real publicada. Contas locais por e-mail continuam locais; publicação requer Firebase/Google e não migra dados automaticamente.
 
 Relatório e limitações: `docs/LISTAS-E-HQ-VALIDACAO.md`. Validação:24 testes do catálogo,47 unitários/regras e12 de interface na primeira rodada. Repetição final de interface após ajuste de borda/espaçamento registrada nos logs locais. Matriz física/performance e demais pendências de recomendações não foram declaradas concluídas.
+
+### Refinamento visual e conteúdo — rodada seguinte
+
+Editor de listas passou a usar o motor Liquid Glass existente em ações e painel, campos com inputWellSurface e folgas explícitas. A base do painel impede texto da tela anterior aparecer por trás do material. Ajuste de capa segue o estúdio da foto de perfil, com uma única imagem contínua sob máscara 2:1, grade, pinça, arraste, centralização, zoom acessível e miniatura.
+
+Ficha: fade mais gradual, hero persistente fora da LazyColumn e fim do fade repetido das miniaturas; ampliação com zoom ancorado, margens e contexto escurecido/desfocado, com saída reversa e movimento reduzido. Sinopse salva também é traduzida; italiano deixa de ser aceito como PT e o texto não é cortado em 550 caracteres. Tradução cancelável e sem resposta parcial.
+
+Busca apresenta um representante mais completo por obra/volume identificável, incluindo variantes Absolute Batman/Batman Absoluto/Batman Assoluto. IDs, páginas e ISBN do acervo não são fundidos. Até três encadernados com busca incompleta são detalhados com limite de tempo. Ficha pode usar créditos de edição relacionada quando a história é compatível e indica essa origem. Na HQ real, sinopse completa em PT e personagens carregados; progresso preservado em90/160. Não houve deploy backend nesta rodada.
+
+Validação:76 testes unitários,24 do catálogo,12 de interface na rodada ampla e4 finais, incluindo zoom com relógio controlado, recorte e salvamento. Relatório: docs/LISTAS-HQ-REFINO-VISUAL.md. Matriz física/performance continua fora desta rodada; não afirmar medição de jank/consumo.

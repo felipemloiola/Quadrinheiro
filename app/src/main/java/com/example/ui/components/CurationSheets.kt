@@ -49,6 +49,7 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
     actionLabel: String?=null, actionEnabled: Boolean=true, onAction: ()->Unit={}, headerActions:@Composable RowScope.()->Unit={}, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest={if(!busy)onClose()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
         val theme=LocalIOS27Theme.current
+        val opaque=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
         val sheet=rememberFluidSheet(.92f,onClose,{},backEnabled=!busy)
         BackHandler(enabled=busy) {}
         LaunchedEffect(error,reopenKey) {if(error!=null || reopenKey>0)sheet.enter()}
@@ -57,19 +58,32 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha=.32f)).clickable(enabled=!busy,onClickLabel="Fechar painel") {sheet.dismiss()})
             Column(Modifier.fillMaxSize().padding(top=8.dp).graphicsLayer { translationY=(sheet.offset-restOffset).coerceAtLeast(0f) }
                 .background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
-                .contentMaterialSurface(RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
+                .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f))
                 .pointerInput(Unit) {awaitEachGesture {awaitFirstDown(requireUnconsumed=false);waitForUpOrCancellation()}}.navigationBarsPadding().padding(bottom=16.dp)) {
                 Row(Modifier.fillMaxWidth().then(if(busy)Modifier else sheet.dragModifier).padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(enabled=!busy,onClick={ sheet.dismiss() }) { Icon(Icons.Default.Close,"Fechar",tint=theme.textSecondary) }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     headerActions()
-                    actionLabel?.let { label -> Button(onClick=onAction,enabled=actionEnabled && !busy,
-                        modifier=Modifier.heightIn(min=48.dp).padding(end=8.dp),shape=RoundedCornerShape(50),
-                        colors=ButtonDefaults.buttonColors(containerColor=theme.textPrimary,contentColor=theme.bgPrimary)) {Text(label)} }
+                    actionLabel?.let { label -> CurationGlassAction(label,onAction,Modifier.padding(start=8.dp,end=8.dp),enabled=actionEnabled && !busy) }
                 }
                 content()
             }
         }
+    }
+}
+
+@Composable
+internal fun CurationGlassAction(label:String,onClick:()->Unit,modifier:Modifier=Modifier,enabled:Boolean=true,
+    icon:androidx.compose.ui.graphics.vector.ImageVector?=null) {
+    val t=LocalIOS27Theme.current
+    val shape=RoundedCornerShape(50)
+    val opaque=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
+    Row(modifier.heightIn(min=48.dp).clip(shape)
+        .then(if(opaque) Modifier.contentMaterialSurface(shape) else Modifier.liquidGlass(shape=shape,surfaceAlpha=.3f))
+        .clickable(enabled=enabled,role=Role.Button,onClick=onClick).padding(horizontal=16.dp,vertical=10.dp),
+        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center) {
+        if(icon!=null){Icon(icon,null,tint=t.textPrimary.copy(alpha=if(enabled)1f else .4f),modifier=Modifier.size(18.dp));Spacer(Modifier.width(8.dp))}
+        Text(label,color=t.textPrimary.copy(alpha=if(enabled)1f else .4f),fontWeight=FontWeight.SemiBold,maxLines=1)
     }
 }
 
@@ -84,11 +98,11 @@ internal fun CurationError(controller: CurationController) {
 internal fun CurationField(label: String, value: String, max: Int, enabled: Boolean=true, onChange: (String)->Unit) {
     val t=LocalIOS27Theme.current
     TextField(value=value,enabled=enabled,onValueChange={ if(it.length<=max) onChange(it) },label={ Text(label) },
-        modifier=Modifier.fillMaxWidth(),maxLines=if(max>300) 4 else 2,
+        modifier=Modifier.fillMaxWidth().inputWellSurface(),maxLines=if(max>300) 4 else 2,
         shape=RoundedCornerShape(16.dp),
         colors=TextFieldDefaults.colors(focusedTextColor=t.textPrimary,unfocusedTextColor=t.textPrimary,
             focusedLabelColor=t.accent,unfocusedLabelColor=t.textSecondary,cursorColor=t.accent,
-            focusedContainerColor=t.bgSecondary,unfocusedContainerColor=t.bgSecondary,
+            focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,
             focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent))
 }
 
@@ -262,11 +276,9 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
             item {
                 if(draft.items.isNotEmpty()) {
                     ListArtwork(draft,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(18.dp)))
-                    OutlinedButton(enabled=!state.saving,onClick={artwork=true},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),shape=RoundedCornerShape(50),
-                        border=BorderStroke(1.dp,t.textSecondary.copy(alpha=.4f)),
-                        colors=ButtonDefaults.outlinedButtonColors(containerColor=t.textPrimary.copy(alpha=.04f),contentColor=t.textPrimary)) {
-                        Icon(Icons.Default.Image,null);Spacer(Modifier.width(8.dp));Text("Escolher capa")
-                    }
+                    Spacer(Modifier.height(12.dp))
+                    CurationGlassAction("Escolher capa",{artwork=true},Modifier.fillMaxWidth(),enabled=!state.saving,icon=Icons.Default.Image)
+                    Spacer(Modifier.height(20.dp))
                 }
                 CurationField("Nome",draft.name,100,enabled=!state.saving) {draft=draft.copy(name=it)}
                 Spacer(Modifier.height(12.dp))
@@ -283,11 +295,7 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                 }
                 Text("${draft.items.size}/200 HQs",color=t.textSecondary,fontSize=12.sp)
                 Spacer(Modifier.height(12.dp))
-                Button(onClick={selection=emptySet();adding=true},enabled=draft.items.size<200 && !state.saving,
-                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),shape=RoundedCornerShape(50),
-                    colors=ButtonDefaults.buttonColors(containerColor=t.textPrimary,contentColor=t.bgPrimary)) {
-                    Icon(Icons.Default.Add,null);Spacer(Modifier.width(8.dp));Text("Adicionar HQ da biblioteca")
-                }
+                CurationGlassAction("Adicionar HQ da biblioteca",{selection=emptySet();adding=true},Modifier.fillMaxWidth(),enabled=draft.items.size<200 && !state.saving,icon=Icons.Default.Add)
                 if(onSearch!=null) TextButton(onClick={scope.launch {if(controller.preserveDraft(draft,owner)){onClose();onSearch()}}},enabled=!state.saving) {Text("Buscar HQ no catálogo",color=t.accent)}
             }
             items(draft.items,key={it.key}) { entry ->

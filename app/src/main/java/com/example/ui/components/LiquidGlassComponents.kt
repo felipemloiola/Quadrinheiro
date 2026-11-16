@@ -1051,11 +1051,6 @@ fun BookCover(
                     .allowRgb565(true)
                     .build()
             }
-            val coverAlpha by animateFloatAsState(
-                targetValue = if (isImageLoaded) 1f else 0f,
-                animationSpec = motion.tween(durationMillis = 280, easing = EaseOut),
-                label = "bookCoverSoftFadeIn"
-            )
             AsyncImage(
                 model = imageRequest,
                 contentDescription = title,
@@ -1069,7 +1064,6 @@ fun BookCover(
                 },
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = coverAlpha }
             )
         }
 

@@ -18,6 +18,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -78,6 +82,8 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     var fallbackBanner by remember(comic.id, comic.externalId, entity) { mutableStateOf("") }
     var editionPicker by remember { mutableStateOf(false) }
     var expandedCover by remember(comic.id) { mutableStateOf(false) }
+    var coverBounds by remember(comic.id) {mutableStateOf<Rect?>(null)}
+    var translatedSynopsis by remember(comic.id,entity) {mutableStateOf("")}
     var rating by remember(comic.id, comic.externalId) { mutableStateOf<CommunityRating?>(null) }
     val repository = remember { CommunityRepository(context) }
     val listState = rememberLazyListState()
@@ -104,44 +110,17 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         } catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { }
     }
-    LaunchedEffect(detail?.id, detail?.type) {
-        val original = detail ?: return@LaunchedEffect
-        if (original.description.isBlank()) return@LaunchedEffect
-        if (PortugueseComicTranslator.isPortugueseText(original.description)) return@LaunchedEffect
-        val instant = PortugueseComicTranslator.translateSynopsisToPtBr(
-            rawSynopsis = original.description,
-            translatedTitle = original.title,
-            authors = original.creators.joinToString(", ") { it.name },
-            publisher = original.publisher,
-            releaseYear = 0,
-            pageCount = original.pageCount,
-            allowNetworkTranslation = false
-        )
-        if (instant.isNotBlank()) {
-            if (detail?.id == original.id && detail?.type == original.type) {
-                detail = original.copy(description = instant)
-            }
-            return@LaunchedEffect
-        }
+    val synopsisSource = if(entity!=null) detail?.description.orEmpty() else listOf(comic.synopsisPtBr,detail?.description.orEmpty(),comic.synopsis)
+        .firstOrNull {it.isNotBlank() && PortugueseComicTranslator.isPortugueseText(it)}
+        ?: comic.synopsis.ifBlank {comic.synopsisPtBr.ifBlank {detail?.description.orEmpty()}}
+    LaunchedEffect(synopsisSource,comic.id,entity) {
+        translatedSynopsis=""
+        if(synopsisSource.isBlank())return@LaunchedEffect
+        if(PortugueseComicTranslator.isPortugueseText(synopsisSource)){translatedSynopsis=synopsisSource;return@LaunchedEffect}
         translating = true
         try {
-            val translated = withContext(Dispatchers.IO) {
-                kotlinx.coroutines.withTimeoutOrNull(3500L) {
-                    val online = PortugueseComicTranslator.translateSynopsisToPtBr(
-                        rawSynopsis = original.description,
-                        translatedTitle = original.title,
-                        authors = original.creators.joinToString(", ") { it.name },
-                        publisher = original.publisher,
-                        releaseYear = 0,
-                        pageCount = original.pageCount,
-                        allowNetworkTranslation = true
-                    )
-                    if (online.isNotBlank()) original.copy(description = online)
-                    else ComicVineCatalog.translated(original)
-                }
-            }
-            if (translated != null && detail?.id == translated.id && detail?.type == translated.type) {
-                detail = translated
+            translatedSynopsis=kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                PortugueseComicTranslator.translateSynopsisToPtBr(synopsisSource,comic.displayTitle,comic.authors,comic.publisher,comic.releaseYear,comic.pageCount,allowNetworkTranslation=true)
             }
         } catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { }
@@ -176,10 +155,16 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val settings=com.example.ui.theme.LocalAppSettings.current
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
-    Box(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
+    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().then(if(expandedCover && !settings.reduceTransparency && !motion.reduced) Modifier.blur(16.dp) else Modifier).background(t.bgPrimary).testTag("comic_detail_page")) {
+        val persistentBanner=detail?.banner.orEmpty().ifBlank {fallbackBanner}.ifBlank {if(isComic)effectiveCover else ""}
+        val persistentHeroHeight=(maxWidth/1.85f).coerceIn(160.dp,260.dp)
         if (effectiveCover.isNotBlank() && !settings.reduceTransparency) {
             ReadingCoverAtmosphere(effectiveCover, t.bgPrimary, fraction = .55f, modifier=Modifier.graphicsLayer {alpha=if(motion.reduced) .08f else scrollFraction()*.35f})
         }
+        if(persistentBanner.isNotBlank() && (!isComic || tab!=3)) ComicArtwork(persistentBanner,Modifier.fillMaxWidth().height(persistentHeroHeight)
+            .graphicsLayer {alpha=if(motion.reduced){if(listState.firstVisibleItemIndex>0)0f else 1f}else 1f-scrollFraction();translationY=if(motion.reduced)0f else -listState.firstVisibleItemScrollOffset*.18f}
+            .testTag("comic_detail_banner"),fade=true)
         if (isComic && tab == 3) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).padding(top = 68.dp)) {
                 DetailTabs(tab, { tab = it })
@@ -196,13 +181,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val banner = detail?.banner.orEmpty().ifBlank { fallbackBanner }.ifBlank { if (isComic) effectiveCover else "" }
                     val heroHeight = (maxWidth / 1.85f).coerceIn(160.dp,260.dp)
-                    if (banner.isNotBlank()) Box(Modifier.fillMaxWidth().height(heroHeight).testTag("comic_detail_banner")) {
-                        ComicArtwork(banner, Modifier.fillMaxSize(), fade=true)
-                    }
                     Column {
                         Spacer(Modifier.height(if (banner.isNotBlank()) (heroHeight - 54.dp).coerceAtLeast(68.dp) else 68.dp))
                         Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Top) {
-                            if (isComic) BookCover(effectiveCover, comic.displayTitle, spine3d = false, modifier = Modifier.width(104.dp).aspectRatio(2f / 3f).clickable(onClickLabel="Ampliar capa",enabled=effectiveCover.isNotBlank()) {expandedCover=true})
+                            if (isComic) BookCover(effectiveCover, comic.displayTitle, spine3d = false, modifier = Modifier.width(104.dp).aspectRatio(2f / 3f).onGloballyPositioned {coverBounds=it.boundsInWindow()}.clickable(onClickLabel="Ampliar capa",enabled=effectiveCover.isNotBlank()) {expandedCover=true})
                             else ProfileImage(detail?.image.orEmpty(), detail?.title, Modifier.size(110.dp).clip(RoundedCornerShape(22.dp)), face = true)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (isComic) comic.displayTitle else detail?.title ?: "Carregando…", color = t.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
@@ -224,12 +206,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = t.accent) }
             if (failed) item { TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Tentar carregar informações novamente", color = t.accent) } }
             if (!isComic || tab == 0) {
-                val candidateSynopsis = when {
-                    comic.synopsisPtBr.isNotBlank() && !comic.synopsisPtBr.contains("series digitais", ignoreCase = true) -> comic.synopsisPtBr
-                    comic.synopsis.isNotBlank() && !comic.synopsis.contains("series digitais", ignoreCase = true) -> comic.synopsis
-                    detail?.description?.isNotBlank() == true && !detail?.description!!.contains("series digitais", ignoreCase = true) -> detail?.description!!
-                    else -> comic.synopsisPtBr.ifBlank { comic.synopsis.ifBlank { detail?.description.orEmpty() } }
-                }
+                val candidateSynopsis = translatedSynopsis.ifBlank {synopsisSource}
                 val description = PortugueseComicTranslator.formatCleanSynopsis(candidateSynopsis)
                 if (description.isNotBlank()) item {
                     DetailSection(if (isComic) "Sinopse" else "Biografia") {
@@ -282,6 +259,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             } else {
                 val credits = (if (tab == 1) detail?.characters.orEmpty() else detail?.creators.orEmpty()).distinctBy { it.id }
                 if (detail?.creditsScope == "series") item { Text("Personagens e equipe da série", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp), fontSize = 12.sp) }
+                if (detail?.creditsScope == "work") item { Text("Créditos de edição relacionada", color=t.textSecondary,modifier=Modifier.padding(horizontal=20.dp),fontSize=12.sp) }
                 itemsIndexed(credits, key = { _, it -> it.id }) { index, credit ->
                     val type = if (tab == 1) "character" else "person"
                     CreditRow(credit, type, autoLoad = index < 6) { openEntity(type, credit.id) }
@@ -298,7 +276,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             if (collapsed) Text(if (isComic) comic.displayTitle else detail?.title.orEmpty(), color = t.textPrimary,
                 fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
             else Spacer(Modifier.weight(1f))
-            if (isComic) IconButton(onClick = onShare) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.accent) }
+            if (isComic) IconButton(onClick = onShare,modifier=Modifier.liquidGlass(shape=RoundedCornerShape(50))) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.textPrimary) }
         }
         if (isComic && tab != 3) Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
             .navigationBarsPadding().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 32.dp)
@@ -310,11 +288,12 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             }
         }
     }
+    if(expandedCover) ExpandedComicCover(effectiveCover,comic.displayTitle,coverBounds) {expandedCover=false}
+    }
     listToOpen?.let { selected ->
         val list = curationState.lists.firstOrNull { it.id == selected.id && !it.deleted }
         if (list != null) ListDetailSheet(list, { listToOpen = null }, onComic = { next -> listToOpen = null; openComic(next) })
     }
-    if(expandedCover) ExpandedComicCover(effectiveCover,comic.displayTitle) {expandedCover=false}
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->
         comic = comic.copy(externalId = edition.externalId, sourceLabel = edition.sourceLabel, publisher = edition.publisher.ifBlank { comic.publisher })
         editionPicker = false

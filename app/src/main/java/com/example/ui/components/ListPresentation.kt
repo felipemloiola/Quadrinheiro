@@ -149,47 +149,28 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
 }
 
 @Composable
-internal fun ListArtworkEditor(list: ComicList, onApply: (ComicList) -> Unit, onClose: () -> Unit) {
-    val t = LocalIOS27Theme.current
-    var draft by remember(list.id) { mutableStateOf(list) }
-    var choosing by remember { mutableStateOf(true) }
-    var previewSize by remember { mutableStateOf(IntSize.Zero) }
-    var precise by remember { mutableStateOf(false) }
-    val latest by rememberUpdatedState(draft)
-    CurationSheet(if(choosing) "Escolher capa" else "Ajustar capa", {if(choosing) onClose() else choosing=true},actionLabel=if(choosing) null else "Usar capa",onAction={onApply(draft);onClose()}) {
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (choosing) {
-                item { Text("Use uma HQ desta lista", color = t.textSecondary) }
-                items(list.items.chunked(2), key = { it.first().key }) { pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        pair.forEach { entry ->
-                            Column(Modifier.weight(1f).clickable(role = Role.RadioButton, onClickLabel = "Usar capa de ${entry.title}") {
-                                draft = if(draft.coverKey==entry.key) draft else draft.copy(coverKey = entry.key, coverX = .5f, coverY = .5f, coverZoom = 1f)
-                                choosing=false
-                            }.semantics { selected = (draft.coverKey.ifBlank { draft.coverItem()?.key.orEmpty() }) == entry.key }) {
-                                BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
-                                Text((if (draft.coverKey.ifBlank { draft.coverItem()?.key.orEmpty() } == entry.key) "✓ " else "") + entry.title, color = t.textPrimary, modifier = Modifier.padding(vertical = 8.dp))
-                            }
+internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:()->Unit) {
+    var selected by remember(list.id){mutableStateOf<ComicList?>(null)}
+    val t=LocalIOS27Theme.current
+    if(selected!=null) {
+        ListCoverCropDialog(selected!!,{onApply(it);onClose()},{selected=null})
+        return
+    }
+    CurationSheet("Escolher capa",onClose) {
+        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            item {Text("Use uma HQ desta lista",color=t.textSecondary)}
+            items(list.items.chunked(2),key={it.first().key}) {pair ->
+                Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                    pair.forEach {entry ->
+                        Column(Modifier.weight(1f).contentMaterialSurface(RoundedCornerShape(18.dp)).clickable(role=Role.RadioButton,onClickLabel="Usar capa de "+entry.title) {
+                            selected=if(list.coverKey==entry.key)list else list.copy(coverKey=entry.key,coverX=.5f,coverY=.5f,coverZoom=1f)
+                        }.padding(12.dp)) {
+                            BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.fillMaxWidth().aspectRatio(2f/3f))
+                            Text(entry.title,color=t.textPrimary,fontWeight=FontWeight.Medium,modifier=Modifier.padding(top=10.dp),maxLines=2,overflow=TextOverflow.Ellipsis)
                         }
-                        if (pair.size == 1) Spacer(Modifier.weight(1f))
                     }
+                    if(pair.size==1)Spacer(Modifier.weight(1f))
                 }
-            } else {
-                item { ListArtwork(draft, Modifier.fillMaxWidth().aspectRatio(2f).onSizeChanged {previewSize=it}
-                    .pointerInput(list.id) {detectTransformGestures {_,pan,zoom,_ ->
-                        val current=latest
-                        draft=current.copy(coverZoom=(current.coverZoom*zoom).coerceIn(1f,3f),
-                            coverX=(current.coverX-pan.x/previewSize.width.coerceAtLeast(1)).coerceIn(0f,1f),
-                            coverY=(current.coverY-pan.y/previewSize.height.coerceAtLeast(1)).coerceIn(0f,1f))
-                    }}.semantics {contentDescription="Enquadramento da capa. Arraste para mover e use dois dedos para ampliar."}) }
-                item { Text("Arraste para mover · Use dois dedos para ampliar", color = t.textSecondary) }
-                item { TextButton(onClick={precise=!precise}) {Text(if(precise) "Ocultar ajustes precisos" else "Ajustes precisos",color=t.textPrimary)} }
-                if(precise) {
-                    item { FocusSlider("Posição horizontal", draft.coverX, 0f..1f) { draft = draft.copy(coverX = it) } }
-                    item { FocusSlider("Posição vertical", draft.coverY, 0f..1f) { draft = draft.copy(coverY = it) } }
-                    item { FocusSlider("Zoom", draft.coverZoom, 1f..3f) { draft = draft.copy(coverZoom = it) } }
-                }
-                item { TextButton(onClick = { draft = draft.copy(coverX = .5f, coverY = .5f, coverZoom = 1f) }) { Text("Redefinir", color = t.textPrimary) } }
             }
         }
     }

@@ -17,6 +17,25 @@ import org.junit.runner.RunWith
 class EditorialRedesignUiTest {
     @get:Rule val compose=createComposeRule()
 
+    @Test fun expandedCoverZoomsFromItsSourceAndReversesOnClose() {
+        compose.mainClock.autoAdvance=false
+        var open by mutableStateOf(true)
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=false,reduceTransparency=true)) {
+            if(open) com.example.ui.components.ExpandedComicCover("","Capa em transição",androidx.compose.ui.geometry.Rect(40f,120f,140f,270f)){open=false}
+        }}
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(60)
+        val midway=compose.onNodeWithContentDescription("Capa em transição").fetchSemanticsNode().boundsInRoot.width
+        compose.mainClock.advanceTimeBy(260)
+        val expanded=compose.onNodeWithContentDescription("Capa em transição").fetchSemanticsNode().boundsInRoot.width
+        assertTrue("O zoom aumenta a capa a partir da origem",expanded>midway)
+        compose.onNodeWithContentDescription("Fechar capa").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(200)
+        compose.runOnIdle {assertFalse(open)}
+        compose.mainClock.autoAdvance=true
+    }
+
     @Test fun detailUsesExistingRegistrationAndKeepsReadingStateUntouched() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val image=java.io.File(context.cacheDir,"detail-cover-fixture.png")
@@ -34,7 +53,10 @@ class EditorialRedesignUiTest {
             ComicDetailDialog(shown,ReaderProfile(),listOf(shown),{}, {registered=it},{},{},{},resolveDetails={resolved=true;null})
         }}
         compose.waitUntil(5000){resolved}
+        val page=compose.onNodeWithTag("comic_detail_page").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithContentDescription(base.displayTitle).performClick()
+        val expanded=compose.onAllNodesWithContentDescription(base.displayTitle).onLast().fetchSemanticsNode().boundsInRoot
+        assertTrue("A capa ampliada preserva contexto nas laterais",expanded.width<page.width*.9f)
         compose.onNodeWithContentDescription("Fechar capa").assertIsDisplayed().performClick()
         compose.onNodeWithText("Atualizar leitura").assertIsDisplayed().performClick()
         assertEquals(base,registered)
