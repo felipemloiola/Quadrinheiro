@@ -1748,6 +1748,7 @@ fun SearchMultiApiTab(
         val seenKeys = HashSet<String>()
         val finalItems = mutableListOf<ComicEntry>()
         fun addUnique(item: ComicEntry) {
+            if(!com.example.data.PortugueseSearchPolicy.accepts(item))return
             val normTitle = item.title.lowercase().trim()
             val canonicalKey = SeriesSequenceEngine.canonicalDeduplicationKey(item)
             val extId = item.externalId.trim().lowercase()

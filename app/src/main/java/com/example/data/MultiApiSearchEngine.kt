@@ -94,7 +94,7 @@ open class MultiApiSearchEngine {
         } catch (_: Exception) {
         }
     }
-    open fun searchOnlineProgressive(query: String, searchLanguage: String = "ALL", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
+    open fun searchOnlineProgressive(query: String, searchLanguage: String = "PT", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
         val literal = query.trim().take(100)
         if (literal.length < 2) { send(emptyList()); return@channelFlow }
         val key = searchCacheKey(literal, searchLanguage, provider, hdCovers)
@@ -107,7 +107,7 @@ open class MultiApiSearchEngine {
         suspend fun accept(batch: List<ComicEntry>) {
             if (batch.isEmpty()) return
             mutex.withLock {
-                pool = CatalogSearchPolicy.unique(pool + batch.map(AdditionalCatalogSources::localize)).take(120)
+                pool = CatalogSearchPolicy.unique(pool + batch.filter(PortugueseSearchPolicy::accepts).map(AdditionalCatalogSources::localize)).take(120)
                 emitted = CatalogWorkIdentity.preferred(CatalogSearchPolicy.ranked(pool, variants, searchLanguage)).take(60)
                 ModernCatalog.accept(emitted); send(emitted)
             }
@@ -136,7 +136,7 @@ open class MultiApiSearchEngine {
             runCatching { withTimeoutOrNull(3500L) { PortugueseBookSources.googlePortuguese(extraTopic, page = page).map(AdditionalCatalogSources::localize) } }
                 .getOrNull().orEmpty()
         } else emptyList()
-        val combined = CatalogWorkIdentity.preferred(CatalogSearchPolicy.unique((primary?.items.orEmpty().map(AdditionalCatalogSources::localize)) + extra))
+        val combined = CatalogWorkIdentity.preferred(CatalogSearchPolicy.unique(((primary?.items.orEmpty().map(AdditionalCatalogSources::localize)) + extra).filter(PortugueseSearchPolicy::accepts)))
         val hasMore = (primary?.hasMore == true) || extra.isNotEmpty()
         return CatalogPage(combined, hasMore).also { ModernCatalog.accept(it.items) }
     }

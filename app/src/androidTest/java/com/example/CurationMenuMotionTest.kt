@@ -1,6 +1,9 @@
 package com.example
 
 import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -33,14 +36,39 @@ class CurationMenuMotionTest {
         compose.mainClock.autoAdvance=true
     }
 
-    @Test fun visibilityUsesSelectionAndDefersTheChoiceUntilDismissal() {
-        var open by mutableStateOf(true)
+    @Test fun visibilityUsesTheProfileGlassPickerInsideTheDialogWindow() {
         var picked=""
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(colorScheme="light",reduceMotion=true,reduceTransparency=true)) {
-            if(open) ListVisibilityMenu(false,{open=false},{picked="private"},{picked="public"})
+            CurationSheet("Editar lista",{}) {
+                AppleMenuPicker(options=listOf(SegmentOption(false,"Privada",Icons.Default.Lock),SegmentOption(true,"Pública",Icons.Default.Public)),value=false,onChange={picked=if(it)"public" else "private"})
+            }
         }}
-        compose.onNodeWithText("Privada").assertIsSelected()
+        compose.onNodeWithText("Privada").performClick()
+        compose.onNodeWithTag("retained_glass_menu").assertIsDisplayed()
+        compose.onAllNodesWithText("Privada").onLast().assertIsSelected()
+        compose.onNodeWithText("Pública",useUnmergedTree=true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) {getLayout ->
+            val layouts=mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            assertTrue(getLayout(layouts))
+            assertEquals("O texto não deve quebrar entre os ícones",1,layouts.single().lineCount)
+        }
         compose.onNodeWithText("Pública").assertIsNotSelected().performClick()
-        compose.runOnIdle {assertFalse(open);assertEquals("public",picked)}
+        compose.runOnIdle {assertEquals("public",picked)}
+    }
+
+    @Test fun closingACropPageReturnsToTheExistingCoverPicker() {
+        val comic=com.example.data.ListComic.from(com.example.model.ComicEntry(id="navigation-test",externalId="",authors="",publisher="",title="HQ de navegação"))
+        val list=com.example.data.ComicList(name="Navegação",items=listOf(comic))
+        var dismissed=0
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
+            ListArtworkEditor(list,{}, {dismissed++})
+        }}
+        compose.onNodeWithText("HQ de navegação").performClick()
+        compose.onNodeWithText("Ajustar capa").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Fechar").onLast().performClick()
+        compose.onNodeWithText("Escolher capa").assertIsDisplayed()
+        compose.onNodeWithText("HQ de navegação").assertIsDisplayed()
+        compose.runOnIdle {assertEquals(0,dismissed)}
+        compose.onAllNodesWithContentDescription("Fechar").onLast().performClick()
+        compose.runOnIdle {assertEquals(1,dismissed)}
     }
 }

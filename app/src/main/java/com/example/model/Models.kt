@@ -634,7 +634,7 @@ data class AppSettings(
     val defaultShelfSort: String = "RECENT", // "RECENT" | "RATING" | "TITLE" | "YEAR"
     val shelfLayout: String = "grid", // "grid" | "list" | "sequences"
     val defaultFormat: String = "Encadernado (TPB)",
-    val searchLanguage: String = "ALL", // "ALL" | "PT"
+    val searchLanguage: String = "PT", // "ALL" | "PT"
     val searchProvider: String = "MULTI", // "MULTI" | "BOOKS" | "MANGA"
     val hdCovers: Boolean = true,
     val spoilerProtection: Boolean = false,

@@ -33,25 +33,3 @@ internal fun CurationPrompt(title:String,onDismiss:()->Unit,confirmLabel:String,
         }
     }
 }
-
-@Composable
-internal fun ListVisibilityMenu(isPublic:Boolean,onDismiss:()->Unit,onPrivate:()->Unit,onPublic:()->Unit) {
-    val panel=rememberCurationPanelState()
-    val t=LocalIOS27Theme.current
-    CurationSheet("Visibilidade da lista",onDismiss,panel=panel,compact=true) {
-        Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            listOf(false,true).forEach {public ->
-                Row(Modifier.fillMaxWidth().inputWellSurface().selectable(selected=isPublic==public,role=Role.RadioButton) {
-                    panel.close(if(public)onPublic else onPrivate)
-                }.heightIn(min=72.dp).padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {
-                    Icon(if(public)Icons.Default.Public else Icons.Default.Lock,null,tint=t.textSecondary)
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                        Text(if(public)"Pública" else "Privada",color=t.textPrimary,fontWeight=FontWeight.SemiBold)
-                        Text(if(public)"Visível para todos" else "Apenas você",color=t.textSecondary,fontSize=13.sp)
-                    }
-                    Icon(if(isPublic==public)Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,null,tint=if(isPublic==public)t.accent else t.textSecondary)
-                }
-            }
-        }
-    }
-}

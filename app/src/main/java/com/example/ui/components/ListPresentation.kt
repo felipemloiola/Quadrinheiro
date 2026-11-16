@@ -113,22 +113,18 @@ internal fun ListHero(list: ComicList) {
 internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (ComicEntry) -> Unit,
     onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null, busy: Boolean = false) {
     val t = LocalIOS27Theme.current
-    var menu by remember { mutableStateOf(false) }
     val panel=rememberCurationPanelState()
     CurationSheet(list.name, onClose, busy = busy, actionLabel=if(onEdit!=null) "Editar" else null,
-        onAction={panel.close {onEdit?.invoke()}},panel=panel, headerActions={
-            if (onHighlight != null) Box {
-                IconButton(onClick = { menu = true }, enabled = !busy) { Icon(Icons.Default.MoreHoriz, "Opções da lista", tint = t.textPrimary) }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(text = { Text("Destacar na Biblioteca") }, onClick = { menu = false; onHighlight() })
-                    if (onEdit != null) DropdownMenuItem(text = { Text("Escolher capa") }, onClick = { menu = false; panel.close(onEdit) })
-                }
-            }
+        onAction={onEdit?.invoke()},panel=panel, headerActions={
+            if(onHighlight!=null) CurationActionMenu("Opções da lista",buildList {
+                add(LiquidGlassMenuItemData("Destacar na Biblioteca",Icons.Default.Star,onClick=onHighlight))
+                if(onEdit!=null)add(LiquidGlassMenuItemData("Escolher capa",Icons.Default.Image,onClick=onEdit))
+            },enabled=!busy)
         }) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { ListHero(list) }
             if (list.description.isNotBlank()) item { Text(list.description, color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp)) }
-            if (onAdd != null) item { EditorialAction("Adicionar HQs", {panel.close(onAdd)}, Modifier.fillMaxWidth().padding(horizontal = 16.dp), !busy) }
+            if (onAdd != null) item { EditorialAction("Adicionar HQs", onAdd, Modifier.fillMaxWidth().padding(horizontal = 16.dp), !busy) }
             if (list.items.isEmpty()) item {
                 Text("Nenhuma HQ por aqui", color = t.textPrimary, modifier = Modifier.padding(24.dp), fontSize = 20.sp)
             }
@@ -153,21 +149,15 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
 internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:()->Unit) {
     var selected by remember(list.id){mutableStateOf<ComicList?>(null)}
     val t=LocalIOS27Theme.current
-    if(selected!=null) {
-        ListCoverCropDialog(selected!!,{onApply(it);onClose()},{selected=null})
-        return
-    }
     val pickerPanel=rememberCurationPanelState()
-    var nextCover by remember {mutableStateOf<ComicList?>(null)}
-    CurationSheet("Escolher capa",{if(nextCover!=null)selected=nextCover else onClose()},panel=pickerPanel) {
+    CurationSheet("Escolher capa",onClose,panel=pickerPanel) {
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item {Text("Use uma HQ desta lista",color=t.textSecondary)}
             items(list.items.chunked(2),key={it.first().key}) {pair ->
                 Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                     pair.forEach {entry ->
                         Column(Modifier.weight(1f).contentMaterialSurface(RoundedCornerShape(18.dp)).clickable(enabled=pickerPanel.request==0,role=Role.RadioButton,onClickLabel="Usar capa de "+entry.title) {
-                            nextCover=if(list.coverKey==entry.key)list else list.copy(coverKey=entry.key,coverX=.5f,coverY=.5f,coverZoom=1f)
-                            pickerPanel.close()
+                            selected=if(list.coverKey==entry.key)list else list.copy(coverKey=entry.key,coverX=.5f,coverY=.5f,coverZoom=1f)
                         }.padding(12.dp)) {
                             BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.fillMaxWidth().aspectRatio(2f/3f))
                             Text(entry.title,color=t.textPrimary,fontWeight=FontWeight.Medium,modifier=Modifier.padding(top=10.dp),maxLines=2,overflow=TextOverflow.Ellipsis)
@@ -178,4 +168,7 @@ internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:
             }
         }
     }
+    selected?.let {cover -> CurationSubpage {
+        ListCoverCropDialog(cover,{onApply(it);onClose()},{selected=null})
+    }}
 }

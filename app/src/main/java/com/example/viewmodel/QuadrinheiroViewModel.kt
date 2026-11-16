@@ -2099,7 +2099,7 @@ class QuadrinheiroViewModel(
             return
         }
         val s = _appSettings.value
-        val cacheKey = searchEngine.searchCacheKey(q, s.searchLanguage, s.searchProvider, s.hdCovers)
+        val cacheKey = searchEngine.searchCacheKey(q, "PT", s.searchProvider, s.hdCovers)
         val cached = searchEngine.getCached(cacheKey)
         if (cached != null) {
             _remoteResults.value = cached
@@ -2116,7 +2116,7 @@ class QuadrinheiroViewModel(
             searchEngine.searchOnlineProgressive(
                 query = q,
                 provider = s.searchProvider,
-                searchLanguage = s.searchLanguage,
+                searchLanguage = "PT",
                 hdCovers = s.hdCovers
             ).collectLatest { list ->
                 _remoteResults.value = list

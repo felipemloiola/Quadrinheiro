@@ -1478,16 +1478,15 @@ fun SettingsTabScreen(
                                                 color = s.textPrimary
                                             )
                                             Text(
-                                                text = "Define a região prioritária nos servidores",
+                                                text = "Exibe edições em português na busca",
                                                 fontSize = 12.sp,
                                                 color = s.textSecondary
                                             )
                                         }
                                         AppleMenuPicker(
-                                            value = appSettings.searchLanguage,
+                                            value = "PT",
                                             onChange = { v -> viewModel.updateSettings { it.copy(searchLanguage = v) } },
                                             options = listOf(
-                                                SegmentOption("ALL", "Global (PT + EN)", Icons.Default.Public),
                                                 SegmentOption("PT", "Português (Brasil)", Icons.AutoMirrored.Filled.MenuBook)
                                             )
                                         )

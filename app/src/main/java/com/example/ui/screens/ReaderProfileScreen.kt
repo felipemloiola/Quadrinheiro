@@ -79,11 +79,11 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 comicLoading = true
                 try {
                     kotlinx.coroutines.delay(180)
-                    val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "ALL"
+                    val preferredLang = "PT"
                     val collected = mutableListOf<ComicEntry>()
                     multiSearchEngine.searchOnlineProgressive(
                         query = trimmed,
-                        searchLanguage = settings.searchLanguage,
+                        searchLanguage = "PT",
                         provider = settings.searchProvider,
                         hdCovers = settings.hdCovers
                     ).collect { partial ->
@@ -376,9 +376,9 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 }
                 if (editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size) TextButton(onClick = { select(null) }) { Text("Remover dos favoritos", color = theme.accent) }
                 val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).filterIndexed { index, _ -> index != editSlot }.toSet()
-                val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
+                val preferredLang = "PT"
                 val shownComics = remember(candidates, excluded, query, preferredLang) {
-                    val available = candidates.filter { it.id !in excluded }
+                    val available = candidates.filter { it.id !in excluded && com.example.data.PortugueseSearchPolicy.accepts(it) }
                     if (query.isBlank()) {
                         available.take(80)
                     } else {
