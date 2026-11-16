@@ -9,7 +9,7 @@ import org.json.JSONObject
 
 data class CurationState(val owner: String = "", val lists: List<ComicList> = emptyList(),
     val feedback: RecommendationFeedback = RecommendationFeedback(), val loading: Boolean = false,
-    val saving: Boolean = false, val error: String? = null)
+    val saving: Boolean = false, val error: String? = null, val ready: Boolean = false)
 
 class CurationController internal constructor(context: Context, private val scope: CoroutineScope,
     private val currentOwner: () -> String, private val onFeedbackChanged: () -> Unit) {
@@ -60,11 +60,13 @@ class CurationController internal constructor(context: Context, private val scop
                 }
                 if(token==generation && currentOwner()==uid) {
                     loaded=true;localReady=true; mutable.value=CurationState(uid,snapshot.lists,snapshot.feedback,
-                        error=if(cacheIssue) "Dados carregados da conta, mas a cópia local não pôde ser atualizada. Verifique o espaço disponível ou reduza o tamanho das listas." else null)
+                        error=if(cacheIssue) "Dados carregados da conta, mas a cópia local não pôde ser atualizada. Verifique o espaço disponível ou reduza o tamanho das listas." else null,ready=true)
                     onFeedbackChanged()
                 }
             } catch(cancelled: CancellationException) { throw cancelled }
-            catch(_: Exception) {
+            catch(e: Exception) {
+                if(com.example.BuildConfig.DEBUG) android.util.Log.w("PrivateCuration",
+                    "Load ${e.javaClass.simpleName} code=${(e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code?.name ?: "none"} at ${e.stackTrace.firstOrNull {it.className.startsWith("com.example")}}")
                 if(token==generation && currentOwner()==uid) mutable.value=mutable.value.copy(loading=false,error="Não foi possível carregar seus dados privados. Tente novamente.")
             }
         }
@@ -120,7 +122,7 @@ class CurationController internal constructor(context: Context, private val scop
             }
             if(token==generation && currentOwner()==uid) {
                 mutable.value=CurationState(uid,next.lists,next.feedback,
-                    error=if(cacheIssue) "Salvo na conta. A cópia local não pôde ser atualizada; verifique o espaço ou reduza o tamanho das listas." else null)
+                    error=if(cacheIssue) "Salvo na conta. A cópia local não pôde ser atualizada; verifique o espaço ou reduza o tamanho das listas." else null,ready=true)
                 if(feedback!=null) onFeedbackChanged()
             }
             true

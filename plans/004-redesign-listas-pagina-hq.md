@@ -42,3 +42,21 @@ minSdk24, materiais/movimento existentes, conta/UID e revisões, sem dados inven
 3. Refinar editor/detalhe conforme rascunhos (ações de adicionar/capa/excluir diretas no menu; hierarquia do cabeçalho e confirmação de adição).
 4. Fazer folha de recomendação compacta com altura adaptativa e validar fontes grandes, modo claro, transparência/movimento reduzidos, API24/31/33+ e performance comparável.
 5. Somente depois preparar PR/publicação autorizada e regras/assinatura de produção; rascunhos, contexto e capturas pessoais ficam privados.
+
+## Correções solicitadas após teste no emulador (saldo informado:5%)
+
+- Cabeçalho de Listas alinhado ao padrão da Biblioteca: voltar ao Perfil, legenda, título, divisor e seletor com ícones.
+- Painéis: reservar a área real abaixo do recuo superior; aplicar somente o delta animado em graphicsLayer. A transformação anterior movia o conteúdo para fora da janela, cortando botões.
+- Salvar lista, Adicionar(N) e Concluir como ações principais fixas no cabeçalho. Campos de criação agrupados sem contadores permanentes e sem a pilha de ações de recuperação para erro de carregamento.
+- Enquadramento por arrastar/pinçar, sliders opcionais recolhidos em Ajustes precisos. Sem nova animação, blur ou dependência.
+- Estado ready explícito impede oferecer salvamento antes da leitura autenticada inicial. Nenhum fallback silencioso para armazenamento de outra conta/local.
+- Confirmado via release do banco NOMEADO: regras publicadas não continham lists/recommendationPreferences. Diff semântico limitado às permissões privadas já existentes no repositório; acervo e painel preservados. Validação em Firebase emulado antes de aplicar a correção pedida ao backend.
+- Logs locais: `curation-fixes-validation.log`; cópia das regras anteriores em `curation-live-before.rules`, ambas em `.build-outputs/`. Registrar abaixo resultado de deploy, instrumentação e commit ao concluir.
+
+### Ponto de parada — usuário informou1% restante
+
+-27 testes aprovados (24 curadoria,3 regras com Auth/Firestore emulados),9 nativos aprovados incluindo pinça, seleção em lote e salvamento desabilitado quando conta indisponível. Build final do diagnóstico/superfície legível aprovado. APK atualizado só no emulador, por install-r, sem apagar dados; manter aberto.
+- Usuário autorizou explicitamente publicar as regras privadas. Conector reportou sucesso sem alterar o release nomeado; CLI com configuração temporária contendo só regras publicou corretamente. Leitura posterior do release exato confirmou lists/recommendationPreferences presentes. Sem mudanças nas permissões do acervo; configuração não inclui índices. Backups e logs permanecem privados.
+- IMPEDIMENTO REMANESCENTE COMPROVADO: `PrivateCuration: Load IllegalStateException code=none at CurationCloudRepository.owner(CurationCloudRepository.kt:17)`. A sessão Firebase não corresponde ao UID solicitado pelas listas (ainda não distinguido entre sessão ausente ou outra conta). Não remover a checagem de dono, não migrar automaticamente os dados para outro UID, não deslogar/apagar dados.
+- Rascunho real Teste com1HQ preservado. Salvamento na conta real ainda NÃO validado/resolvido; testes de convidado e regras não substituem essa verificação.
+- Próxima ação: verificar/reconectar a sessão da conta correta pelo fluxo existente, preservando rascunhos; ajustar a mensagem/ação de reconexão e validar leitura + salvamento real. Depois revisar as telas claras e confirmar a aparência com usuário. Não refazer geração de rascunhos nem auditoria ampla.

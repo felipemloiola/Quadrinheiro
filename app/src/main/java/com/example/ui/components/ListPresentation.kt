@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,7 +151,10 @@ internal fun ListArtworkEditor(list: ComicList, onApply: (ComicList) -> Unit, on
     val t = LocalIOS27Theme.current
     var draft by remember(list.id) { mutableStateOf(list) }
     var tab by remember { mutableStateOf("cover") }
-    CurationSheet("Capa da lista", onClose) {
+    var previewSize by remember { mutableStateOf(IntSize.Zero) }
+    var precise by remember { mutableStateOf(false) }
+    val latest by rememberUpdatedState(draft)
+    CurationSheet("Capa da lista", onClose,actionLabel="Concluir",onAction={onApply(draft);onClose()}) {
         AppleSegmentedPicker(value = tab, onChange = { tab = it }, options = listOf(SegmentOption("cover", "Escolher capa"), SegmentOption("focus", "Enquadramento")))
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (tab == "cover") {
@@ -166,15 +173,23 @@ internal fun ListArtworkEditor(list: ComicList, onApply: (ComicList) -> Unit, on
                     }
                 }
             } else {
-                item { ListArtwork(draft, Modifier.fillMaxWidth().aspectRatio(2f)) }
-                item { Text("Ajuste o foco da arte", color = t.textPrimary, fontWeight = FontWeight.SemiBold) }
-                item { FocusSlider("Posição horizontal", draft.coverX, 0f..1f) { draft = draft.copy(coverX = it) } }
-                item { FocusSlider("Posição vertical", draft.coverY, 0f..1f) { draft = draft.copy(coverY = it) } }
-                item { FocusSlider("Zoom", draft.coverZoom, 1f..3f) { draft = draft.copy(coverZoom = it) } }
+                item { ListArtwork(draft, Modifier.fillMaxWidth().aspectRatio(2f).onSizeChanged {previewSize=it}
+                    .pointerInput(list.id) {detectTransformGestures {_,pan,zoom,_ ->
+                        val current=latest
+                        draft=current.copy(coverZoom=(current.coverZoom*zoom).coerceIn(1f,3f),
+                            coverX=(current.coverX-pan.x/previewSize.width.coerceAtLeast(1)).coerceIn(0f,1f),
+                            coverY=(current.coverY-pan.y/previewSize.height.coerceAtLeast(1)).coerceIn(0f,1f))
+                    }}.semantics {contentDescription="Enquadramento da capa. Arraste para mover e use dois dedos para ampliar."}) }
+                item { Text("Arraste para mover · Use dois dedos para ampliar", color = t.textSecondary) }
+                item { TextButton(onClick={precise=!precise}) {Text(if(precise) "Ocultar ajustes precisos" else "Ajustes precisos",color=t.textPrimary)} }
+                if(precise) {
+                    item { FocusSlider("Posição horizontal", draft.coverX, 0f..1f) { draft = draft.copy(coverX = it) } }
+                    item { FocusSlider("Posição vertical", draft.coverY, 0f..1f) { draft = draft.copy(coverY = it) } }
+                    item { FocusSlider("Zoom", draft.coverZoom, 1f..3f) { draft = draft.copy(coverZoom = it) } }
+                }
                 item { TextButton(onClick = { draft = draft.copy(coverX = .5f, coverY = .5f, coverZoom = 1f) }) { Text("Redefinir", color = t.textPrimary) } }
             }
         }
-        EditorialAction("Concluir", { onApply(draft); onClose() }, Modifier.fillMaxWidth().padding(16.dp))
     }
 }
 

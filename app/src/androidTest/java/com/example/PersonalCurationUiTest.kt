@@ -162,10 +162,28 @@ class PersonalCurationUiTest {
             ListArtworkEditor(list,{applied=it},{})
         }}
         compose.onNodeWithText(library.last().displayTitle).performClick()
+        compose.onNodeWithText("Enquadramento").performClick()
+        compose.onNodeWithContentDescription("Enquadramento da capa.",substring=true).performTouchInput {
+            down(0,androidx.compose.ui.geometry.Offset(centerX-25,centerY))
+            down(1,androidx.compose.ui.geometry.Offset(centerX+25,centerY))
+            moveTo(0,androidx.compose.ui.geometry.Offset(centerX-70,centerY-20),delayMillis=120)
+            moveTo(1,androidx.compose.ui.geometry.Offset(centerX+70,centerY-20),delayMillis=120)
+            up(0);up(1)
+        }
         assertNull(applied)
         compose.onNodeWithText("Concluir").performClick()
         assertEquals(list.items.last().key,applied!!.coverKey)
+        assertTrue(applied!!.coverZoom>1f)
         assertTrue(storage.load("guest_local").lists.isEmpty())
+    }
+    @Test fun unavailableAccountCannotOfferAnApparentlySuccessfulSave() {
+        val unavailable=CurationController(InstrumentationRegistry.getInstrumentation().targetContext,scope,{"local_default"},{})
+        compose.runOnIdle {unavailable.load()}
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(colorScheme="light",reduceMotion=true,reduceTransparency=true)) {
+            ListEditor(ComicList(name="Rascunho preservado"),library,unavailable,null,{}) {}
+        }}
+        compose.onNodeWithText("Salvar lista").assertIsNotEnabled()
+        compose.onNodeWithText("Recarregar versão salva · preservar rascunho").assertDoesNotExist()
     }
     @Test fun deletedListsDoNotConsumeTheActiveListQuota() {
         storage.save("guest_local",CurationSnapshot(List(101) {ComicList(name="Lista excluída",deleted=true,revision=1)}))

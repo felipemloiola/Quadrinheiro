@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.*
@@ -33,24 +35,31 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import com.example.model.ComicEntry
 import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.screens.SettingsBackButton
 import kotlinx.coroutines.launch
 
 /** Existing fluid motion/material pipeline, no extra backdrop or continuous animation. */
 @Composable
-internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=false, error: String?=null, reopenKey: Int=0, content: @Composable ColumnScope.() -> Unit) {
+internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=false, error: String?=null, reopenKey: Int=0,
+    actionLabel: String?=null, actionEnabled: Boolean=true, onAction: ()->Unit={}, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest={if(!busy)onClose()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
         val theme=LocalIOS27Theme.current
         val sheet=rememberFluidSheet(.92f,onClose,{},backEnabled=!busy)
         BackHandler(enabled=busy) {}
         LaunchedEffect(error,reopenKey) {if(error!=null || reopenKey>0)sheet.enter()}
-        Box(Modifier.fillMaxSize()) {
+        val restOffset=with(LocalDensity.current) {LocalConfiguration.current.screenHeightDp.dp.toPx()*.08f}
+        BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
             Box(Modifier.matchParentSize().background(Color.Black.copy(alpha=.32f)).clickable(enabled=!busy,onClickLabel="Fechar painel") {sheet.dismiss()})
-            Column(Modifier.fillMaxSize().graphicsLayer { translationY=sheet.offset }
-                .padding(top=12.dp).contentMaterialSurface(RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
-                .pointerInput(Unit) {detectTapGestures {}}.imePadding().navigationBarsPadding().padding(bottom=70.dp)) {
+            Column(Modifier.fillMaxSize().padding(top=maxHeight*.08f).graphicsLayer { translationY=sheet.offset-restOffset }
+                .background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
+                .contentMaterialSurface(RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
+                .pointerInput(Unit) {detectTapGestures {}}.navigationBarsPadding().padding(bottom=24.dp)) {
                 Row(Modifier.fillMaxWidth().then(if(busy)Modifier else sheet.dragModifier).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(enabled=!busy,onClick={ sheet.dismiss() }) { Icon(Icons.Default.Close,"Fechar",tint=theme.textSecondary) }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp)
+                    actionLabel?.let { label -> Button(onClick=onAction,enabled=actionEnabled && !busy,
+                        modifier=Modifier.heightIn(min=48.dp).padding(end=8.dp),shape=RoundedCornerShape(50),
+                        colors=ButtonDefaults.buttonColors(containerColor=theme.textPrimary,contentColor=theme.bgPrimary)) {Text(label)} }
                 }
                 content()
             }
@@ -68,12 +77,13 @@ internal fun CurationError(controller: CurationController) {
 @Composable
 internal fun CurationField(label: String, value: String, max: Int, enabled: Boolean=true, onChange: (String)->Unit) {
     val t=LocalIOS27Theme.current
-    OutlinedTextField(value=value,enabled=enabled,onValueChange={ if(it.length<=max) onChange(it) },label={ Text(label) },
+    TextField(value=value,enabled=enabled,onValueChange={ if(it.length<=max) onChange(it) },label={ Text(label) },
         modifier=Modifier.fillMaxWidth(),maxLines=if(max>300) 4 else 2,
-        supportingText={ Text("${value.length}/$max") },
-        colors=OutlinedTextFieldDefaults.colors(focusedTextColor=t.textPrimary,unfocusedTextColor=t.textPrimary,
+        shape=RoundedCornerShape(16.dp),
+        colors=TextFieldDefaults.colors(focusedTextColor=t.textPrimary,unfocusedTextColor=t.textPrimary,
             focusedLabelColor=t.accent,unfocusedLabelColor=t.textSecondary,cursorColor=t.accent,
-            focusedBorderColor=t.accent,unfocusedBorderColor=t.textSecondary.copy(alpha=.35f)))
+            focusedContainerColor=t.bgSecondary,unfocusedContainerColor=t.bgSecondary,
+            focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent))
 }
 
 @Composable
@@ -138,13 +148,19 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     LaunchedEffect(state.owner) { controller.load(); drafts=controller.drafts() }
     val active=state.lists.filterNot {it.deleted}
     val featured=featuredComicList(active)
-    Column(Modifier.fillMaxSize().padding(horizontal=16.dp)) {
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick=onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack,"Voltar ao perfil",tint=t.textPrimary) }
-            Text("Biblioteca",Modifier.weight(1f),color=t.textPrimary,fontWeight=FontWeight.Bold,fontSize=28.sp)
+    Column(Modifier.fillMaxSize().padding(horizontal=16.dp).padding(top=12.dp)) {
+        SettingsBackButton(onBack,label="Perfil")
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Suas coleções",color=t.textSecondary,fontSize=12.sp,fontWeight=FontWeight.Medium)
+                Text("Biblioteca",color=t.textPrimary,fontWeight=FontWeight.Bold,fontSize=28.sp,letterSpacing=(-.5).sp)
+            }
             IconButton(onClick={editing=ComicList()},enabled=!state.loading && !state.saving) { Icon(Icons.Default.Add,"Criar lista",tint=t.textPrimary) }
         }
-        AppleSegmentedPicker(value="lists",onChange=onSection,options=listOf(SegmentOption("shelf","Estante"),SegmentOption("diary","Diário"),SegmentOption("lists","Listas")))
+        HorizontalDivider(color=t.divider,thickness=.5.dp)
+        Spacer(Modifier.height(16.dp))
+        AppleSegmentedPicker(value="lists",onChange=onSection,options=listOf(SegmentOption("shelf","Estante",LucideIcons.Library),SegmentOption("diary","Diário",LucideIcons.Calendar),SegmentOption("lists","Listas",Icons.Default.FormatListNumbered)))
         CurationError(controller)
         if(state.error!=null) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
         LazyColumn(contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -215,19 +231,19 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
         if(index>=0) {val item=items.removeAt(index);items.add(target.coerceIn(0,items.size),item);draft=latest.copy(items=items)}
     }
     fun closeDraft() { if(state.saving) return;scope.launch {if(controller.preserveDraft(draft,owner)) onClose() else closeFailure++} }
-    CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",{if(draft==initial) onClose() else {leaving=true;closeFailure++}},busy=state.saving,error=state.error,reopenKey=closeFailure) {
+    CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",{if(draft==initial) onClose() else {leaving=true;closeFailure++}},busy=state.saving,error=state.error,reopenKey=closeFailure,
+        actionLabel=if(state.saving) "Salvando…" else "Salvar lista",
+        actionEnabled=draft.name.isNotBlank() && state.ready && !state.loading,
+        onAction={scope.launch {if(controller.save(draft,owner)) onClose()}}) {
         CurationError(controller)
-        if(state.error!=null) TextButton(onClick={scope.launch {controller.preserveDraft(draft,owner);controller.load(true);reloadRequested=true}}) {
+        if(state.error!=null && !state.ready) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
+        if(state.error!=null && state.ready) TextButton(onClick={scope.launch {controller.preserveDraft(draft,owner);controller.load(true);reloadRequested=true}}) {
             Text("Recarregar versão salva · preservar rascunho",color=t.accent)
         }
-        if(state.error!=null && initial.revision>0) TextButton(enabled=!state.saving,onClick={scope.launch {
+        if(state.error!=null && state.ready && initial.revision>0) TextButton(enabled=!state.saving,onClick={scope.launch {
             if(controller.save(draft.copy(id=java.util.UUID.randomUUID().toString(),revision=0,deleted=false),owner)) onClose()
         }}) {Text("Salvar meu rascunho como nova lista",color=t.accent)}
-        if(state.error!=null) TextButton(enabled=!state.saving,onClick={discarding=true}) {Text("Descartar este rascunho",color=t.textSecondary)}
-        Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween) {
-            TextButton(onClick={scope.launch {if(controller.save(draft,owner)) onClose()}},enabled=draft.name.isNotBlank() && !state.saving && !state.loading) {Text(if(state.saving) "Salvando…" else "Salvar lista",color=t.accent)}
-            if(initial.revision>0) TextButton(onClick={deleting=true},enabled=!state.saving) {Text("Excluir lista",color=t.textSecondary)}
-        }
+        if(state.error!=null && state.ready) TextButton(enabled=!state.saving,onClick={discarding=true}) {Text("Descartar este rascunho",color=t.textSecondary)}
         LazyColumn(Modifier.weight(1f).testTag("list_editor_items"),state=editorListState,contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             item {
                 if(draft.items.isNotEmpty()) {
@@ -235,13 +251,19 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                     TextButton(enabled=!state.saving,onClick={artwork=true}) {Text("Escolher capa e ajustar enquadramento",color=t.textPrimary)}
                 }
                 CurationField("Nome",draft.name,100,enabled=!state.saving) {draft=draft.copy(name=it)}
+                Spacer(Modifier.height(12.dp))
                 CurationField("Descrição",draft.description,2000,enabled=!state.saving) {draft=draft.copy(description=it)}
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     Text("Ranking numerado",Modifier.weight(1f),color=t.textPrimary)
                     AppleToggle(draft.ranked,onChange={if(!state.saving)draft=draft.copy(ranked=it)},modifier=Modifier.semantics {contentDescription="Ranking numerado";if(state.saving)disabled()})
                 }
                 Text("Privada · ${draft.items.size}/200 HQs",color=t.textSecondary,fontSize=12.sp)
-                TextButton(onClick={selection=emptySet();adding=true},enabled=draft.items.size<200 && !state.saving) {Text("Adicionar HQ da biblioteca",color=t.accent)}
+                Spacer(Modifier.height(12.dp))
+                Button(onClick={selection=emptySet();adding=true},enabled=draft.items.size<200 && !state.saving,
+                    modifier=Modifier.fillMaxWidth().heightIn(min=48.dp),shape=RoundedCornerShape(50),
+                    colors=ButtonDefaults.buttonColors(containerColor=t.textPrimary,contentColor=t.bgPrimary)) {
+                    Icon(Icons.Default.Add,null);Spacer(Modifier.width(8.dp));Text("Adicionar HQ da biblioteca")
+                }
                 if(onSearch!=null) TextButton(onClick={scope.launch {if(controller.preserveDraft(draft,owner)){onClose();onSearch()}}},enabled=!state.saving) {Text("Buscar HQ no catálogo",color=t.accent)}
             }
             items(draft.items,key={it.key}) { entry ->
@@ -291,10 +313,16 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                     HorizontalDivider(color=t.divider)
                 }
             }
+            if(initial.revision>0) item(key="delete-list") {
+                TextButton(onClick={deleting=true},enabled=!state.saving) {Text("Excluir lista",color=t.textSecondary)}
+            }
         }
     }
     if(artwork) ListArtworkEditor(draft,{draft=it},{artwork=false})
-    if(adding) CurationSheet("Adicionar da biblioteca",{adding=false}) {
+    if(adding) CurationSheet("Adicionar HQs",{adding=false},actionLabel="Adicionar (${selection.size})",actionEnabled=selection.isNotEmpty() && !state.saving,onAction={
+        draft=draft.copy(items=draft.items+library.map(ListComic::from).distinctBy {it.key}.filter {it.key in selection && draft.items.none {old->old.key==it.key}})
+        adding=false;selection=emptySet()
+    }) {
         AppleTextField(query,{query=it},"Buscar na biblioteca",modifier=Modifier.padding(16.dp))
         if(onSearch!=null) TextButton(enabled=!state.saving,onClick={scope.launch {
             if(controller.preserveDraft(draft,owner)){onClose();onSearch()}
@@ -315,10 +343,6 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                 }
             }
         }
-        EditorialAction("Adicionar (${selection.size})",{
-            draft=draft.copy(items=draft.items+library.map(ListComic::from).distinctBy {it.key}.filter {it.key in selection && draft.items.none {old->old.key==it.key}})
-            adding=false;selection=emptySet()
-        },Modifier.fillMaxWidth().padding(16.dp),selection.isNotEmpty() && !state.saving)
     }
     if(leaving) AlertDialog(onDismissRequest={leaving=false},title={Text("Sair da edição?")},
         text={Column {
