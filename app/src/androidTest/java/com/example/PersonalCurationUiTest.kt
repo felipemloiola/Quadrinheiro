@@ -71,6 +71,7 @@ class PersonalCurationUiTest {
         assertEquals("Minha primeira escolha",saved.items.last().note)
         assertTrue(storage.drafts("guest_local").any {it.id==unrelated.id})
         assertTrue(saved.ranked);assertTrue(library.all {it.currentPage==0 && !it.favorite})
+        compose.onNodeWithContentDescription("Explorar listas públicas").assertDoesNotExist()
         compose.onNodeWithText("Meu ranking").performClick()
         compose.onNodeWithText("Minha primeira escolha").assertIsDisplayed()
         val bitmap=checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
@@ -172,6 +173,7 @@ class PersonalCurationUiTest {
         }
         assertNull(applied)
         compose.onNodeWithText("Usar capa").performClick()
+        compose.waitUntil(5000) {applied!=null}
         assertEquals(list.items.last().key,applied!!.coverKey)
         assertTrue(applied!!.coverZoom>1f)
         assertTrue(storage.load("guest_local").lists.isEmpty())

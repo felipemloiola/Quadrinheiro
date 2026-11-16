@@ -88,3 +88,11 @@ Ficha: fade mais gradual, hero persistente fora da LazyColumn e fim do fade repe
 Busca apresenta um representante mais completo por obra/volume identificável, incluindo variantes Absolute Batman/Batman Absoluto/Batman Assoluto. IDs, páginas e ISBN do acervo não são fundidos. Até três encadernados com busca incompleta são detalhados com limite de tempo. Ficha pode usar créditos de edição relacionada quando a história é compatível e indica essa origem. Na HQ real, sinopse completa em PT e personagens carregados; progresso preservado em90/160. Não houve deploy backend nesta rodada.
 
 Validação:76 testes unitários,24 do catálogo,12 de interface na rodada ampla e4 finais, incluindo zoom com relógio controlado, recorte e salvamento. Relatório: docs/LISTAS-HQ-REFINO-VISUAL.md. Matriz física/performance continua fora desta rodada; não afirmar medição de jank/consumo.
+
+### Menus e controles das listas — revisão solicitada em seguida
+
+Substituídos diálogos Material das listas por CurationPrompt/ListVisibilityMenu no tema do app. Crop usa agora CurationSheet temática, AppleSlider existente, confirmação primária no cabeçalho e centralização com botão do app; o estúdio escuro isolado anterior foi rejeitado pelo usuário. Escolher capa ganhou fundo primário contrastante. Removido apenas o atalho Explorar listas públicas, preservando dados e funcionalidade de visibilidade.
+
+CurationPanelState retém janela/conteúdo até a conclusão de FluidSheetState, com callbacks posteriores para salvar, aplicar, adicionar e navegar. Removidas segunda animação e dim da janela Android; scrim e deslocamento usam o mesmo progresso, com altura correta para painéis compactos. Editor com alterações pendentes confirma antes de sair; sem alterações mantém predictive back. Sem mudança de regras, catálogo ou registro de leitura.
+
+Validação:37 unitários e15 cenários nativos (14 na rodada ampla e recorte aprovado após ajustar a espera do teste ao fechamento assíncrono). APK instalado sem limpar dados. Revisão manual do menu, contraste da capa e AppleSlider na conta real; cancelamento sem aplicar mudanças. Relatório docs/LISTAS-CONTROLES-E-SAIDA.md. Não retomar estilos anteriores roxos ou estúdio preto para essas telas.
