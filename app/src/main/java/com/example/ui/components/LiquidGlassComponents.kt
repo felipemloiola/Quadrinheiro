@@ -1981,7 +1981,8 @@ class LiquidGlassMenuRequest(
     val triggerLabel: String = "",
     val triggerIcon: ImageVector? = Icons.Default.UnfoldMore,
     val items: List<LiquidGlassMenuItemData>,
-    val onDismiss: () -> Unit
+    val onDismiss: () -> Unit,
+    val selectionMenu: Boolean = true
 )
 
 @androidx.compose.runtime.Stable
@@ -2017,7 +2018,8 @@ class LiquidGlassMenuHostState {
                 triggerLabel = newLabel,
                 triggerIcon = current.triggerIcon,
                 items = current.items,
-                onDismiss = current.onDismiss
+                onDismiss = current.onDismiss,
+                selectionMenu = current.selectionMenu
             )
         }
     }
@@ -2031,7 +2033,8 @@ class LiquidGlassMenuHostState {
                 triggerLabel = current.triggerLabel,
                 triggerIcon = current.triggerIcon,
                 items = current.items,
-                onDismiss = current.onDismiss
+                onDismiss = current.onDismiss,
+                selectionMenu = current.selectionMenu
             )
         }
     }

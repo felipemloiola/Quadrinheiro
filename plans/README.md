@@ -1,5 +1,7 @@
 # Planos de Melhoria de Animações — Quadrinheiro
 
+Revisão atual de listas e ficha da HQ: [005 — Revisão de design da curadoria](005-revisao-design-curadoria.md).
+
 Auditoria conduzida segundo as habilidades `.claude/skills/quadrinheiro-animation-performance`, `.claude/skills/quadrinheiro-review-animations` e `.claude/skills/quadrinheiro-improve-animations` (filosofia de Emil Kowalski adaptada ao Jetpack Compose).
 
 ## Tabela de Achados Priorizados (Impacto ÷ Esforço)

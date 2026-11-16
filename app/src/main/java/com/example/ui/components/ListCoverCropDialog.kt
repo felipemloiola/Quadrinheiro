@@ -61,7 +61,11 @@ internal fun ListCoverCropDialog(initial:ComicList,onApply:(ComicList)->Unit,onB
                                 coverX=(old.coverX-pan.x/cropW-pivot.x/cropW*(next-old.coverZoom)/next).coerceIn(0f,1f),
                                 coverY=(old.coverY-pan.y/cropH-pivot.y/cropH*(next-old.coverZoom)/next).coerceIn(0f,1f))
                         }}.semantics {contentDescription="Enquadramento da capa. Arraste para mover e use dois dedos para ampliar.";stateDescription="Zoom "+(draft.coverZoom*100).toInt()+"%"
-                            customActions=listOf(CustomAccessibilityAction("Mover para cima"){draft=draft.copy(coverY=(draft.coverY-.1f).coerceAtLeast(0f));true},CustomAccessibilityAction("Mover para baixo"){draft=draft.copy(coverY=(draft.coverY+.1f).coerceAtMost(1f));true})}) {
+                            customActions=listOf(
+                                CustomAccessibilityAction("Mover para cima"){draft=draft.copy(coverY=(draft.coverY+.1f).coerceAtMost(1f));true},
+                                CustomAccessibilityAction("Mover para baixo"){draft=draft.copy(coverY=(draft.coverY-.1f).coerceAtLeast(0f));true},
+                                CustomAccessibilityAction("Mover para a esquerda"){draft=draft.copy(coverX=(draft.coverX+.1f).coerceAtMost(1f));true},
+                                CustomAccessibilityAction("Mover para a direita"){draft=draft.copy(coverX=(draft.coverX-.1f).coerceAtLeast(0f));true})}) {
                         val left=(size.width-cropW)/2;val top=(size.height-cropH)/2
                         drawRect(Color.Black.copy(alpha=.68f))
                         drawRect(Color.Transparent,Offset(left,top),androidx.compose.ui.geometry.Size(cropW,cropH),blendMode=androidx.compose.ui.graphics.BlendMode.Clear)

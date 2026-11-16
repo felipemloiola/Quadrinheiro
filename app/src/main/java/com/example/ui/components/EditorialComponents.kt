@@ -18,11 +18,7 @@ import com.example.ui.theme.LocalIOS27Theme
 
 @Composable
 internal fun EditorialAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    val t = LocalIOS27Theme.current
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp),
-        shape = RoundedCornerShape(50), colors = ButtonDefaults.outlinedButtonColors(contentColor = t.textPrimary)) {
-        Text(label, fontWeight = FontWeight.SemiBold)
-    }
+    CurationGlassAction(label,onClick,modifier,enabled=enabled)
 }
 
 @Composable

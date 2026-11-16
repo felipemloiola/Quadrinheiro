@@ -2,6 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
@@ -114,7 +117,7 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
     onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null, busy: Boolean = false) {
     val t = LocalIOS27Theme.current
     val panel=rememberCurationPanelState()
-    CurationSheet(list.name, onClose, busy = busy, actionLabel=if(onEdit!=null) "Editar" else null,
+    CurationSheet(list.name, onClose, busy = busy, menus=onHighlight!=null, actionLabel=if(onEdit!=null) "Editar" else null,
         onAction={onEdit?.invoke()},panel=panel, headerActions={
             if(onHighlight!=null) CurationActionMenu("Opções da lista",buildList {
                 add(LiquidGlassMenuItemData("Destacar na Biblioteca",Icons.Default.Star,onClick=onHighlight))
@@ -156,11 +159,21 @@ internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:
             items(list.items.chunked(2),key={it.first().key}) {pair ->
                 Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                     pair.forEach {entry ->
-                        Column(Modifier.weight(1f).contentMaterialSurface(RoundedCornerShape(18.dp)).clickable(enabled=pickerPanel.request==0,role=Role.RadioButton,onClickLabel="Usar capa de "+entry.title) {
+                        val isCurrent=list.coverItem()?.key==entry.key
+                        val shape=RoundedCornerShape(18.dp)
+                        Column(Modifier.weight(1f).testTag("list_cover_choice_${entry.key}").clip(shape).contentMaterialSurface(shape)
+                            .then(if(isCurrent)Modifier.border(1.dp,t.textPrimary.copy(alpha=.6f),shape) else Modifier)
+                            .selectable(selected=isCurrent,enabled=pickerPanel.request==0,role=Role.RadioButton) {
                             selected=if(list.coverKey==entry.key)list else list.copy(coverKey=entry.key,coverX=.5f,coverY=.5f,coverZoom=1f)
-                        }.padding(12.dp)) {
-                            BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.fillMaxWidth().aspectRatio(2f/3f))
-                            Text(entry.title,color=t.textPrimary,fontWeight=FontWeight.Medium,modifier=Modifier.padding(top=10.dp),maxLines=2,overflow=TextOverflow.Ellipsis)
+                        }.semantics {stateDescription=if(isCurrent)"Capa atual" else "Usar esta capa"}.padding(12.dp)) {
+                            Box(Modifier.fillMaxWidth().aspectRatio(2f/3f)) {
+                                BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.fillMaxSize().clearAndSetSemantics {})
+                                if(isCurrent) Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(26.dp)
+                                    .background(t.bgPrimary,androidx.compose.foundation.shape.CircleShape).padding(5.dp)) {
+                                    Icon(Icons.Default.Check,null,tint=t.textPrimary,modifier=Modifier.fillMaxSize())
+                                }
+                            }
+                            Text(entry.title,color=t.textPrimary,fontWeight=FontWeight.Medium,modifier=Modifier.fillMaxWidth().padding(top=10.dp),minLines=2,maxLines=2,overflow=TextOverflow.Ellipsis)
                         }
                     }
                     if(pair.size==1)Spacer(Modifier.weight(1f))

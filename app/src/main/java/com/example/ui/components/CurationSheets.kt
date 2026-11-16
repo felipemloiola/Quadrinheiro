@@ -76,7 +76,7 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
     val latestItems by rememberUpdatedState(items)
     DisposableEffect(host,id) {onDispose {host?.dismissMenu(id)}}
     IconButton(enabled=enabled,onClick={
-        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,Icons.Default.MoreHoriz,latestItems,{}))
+        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,Icons.Default.MoreHoriz,latestItems,{},selectionMenu=false))
     },modifier=modifier.onGloballyPositioned {
         val point=it.positionInRoot()
         bounds=IntRect(point.x.toInt(),point.y.toInt(),point.x.toInt()+it.size.width,point.y.toInt()+it.size.height)
@@ -87,21 +87,24 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
 @Composable
 internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=false, error: String?=null, reopenKey: Int=0,
     actionLabel: String?=null, actionEnabled: Boolean=true, onAction: ()->Unit={}, headerActions:@Composable RowScope.()->Unit={},
-    panel:CurationPanelState=rememberCurationPanelState(),compact:Boolean=false,onCloseRequest:(()->Unit)?=null,
+    panel:CurationPanelState=rememberCurationPanelState(),compact:Boolean=false,onCloseRequest:(()->Unit)?=null,menus:Boolean=false,
     content: @Composable ColumnScope.() -> Unit) {
     val requestClose=remember {mutableStateOf<()->Unit>({})}
+    val contentDensity=LocalDensity.current
     Dialog(onDismissRequest={requestClose.value()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
+        // A Dialog creates an Android owner; retain the app's typography scale inside it.
+        CompositionLocalProvider(LocalDensity provides contentDensity) {
         val theme=LocalIOS27Theme.current
         val opaque=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
         val childPage=LocalCurationPageDepth.current>0 && !compact
         val menuHost=remember {LiquidGlassMenuHostState()}
-        val menuBackdrop=rememberLayerBackdrop()
+        val menuBackdrop=if(menus)rememberLayerBackdrop() else null
         val fraction=if(compact || childPage)1f else .92f
         val sheet=rememberFluidSheet(fraction,{panel.complete(onClose)},{},backEnabled=!busy && onCloseRequest==null && panel.request==0 && menuHost.currentRequest==null)
         val view=LocalView.current
         DisposableEffect(view){(view.parent as? DialogWindowProvider)?.window?.let {it.setWindowAnimations(0);it.setDimAmount(0f)};onDispose{}}
         SideEffect {requestClose.value={if(!busy && panel.request==0){if(onCloseRequest!=null)onCloseRequest() else panel.close()}}}
-        BackHandler(enabled=busy) {}
+        BackHandler(enabled=busy || panel.request>0) {}
         BackHandler(enabled=!busy && onCloseRequest!=null && panel.request==0) {onCloseRequest?.invoke()}
         LaunchedEffect(panel.request){if(panel.request>0)sheet.dismiss()}
         LaunchedEffect(error,reopenKey) {if(panel.request==0 && (error!=null || reopenKey>0))sheet.enter()}
@@ -111,7 +114,7 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         var panelHeight by remember {mutableFloatStateOf(screenHeight)}
         CompositionLocalProvider(LocalLiquidGlassMenuHost provides menuHost) {
         Box(Modifier.fillMaxSize()) {
-        BoxWithConstraints(Modifier.fillMaxSize().layerBackdrop(menuBackdrop,reuseRecordedContent=true,freezeSnapshot=menuHost.currentRequest!=null).statusBarsPadding().imePadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().then(if(menuBackdrop!=null)Modifier.layerBackdrop(menuBackdrop,reuseRecordedContent=true,freezeSnapshot=menuHost.currentRequest!=null) else Modifier).statusBarsPadding().imePadding()) {
             Box(Modifier.matchParentSize().graphicsLayer {alpha=if(childPage)0f else (sheet.scrimFraction/fraction).coerceIn(0f,1f)}.background(Color.Black.copy(alpha=.32f)).clickable(enabled=!busy,onClickLabel="Fechar painel") {requestClose.value()})
             Column((if(compact)Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max=maxHeight*.85f) else Modifier.fillMaxSize().padding(top=8.dp))
                 .onSizeChanged {panelHeight=it.height.toFloat()}
@@ -132,7 +135,8 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                 content()
             }
         }
-        LiquidGlassMenuOverlayHost(menuHost,menuBackdrop,Modifier.matchParentSize())
+        if(menuBackdrop!=null)LiquidGlassMenuOverlayHost(menuHost,menuBackdrop,Modifier.matchParentSize())
+        }
         }
         }
     }
@@ -150,7 +154,8 @@ internal fun CurationGlassAction(label:String,onClick:()->Unit,modifier:Modifier
         verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center) {
         val foreground=if(primary)t.bgPrimary else t.textPrimary
         if(icon!=null){Icon(icon,null,tint=foreground.copy(alpha=if(enabled)1f else .4f),modifier=Modifier.size(18.dp));Spacer(Modifier.width(8.dp))}
-        Text(label,color=foreground.copy(alpha=if(enabled)1f else .4f),fontWeight=FontWeight.SemiBold,maxLines=1)
+        Text(label,color=foreground.copy(alpha=if(enabled)1f else .4f),fontWeight=FontWeight.SemiBold,maxLines=2,
+            textAlign=androidx.compose.ui.text.style.TextAlign.Center,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 
@@ -325,7 +330,7 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
         if(index>=0) {val item=items.removeAt(index);items.add(target.coerceIn(0,items.size),item);draft=latest.copy(items=items)}
     }
     fun closeDraft() { if(state.saving) return;scope.launch {if(controller.preserveDraft(draft,owner)) editorPanel.close() else closeFailure++} }
-    CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",onClose,busy=state.saving,error=state.error,reopenKey=closeFailure,panel=editorPanel,
+    CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",onClose,busy=state.saving,error=state.error,reopenKey=closeFailure,panel=editorPanel,menus=true,
         onCloseRequest=if(draft==initial)null else ({leaving=true}),
         actionLabel=if(state.saving) "Salvando…" else "Salvar lista",
         actionEnabled=draft.name.isNotBlank() && state.ready && !state.loading,

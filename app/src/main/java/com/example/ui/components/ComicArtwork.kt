@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -116,7 +117,13 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
                     translationY=(origin.center.y-destination.center.y)*(1-p)+offset.y
                 }
                 alpha=p.coerceIn(0f,1f)
-            }.clip(RoundedCornerShape(12.dp)).clipToBounds()
+            }.clip(RoundedCornerShape(12.dp)).clipToBounds().semantics(mergeDescendants=true) {
+                stateDescription="Ampliação de ${(scale*100).toInt()}%"
+                customActions=listOf(
+                    CustomAccessibilityAction("Ampliar capa"){scale=(scale+.5f).coerceAtMost(5f);true},
+                    CustomAccessibilityAction("Reduzir capa"){scale=(scale-.5f).coerceAtLeast(1f);if(scale==1f)offset=androidx.compose.ui.geometry.Offset.Zero;true},
+                    CustomAccessibilityAction("Redefinir ampliação"){scale=1f;offset=androidx.compose.ui.geometry.Offset.Zero;true})
+            }
                 .pointerInput(url){detectTransformGestures {_,pan,zoom,_ ->
                     scale=(scale*zoom).coerceIn(1f,5f)
                     offset=if(scale==1f) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset((offset.x+pan.x).coerceIn(-size.width*(scale-1)/2,size.width*(scale-1)/2),(offset.y+pan.y).coerceIn(-size.height*(scale-1)/2,size.height*(scale-1)/2))

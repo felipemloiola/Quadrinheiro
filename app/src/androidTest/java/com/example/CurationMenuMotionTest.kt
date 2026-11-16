@@ -39,7 +39,7 @@ class CurationMenuMotionTest {
     @Test fun visibilityUsesTheProfileGlassPickerInsideTheDialogWindow() {
         var picked=""
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(colorScheme="light",reduceMotion=true,reduceTransparency=true)) {
-            CurationSheet("Editar lista",{}) {
+            CurationSheet("Editar lista",{},menus=true) {
                 AppleMenuPicker(options=listOf(SegmentOption(false,"Privada",Icons.Default.Lock),SegmentOption(true,"Pública",Icons.Default.Public)),value=false,onChange={picked=if(it)"public" else "private"})
             }
         }}
@@ -70,5 +70,20 @@ class CurationMenuMotionTest {
         compose.runOnIdle {assertEquals(0,dismissed)}
         compose.onAllNodesWithContentDescription("Fechar").onLast().performClick()
         compose.runOnIdle {assertEquals(1,dismissed)}
+    }
+
+    @Test fun actionMenuExposesButtonsInsteadOfRadioOptions() {
+        var invoked=false
+        compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
+            CurationSheet("Lista",{},menus=true) {
+                CurationActionMenu("Opções da lista",listOf(LiquidGlassMenuItemData("Editar nota"){invoked=true}))
+            }
+        }}
+        compose.onNodeWithContentDescription("Opções da lista").performClick()
+        val item=compose.onNodeWithText("Editar nota")
+        item.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.Role,androidx.compose.ui.semantics.Role.Button))
+        item.assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsProperties.Selected))
+        item.assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f)).performClick()
+        compose.runOnIdle {assertTrue(invoked)}
     }
 }

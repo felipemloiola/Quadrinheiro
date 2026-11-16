@@ -78,7 +78,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val palette = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
     val dark = LocalIsDarkTheme.current
-    val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 46.dp
+    val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 48.dp
     val hoverOffset by androidx.compose.animation.core.animateFloatAsState(
         targetValue = with(density) { (rowHeight + .5.dp).toPx() } * (hovered ?: 0),
         animationSpec = motion.spring(.65f, 560f), label = "menuHoverPosition")
@@ -155,8 +155,9 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                         .clip(RoundedCornerShape(16.dp))
                         .background(if (item.selected && hovered == null) palette.accent.copy(alpha = .09f) else Color.Transparent)
                         .semantics(mergeDescendants = true) {
-                            selected = item.selected; role = Role.RadioButton
-                            onClick("Selecionar ${item.label}") { choose(index); true }
+                            if(request.selectionMenu)selected = item.selected
+                            role = if(request.selectionMenu)Role.RadioButton else Role.Button
+                            onClick(if(request.selectionMenu)"Selecionar ${item.label}" else item.label) { choose(index); true }
                         }.focusable().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.width(18.dp)) { if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp)) }
