@@ -181,13 +181,12 @@ fun DeferredLinearProgressBar(
 }
 
 /**
- * Card de leitura em andamento ("Em leitura") na aba Lendo Agora, isolado com `progressProvider: () -> Float`.
+ * Card de leitura em andamento com atualização rápida de progresso.
  */
 @Composable
 fun HomeReadingNowComicCard(
     item: ComicEntry,
     appSettings: AppSettings,
-    progressProvider: () -> Float,
     onSelectComic: (ComicEntry) -> Unit,
     onQuickUpdateReadingPage: (ComicEntry, Int) -> Unit
 ) {
@@ -232,7 +231,9 @@ fun HomeReadingNowComicCard(
                     .clickable { onSelectComic(item) }
             ) {
                 com.example.ui.components.HomeSkeletonText(
-                    text = "${item.publisher.uppercase()} • $pct% CONCLUÍDO",
+                    text = if (item.pageCount > 0) {
+                        listOf(item.publisher.uppercase(), "$pct% CONCLUÍDO").filter(String::isNotBlank).joinToString(" • ")
+                    } else item.publisher.uppercase(),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = s.textSecondary
@@ -256,7 +257,9 @@ fun HomeReadingNowComicCard(
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DeferredLinearProgressBar(
-                    progressProvider = progressProvider,
+                    progressProvider = {
+                        (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1)).coerceIn(0f, 1f)
+                    },
                     trackColor = if (s.isLight) Color.Black.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.12f),
                     fillColor = s.accentColor,
                     modifier = Modifier
@@ -266,18 +269,19 @@ fun HomeReadingNowComicCard(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     com.example.ui.components.HomeSkeletonText(
-                        text = "Pág. ${item.currentPage} de ${item.pageCount}",
+                        text = if (item.pageCount > 0) "Pág. ${item.currentPage} de ${item.pageCount}" else "Total de páginas indisponível",
+                        modifier = Modifier.weight(1f),
                         fontSize = 12.sp,
                         fontFamily = SpaceGroteskTabularFamily,
                         fontWeight = FontWeight.Medium,
                         color = s.textSecondary
                     )
 
-                    AppleStepper(
+                    if (item.pageCount > 0) AppleStepper(
                         modifier = Modifier.homeSkeleton(0.16f),
                         value = item.currentPage,
                         min = 0,

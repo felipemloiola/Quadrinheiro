@@ -487,13 +487,12 @@ fun QuadrinheiroApp(
     val activeReadingComicId by viewModel.activeReadingComicId.collectAsStateWithLifecycle()
     val readingNowList = remember(comics) { comics.filter { it.status == ReadingStatus.READING } }
     val readComicsList = remember(comics) { comics.filter { it.status == ReadingStatus.READ } }
-    val activeReadingIndex = remember(readingNowList, activeReadingComicId) {
-        if (readingNowList.isEmpty()) 0
-        else readingNowList.indexOfFirst {
-            it.id == activeReadingComicId || (it.externalId.isNotBlank() && it.externalId == activeReadingComicId)
-        }.let { if (it >= 0) it else 0 }
+    val featuredReadingItem = remember(readingNowList, activeReadingComicId) {
+        com.example.model.activeReadingComic(readingNowList, activeReadingComicId)
     }
-    val featuredReadingItem = readingNowList.getOrNull(activeReadingIndex)
+    val activeReadingIndex = remember(readingNowList, featuredReadingItem?.id) {
+        readingNowList.indexOfFirst { it.id == featuredReadingItem?.id }.coerceAtLeast(0)
+    }
     val totalPagesRead = remember(comics) {
         comics.sumOf {
             when (it.status) {
@@ -582,9 +581,7 @@ fun QuadrinheiroApp(
         val mainContentBackdrop = rememberLayerBackdrop()
 
         // HQ com status "Lendo" ativa. Se não houver nenhuma HQ com status READING, currentlyReadingComic é null.
-        val currentlyReadingComic = remember(readingNowList, activeReadingComicId) {
-            com.example.model.activeReadingComic(readingNowList, activeReadingComicId)
-        }
+        val currentlyReadingComic = featuredReadingItem
 
         var isFirstFrameRendered by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
@@ -737,6 +734,7 @@ fun QuadrinheiroApp(
                                 } else when (activeTab) {
                                     "home" -> HomeReadingNowTab(
                                         onSelectActiveReadingComic = viewModel::selectActiveReadingComic,
+                                        activeReadingId = activeReadingComicId,
                                         isLoading = isEnteringApp,
                                         comics = comics,
                                         profile = profile,

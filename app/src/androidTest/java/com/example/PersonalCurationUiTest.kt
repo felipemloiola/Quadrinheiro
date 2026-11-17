@@ -49,7 +49,7 @@ class PersonalCurationUiTest {
         compose.setContent {
             QuadrinheiroTheme(settings=AppSettings(colorScheme="dark",reduceMotion=true,reduceTransparency=true)) {
                 Box(Modifier.fillMaxSize().background(com.example.ui.theme.LocalIOS27Theme.current.bgPrimary)) {
-                if(overview) PersonalListsScreen(library,controller,{},{},{},{})
+                if(overview) PersonalListsScreen(library, controller, {}, {}, {})
                 else ListEditor(list,library,controller,null,{}) {overview=true}
                 }
             }
@@ -145,8 +145,8 @@ class PersonalCurationUiTest {
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
             ListEditor(list,library,controller,null,{}) {}
         }}
-        compose.onNodeWithTag("list_editor_items").performScrollToNode(hasText("Adicionar HQ da biblioteca"))
-        compose.onNodeWithText("Adicionar HQ da biblioteca").performClick()
+        compose.onNodeWithTag("list_editor_items").performScrollToNode(hasText("Adicionar HQs"))
+        compose.onNodeWithText("Adicionar HQs").performClick()
         compose.onNodeWithText(library.first().displayTitle).performClick()
         compose.onNodeWithText(library.last().displayTitle).performClick()
         assertTrue(controller.state.value.lists.isEmpty())
@@ -155,6 +155,37 @@ class PersonalCurationUiTest {
         compose.waitUntil(10000) {controller.state.value.lists.any {it.id==list.id}}
         assertEquals(2,storage.load("guest_local").lists.single().items.size)
         assertTrue(library.all {it.currentPage==0})
+    }
+    @Test fun libraryAndCatalogSelectionsReturnToTheSameListDraft() {
+        val catalogComic = library.last().copy(id = "catalog-only", title = "HQ do catálogo", isOnlineResult = true)
+        val list = ComicList(name = "Estante e catálogo", description = "Descrição do rascunho")
+        compose.runOnIdle { scope.launch { controller.save(list) } }
+        compose.waitUntil(10000) { controller.state.value.lists.any { it.id == list.id } }
+        compose.setContent {
+            QuadrinheiroTheme(settings = AppSettings(reduceMotion = true, reduceTransparency = true)) {
+                PersonalListsScreen(library, controller, {}, {}, {}, searchCatalog = { query ->
+                    kotlinx.coroutines.flow.flowOf(if (query == "catálogo") listOf(catalogComic) else emptyList())
+                })
+            }
+        }
+        compose.onNode(hasClickAction() and hasText(list.name)).performClick()
+        compose.onNodeWithText("Adicionar HQs").performClick()
+        compose.onNodeWithText(library.first().displayTitle).performClick()
+        compose.onNodeWithText("Catálogo").performClick()
+        compose.onNode(hasSetTextAction() and hasContentDescription("Buscar no catálogo")).performTextInput("catálogo")
+        compose.waitUntil(5000) { compose.onAllNodesWithText(catalogComic.displayTitle).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(catalogComic.displayTitle).performClick()
+        compose.onNodeWithText("Minha estante").performClick()
+        compose.onNodeWithText("Adicionar (2)").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Minha estante").fetchSemanticsNodes().isEmpty() }
+        assertTrue(storage.load("guest_local").lists.single().items.isEmpty())
+        compose.onNodeWithText("Salvar lista").performClick()
+        compose.waitUntil(10000) { controller.state.value.lists.single().items.size == 2 }
+        val saved = storage.load("guest_local").lists.single()
+        assertEquals(list.description, saved.description)
+        assertEquals(listOf(ListComic.from(library.first()).key, ListComic.from(catalogComic).key), saved.items.map { it.key })
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Salvar lista").fetchSemanticsNodes().isEmpty() }
+        compose.onNode(hasClickAction() and hasText(catalogComic.displayTitle)).assertIsDisplayed()
     }
     @Test fun focusEditorKeepsArtworkChangesInTheDraftUntilConfirmed() {
         val items = library.map(ListComic::from).map {
@@ -165,7 +196,7 @@ class PersonalCurationUiTest {
         compose.runOnIdle { scope.launch { controller.save(list) } }
         compose.waitUntil(10000) { controller.state.value.lists.any { it.id == list.id } }
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
-            PersonalListsScreen(library, controller, {}, {}, {}, {})
+            PersonalListsScreen(library, controller, {}, {}, {})
         }}
         compose.onNode(hasClickAction() and hasText(list.name)).performClick()
         compose.onNodeWithContentDescription("Opções da lista").performClick()

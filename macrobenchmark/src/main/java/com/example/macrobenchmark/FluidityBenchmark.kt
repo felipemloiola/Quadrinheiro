@@ -6,6 +6,8 @@ import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,4 +35,24 @@ class FluidityBenchmark {
             device.enterGuestLibrary()
         }
     ) { device.exerciseLibraryAndSettings() }
+
+    @Test fun listMenuFrames() {
+        val name = InstrumentationRegistry.getArguments().getString("benchmarkList").orEmpty()
+        assumeTrue("Prepare uma lista na conta de teste e informe benchmarkList", name.isNotBlank())
+        benchmark.measureRepeated(
+            packageName = TARGET_PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            compilationMode = CompilationMode.Partial(),
+            iterations = 5,
+            setupBlock = { startActivityAndWait(); device.openListForBenchmark(name) }
+        ) { device.exerciseListMenu() }
+    }
+
+    @Test fun exploreDetailReturnFrames() = benchmark.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(FrameTimingMetric()),
+        compilationMode = CompilationMode.Partial(),
+        iterations = 5,
+        setupBlock = { startActivityAndWait(); device.enterExplore() }
+    ) { device.exerciseExploreDetailReturn() }
 }

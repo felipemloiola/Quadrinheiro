@@ -57,9 +57,8 @@ object EditorialDiscovery {
             }
     }
 
-    suspend fun load(context: Context, retry: Boolean = false) = mutex.withLock {
-        if (attempted && !retry) return@withLock
-        attempted = true
+    suspend fun load(context: Context, retryShelf: String? = null) = mutex.withLock {
+        if (attempted && retryShelf == null) return@withLock
         val file = AtomicFile(File(context.filesDir, "discovery-editorial-v2.json"))
         if (mutable.value.isEmpty()) runCatching {
             check(file.baseFile.length() <= 192 * 1024)
@@ -73,6 +72,7 @@ object EditorialDiscovery {
         val permits = Semaphore(2)
         val engine = MultiApiSearchEngine()
         for ((title, seeds) in selections) {
+            if (retryShelf != null && title != retryShelf) continue
             if ((mutable.value[title]?.size ?: 0) >= minOf(3, seeds.size)) continue
             val entries = coroutineScope {
                 seeds.map { seed -> async {
@@ -103,5 +103,6 @@ object EditorialDiscovery {
                 catch (error: Exception) { file.failWrite(output); throw error }
             }
         }
+        if (retryShelf == null) attempted = true
     }
 }

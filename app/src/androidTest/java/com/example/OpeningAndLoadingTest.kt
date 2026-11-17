@@ -83,6 +83,31 @@ class OpeningAndLoadingTest {
         screenshot("home-loaded.png")
     }
 
+    @Test fun homeFollowsTheSameActiveReadingAndCurrentPageAsTheWidgetResolver() {
+        val second = comic.copy(id = "second", externalId = "catalog-second", title = "Superman", currentPage = 65)
+        val library = mutableStateOf(listOf(comic, second))
+        val activeId = mutableStateOf(second.externalId)
+        compose.setContent {
+            val settings = AppSettings(showFloatingMenu = false, reduceMotion = true, reduceTransparency = true)
+            QuadrinheiroTheme(settings) {
+                HomeReadingNowTab(library.value, ReaderProfile(), settings, rememberLazyListState(),
+                    {}, {}, {}, {}, {}, {}, { _, _ -> }, activeReadingId = activeId.value)
+            }
+        }
+        fun checkActivePage(expectedPage: Int) {
+            val pages = compose.onAllNodesWithText("Pág. $expectedPage de 160", useUnmergedTree = true)
+            pages.onFirst().assertIsDisplayed()
+            val heading = compose.onNodeWithText("Continuar lendo").getUnclippedBoundsInRoot()
+            assertTrue(pages.onFirst().getUnclippedBoundsInRoot().top > heading.top)
+            assertEquals(expectedPage, activeReadingComic(library.value, activeId.value)?.currentPage)
+        }
+        checkActivePage(65)
+        compose.runOnIdle { library.value = listOf(comic, second.copy(currentPage = 70)) }
+        checkActivePage(70)
+        compose.runOnIdle { library.value = listOf(comic, second.copy(status = ReadingStatus.READ, currentPage = 160)) }
+        checkActivePage(30)
+    }
+
     @Test fun shaderPoolReturnsIndependentInstances() = kotlinx.coroutines.runBlocking {
         org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= 33)
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -107,9 +132,9 @@ class OpeningAndLoadingTest {
                     onDelete = {}, onDismiss = {})
             }
         }
-        compose.onNodeWithText("Editar Quadrinho").assertIsDisplayed()
-        compose.onNodeWithTag("editor_list", useUnmergedTree = true).performScrollToIndex(5)
-        compose.onNodeWithText("Salvar Registro").performScrollTo().performClick()
+        compose.onNodeWithText("Editar HQ").assertIsDisplayed()
+        compose.onNodeWithTag("editor_list", useUnmergedTree = true).performScrollToNode(hasText("Salvar"))
+        compose.onNodeWithText("Salvar").performClick()
         compose.runOnIdle { assertEquals(fixture.id, saved?.id); assertEquals(30, saved?.currentPage) }
     }
 }

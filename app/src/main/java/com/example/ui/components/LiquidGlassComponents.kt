@@ -2425,7 +2425,8 @@ fun AppleTextField(
     placeholder: String,
     leadingIcon: ImageVector? = null,
     useContentMaterial: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    usePlaceholderAsLabel: Boolean = false
 ) {
     val mat = LocalAppleMaterials.current
     var focused by remember { mutableStateOf(false) }
@@ -2460,6 +2461,7 @@ fun AppleTextField(
             if (value.isEmpty()) {
                 Text(
                     text = placeholder,
+                    modifier = if (usePlaceholderAsLabel) Modifier.clearAndSetSemantics {} else Modifier,
                     fontSize = 13.sp,
                     color = mat.scheme.textTertiary,
                     maxLines = 1,
@@ -2481,6 +2483,7 @@ fun AppleTextField(
                     .fillMaxWidth()
                     .padding(vertical = 10.dp)
                     .onFocusChanged { focused = it.isFocused }
+                    .then(if (usePlaceholderAsLabel) Modifier.semantics { contentDescription = placeholder } else Modifier)
             )
         }
 

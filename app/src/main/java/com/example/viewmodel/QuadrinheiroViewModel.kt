@@ -2090,6 +2090,11 @@ class QuadrinheiroViewModel(
         triggerOnlineSearchIfNeeded(immediate = true)
     }
 
+    internal fun searchCatalogForList(query: String): kotlinx.coroutines.flow.Flow<List<ComicEntry>> {
+        val settings = _appSettings.value
+        return searchEngine.searchOnlineProgressive(query, "PT", settings.searchProvider, settings.hdCovers)
+    }
+
     private fun triggerOnlineSearchIfNeeded(immediate: Boolean = false) {
         searchJob?.cancel()
         val q = _searchQuery.value.trim()

@@ -99,9 +99,15 @@ gradle :macrobenchmark:connectedBenchmarkAndroidTest -Pandroid.testInstrumentati
 gradle :macrobenchmark:connectedBenchmarkAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.example.macrobenchmark.QuadrinheiroBaselineProfileGenerator
 ```
 
-O primeiro comando mede inicialização fria e tempo de frames ao percorrer
-Biblioteca e Ajustes. O segundo usa `BaselineProfileRule` para gerar um perfil ART
-a partir das mesmas jornadas. Os arquivos de resultado e traces ficam em
+O primeiro comando mede inicialização fria, tempo de frames na Biblioteca e nos
+Ajustes e a abertura e o retorno de uma ficha em Explorar. O teste de Explorar
+também verifica que o pôster volta à posição anterior. Para medir a abertura do
+menu de Listas, prepare uma lista em uma conta de teste e acrescente
+`-Pandroid.testInstrumentationRunnerArguments.benchmarkList="Nome da lista"`
+ao primeiro comando. O benchmark abre e fecha o menu da lista.
+
+O segundo comando usa `BaselineProfileRule` para gerar um perfil ART a partir
+da navegação pela Biblioteca e pelos Ajustes. Os arquivos de resultado e traces ficam em
 `macrobenchmark/build/outputs/`; revise o perfil gerado e incorpore suas regras ao
 `app/src/main/baseline-prof.txt` antes de uma release.
 

@@ -319,7 +319,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         }
         item {
             Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp))) {
-                ProfileLink("Biblioteca", "Estante e diário", Icons.AutoMirrored.Filled.MenuBook, onLibrary)
+                ProfileLink("Biblioteca", "Estante, diário e listas", Icons.AutoMirrored.Filled.MenuBook, onLibrary)
             }
         }
         if (reviews.isNotEmpty()) {

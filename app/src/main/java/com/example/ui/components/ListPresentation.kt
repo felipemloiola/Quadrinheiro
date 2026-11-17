@@ -94,7 +94,8 @@ internal fun FeaturedListCard(list: ComicList, onClick: () -> Unit) {
             val coverWidth=((maxWidth-30.dp)/4).coerceIn(32.dp,64.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 list.items.take(4).forEach { entry ->
-                    BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.width(coverWidth).height(coverWidth*1.5f))
+                    BookCover(entry.cover, entry.title, spine3d = false,
+                        modifier = Modifier.width(coverWidth).height(coverWidth*1.5f).clearAndSetSemantics {})
                 }
             }
         }
@@ -142,7 +143,8 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
                 Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Ver ${entry.title}") { panel.close {onComic(entry.comic())} }.padding(horizontal = 20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (list.ranked) Text("${index + 1}", color = t.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
-                        BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.size(58.dp, 87.dp))
+                        BookCover(entry.cover, entry.title, spine3d = false,
+                            modifier = Modifier.size(58.dp, 87.dp).clearAndSetSemantics {})
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(entry.title, color = t.textPrimary, fontWeight = FontWeight.SemiBold)
                             if (entry.note.isNotBlank()) Text(entry.note, color = t.textSecondary, fontSize = 13.sp)

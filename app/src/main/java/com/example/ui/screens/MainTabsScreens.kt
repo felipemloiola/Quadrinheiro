@@ -201,7 +201,8 @@ fun HomeReadingNowTab(
     onToggleBottomAccessory: (Boolean) -> Unit = {},
     onOpenStatistics: () -> Unit = {},
     isLoading: Boolean = false,
-    onSelectActiveReadingComic: (String) -> Unit = {}
+    onSelectActiveReadingComic: (String) -> Unit = {},
+    activeReadingId: String? = profile.activeReadingComicId
 ) {
     if (isLoading) {
         com.example.ui.components.HomeLoadingSkeleton(comics, profile, appSettings)
@@ -212,6 +213,14 @@ fun HomeReadingNowTab(
     val themeColors = LocalIOS27Theme.current
 
     val readingNowList = remember(comics) { comics.filter { it.status == ReadingStatus.READING } }
+    val activeReading = remember(readingNowList, activeReadingId) {
+        com.example.model.activeReadingComic(readingNowList, activeReadingId)
+    }
+    val otherReadings = remember(readingNowList, activeReading?.id) { readingNowList.filterNot { it.id == activeReading?.id } }
+    val openReading: (ComicEntry) -> Unit = { comic ->
+        if (comic.id != activeReading?.id) onSelectActiveReadingComic(comic.id)
+        onSelectComic(comic)
+    }
     val readComicsList = remember(comics) { comics.filter { it.status == ReadingStatus.READ } }
     val totalPagesRead = remember(comics) {
         comics.sumOf {
@@ -290,6 +299,18 @@ fun HomeReadingNowTab(
                 }
             }
             HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+        }
+
+        if (activeReading != null) {
+            item(key = "home-active-reading-header", contentType = "section_header") {
+                com.example.ui.components.HomeSkeletonText(
+                    text = "Continuar lendo", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary
+                )
+            }
+            item(key = "reading-${activeReading.id}", contentType = "reading_now_item") {
+                HomeReadingNowComicCard(activeReading, appSettings, onSelectComic = openReading,
+                    onQuickUpdateReadingPage = onQuickUpdateReadingPage)
+            }
         }
 
         // Resumo da Meta de Leitura (Apple HIG Activity Rings + Gauge)
@@ -553,8 +574,7 @@ fun HomeReadingNowTab(
                 }
             }
         } else {
-            // Seção: Continuar Lendo com Stepper Nativo e Leitura Diferida de Estado
-            if (readingNowList.isNotEmpty()) {
+            if (otherReadings.isNotEmpty()) {
                 item(key = "home-reading-now-header", contentType = "section_header") {
                     Row(
                         modifier = Modifier
@@ -564,7 +584,7 @@ fun HomeReadingNowTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         com.example.ui.components.HomeSkeletonText(
-                            text = "Em leitura (${readingNowList.size})",
+                            text = "Outras leituras (${otherReadings.size})",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = s.textSecondary
@@ -573,17 +593,14 @@ fun HomeReadingNowTab(
                 }
 
                 items(
-                    items = readingNowList,
+                    items = otherReadings,
                     key = { "reading-${it.id}" },
                     contentType = { "reading_now_item" }
                 ) { item ->
                     HomeReadingNowComicCard(
                         item = item,
                         appSettings = appSettings,
-                        progressProvider = {
-                            (item.currentPage.toFloat() / item.pageCount.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
-                        },
-                        onSelectComic = onSelectComic,
+                        onSelectComic = openReading,
                         onQuickUpdateReadingPage = onQuickUpdateReadingPage
                     )
                 }
@@ -815,7 +832,11 @@ fun ShelfLibraryTab(
 ) {
     if (shelfSection == "lists") {
         val accountContext=LocalContext.current
-        com.example.ui.components.PersonalListsScreen(comics,curationViewModel.curation,onChangeShelfSection,onBackToProfile,onGoToSearch,onSelectComic,onConnectAccount={curationViewModel.loginWithGoogle(accountContext)})
+        com.example.ui.components.PersonalListsScreen(
+            comics, curationViewModel.curation, onChangeShelfSection, onBackToProfile, onSelectComic,
+            onConnectAccount = { curationViewModel.loginWithGoogle(accountContext) },
+            searchCatalog = curationViewModel::searchCatalogForList
+        )
         return
     }
     val mat = LocalAppleMaterials.current

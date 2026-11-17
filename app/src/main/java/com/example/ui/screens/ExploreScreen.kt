@@ -20,25 +20,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.FirebaseAiRecommendationEnhancer
-import com.example.data.ModernCatalog
-import com.example.data.MultiApiSearchEngine
-import com.example.data.PersonalizedDiscovery
-import com.example.data.RecommendationCandidateRetriever
+import com.example.data.EditorialDiscovery
 import com.example.data.RecommendedComic
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.ui.components.AppleSegmentedPicker
 import com.example.ui.components.BookCover
-import com.example.ui.theme.LocalAppMotion
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.viewmodel.QuadrinheiroViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private const val PERSISTED_CACHE_TTL_MS = 12L * 60L * 60L * 1000L
 
 internal object ExploreShowcaseBuilder {
     @Volatile
@@ -146,44 +138,34 @@ fun ExploreScreen(
     onLogin: () -> Unit = {}
 ) {
     val theme = LocalIOS27Theme.current
-    val motion = LocalAppMotion.current
     val appContext = LocalContext.current.applicationContext
-    // Same Activity-scoped owner as the app host; its existing settings flow is isolated by account.
-    val settings by viewModel.appSettings.collectAsStateWithLifecycle()
-    var collection by remember { mutableStateOf<String?>(null) }
+    var collection by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(viewModel) {
         viewModel.curation.load()
         viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
     }
-    val catalog by ModernCatalog.entries.collectAsState()
-
     val exploreRecommendationState by viewModel.exploreRecommendationState.collectAsStateWithLifecycle()
-
-    val starterComicsState = remember {
-        mutableStateOf(ExploreShowcaseBuilder.memoStarter)
-    }
-    val dcComicsState = remember {
-        mutableStateOf(ExploreShowcaseBuilder.memoDc)
-    }
-    val marvelComicsState = remember {
-        mutableStateOf(ExploreShowcaseBuilder.memoMarvel)
-    }
-
-    val editorial by com.example.data.EditorialDiscovery.shelves.collectAsStateWithLifecycle()
+    val recommendations = exploreRecommendationState.recommendations
+    val editorial by EditorialDiscovery.shelves.collectAsStateWithLifecycle()
     val editorialScope = rememberCoroutineScope()
+    var editorialLoading by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { com.example.data.EditorialDiscovery.load(appContext) }
+        try {
+            withContext(Dispatchers.IO) { EditorialDiscovery.load(appContext) }
+        } finally {
+            editorialLoading = false
+        }
     }
-    LaunchedEffect(editorial) {
-        starterComicsState.value = editorial["Para começar"].orEmpty()
-        dcComicsState.value = editorial["Universo DC"].orEmpty()
-        marvelComicsState.value = editorial["Universo Marvel"].orEmpty()
-    }
-    fun openEditorial(title: String) {
-        collection = title
-        if(editorial[title].isNullOrEmpty()) editorialScope.launch(Dispatchers.IO) {
-            com.example.data.EditorialDiscovery.load(appContext, retry = true)
+    fun retryEditorial(title: String) {
+        if (editorialLoading) return
+        editorialLoading = true
+        editorialScope.launch {
+            try {
+                withContext(Dispatchers.IO) { EditorialDiscovery.load(appContext, retryShelf = title) }
+            } finally {
+                editorialLoading = false
+            }
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -234,15 +216,9 @@ fun ExploreScreen(
                                 }
                             }
                         }
-                        val recs = exploreRecommendationState.recommendations
-                        val reasonMap = recs.associate { it.comic.id to it.reasonLabel }
-                        val entries = when (selected) {
-                            "Para você" -> recs.map { it.comic }
-                            "Para começar" -> starterComicsState.value
-                            "Universo DC" -> dcComicsState.value
-                            "Universo Marvel" -> marvelComicsState.value
-                            else -> emptyList()
-                        }
+                        val personal = selected == "Para você"
+                        val entries = if (personal) recommendations.map { it.comic } else editorial[selected].orEmpty()
+                        val recommendationsById = if (personal) recommendations.associateBy { it.comic.id } else emptyMap()
                         items(
                             items = entries.chunked(3),
                             key = { it.first().id },
@@ -250,10 +226,10 @@ fun ExploreScreen(
                         ) { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 row.forEach { comic ->
-                                    val reason = if (selected == "Para você") reasonMap[comic.id] else null
+                                    val recommendation = recommendationsById[comic.id]
                                     Column(Modifier.weight(1f)) {
-                                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, reason)
-                                        if(selected=="Para você") recs.firstOrNull {it.comic.id==comic.id}?.let {
+                                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, recommendation?.reasonLabel)
+                                        recommendation?.let {
                                             com.example.ui.components.RecommendationExplanationAction(it,viewModel.curation,onComic)
                                         }
                                     }
@@ -263,70 +239,24 @@ fun ExploreScreen(
                         }
                         if (entries.isEmpty()) {
                             item(key = "selected_empty", contentType = "explore_empty") {
-                                Text("Suas sugestões aparecem aqui com base nas leituras e nos favoritos.", color = theme.textSecondary)
-                            }
-                        }
-                        item(key = "explore_load_more", contentType = "explore_footer") {
-                            val scope = rememberCoroutineScope()
-                            var loadingMore by remember { mutableStateOf(false) }
-                            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                if (loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(22.dp), color = theme.accent, strokeWidth = 2.dp)
-                                } else {
-                                    TextButton(
-                                        onClick = {
-                                            loadingMore = true
-                                            scope.launch {
-                                                try {
-                                                    val univ = when (selected) {
-                                                        "Universo DC" -> "DC / Vertigo"
-                                                        "Universo Marvel" -> "Marvel"
-                                                        else -> profile.favoriteUniverse
-                                                    }
-                                                    ModernCatalog.loadMore(univ)
-                                                } finally {
-                                                    loadingMore = false
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.heightIn(min = 48.dp).testTag("explore_load_more_button")
-                                    ) {
-                                        Text("Carregar mais edições", color = theme.accent)
-                                    }
-                                }
+                                if (personal) RecommendationEmptyState(exploreRecommendationState.isRefreshing)
+                                else EditorialEmptyState(editorialLoading) { retryEditorial(selected) }
                             }
                         }
                     } else {
                         item(key = "Para você", contentType = "explore_for_you_section") {
                             ExploreForYouSection(
-                                recommendations = exploreRecommendationState.recommendations,
-                                catalogFallback = catalog,
+                                recommendations = recommendations,
+                                loading = exploreRecommendationState.isRefreshing,
                                 onExpand = { collection = "Para você" },
                                 onComic = onComic,
                                 controller = viewModel.curation
                             )
                         }
-                        item(key = "Para começar", contentType = "explore_shelf_section") {
+                        items(EditorialDiscovery.selections.keys.toList(), key = { it }, contentType = { "explore_shelf_section" }) { title ->
                             ExploreCatalogSection(
-                                title = "Para começar",
-                                entriesState = starterComicsState,
-                                onExpand = { openEditorial("Para começar") },
-                                onComic = onComic
-                            )
-                        }
-                        item(key = "Universo DC", contentType = "explore_shelf_section") {
-                            ExploreCatalogSection(
-                                title = "Universo DC",
-                                entriesState = dcComicsState,
-                                onExpand = { openEditorial("Universo DC") },
-                                onComic = onComic
-                            )
-                        }
-                        item(key = "Universo Marvel", contentType = "explore_shelf_section") {
-                            ExploreCatalogSection(
-                                title = "Universo Marvel",
-                                entriesState = marvelComicsState,
-                                onExpand = { openEditorial("Universo Marvel") },
+                                title = title, entries = editorial[title].orEmpty(), loading = editorialLoading,
+                                onExpand = { collection = title }, onRetry = { retryEditorial(title) },
                                 onComic = onComic
                             )
                         }
@@ -340,19 +270,13 @@ fun ExploreScreen(
 @Composable
 private fun ExploreForYouSection(
     recommendations: List<RecommendedComic>,
-    catalogFallback: List<ComicEntry>,
+    loading: Boolean,
     onExpand: () -> Unit,
     onComic: (ComicEntry) -> Unit,
     controller: com.example.data.CurationController
 ) {
     val theme = LocalIOS27Theme.current
-    val entries = remember(recommendations) {
-        recommendations.map { it.comic }
-    }
-    val reasonMap = remember(recommendations) {
-        recommendations.associate { it.comic.id to it.reasonLabel }
-    }
-    if (entries.isNotEmpty()) {
+    if (recommendations.isNotEmpty()) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onExpand),
@@ -364,15 +288,13 @@ private fun ExploreForYouSection(
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(
-                    items = entries.take(8),
-                    key = { it.id },
+                    items = recommendations.take(8),
+                    key = { it.comic.id },
                     contentType = { "explore_poster" }
-                ) { comic ->
+                ) { recommendation ->
                     Column(Modifier.width(132.dp)) {
-                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, reasonMap[comic.id])
-                        recommendations.firstOrNull {it.comic.id==comic.id}?.let {
-                            com.example.ui.components.RecommendationExplanationAction(it,controller,onComic)
-                        }
+                        ExplorePoster(recommendation.comic, Modifier.fillMaxWidth(), onComic, recommendation.reasonLabel)
+                        com.example.ui.components.RecommendationExplanationAction(recommendation,controller,onComic)
                     }
                 }
             }
@@ -380,11 +302,7 @@ private fun ExploreForYouSection(
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionHeading("Para você")
-            Text(
-                "Suas sugestões aparecem aqui com base nas leituras e nos favoritos.",
-                color = theme.textSecondary,
-                fontSize = 13.sp
-            )
+            RecommendationEmptyState(loading)
         }
     }
     com.example.ui.components.RecommendationPreferencesAction(controller)
@@ -393,24 +311,25 @@ private fun ExploreForYouSection(
 @Composable
 private fun ExploreCatalogSection(
     title: String,
-    entriesState: State<List<ComicEntry>>,
+    entries: List<ComicEntry>,
+    loading: Boolean,
     onExpand: () -> Unit,
+    onRetry: () -> Unit,
     onComic: (ComicEntry) -> Unit
 ) {
     val theme = LocalIOS27Theme.current
-    val entries by entriesState
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onExpand),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = entries.isNotEmpty(), onClick = onExpand),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             SectionHeading(title)
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Ver seleção $title", tint = theme.textSecondary)
+            if (entries.isNotEmpty()) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Ver seleção $title", tint = theme.textSecondary)
         }
-        if(entries.isEmpty()) Text("Seleção indisponível. Toque na seta para tentar novamente.", color = theme.textSecondary, fontSize = 13.sp)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (entries.isEmpty()) EditorialEmptyState(loading, onRetry)
+        else LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(
                 items = entries.take(8),
                 key = { it.id },
@@ -419,6 +338,23 @@ private fun ExploreCatalogSection(
                 ExplorePoster(comic, Modifier.width(112.dp), onComic, null)
             }
         }
+    }
+}
+
+@Composable
+private fun RecommendationEmptyState(loading: Boolean) {
+    Text(
+        if (loading) "Preparando suas sugestões…" else "Suas sugestões aparecem aqui com base nas leituras e nos favoritos.",
+        color = LocalIOS27Theme.current.textSecondary, fontSize = 13.sp
+    )
+}
+
+@Composable
+private fun EditorialEmptyState(loading: Boolean, onRetry: () -> Unit) {
+    val theme = LocalIOS27Theme.current
+    Column {
+        Text(if (loading) "Carregando seleção…" else "Seleção indisponível no momento.", color = theme.textSecondary, fontSize = 13.sp)
+        if (!loading) TextButton(onClick = onRetry) { Text("Tentar novamente", color = theme.accent) }
     }
 }
 
@@ -437,6 +373,7 @@ private fun ExplorePoster(
     }
     Column(
         modifier
+            .testTag("explore_poster")
             .semantics(mergeDescendants = true) {
                 contentDescription = semanticDescription
             }

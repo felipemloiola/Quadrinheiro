@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -51,6 +52,9 @@ import com.example.model.ComicEntry
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.screens.SettingsBackButton
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 
 /** Existing fluid motion/material pipeline, no extra backdrop or continuous animation. */
 @Stable
@@ -228,14 +232,15 @@ private fun AddToListSheet(comic: ComicEntry, controller: CurationController, on
             }
         }
     }
-    creating?.let { CurationSubpage {key(state.owner,it.id) {ListEditor(it,emptyList(),controller,onSearch=null,onOpenComic={}) { creating=null }} } }
+    creating?.let { CurationSubpage {key(state.owner,it.id) {ListEditor(it,emptyList(),controller,searchCatalog=null,onOpenComic={}) { creating=null }} } }
 }
 
 internal enum class ListEditorDestination { Editor, AddComics, ChooseCover }
 
 @Composable
 fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationController,
-    onSection: (String)->Unit, onBack: ()->Unit, onSearch: ()->Unit, onComic: (ComicEntry)->Unit,onConnectAccount:(()->Unit)?=null) {
+    onSection: (String)->Unit, onBack: ()->Unit, onComic: (ComicEntry)->Unit, onConnectAccount: (()->Unit)?=null,
+    searchCatalog: ((String) -> Flow<List<ComicEntry>>)? = null) {
     val state by controller.state.collectAsStateWithLifecycle()
     val t=LocalIOS27Theme.current
     val scope=rememberCoroutineScope()
@@ -267,7 +272,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         CurationError(controller)
         if(state.error!=null) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
         if(state.localOnly && state.owner!="guest_local") Text("Listas salvas nesta conta, neste aparelho",color=t.textSecondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
-        LazyColumn(contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.testTag("lists_page"), contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             items(drafts,key={"draft:${it.id}"}) {pending ->
                 CompactListRow(pending,{openEditor(pending)},trailing="Continuar rascunho · ${pending.items.size} HQs")
             }
@@ -295,20 +300,19 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         }},busy=state.saving || state.loading)
     }
     editing?.let { list -> CompositionLocalProvider(LocalCurationPageDepth provides if(viewing!=null)1 else 0) {key(state.owner,list.id) {
-        ListEditor(list,library,controller,onSearch={ editing=null;viewing=null;onSearch() },onOpenComic={viewing=null;onComic(it)},onConnectAccount=onConnectAccount,destination=destination) { editing=null;scope.launch {drafts=controller.drafts()} }
+        ListEditor(list,library,controller,searchCatalog,onOpenComic={viewing=null;onComic(it)},onConnectAccount=onConnectAccount,destination=destination) { editing=null;scope.launch {drafts=controller.drafts()} }
     }} }
 }
 
 @Composable
 internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controller: CurationController,
-    onSearch: (() -> Unit)?, onOpenComic: (ComicEntry)->Unit,onConnectAccount:(()->Unit)?=null,
+    searchCatalog: ((String) -> Flow<List<ComicEntry>>)?, onOpenComic: (ComicEntry)->Unit,onConnectAccount:(()->Unit)?=null,
     destination: ListEditorDestination = ListEditorDestination.Editor, onClose: ()->Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val owner=remember {state.owner}
     var draft by remember(initial.id) {mutableStateOf(initial)}
     var adding by remember {mutableStateOf(destination == ListEditorDestination.AddComics)}
     var artwork by remember {mutableStateOf(destination == ListEditorDestination.ChooseCover)}
-    var selection by remember {mutableStateOf(emptySet<String>())}
     var deleting by remember {mutableStateOf(false)}
     var discarding by remember {mutableStateOf(false)}
     var leaving by remember {mutableStateOf(false)}
@@ -316,7 +320,6 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
     var connectConfirmation by remember {mutableStateOf(false)}
     var closeFailure by remember {mutableIntStateOf(0)}
     var reloadRequested by remember {mutableStateOf(false)}
-    var query by remember {mutableStateOf("")}
     var moving by remember {mutableStateOf<ListComic?>(null)}
     var position by remember {mutableStateOf("")}
     var noting by remember {mutableStateOf<ListComic?>(null)}
@@ -398,8 +401,7 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                 }
                 Text("${draft.items.size}/200 HQs",color=t.textSecondary,fontSize=12.sp)
                 Spacer(Modifier.height(12.dp))
-                CurationGlassAction("Adicionar HQ da biblioteca",{selection=emptySet();adding=true},Modifier.fillMaxWidth(),enabled=draft.items.size<200 && !state.saving,icon=Icons.Default.Add)
-                if(onSearch!=null) TextButton(onClick={scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close(onSearch)}},enabled=!state.saving) {Text("Buscar HQ no catálogo",color=t.accent)}
+                CurationGlassAction("Adicionar HQs",{adding=true},Modifier.fillMaxWidth(),enabled=draft.items.size<200 && !state.saving,icon=Icons.Default.Add)
             }
             itemsIndexed(draft.items,key={_, entry -> entry.key},contentType={_, _ -> "comic"}) { index, entry ->
                 Column(Modifier.fillMaxWidth()
@@ -460,43 +462,8 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
     if(connectConfirmation) CurationPrompt("Conecte uma conta Google",{connectConfirmation=false},if(onConnectAccount!=null)"Conectar Google" else "Entendi",{
         if(onConnectAccount!=null)scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close(onConnectAccount)}
     }) {Text("Esta conta salva listas neste aparelho. Uma conta Google é necessária para publicar. Seu rascunho permanece nesta conta.",color=t.textSecondary)}
-    if(adding) {
-    val addPanel=rememberCurationPanelState()
-    val libraryReferences = remember(library) { library.map { it to ListComic.from(it) } }
-    val includedKeys = remember(draft.items) { draft.items.mapTo(HashSet()) { it.key } }
-    val matches = remember(libraryReferences, query) {
-        libraryReferences.asSequence()
-            .filter { (comic, _) -> comic.displayTitle.contains(query, true) || comic.authors.contains(query, true) }
-            .map { (_, reference) -> reference }
-            .distinctBy { it.key }
-            .toList()
-    }
-    CurationSheet("Adicionar HQs",{adding=false;selection=emptySet()},panel=addPanel,actionLabel="Adicionar (${selection.size})",actionEnabled=selection.isNotEmpty() && !state.saving,onAction={
-        val selected = libraryReferences.asSequence().map { (_, reference) -> reference }
-            .filter { it.key in selection && it.key !in includedKeys }.distinctBy { it.key }.toList()
+    if (adding) ListComicPicker(library, draft.items, searchCatalog, { adding = false }) { selected ->
         draft = draft.copy(items = draft.items + selected)
-        addPanel.close()
-    }) {
-        AppleTextField(query,{query=it},"Buscar na biblioteca",modifier=Modifier.padding(16.dp))
-        if(onSearch!=null) TextButton(enabled=!state.saving,onClick={scope.launch {
-            if(controller.preserveDraft(draft,owner))addPanel.close {editorPanel.close(onSearch)}
-        }}) {Text("Buscar HQ no catálogo",color=t.textPrimary)}
-        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp)) {
-            if(matches.isEmpty()) item {Text("Nenhuma HQ encontrada",color=t.textSecondary)}
-            items(matches,key={it.key}) {ref ->
-                val included = ref.key in includedKeys
-                Row(Modifier.fillMaxWidth().clickable(enabled=!included && !state.saving && (ref.key in selection || draft.items.size+selection.size<200),role=Role.Checkbox) {
-                    selection=if(ref.key in selection) selection-ref.key else selection+ref.key
-                }.padding(vertical=8.dp).semantics {selected=included || ref.key in selection},
-                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    BookCover(ref.cover,ref.title,spine3d=false,modifier=Modifier.size(48.dp,72.dp))
-                    Text(ref.title,Modifier.weight(1f),color=t.textPrimary,fontWeight=FontWeight.SemiBold)
-                    if(included) Text("Já na lista",color=t.textSecondary,fontSize=12.sp)
-                    else Checkbox(ref.key in selection,null)
-                }
-            }
-        }
-    }
     }
     if(leaving) CurationPrompt("Sair da edição?",{leaving=false},"Guardar rascunho e sair",::closeDraft,cancelLabel="Continuar editando",
         alternativeLabel="Descartar alterações",onAlternative={discarding=true}) {Text("Você pode guardar as alterações e continuar depois.",color=t.textSecondary)}
@@ -516,6 +483,102 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
 }
 
 @Composable
+private fun ListComicPicker(
+    library: List<ComicEntry>,
+    included: List<ListComic>,
+    searchCatalog: ((String) -> Flow<List<ComicEntry>>)?,
+    onClose: () -> Unit,
+    onConfirm: (List<ListComic>) -> Unit
+) {
+    val theme = LocalIOS27Theme.current
+    val panel = rememberCurationPanelState()
+    var catalog by remember { mutableStateOf(false) }
+    var libraryQuery by remember { mutableStateOf("") }
+    var catalogQuery by remember { mutableStateOf("") }
+    var retry by remember { mutableIntStateOf(0) }
+    var selection by remember { mutableStateOf(emptyMap<String, ListComic>()) }
+    val references = remember(library) { library.map { it to ListComic.from(it) } }
+    val includedKeys = remember(included) { included.mapTo(HashSet()) { it.key } }
+    val catalogTerm = catalogQuery.trim()
+    val catalogSearch = if (catalog) searchCatalog else null
+    val libraryMatches = remember(references, libraryQuery) {
+        references.asSequence()
+            .filter { (comic, _) -> comic.displayTitle.contains(libraryQuery, true) || comic.authors.contains(libraryQuery, true) }
+            .map { it.second }.distinctBy { it.key }.toList()
+    }
+    var catalogMatches by remember(catalogTerm) { mutableStateOf<List<ListComic>>(emptyList()) }
+    var loading by remember(catalogTerm, retry) { mutableStateOf(catalogTerm.length >= 2) }
+    var failed by remember(catalogTerm, retry) { mutableStateOf(false) }
+    LaunchedEffect(catalogSearch, catalogTerm, retry) {
+        if (catalogSearch == null || catalogTerm.length < 2) return@LaunchedEffect
+        if (catalogMatches.isNotEmpty() && !loading) return@LaunchedEffect
+        loading = true
+        try {
+            delay(300)
+            catalogSearch(catalogTerm).collect { editions ->
+                catalogMatches = editions.map(ListComic::from).distinctBy { it.key }
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            failed = true
+        }
+        loading = false
+    }
+    val libraryScroll = rememberLazyListState()
+    val catalogScroll = rememberLazyListState()
+    CurationSheet("Adicionar HQs", onClose, panel = panel, actionLabel = "Adicionar (${selection.size})",
+        actionEnabled = selection.isNotEmpty(), onAction = {
+            val fromLibrary = references.asSequence().map { it.second }.filter { it.key in selection }
+                .distinctBy { it.key }.toList()
+            val libraryKeys = fromLibrary.mapTo(HashSet()) { it.key }
+            val selected = (fromLibrary + selection.values.filterNot { it.key in libraryKeys })
+                .filterNot { it.key in includedKeys }.take((200 - included.size).coerceAtLeast(0))
+            panel.close { onConfirm(selected) }
+        }) {
+        if (searchCatalog != null) {
+            AppleSegmentedPicker(listOf("Minha estante", "Catálogo"), if (catalog) 1 else 0,
+                { catalog = it == 1 }, Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+        }
+        AppleTextField(if (catalog) catalogQuery else libraryQuery, {
+            if (catalog) catalogQuery = it.take(100) else libraryQuery = it
+        }, if (catalog) "Buscar no catálogo" else "Buscar na biblioteca",
+            modifier = Modifier.padding(16.dp), usePlaceholderAsLabel = true)
+        val matches = if (catalog) catalogMatches else libraryMatches
+        LazyColumn(Modifier.weight(1f), state = if (catalog) catalogScroll else libraryScroll,
+            contentPadding = PaddingValues(horizontal = 16.dp)) {
+            when {
+                catalog && catalogTerm.length < 2 -> item { Text("Digite pelo menos duas letras para buscar no catálogo.", color = theme.textSecondary) }
+                catalog && loading && matches.isEmpty() -> item {
+                    Text("Buscando HQs…", color = theme.textSecondary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
+                catalog && (failed || matches.isEmpty()) -> item {
+                    Text(if (failed) "A busca foi interrompida." else "Nenhuma HQ encontrada no catálogo.",
+                        color = theme.textSecondary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    TextButton(onClick = { retry++ }) { Text("Tentar novamente", color = theme.accent) }
+                }
+                matches.isEmpty() -> item { Text("Nenhuma HQ encontrada na estante.", color = theme.textSecondary) }
+            }
+            items(matches, key = { it.key }) { ref ->
+                val alreadyIncluded = ref.key in includedKeys
+                val checked = alreadyIncluded || ref.key in selection
+                Row(Modifier.fillMaxWidth().toggleable(
+                    value = checked, role = Role.Checkbox,
+                    enabled = panel.request == 0 && !alreadyIncluded && (checked || included.size + selection.size < 200),
+                    onValueChange = { selected -> selection = if (selected) selection + (ref.key to ref) else selection - ref.key }
+                ).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BookCover(ref.cover, ref.title, spine3d = false, modifier = Modifier.size(48.dp, 72.dp).clearAndSetSemantics {})
+                    Text(ref.title, Modifier.weight(1f), color = theme.textPrimary, fontWeight = FontWeight.SemiBold)
+                    if (alreadyIncluded) Text("Já na lista", color = theme.textSecondary, fontSize = 12.sp)
+                    else Checkbox(checked, null)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun RecommendationExplanationAction(recommendation: RecommendedComic, controller: CurationController, onRegister: (ComicEntry)->Unit) {
     val ownerState by controller.state.collectAsStateWithLifecycle()
     var show by remember(recommendation.comic.id,ownerState.owner) {mutableStateOf(false)}
@@ -524,11 +587,11 @@ fun RecommendationExplanationAction(recommendation: RecommendedComic, controller
     if(show) {
         val state by controller.state.collectAsStateWithLifecycle()
         val scope=rememberCoroutineScope()
-        CurationSheet("Por que esta HQ?",{show=false}) {
+        CurationSheet("Por que esta HQ?",{show=false},compact=true) {
             CurationError(controller)
             LazyColumn(contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                    BookCover(recommendation.comic.coverUrl,recommendation.comic.displayTitle,spine3d=false,modifier=Modifier.size(76.dp,114.dp))
+                    BookCover(recommendation.comic.coverUrl,recommendation.comic.displayTitle,spine3d=false,modifier=Modifier.size(52.dp,78.dp).clearAndSetSemantics {})
                     Text(recommendation.comic.displayTitle,color=t.textPrimary,fontWeight=FontWeight.Bold,fontSize=20.sp,modifier=Modifier.weight(1f))
                 }}
                 item {Text(recommendation.explanation?.detail ?: "${recommendation.reasonLabel}. Esta seleção antiga não tem uma referência detalhada salva.",color=t.textSecondary)}
@@ -538,7 +601,6 @@ fun RecommendationExplanationAction(recommendation: RecommendedComic, controller
                 } }
                 item { TextButton(enabled=!state.saving,onClick={scope.launch {controller.feedback(recommendation.comic,"undo")}}) {Text("Desfazer preferência",color=t.accent)} }
                 item { TextButton(onClick={show=false;onRegister(recommendation.comic)}) {Text("Já li / Quero ler…",color=t.accent)} }
-                item {Text("Estas preferências não alteram seus favoritos nem avaliações.",color=t.textSecondary,fontSize=12.sp)}
             }
         }
     }
