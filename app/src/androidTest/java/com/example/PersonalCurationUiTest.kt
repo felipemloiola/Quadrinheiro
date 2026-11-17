@@ -107,7 +107,7 @@ class PersonalCurationUiTest {
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
             ListEditor(list,library,controller,null,{}) {}
         }}
-        val description="Arrastar ${library.first().displayTitle} para reordenar"
+        val description="Reordenar ${library.first().displayTitle}"
         compose.onNodeWithTag("list_editor_items").performScrollToNode(hasContentDescription(description))
         compose.onNodeWithContentDescription(description).performTouchInput {
             down(center);advanceEventTime(700);moveBy(androidx.compose.ui.geometry.Offset(0f,650f));up()
