@@ -57,7 +57,7 @@ class PersonalCurationUiTest {
         val firstOptions="list_item_options_${list.items.first().key}"
         compose.onNodeWithTag("list_editor_items").performScrollToNode(hasTestTag(firstOptions))
         compose.onNodeWithTag(firstOptions).performClick()
-        compose.onNodeWithText("Nota").performClick()
+        compose.onNodeWithText("Editar nota").performClick()
         compose.onNode(hasSetTextAction() and hasText("Sua nota")).performTextInput("Minha primeira escolha")
         compose.onNodeWithText("Concluir").performClick()
         compose.onNodeWithTag(firstOptions).performClick()
@@ -157,12 +157,21 @@ class PersonalCurationUiTest {
         assertTrue(library.all {it.currentPage==0})
     }
     @Test fun focusEditorKeepsArtworkChangesInTheDraftUntilConfirmed() {
-        val list=ComicList(name="Capa ajustável",items=library.map(ListComic::from))
-        var applied:ComicList?=null
+        val items = library.map(ListComic::from).map {
+            it.copy(cover = "android.resource://android/${android.R.drawable.ic_menu_gallery}")
+        }
+        val withoutCover = ListComic.from(library.first().copy(id = "without-cover"))
+        val list = ComicList(name = "Capa ajustável", items = items + withoutCover)
+        compose.runOnIdle { scope.launch { controller.save(list) } }
+        compose.waitUntil(10000) { controller.state.value.lists.any { it.id == list.id } }
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
-            ListArtworkEditor(list,{applied=it},{})
+            PersonalListsScreen(library, controller, {}, {}, {}, {})
         }}
-        compose.onNodeWithText(library.last().displayTitle).performClick()
+        compose.onNode(hasClickAction() and hasText(list.name)).performClick()
+        compose.onNodeWithContentDescription("Opções da lista").performClick()
+        compose.onNodeWithText("Escolher capa").performClick()
+        compose.onNodeWithTag("list_cover_choice_${withoutCover.key}").assertDoesNotExist()
+        compose.onNodeWithTag("list_cover_choice_${items.last().key}").performClick()
         compose.onNodeWithText("Ajustar capa").assertIsDisplayed()
         compose.onNodeWithContentDescription("Enquadramento da capa.",substring=true).performTouchInput {
             down(0,androidx.compose.ui.geometry.Offset(centerX-25,centerY))
@@ -171,12 +180,16 @@ class PersonalCurationUiTest {
             moveTo(1,androidx.compose.ui.geometry.Offset(centerX+70,centerY-20),delayMillis=120)
             up(0);up(1)
         }
-        assertNull(applied)
+        assertEquals("", storage.load("guest_local").lists.single().coverKey)
         compose.onNodeWithText("Usar capa").performClick()
-        compose.waitUntil(5000) {applied!=null}
-        assertEquals(list.items.last().key,applied!!.coverKey)
-        assertTrue(applied!!.coverZoom>1f)
-        assertTrue(storage.load("guest_local").lists.isEmpty())
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Ajustar capa").fetchSemanticsNodes().isEmpty() }
+        assertEquals("", storage.load("guest_local").lists.single().coverKey)
+        compose.onNodeWithText("Salvar lista").performClick()
+        compose.waitUntil(10000) { controller.state.value.lists.single().coverKey == items.last().key }
+        val saved = storage.load("guest_local").lists.single()
+        assertEquals(items.last().key, saved.coverKey)
+        assertTrue(saved.coverZoom > 1f)
+        assertEquals(items + withoutCover, saved.items)
     }
     @Test fun singleBookFeaturedListStaysCompact() {
         val list=ComicList(name="Uma HQ",items=listOf(ListComic.from(library.first())))

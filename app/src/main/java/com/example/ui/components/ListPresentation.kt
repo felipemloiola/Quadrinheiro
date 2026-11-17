@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,9 +23,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,17 +34,24 @@ import com.example.data.*
 import com.example.model.ComicEntry
 import com.example.ui.theme.LocalIOS27Theme
 
+private val listArtworkBackground = Color(0xFF111113)
+private val listArtworkScrim = Brush.verticalGradient(listOf(Color.Transparent, listArtworkBackground))
+
 /** Original pixels, one bounded Coil request. No backdrop capture or per-frame effects. */
 @Composable
 internal fun ListArtwork(list: ComicList, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val cover = list.coverItem()?.cover.orEmpty().replace("http://", "https://")
-    val request = remember(context, cover) {
-        ImageRequest.Builder(context).data(cover).size(1024, 1024).allowHardware(true).crossfade(false)
-            .diskCachePolicy(LibraryDiskCacheRegistry.diskCachePolicyFor(cover)).build()
+    val cover = remember(list.items, list.coverKey) {
+        list.coverItem()?.cover.orEmpty().trim().replace("http://", "https://")
     }
-    Box(modifier.clipToBounds().background(Color(0xFF111113))) {
-        if (cover.isNotBlank()) AsyncImage(request, null, Modifier.fillMaxSize().graphicsLayer {
+    val request = remember(context, cover) {
+        cover.takeIf(String::isNotEmpty)?.let {
+            ImageRequest.Builder(context).data(it).size(1024, 1024).allowHardware(true).crossfade(false)
+            .diskCachePolicy(LibraryDiskCacheRegistry.diskCachePolicyFor(cover)).build()
+        }
+    }
+    Box(modifier.clipToBounds().background(listArtworkBackground)) {
+        if (request != null) AsyncImage(request, null, Modifier.fillMaxSize().graphicsLayer {
             scaleX = list.coverZoom; scaleY = list.coverZoom
             translationX = (.5f - list.coverX) * size.width * (list.coverZoom - 1f)
             translationY = (.5f - list.coverY) * size.height * (list.coverZoom - 1f)
@@ -61,7 +64,9 @@ internal fun ListArtwork(list: ComicList, modifier: Modifier = Modifier) {
 internal fun ListCoverStack(list: ComicList, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy((-18).dp), verticalAlignment = Alignment.CenterVertically) {
         if (list.items.isEmpty()) Icon(Icons.Default.CollectionsBookmark, null, tint = LocalIOS27Theme.current.textSecondary, modifier = Modifier.size(48.dp))
-        list.items.take(3).forEach { BookCover(it.cover, it.title, spine3d = false, modifier = Modifier.size(42.dp, 63.dp)) }
+        list.items.take(3).forEach {
+            BookCover(it.cover, it.title, spine3d = false, modifier = Modifier.size(42.dp, 63.dp).clearAndSetSemantics {})
+        }
     }
 }
 
@@ -82,7 +87,7 @@ internal fun CompactListRow(list: ComicList, onClick: () -> Unit, enabled: Boole
 
 @Composable
 internal fun FeaturedListCard(list: ComicList, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Color(0xFF111113))
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(listArtworkBackground)
         .clickable(onClickLabel = "Abrir lista ${list.name}", onClick = onClick)) {
         ListHero(list)
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start=14.dp,end=14.dp,bottom=16.dp)) {
@@ -101,7 +106,7 @@ internal fun ListHero(list: ComicList) {
     Box(Modifier.fillMaxWidth()) {
         if (list.coverItem() != null) ListArtwork(list, Modifier.fillMaxWidth().aspectRatio(2f))
         else Spacer(Modifier.fillMaxWidth().height(88.dp))
-        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF111113)))))
+        Box(Modifier.matchParentSize().background(listArtworkScrim))
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(list.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 25.sp, lineHeight = 29.sp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,14 +119,16 @@ internal fun ListHero(list: ComicList) {
 
 @Composable
 internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (ComicEntry) -> Unit,
-    onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null, busy: Boolean = false) {
+    onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null,
+    onChooseCover: (() -> Unit)? = null, busy: Boolean = false) {
     val t = LocalIOS27Theme.current
     val panel=rememberCurationPanelState()
-    CurationSheet(list.name, onClose, busy = busy, menus=onHighlight!=null, actionLabel=if(onEdit!=null) "Editar" else null,
+    val hasMenu = onHighlight != null || onChooseCover != null
+    CurationSheet(list.name, onClose, busy = busy, menus=hasMenu, actionLabel=if(onEdit!=null) "Editar" else null,
         onAction={onEdit?.invoke()},panel=panel, headerActions={
-            if(onHighlight!=null) CurationActionMenu("Opções da lista",buildList {
-                add(LiquidGlassMenuItemData("Destacar na Biblioteca",Icons.Default.Star,onClick=onHighlight))
-                if(onEdit!=null)add(LiquidGlassMenuItemData("Escolher capa",Icons.Default.Image,onClick=onEdit))
+            if (hasMenu) CurationActionMenu("Opções da lista", buildList {
+                if (onChooseCover != null) add(LiquidGlassMenuItemData("Escolher capa", Icons.Default.Image, onClick=onChooseCover))
+                if (onHighlight != null) add(LiquidGlassMenuItemData("Destacar na Biblioteca", Icons.Default.Star, onClick=onHighlight))
             },enabled=!busy)
         }) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -153,13 +160,15 @@ internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:
     var selected by remember(list.id){mutableStateOf<ComicList?>(null)}
     val t=LocalIOS27Theme.current
     val pickerPanel=rememberCurationPanelState()
+    val coverRows = remember(list.items) { list.items.filter { it.cover.isNotBlank() }.chunked(2) }
+    val currentCoverKey = remember(list.items, list.coverKey) { list.coverItem()?.key }
     CurationSheet("Escolher capa",onClose,panel=pickerPanel) {
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
             item {Text("Use uma HQ desta lista",color=t.textSecondary)}
-            items(list.items.chunked(2),key={it.first().key}) {pair ->
+            items(coverRows,key={it.first().key}) {pair ->
                 Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
                     pair.forEach {entry ->
-                        val isCurrent=list.coverItem()?.key==entry.key
+                        val isCurrent = currentCoverKey == entry.key
                         val shape=RoundedCornerShape(18.dp)
                         Column(Modifier.weight(1f).testTag("list_cover_choice_${entry.key}").clip(shape).contentMaterialSurface(shape)
                             .then(if(isCurrent)Modifier.border(1.dp,t.textPrimary.copy(alpha=.6f),shape) else Modifier)

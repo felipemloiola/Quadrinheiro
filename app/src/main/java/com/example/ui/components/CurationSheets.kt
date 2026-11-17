@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -200,34 +201,37 @@ private fun AddToListSheet(comic: ComicEntry, controller: CurationController, on
     val t = LocalIOS27Theme.current
     var query by remember { mutableStateOf("") }
     val panel=rememberCurationPanelState()
+    val matchingDrafts = remember(pendingDrafts, query) { pendingDrafts.filter { it.name.contains(query, true) } }
+    val matches = remember(state.lists, query) { state.lists.filter { !it.deleted && it.name.contains(query, true) } }
     CurationSheet("Adicionar a uma lista",onClose,busy=state.saving,error=state.error,panel=panel) {
         CurationError(controller)
         Row(Modifier.padding(16.dp), verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
             BookCover(comic.coverUrl,comic.displayTitle,spine3d=false,modifier=Modifier.size(48.dp,72.dp))
-            Column { Text(comic.displayTitle,color=t.textPrimary,fontWeight=FontWeight.SemiBold);Text("Listas privadas",color=t.textSecondary,fontSize=12.sp) }
+            Text(comic.displayTitle, color = t.textPrimary, fontWeight = FontWeight.SemiBold)
         }
         AppleTextField(query,{query=it},"Buscar lista",modifier=Modifier.padding(horizontal=16.dp))
         EditorialAction("Criar nova lista",{creating=ComicList(items=listOf(ref))},Modifier.fillMaxWidth().padding(16.dp),!state.saving && !state.loading)
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            items(pendingDrafts.filter {it.name.contains(query,true)},key={"draft:${it.id}"}) {pending ->
+            items(matchingDrafts,key={"draft:${it.id}"}) {pending ->
                 val included=pending.items.any {it.key==ref.key}
                 TextButton(enabled=!state.saving && !state.loading && (included || pending.items.size<200),onClick={
                     creating=if(included) pending else pending.copy(items=pending.items+ref)
                 }) {Text("Continuar rascunho: ${pending.name}",color=t.textPrimary)}
             }
-            val matches=state.lists.filter {!it.deleted && it.name.contains(query,true)}
-            if(matches.isEmpty() && !state.loading) item {Text("Nenhuma lista encontrada",color=t.textSecondary)}
+            if(matches.isEmpty() && matchingDrafts.isEmpty() && !state.loading) item {Text("Nenhuma lista encontrada",color=t.textSecondary)}
             items(matches,key={it.id}) { list ->
                 val included=list.items.any {it.key==ref.key}
                 CompactListRow(list,onClick={scope.launch {
                     if(controller.save(list.copy(items=list.items+ref),state.owner)) panel.close()
                 }},enabled=!included && list.items.size<200 && !state.saving && !state.loading,
-                    trailing=if(included) "Já adicionada" else if(list.items.size>=200) "Limite de 200 HQs" else "${list.items.size} HQs · Privada")
+                    trailing=if(included) "Já adicionada" else if(list.items.size>=200) "Limite de 200 HQs" else null)
             }
         }
     }
     creating?.let { CurationSubpage {key(state.owner,it.id) {ListEditor(it,emptyList(),controller,onSearch=null,onOpenComic={}) { creating=null }} } }
 }
+
+internal enum class ListEditorDestination { Editor, AddComics, ChooseCover }
 
 @Composable
 fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationController,
@@ -238,10 +242,15 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     var editing by remember(state.owner) { mutableStateOf<ComicList?>(null) }
     var viewing by remember(state.owner) { mutableStateOf<ComicList?>(null) }
     var drafts by remember(state.owner) { mutableStateOf(emptyList<ComicList>()) }
-    var addingFromDetail by remember(state.owner) {mutableStateOf(false)}
+    var destination by remember(state.owner) { mutableStateOf(ListEditorDestination.Editor) }
     LaunchedEffect(state.owner) { controller.load(); drafts=controller.drafts() }
-    val active=state.lists.filterNot {it.deleted}
-    val featured=featuredComicList(active)
+    val active = remember(state.lists) { state.lists.filterNot { it.deleted } }
+    val featured = remember(active) { featuredComicList(active) }
+    val compactLists = remember(active, featured?.id) { active.filterNot { it.id == featured?.id } }
+    fun openEditor(list: ComicList, target: ListEditorDestination = ListEditorDestination.Editor) {
+        destination = target
+        editing = list
+    }
     Column(Modifier.fillMaxSize().padding(horizontal=16.dp).padding(top=12.dp)) {
         SettingsBackButton(onBack,label="Perfil")
         Spacer(Modifier.height(16.dp))
@@ -250,7 +259,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
                 Text("Suas coleções",color=t.textSecondary,fontSize=12.sp,fontWeight=FontWeight.Medium)
                 Text("Biblioteca",color=t.textPrimary,fontWeight=FontWeight.Bold,fontSize=28.sp,letterSpacing=(-.5).sp)
             }
-            IconButton(onClick={editing=ComicList()},enabled=!state.loading && !state.saving) { Icon(Icons.Default.Add,"Criar lista",tint=t.textPrimary) }
+            IconButton(onClick={openEditor(ComicList())},enabled=!state.loading && !state.saving) { Icon(Icons.Default.Add,"Criar lista",tint=t.textPrimary) }
         }
         HorizontalDivider(color=t.divider,thickness=.5.dp)
         Spacer(Modifier.height(16.dp))
@@ -260,42 +269,45 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         if(state.localOnly && state.owner!="guest_local") Text("Listas salvas nesta conta, neste aparelho",color=t.textSecondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
         LazyColumn(contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             items(drafts,key={"draft:${it.id}"}) {pending ->
-                CompactListRow(pending,{editing=pending},trailing="Continuar rascunho · ${pending.items.size} HQs")
+                CompactListRow(pending,{openEditor(pending)},trailing="Continuar rascunho · ${pending.items.size} HQs")
             }
-            if(active.isEmpty() && !state.loading) item {
+            if(active.isEmpty() && drafts.isEmpty() && !state.loading) item {
                 Column(Modifier.fillMaxWidth().padding(vertical=64.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(16.dp)) {
                     Icon(Icons.Default.CollectionsBookmark,null,tint=t.textSecondary,modifier=Modifier.size(64.dp))
                     Text("Suas listas começam aqui",color=t.textPrimary,fontSize=22.sp,fontWeight=FontWeight.SemiBold)
                     Text("Organize HQs por tema ou crie seu ranking.",color=t.textSecondary)
-                    EditorialAction("Criar minha primeira lista",{editing=ComicList()})
+                    EditorialAction("Criar minha primeira lista",{openEditor(ComicList())})
                 }
             }
             if(featured!=null) item(key="featured:${featured.id}") {FeaturedListCard(featured,{viewing=featured})}
-            items(active.filterNot {it.id==featured?.id},key={it.id}) {list -> CompactListRow(list,{viewing=list})}
+            items(compactLists,key={it.id}) {list -> CompactListRow(list,{viewing=list})}
         }
     }
     viewing?.let {selected ->
         val list=active.firstOrNull {it.id==selected.id}
         if(list!=null) ListDetailSheet(list,{viewing=null},onComic={next ->
             viewing=null;onComic(library.firstOrNull {ListComic.from(it).key==ListComic.from(next).key} ?: next)
-        },onEdit={addingFromDetail=false;editing=list},onAdd={addingFromDetail=true;editing=list},onHighlight={scope.launch {
+        },onEdit={openEditor(list)},onAdd={openEditor(list,ListEditorDestination.AddComics)},
+            onChooseCover=if(list.coverItem()!=null) ({openEditor(list,ListEditorDestination.ChooseCover)}) else null,
+            onHighlight={scope.launch {
             val stamp=maxOf(System.currentTimeMillis(),(active.maxOfOrNull {it.featuredAt} ?: 0)+1)
             controller.save(list.copy(featuredAt=stamp),state.owner)
         }},busy=state.saving || state.loading)
     }
     editing?.let { list -> CompositionLocalProvider(LocalCurationPageDepth provides if(viewing!=null)1 else 0) {key(state.owner,list.id) {
-        ListEditor(list,library,controller,onSearch={ editing=null;viewing=null;onSearch() },onOpenComic={viewing=null;onComic(it)},onConnectAccount=onConnectAccount,startAdding=addingFromDetail) { editing=null;addingFromDetail=false;scope.launch {drafts=controller.drafts()} }
+        ListEditor(list,library,controller,onSearch={ editing=null;viewing=null;onSearch() },onOpenComic={viewing=null;onComic(it)},onConnectAccount=onConnectAccount,destination=destination) { editing=null;scope.launch {drafts=controller.drafts()} }
     }} }
 }
 
 @Composable
 internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controller: CurationController,
-    onSearch: (() -> Unit)?, onOpenComic: (ComicEntry)->Unit,onConnectAccount:(()->Unit)?=null,startAdding:Boolean=false, onClose: ()->Unit) {
+    onSearch: (() -> Unit)?, onOpenComic: (ComicEntry)->Unit,onConnectAccount:(()->Unit)?=null,
+    destination: ListEditorDestination = ListEditorDestination.Editor, onClose: ()->Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val owner=remember {state.owner}
     var draft by remember(initial.id) {mutableStateOf(initial)}
-    var adding by remember {mutableStateOf(startAdding)}
-    var artwork by remember {mutableStateOf(false)}
+    var adding by remember {mutableStateOf(destination == ListEditorDestination.AddComics)}
+    var artwork by remember {mutableStateOf(destination == ListEditorDestination.ChooseCover)}
     var selection by remember {mutableStateOf(emptySet<String>())}
     var deleting by remember {mutableStateOf(false)}
     var discarding by remember {mutableStateOf(false)}
@@ -326,8 +338,22 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
         }
     }
     fun move(key: String, target: Int) {
-        val items=latest.items.toMutableList(); val index=items.indexOfFirst {it.key==key}
-        if(index>=0) {val item=items.removeAt(index);items.add(target.coerceIn(0,items.size),item);draft=latest.copy(items=items)}
+        val index = latest.items.indexOfFirst { it.key == key }
+        if (index < 0 || index == target) return
+        val items = latest.items.toMutableList()
+        val item = items.removeAt(index)
+        items.add(target.coerceIn(0, items.size), item)
+        draft = latest.copy(items = items)
+    }
+    fun moveToDragTarget(key: String) {
+        val center = dragStartCenter + dragOffset
+        val target = editorListState.layoutInfo.visibleItemsInfo.asSequence()
+            .filter { it.contentType == "comic" }
+            .minByOrNull { kotlin.math.abs(it.offset + it.size / 2f - center) }
+        if (target != null) {
+            val index = latest.items.indexOfFirst { it.key == target.key }
+            if (index >= 0) move(key, index)
+        }
     }
     fun closeDraft() { if(state.saving) return;scope.launch {if(controller.preserveDraft(draft,owner)) editorPanel.close() else closeFailure++} }
     CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",onClose,busy=state.saving,error=state.error,reopenKey=closeFailure,panel=editorPanel,menus=true,
@@ -346,7 +372,7 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
         if(state.error!=null && state.ready) TextButton(enabled=!state.saving,onClick={discarding=true}) {Text("Descartar este rascunho",color=t.textSecondary)}
         LazyColumn(Modifier.weight(1f).testTag("list_editor_items"),state=editorListState,contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             item {
-                if(draft.items.isNotEmpty()) {
+                if(draft.coverItem()!=null) {
                     ListArtwork(draft,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(18.dp)))
                     Spacer(Modifier.height(12.dp))
                     CurationGlassAction("Escolher capa",{artwork=true},Modifier.fillMaxWidth(),enabled=!state.saving,icon=Icons.Default.Image,primary=true)
@@ -375,14 +401,14 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                 CurationGlassAction("Adicionar HQ da biblioteca",{selection=emptySet();adding=true},Modifier.fillMaxWidth(),enabled=draft.items.size<200 && !state.saving,icon=Icons.Default.Add)
                 if(onSearch!=null) TextButton(onClick={scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close(onSearch)}},enabled=!state.saving) {Text("Buscar HQ no catálogo",color=t.accent)}
             }
-            items(draft.items,key={it.key}) { entry ->
+            itemsIndexed(draft.items,key={_, entry -> entry.key},contentType={_, _ -> "comic"}) { index, entry ->
                 Column(Modifier.fillMaxWidth()
                     .animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(motion.reduced || dragging==entry.key)null else motion.spring(stiffness=500f))
                     .zIndex(if(dragging==entry.key)1f else 0f)
-                    .graphicsLayer {
+                    .then(if (dragging == entry.key) Modifier.graphicsLayer {
                         val row=editorListState.layoutInfo.visibleItemsInfo.firstOrNull {it.key==entry.key}
-                        translationY=if(dragging==entry.key && row!=null)dragStartCenter+dragOffset-(row.offset+row.size/2f) else 0f
-                    }
+                        translationY=if(row!=null)dragStartCenter+dragOffset-(row.offset+row.size/2f) else 0f
+                    } else Modifier)
                     .padding(vertical=8.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(48.dp).semantics {contentDescription="Arrastar ${entry.title} para reordenar"}
@@ -395,37 +421,29 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                                 },
                                 onDrag={change,amount ->
                                     change.consume();dragOffset+=amount.y
-                                    val keys=latest.items.map {it.key}.toSet()
-                                    val target=editorListState.layoutInfo.visibleItemsInfo.filter {it.key in keys}.minByOrNull {
-                                        kotlin.math.abs(it.offset+it.size/2f-(dragStartCenter+dragOffset))
-                                    }
-                                    val index=latest.items.indexOfFirst {it.key==target?.key}
-                                    if(index>=0 && latest.items.indexOfFirst {it.key==entry.key}!=index)move(entry.key,index)
+                                    moveToDragTarget(entry.key)
                                 },
                                 onDragCancel={dragging=null;dragOffset=0f},
                                 onDragEnd={
-                                    val keys=latest.items.map {it.key}.toSet()
-                                    val target=editorListState.layoutInfo.visibleItemsInfo.filter {it.key in keys}.minByOrNull {
-                                        kotlin.math.abs(it.offset+it.size/2f-(dragStartCenter+dragOffset))
-                                    }
-                                    val index=latest.items.indexOfFirst {it.key==target?.key}
-                                    if(index>=0)move(entry.key,index)
+                                    moveToDragTarget(entry.key)
                                     dragging=null;dragOffset=0f
                                 })},contentAlignment=Alignment.Center) {
                             Icon(Icons.Default.DragHandle,null,tint=t.textSecondary)
                         }
-                        if(draft.ranked) Text("${draft.items.indexOf(entry)+1}",color=t.accent,fontWeight=FontWeight.Bold)
-                        BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.size(52.dp,78.dp))
-                        Text(entry.title,color=t.textPrimary,modifier=Modifier.weight(1f).clickable(onClickLabel="Ver ${entry.title}") {
-                            if(!state.saving) scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close {onOpenComic(library.firstOrNull {ListComic.from(it).key==entry.key} ?: entry.comic())}}
-                        })
+                        if(draft.ranked) Text("${index+1}",color=t.accent,fontWeight=FontWeight.Bold)
+                        BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.size(52.dp,78.dp).clearAndSetSemantics {})
+                        Box(Modifier.weight(1f).heightIn(min=48.dp).clickable(enabled=!state.saving,onClickLabel="Ver ${entry.title}") {
+                            scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close {onOpenComic(library.firstOrNull {ListComic.from(it).key==entry.key} ?: entry.comic())}}
+                        }, contentAlignment = Alignment.CenterStart) {
+                            Text(entry.title, color = t.textPrimary)
+                        }
+                        CurationActionMenu("Opções de ${entry.title}",listOf(
+                            LiquidGlassMenuItemData("Mover",Icons.Default.SwapVert) {moving=entry;position="${index+1}"},
+                            LiquidGlassMenuItemData("Editar nota",Icons.Default.Edit) {noting=entry;note=entry.note},
+                            LiquidGlassMenuItemData("Remover da lista",Icons.Default.Remove) {draft=draft.copy(items=draft.items.filterNot {it.key==entry.key})}
+                        ),Modifier.testTag("list_item_options_${entry.key}"),enabled=!state.saving)
                     }
                     if(entry.note.isNotBlank()) Text(entry.note,color=t.textSecondary,modifier=Modifier.padding(top=8.dp))
-                    CurationActionMenu("Opções de ${entry.title}",listOf(
-                        LiquidGlassMenuItemData("Mover",Icons.Default.SwapVert) {moving=entry;position="${draft.items.indexOf(entry)+1}"},
-                        LiquidGlassMenuItemData("Nota",Icons.Default.Edit) {noting=entry;note=entry.note},
-                        LiquidGlassMenuItemData("Remover da lista",Icons.Default.Remove) {draft=draft.copy(items=draft.items.filterNot {it.key==entry.key})}
-                    ),Modifier.align(Alignment.End).testTag("list_item_options_${entry.key}"),enabled=!state.saving)
                     HorizontalDivider(color=t.divider)
                 }
             }
@@ -444,19 +462,29 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
     }) {Text("Esta conta salva listas neste aparelho. Uma conta Google é necessária para publicar. Seu rascunho permanece nesta conta.",color=t.textSecondary)}
     if(adding) {
     val addPanel=rememberCurationPanelState()
+    val libraryReferences = remember(library) { library.map { it to ListComic.from(it) } }
+    val includedKeys = remember(draft.items) { draft.items.mapTo(HashSet()) { it.key } }
+    val matches = remember(libraryReferences, query) {
+        libraryReferences.asSequence()
+            .filter { (comic, _) -> comic.displayTitle.contains(query, true) || comic.authors.contains(query, true) }
+            .map { (_, reference) -> reference }
+            .distinctBy { it.key }
+            .toList()
+    }
     CurationSheet("Adicionar HQs",{adding=false;selection=emptySet()},panel=addPanel,actionLabel="Adicionar (${selection.size})",actionEnabled=selection.isNotEmpty() && !state.saving,onAction={
-        draft=draft.copy(items=draft.items+library.map(ListComic::from).distinctBy {it.key}.filter {it.key in selection && draft.items.none {old->old.key==it.key}})
+        val selected = libraryReferences.asSequence().map { (_, reference) -> reference }
+            .filter { it.key in selection && it.key !in includedKeys }.distinctBy { it.key }.toList()
+        draft = draft.copy(items = draft.items + selected)
         addPanel.close()
     }) {
         AppleTextField(query,{query=it},"Buscar na biblioteca",modifier=Modifier.padding(16.dp))
         if(onSearch!=null) TextButton(enabled=!state.saving,onClick={scope.launch {
             if(controller.preserveDraft(draft,owner))addPanel.close {editorPanel.close(onSearch)}
         }}) {Text("Buscar HQ no catálogo",color=t.textPrimary)}
-        val matches=library.filter {it.displayTitle.contains(query,true) || it.authors.contains(query,true)}.distinctBy {ListComic.from(it).key}
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp)) {
             if(matches.isEmpty()) item {Text("Nenhuma HQ encontrada",color=t.textSecondary)}
-            items(matches,key={ListComic.from(it).key}) {comic ->
-                val ref=ListComic.from(comic);val included=draft.items.any {it.key==ref.key}
+            items(matches,key={it.key}) {ref ->
+                val included = ref.key in includedKeys
                 Row(Modifier.fillMaxWidth().clickable(enabled=!included && !state.saving && (ref.key in selection || draft.items.size+selection.size<200),role=Role.Checkbox) {
                     selection=if(ref.key in selection) selection-ref.key else selection+ref.key
                 }.padding(vertical=8.dp).semantics {selected=included || ref.key in selection},

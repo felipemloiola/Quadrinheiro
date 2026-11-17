@@ -56,7 +56,8 @@ class CurationMenuMotionTest {
     }
 
     @Test fun closingACropPageReturnsToTheExistingCoverPicker() {
-        val comic=com.example.data.ListComic.from(com.example.model.ComicEntry(id="navigation-test",externalId="",authors="",publisher="",title="HQ de navegação"))
+        val comic=com.example.data.ListComic.from(com.example.model.ComicEntry(id="navigation-test",externalId="",authors="",publisher="",title="HQ de navegação",
+            coverUrl="android.resource://android/${android.R.drawable.ic_menu_gallery}"))
         val list=com.example.data.ComicList(name="Navegação",items=listOf(comic))
         var dismissed=0
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
