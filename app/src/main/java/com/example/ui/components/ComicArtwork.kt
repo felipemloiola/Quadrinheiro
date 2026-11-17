@@ -117,6 +117,7 @@ private fun ExpandedCoverContent(url:String,title:String,source:Rect?,onClose:()
         Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
     }
     fun setZoom(zoom: Float) {
+        if (closing) return
         scale = zoom.coerceIn(1f, 5f)
         offset = clamp(offset, scale)
     }
@@ -159,12 +160,15 @@ private fun ExpandedCoverContent(url:String,title:String,source:Rect?,onClose:()
                     CustomAccessibilityAction("Reduzir capa"){setZoom(scale - .5f);true},
                     CustomAccessibilityAction("Redefinir ampliação"){setZoom(1f);true})
             }
-                .pointerInput(url){detectTransformGestures {centroid,pan,zoom,_ ->
-                    val next = (scale * zoom).coerceIn(1f, 5f)
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    offset = clamp(zoomAroundCentroid(offset, centroid - center, pan, scale, next), next)
-                    scale = next
-                }}) {
+                .pointerInput(url, closing){
+                    if (closing) return@pointerInput
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val next = (scale * zoom).coerceIn(1f, 5f)
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        offset = clamp(zoomAroundCentroid(offset, centroid - center, pan, scale, next), next)
+                        scale = next
+                    }
+                }) {
             BookCover(url,title,spine3d=false,contentScale=ContentScale.Fit,modifier=Modifier.fillMaxSize().clearAndSetSemantics {})
         }
         IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp)
@@ -179,7 +183,7 @@ private fun ExpandedCoverContent(url:String,title:String,source:Rect?,onClose:()
             if (adjusting) {
                 Slider(scale, ::setZoom, valueRange = 1f..5f,
                     modifier = Modifier.semantics { contentDescription = "Zoom da capa" })
-                CropPositionControls(offset, positionLimit(scale), { offset = it }, Color.White)
+                CropPositionControls(offset, positionLimit(scale), { if (!closing) offset = it }, Color.White)
             }
         }
     }

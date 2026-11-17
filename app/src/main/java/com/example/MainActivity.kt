@@ -102,6 +102,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -111,6 +112,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.util.lerp
@@ -1501,7 +1505,13 @@ private fun IOS27BottomTabViewContainer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = lerp(16.dp, 28.dp, collapsedFraction)),
+                .layout { measurable, constraints ->
+                    val inset = lerp(16.dp, 28.dp, collapsedFraction).roundToPx()
+                    val child = measurable.measure(constraints.offset(horizontal = -2 * inset))
+                    layout(constraints.constrainWidth(child.width + 2 * inset), child.height) {
+                        child.placeRelative(inset, 0)
+                    }
+                },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -1640,23 +1650,27 @@ private fun IOS27BottomTabViewContainer(
             }
 
             // Botão Circular da Lupa — Animação Liquid Glass idêntica ao iOS 26
-            val searchButtonSize = lerp(64f.dp, 54f.dp, collapsedFraction)
             val searchAnimationScope = rememberCoroutineScope()
             var isSearchPressed by remember { mutableStateOf(false) }
             var handledByPointer by remember { mutableStateOf(false) }
             val searchScaleAnim = remember { Animatable(1f) }
             val searchGlassProgressAnim = remember { Animatable(0f) }
 
-            val searchInteractiveHighlight = remember(searchAnimationScope) {
+            val searchReduceMotion = com.example.ui.theme.rememberReducedMotion()
+            val searchInteractiveHighlight = remember(searchAnimationScope, searchReduceMotion) {
                 com.kyant.backdrop.catalog.utils.InteractiveHighlight(
-                    animationScope = searchAnimationScope
+                    animationScope = searchAnimationScope,
+                    reduceMotion = searchReduceMotion
                 )
             }
 
             // Caso a aba "search" seja acionada por atalho externo (ex.: botão Buscar na tela)
             var wasSearchSelected by remember { mutableStateOf(isSearchSelected) }
-            LaunchedEffect(isSearchSelected) {
-                if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
+            LaunchedEffect(isSearchSelected, motion.reduced) {
+                if (motion.reduced) {
+                    searchScaleAnim.snapTo(1f)
+                    searchGlassProgressAnim.snapTo(0f)
+                } else if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
                     searchAnimationScope.launch {
                         searchGlassProgressAnim.animateTo(1f, motion.tween(55))
                         searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 350f))
@@ -1681,7 +1695,13 @@ private fun IOS27BottomTabViewContainer(
 
             Box(
                 modifier = Modifier
-                    .size(searchButtonSize)
+                    .layout { measurable, constraints ->
+                        val size = lerp(64.dp, 54.dp, collapsedFraction).roundToPx()
+                        val width = constraints.constrainWidth(size)
+                        val height = constraints.constrainHeight(size)
+                        val child = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(width, height))
+                        layout(width, height) { child.placeRelative(0, 0) }
+                    }
                     .drawBackdrop(
                         backdrop = mainBackdrop,
                         shape = { ContinuousCapsule },
@@ -1755,13 +1775,13 @@ private fun IOS27BottomTabViewContainer(
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             isSearchPressed = true
-                            searchAnimationScope.launch {
+                            if (!searchReduceMotion()) searchAnimationScope.launch {
                                 searchGlassProgressAnim.animateTo(
                                     1f,
                                     motion.spring(dampingRatio = 0.9f, stiffness = 700f)
                                 )
                             }
-                            searchAnimationScope.launch {
+                            if (!searchReduceMotion()) searchAnimationScope.launch {
                                 searchScaleAnim.animateTo(
                                     1.15f,
                                     motion.spring(dampingRatio = 0.75f, stiffness = 550f)
@@ -1783,6 +1803,11 @@ private fun IOS27BottomTabViewContainer(
                             if (releasedInside) {
                                 handledByPointer = true
                                 currentOnSelectTab("search")
+                            }
+                            if (searchReduceMotion()) {
+                                return@awaitEachGesture
+                            }
+                            if (releasedInside) {
                                 searchAnimationScope.launch {
                                     if (searchScaleAnim.value < 1.13f) {
                                         searchScaleAnim.animateTo(1.15f, motion.tween(50))

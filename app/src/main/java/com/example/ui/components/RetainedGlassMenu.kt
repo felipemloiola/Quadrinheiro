@@ -73,8 +73,10 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
             launch { x.animateTo(1f, motion.spring(0.58f, 460f)) }
             y.animateTo(1f, motion.spring(0.62f, 420f))
         } else if (retained != null) {
-            launch { x.animateTo(0f, motion.spring(1f, 850f)) }
-            y.animateTo(0f, motion.spring(1f, 850f))
+            kotlinx.coroutines.coroutineScope {
+                launch { x.animateTo(0f, motion.spring(1f, 850f)) }
+                y.animateTo(0f, motion.spring(1f, 850f))
+            }
             if (state.currentRequest == null) { retained = null; state.morphingMenuId = null }
         }
     }

@@ -50,7 +50,7 @@ class InteractiveHighlight(
 
     val modifier: Modifier =
         Modifier.drawWithContent {
-            val progress = pressProgressAnimation.value
+            val progress = pressProgress
             if (progress > 0f) {
                 if (shader != null) {
                     drawRect(
@@ -88,6 +88,7 @@ class InteractiveHighlight(
             inspectDragGestures(
                 observeOnly = true,
                 onDragStart = { down ->
+                    if (reduceMotion()) return@inspectDragGestures
                     startPosition = down.position
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
@@ -95,19 +96,21 @@ class InteractiveHighlight(
                     }
                 },
                 onDragEnd = {
+                    if (reduceMotion()) return@inspectDragGestures
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
                         launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
                     }
                 },
                 onDragCancel = {
+                    if (reduceMotion()) return@inspectDragGestures
                     animationScope.launch {
                         launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
                         launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
                     }
                 }
             ) { change, _ ->
-                animationScope.launch { positionAnimation.snapTo(change.position) }
+                if (!reduceMotion()) animationScope.launch { positionAnimation.snapTo(change.position) }
             }
         }
 }

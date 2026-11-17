@@ -607,6 +607,7 @@ fun SettingsTabScreen(
                                             min = 0.0f,
                                             max = 2.0f,
                                             step = 0.1f,
+                                            commitOnRelease = true,
                                             accentColor = s.accentColor,
                                             onChange = { v ->
                                                 viewModel.updateSettings { it.copy(glassIntensity = v) }
@@ -647,6 +648,7 @@ fun SettingsTabScreen(
                                             min = 0.2f,
                                             max = 3.0f,
                                             step = 0.1f,
+                                            commitOnRelease = true,
                                             accentColor = s.accentColor,
                                             onChange = { v ->
                                                 viewModel.updateSettings { it.copy(glassBlurIntensity = v) }
@@ -687,6 +689,7 @@ fun SettingsTabScreen(
                                             min = 0.2f,
                                             max = 2.0f,
                                             step = 0.1f,
+                                            commitOnRelease = true,
                                             accentColor = s.accentColor,
                                             onChange = { v ->
                                                 viewModel.updateSettings { it.copy(glassOpacity = v) }
@@ -1080,6 +1083,7 @@ fun SettingsTabScreen(
                                         min = 85f,
                                         max = 115f,
                                         step = 5f,
+                                        commitOnRelease = true,
                                         ticks = listOf(85f, 95f, 100f, 105f, 115f),
                                         accentColor = s.accentColor,
                                         onChange = { v ->

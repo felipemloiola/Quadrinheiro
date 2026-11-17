@@ -1,6 +1,7 @@
 package com.example
 
 import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
@@ -20,6 +21,54 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CurationMenuMotionTest {
     @get:Rule val compose=createComposeRule()
+
+    @Test fun compactPanelTracksTheDragDistanceAfterTouchSlop() {
+        compose.setContent {
+            QuadrinheiroTheme(AppSettings(reduceMotion = true, reduceTransparency = true)) {
+                CurationSheet("Painel compacto", {}, compact = true) {
+                    androidx.compose.material3.Text("Conteúdo")
+                    androidx.compose.foundation.layout.Spacer(
+                        androidx.compose.ui.Modifier.height(120.dp)
+                    )
+                }
+            }
+        }
+        val title = compose.onNodeWithText("Painel compacto")
+        title.performTouchInput { down(center); moveBy(Offset(0f, 32.dp.toPx())) }
+        val afterSlop = title.fetchSemanticsNode().positionInRoot.y
+        var distance = 0f
+        title.performTouchInput {
+            distance = 40.dp.toPx()
+            moveBy(Offset(0f, distance))
+        }
+        assertEquals(distance, title.fetchSemanticsNode().positionInRoot.y - afterSlop, 1f)
+        title.performTouchInput { cancel() }
+    }
+
+    @Test fun deferredSliderCommitsOnceOnReleaseAndDiscardsCancelledPreview() {
+        val committed = mutableListOf<Float>()
+        compose.setContent {
+            var value by remember { mutableFloatStateOf(50f) }
+            QuadrinheiroTheme(AppSettings(reduceMotion = true, reduceTransparency = true)) {
+                AppleSlider(value = value, commitOnRelease = true, onValueChange = {
+                    committed += it
+                    value = it
+                })
+            }
+        }
+        val slider = compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.SetProgress))
+        slider.performTouchInput { down(center); moveBy(Offset(56.dp.toPx(), 0f)) }
+        compose.runOnIdle { assertTrue(committed.isEmpty()) }
+        slider.performTouchInput { up() }
+        compose.runOnIdle {
+            assertEquals(1, committed.size)
+            assertTrue(committed.single() > 50f)
+        }
+        slider.performTouchInput { down(center); moveBy(Offset(-56.dp.toPx(), 0f)); cancel() }
+        compose.runOnIdle { assertEquals(1, committed.size) }
+        slider.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(25f) }
+        compose.runOnIdle { assertEquals(listOf(committed.first(), 25f), committed) }
+    }
 
     @Test fun draggingAnEditedPanelRequestsConfirmationBeforeClosing() {
         var confirmations = 0

@@ -12,10 +12,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -28,6 +30,8 @@ import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CancellationException
 import kotlin.math.abs
 
@@ -45,6 +49,7 @@ class FluidSheetState internal constructor(
     private val dismissThreshold: Float,
     private val expandThreshold: Float,
     private val reduced: () -> Boolean,
+    private val panelHeight: () -> Float?,
     private val onDismiss: () -> Unit,
     private val onExpand: (() -> Unit)?,
     private val onDragDismissRequest: () -> Boolean
@@ -55,13 +60,22 @@ class FluidSheetState internal constructor(
     private val tracker = VelocityTracker()
     private var rawPosition = initialOffset
     private var backStartOffset = initialOffset
-    private var restOffset = initialOffset
+    private var restOffset by mutableFloatStateOf(initialOffset)
     val offset: Float get() = held ?: animation.value
     val isMoving: Boolean get() = held != null || animation.isRunning
-    val scrimFraction: Float get() = (1f - offset / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
+    private val travelHeight: Float get() = (panelHeight() ?: height).coerceAtLeast(1f)
+    val restingOffset: Float get() = restOffset
+    val scrimFraction: Float get() = (1f - offset / travelHeight).coerceIn(0f, 1f)
 
-    fun dismiss() = settle(height, 0f, dismiss = true)
+    fun dismiss() = settle(travelHeight, 0f, dismiss = true)
     fun enter() = settle(restOffset, 0f)
+    internal suspend fun enterMeasured() {
+        val measuredHeight = snapshotFlow { panelHeight() }.filterNotNull().first()
+        if (job == null) {
+            held = if (reduced()) restOffset else measuredHeight
+            enter()
+        }
+    }
     fun expandToTop() {
         if (restOffset == 0f) return
         restOffset = 0f
@@ -79,7 +93,7 @@ class FluidSheetState internal constructor(
     }
 
     fun updateBack(progress: Float) {
-        if (!reduced()) held = backStartOffset + (height - backStartOffset) * progress.coerceIn(0f, 1f)
+        if (!reduced()) held = backStartOffset + (travelHeight - backStartOffset) * progress.coerceIn(0f, 1f)
     }
 
     fun cancelBack() = settle(backStartOffset, 0f)
@@ -100,7 +114,7 @@ class FluidSheetState internal constructor(
     private fun trackDrag(delta: Float, timeMillis: Long) {
         rawPosition += delta
         tracker.addPosition(timeMillis, Offset(0f, rawPosition))
-        held = sheetResistance(rawPosition, height)
+        held = sheetResistance(rawPosition, travelHeight)
     }
 
     private fun finishDrag() {
@@ -108,7 +122,7 @@ class FluidSheetState internal constructor(
         val endpoint = projectSheetEndpoint(rawPosition, velocity)
         when {
             endpoint > restOffset + dismissThreshold -> {
-                if (onDragDismissRequest()) settle(height, velocity, dismiss = true)
+                if (onDragDismissRequest()) settle(travelHeight, velocity, dismiss = true)
                 else settle(restOffset, 0f)
             }
             onExpand != null && restOffset > 0f && endpoint < restOffset - expandThreshold -> {
@@ -120,11 +134,14 @@ class FluidSheetState internal constructor(
         }
     }
 
-    val dragModifier = Modifier.pointerInput(this) {
+    val dragModifier = dragHandle(interruptOnDown = false)
+    val grabberModifier = dragHandle(interruptOnDown = true)
+
+    private fun dragHandle(interruptOnDown: Boolean) = Modifier.pointerInput(this, interruptOnDown) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             var overSlop = 0f
-            val start = if (animation.isRunning) {
+            val start = if (interruptOnDown && animation.isRunning) {
                 down.consume()
                 down
             } else {
@@ -154,7 +171,8 @@ fun rememberFluidSheet(
     onDismiss: () -> Unit,
     onExpand: (() -> Unit)? = null,
     backEnabled: Boolean = true,
-    onDragDismissRequest: () -> Boolean = { true }
+    onDragDismissRequest: () -> Boolean = { true },
+    panelHeight: (() -> Float?)? = null
 ): FluidSheetState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -165,12 +183,16 @@ fun rememberFluidSheet(
     val dismiss = rememberUpdatedState(onDismiss)
     val expand = rememberUpdatedState(onExpand)
     val dragDismiss = rememberUpdatedState(onDragDismissRequest)
+    val latestPanelHeight = rememberUpdatedState(panelHeight)
     val reduced = rememberReducedMotion()
     val state = remember(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, onExpand != null) {
         FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced,
+            { latestPanelHeight.value?.invoke() },
             { dismiss.value() }, if (onExpand != null) ({ expand.value?.invoke() }) else null, { dragDismiss.value() })
     }
-    LaunchedEffect(state) { state.enter() }
+    LaunchedEffect(state, panelHeight != null) {
+        if (panelHeight == null) state.enter() else state.enterMeasured()
+    }
     PredictiveBackHandler(enabled = backEnabled) {
         state.beginBack()
         try {

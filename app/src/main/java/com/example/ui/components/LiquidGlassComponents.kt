@@ -1105,13 +1105,18 @@ private fun CoverShimmerPlaceholder(
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val themeColors = com.example.ui.theme.LocalIOS27Theme.current
     val phase = remember { androidx.compose.runtime.mutableFloatStateOf(-1f) }
-    LaunchedEffect(motion.reduced) {
-        if (motion.reduced) { phase.floatValue = 0f; return@LaunchedEffect }
-        val start = androidx.compose.runtime.withFrameNanos { it }
-        while (true) {
-            val elapsed = androidx.compose.runtime.withFrameNanos { (it - start) / 1_000_000L }
-            if (elapsed >= 6000L) break
-            phase.floatValue = -1f + (elapsed % 1350L) / 1350f * 3f
+    val startedAt = remember { android.os.SystemClock.uptimeMillis() }
+    val animateShimmer = !motion.reduced && !LocalLiquidGlassExtremeFling.current
+    LaunchedEffect(animateShimmer) {
+        if (!animateShimmer) {
+            phase.floatValue = .15f
+            return@LaunchedEffect
+        }
+        while (android.os.SystemClock.uptimeMillis() - startedAt < 6000L) {
+            androidx.compose.runtime.withFrameNanos {
+                val elapsed = android.os.SystemClock.uptimeMillis() - startedAt
+                phase.floatValue = -1f + (elapsed % 1350L) / 1350f * 3f
+            }
         }
         phase.floatValue = .15f
     }
@@ -1335,14 +1340,15 @@ fun AppleSlider(
     max: Float = valueRange.endInclusive,
     step: Float = 1f,
     ticks: List<Float> = emptyList(),
-    onChange: (Float) -> Unit = onValueChange,
+    onChange: ((Float) -> Unit)? = null,
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
     accentColor: Color = activeTrackColor,
     forceLensPreview: Boolean = false,
     lightSurface: Boolean = false,
     backdrop: Backdrop? = null,
-    valueProvider: (() -> Float)? = null
+    valueProvider: (() -> Float)? = null,
+    commitOnRelease: Boolean = false
 ) {
     val baseRange = if (min != 0f || max != 100f) min..max else valueRange
     val safeEnd = maxOf(baseRange.endInclusive, baseRange.start + 1f)
@@ -1352,11 +1358,11 @@ fun AppleSlider(
     val actualAccent = if (accentColor != Color(0xFF0088FF)) accentColor else activeTrackColor
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnChange by rememberUpdatedState(onChange)
-    val callback = remember(safeRange) {
+    val callback: (Float) -> Unit = remember(safeRange) {
         { v: Float ->
             val clamped = v.coerceIn(safeRange)
             currentOnValueChange(clamped)
-            currentOnChange(clamped)
+            currentOnChange?.invoke(clamped)
         }
     }
     val effectiveBackdrop = backdrop ?: LocalLiquidGlassBackdrop.current ?: rememberLayerBackdrop()
@@ -1373,7 +1379,9 @@ fun AppleSlider(
             visibilityThreshold = threshold,
             backdrop = effectiveBackdrop,
             modifier = Modifier.weight(1f),
-            accentColor = actualAccent
+            accentColor = actualAccent,
+            commitOnRelease = commitOnRelease,
+            valueStep = step.takeIf { commitOnRelease }
         )
         trailingIcon?.invoke()
     }

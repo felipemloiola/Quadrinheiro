@@ -1,6 +1,7 @@
 package com.kyant.backdrop.catalog.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -48,6 +54,7 @@ import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.lerp
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalIsDarkTheme
+import com.example.ui.theme.LocalAppSettings
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
@@ -83,13 +90,16 @@ fun LiquidSlider(
     backdrop: Backdrop,
     modifier: Modifier = Modifier,
     isLightTheme: Boolean = !LocalIsDarkTheme.current,
-    accentColor: Color = LocalIOS27Theme.current.accent
+    accentColor: Color = LocalIOS27Theme.current.accent,
+    commitOnRelease: Boolean = false,
+    valueStep: Float? = null
 ) {
     val trackColor =
         if (isLightTheme) Color(0xFF787880).copy(alpha = 0.24f)
         else Color(0xFF787880).copy(alpha = 0.44f)
 
     val trackBackdrop = rememberLayerBackdrop()
+    val reduceTransparency = LocalAppSettings.current.reduceTransparency
     val density = LocalDensity.current
     val view = LocalView.current
 
@@ -142,12 +152,25 @@ fun LiquidSlider(
 
         val currentValueFn by rememberUpdatedState(value)
         val currentOnValueChange by rememberUpdatedState(onValueChange)
+        val deferChanges by rememberUpdatedState(commitOnRelease)
+        val currentStep by rememberUpdatedState(valueStep)
         val currentValueRange by rememberUpdatedState(valueRange)
         val currentUsableTrackWidth by rememberUpdatedState(usableTrackWidth)
         val currentTrackInsetPx by rememberUpdatedState(trackInsetPx)
         val currentThumbWidthPx by rememberUpdatedState(thumbWidthPx)
         val currentIsLtr by rememberUpdatedState(isLtr)
         val currentDampedAnim by rememberUpdatedState(dampedDragAnimation)
+
+        fun commit(requested: Float): Float {
+            val range = currentValueRange
+            val step = currentStep
+            val bounded = requested.coerceIn(range)
+            val next = if (step != null && step > 0f && bounded > range.start && bounded < range.endInclusive) {
+                (range.start + ((bounded - range.start) / step).roundToInt() * step).coerceIn(range)
+            } else bounded
+            currentOnValueChange(next)
+            return next
+        }
 
         LaunchedEffect(Unit) {
             snapshotFlow { currentValueFn() }.collectLatest { externalValue ->
@@ -165,10 +188,26 @@ fun LiquidSlider(
             Modifier
                 .fillMaxWidth()
                 .height(36.dp)
-                .layerBackdrop(
+                .then(if (reduceTransparency) Modifier else Modifier.layerBackdrop(
                     backdrop = trackBackdrop,
                     freezeSnapshot = isScrollInProgress && !isDraggingNow && dampedDragAnimation.pressProgress <= 0.005f
-                )
+                ))
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    val step = valueStep ?: rangeSpan / 20f
+                    val direction = if (isLtr) 1f else -1f
+                    val current = dampedDragAnimation.targetValue
+                    val next = when (event.key) {
+                        Key.DirectionLeft -> current - step * direction
+                        Key.DirectionRight -> current + step * direction
+                        Key.MoveHome -> valueRange.start
+                        Key.MoveEnd -> valueRange.endInclusive
+                        else -> return@onKeyEvent false
+                    }
+                    dampedDragAnimation.updateValue(commit(next))
+                    true
+                }
+                .focusable()
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
@@ -192,6 +231,7 @@ fun LiquidSlider(
                         val thumbSlop = thumbWidth * 0.35f
                         val onThumb = down.position.x in (thumbLeft - thumbSlop)..(thumbLeft + thumbWidth + thumbSlop)
                         var horizontalDrag = false
+                        var released = false
 
                         try {
                             while (true) {
@@ -201,13 +241,12 @@ fun LiquidSlider(
 
                                 val delta = change.position - down.position
                                 if (!change.pressed) {
+                                    released = true
                                     if (!horizontalDrag && !onThumb && delta.getDistance() <= touchSlop &&
                                         change.position.x in 0f..size.width.toFloat() &&
                                         change.position.y in 0f..size.height.toFloat()
                                     ) {
-                                        val next = valueAt(change.position.x)
-                                        anim.updateValue(next)
-                                        currentOnValueChange(next)
+                                        anim.updateValue(commit(valueAt(change.position.x)))
                                     }
                                     if (horizontalDrag) change.consume()
                                     break
@@ -228,12 +267,17 @@ fun LiquidSlider(
                                         .coerceIn(range)
                                 } else valueAt(change.position.x)
                                 anim.updateValue(next)
-                                currentOnValueChange(next)
+                                if (!deferChanges) currentOnValueChange(next)
                                 change.consume()
                             }
                         } finally {
                             if (horizontalDrag) {
-                                anim.animateToValue(anim.targetValue, initialVelocity = 0f)
+                                val target = when {
+                                    !deferChanges -> anim.targetValue
+                                    released -> commit(anim.targetValue)
+                                    else -> currentValueFn().coerceIn(range)
+                                }
+                                anim.animateToValue(target, initialVelocity = 0f)
                                 anim.release()
                                 isDraggingNow = false
                                 SliderTouchLock.isAnySliderActive = false
@@ -244,12 +288,12 @@ fun LiquidSlider(
                 }
                 .semantics {
                     progressBarRangeInfo = ProgressBarRangeInfo(
-                        current = value().fastCoerceIn(valueRange.start, valueRange.endInclusive),
+                        current = (if (isDraggingNow) dampedDragAnimation.targetValue else value())
+                            .fastCoerceIn(valueRange.start, valueRange.endInclusive),
                         range = valueRange
                     )
                     setProgress { target ->
-                        val newValue = target.fastCoerceIn(valueRange.start, valueRange.endInclusive)
-                        currentOnValueChange(newValue)
+                        dampedDragAnimation.updateValue(commit(target))
                         true
                     }
                 },
@@ -304,7 +348,12 @@ fun LiquidSlider(
                     val visualProgress = if (isLtr) progress else 1f - progress
                     translationX = trackInsetPx + usableTrackWidth * visualProgress
                 }
-                .drawBackdrop(
+                .then(if (reduceTransparency) {
+                    Modifier.graphicsLayer {
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                    }.background(if (isLightTheme) Color.White else Color(0xFFE5E5EA), ContinuousCapsule)
+                } else Modifier.drawBackdrop(
                     backdrop = rememberCombinedBackdrop(backdrop, trackBackdrop),
                     shape = { ContinuousCapsule },
                     highlight = {
@@ -390,7 +439,7 @@ fun LiquidSlider(
                             drawRect(Color.White.copy(alpha = 1f - press))
                         }
                     }
-                )
+                ))
                 .size(thumbWidthDp, thumbHeightDp)
         )
     }

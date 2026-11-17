@@ -128,6 +128,7 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         val menuHost=remember {LiquidGlassMenuHostState()}
         val menuBackdrop=if(menus)rememberLayerBackdrop() else null
         val fraction=if(compact || childPage)1f else .92f
+        var panelHeight by remember { mutableFloatStateOf(0f) }
         val sheet = rememberFluidSheet(
             initialHeightFraction = fraction,
             onDismiss = { panel.complete(onClose) },
@@ -135,7 +136,8 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
             onDragDismissRequest = {
                 if (onCloseRequest != null) requestClose.value()
                 onCloseRequest == null && !busy && panel.request == 0
-            }
+            },
+            panelHeight = if (compact) ({ panelHeight.takeIf { it > 0f } }) else null
         )
         FullScreenDialogWindow()
         SideEffect {requestClose.value={if(!busy && panel.request==0){if(onCloseRequest!=null)onCloseRequest() else panel.close()}}}
@@ -146,7 +148,6 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         val screenHeight=with(LocalDensity.current) {LocalConfiguration.current.screenHeightDp.dp.toPx()}
         val screenWidth=with(LocalDensity.current) {LocalConfiguration.current.screenWidthDp.dp.toPx()}
         val restOffset=screenHeight*(1-fraction)
-        var panelHeight by remember {mutableFloatStateOf(screenHeight)}
         CompositionLocalProvider(LocalLiquidGlassMenuHost provides menuHost) {
         Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().then(if(menuBackdrop!=null)Modifier.layerBackdrop(menuBackdrop,reuseRecordedContent=true,freezeSnapshot=menuHost.currentRequest!=null) else Modifier).statusBarsPadding().imePadding()) {
@@ -154,9 +155,13 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
             Column((if(compact)Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max=maxHeight*.85f) else Modifier.fillMaxSize().padding(top=8.dp))
                 .onSizeChanged {panelHeight=it.height.toFloat()}
                 .graphicsLayer {
-                    val progress=(sheet.offset-restOffset).coerceAtLeast(0f)/(screenHeight*fraction)
-                    translationX=if(childPage)progress*screenWidth else 0f
-                    translationY=if(childPage)0f else progress*(if(compact)panelHeight else screenHeight)
+                    val displacement = sheet.offset - restOffset
+                    translationX = if (childPage) displacement.coerceAtLeast(0f) / screenHeight * screenWidth else 0f
+                    translationY = when {
+                        childPage -> 0f
+                        compact -> displacement
+                        else -> displacement.coerceAtLeast(0f)
+                    }
                 }
                 .background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
                 .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f, edgeHighlight=false))
@@ -389,7 +394,7 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
     val haptic=LocalHapticFeedback.current
     val scope=rememberCoroutineScope()
     val t=LocalIOS27Theme.current
-    val latest by rememberUpdatedState(draft)
+    var dragStartItems by remember { mutableStateOf(draft.items) }
     val editorPanel=rememberCurationPanelState()
     LaunchedEffect(state.loading,state.lists,reloadRequested) {
         if(reloadRequested && !state.loading && state.error==null) {
@@ -398,12 +403,12 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
         }
     }
     fun move(key: String, target: Int) {
-        val index = latest.items.indexOfFirst { it.key == key }
+        val index = draft.items.indexOfFirst { it.key == key }
         if (index < 0 || index == target) return
-        val items = latest.items.toMutableList()
+        val items = draft.items.toMutableList()
         val item = items.removeAt(index)
         items.add(target.coerceIn(0, items.size), item)
-        draft = latest.copy(items = items)
+        draft = draft.copy(items = items)
     }
     fun moveToDragTarget(key: String) {
         val center = dragStartCenter + dragOffset
@@ -411,29 +416,42 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
             .filter { it.contentType == "comic" }
             .minByOrNull { kotlin.math.abs(it.offset + it.size / 2f - center) }
         if (target != null) {
-            val index = latest.items.indexOfFirst { it.key == target.key }
+            val index = draft.items.indexOfFirst { it.key == target.key }
             if (index >= 0) move(key, index)
         }
     }
     val edgeZone = with(LocalDensity.current) { 56.dp.toPx() }
     val maxScrollSpeed = with(LocalDensity.current) { 760.dp.toPx() }
-    LaunchedEffect(dragging) {
-        val key = dragging ?: return@LaunchedEffect
+    fun edgePressure(): Float {
+        val layout = editorListState.layoutInfo
+        val center = dragStartCenter + dragOffset
+        val top = layout.viewportStartOffset + edgeZone
+        val bottom = layout.viewportEndOffset - edgeZone
+        return when {
+            center < top -> ((center - top) / edgeZone).coerceAtLeast(-1f)
+            center > bottom -> ((center - bottom) / edgeZone).coerceAtMost(1f)
+            else -> 0f
+        }
+    }
+    val canAutoScroll by remember(edgeZone) {
+        derivedStateOf {
+            if (dragging == null) false else {
+                val pressure = edgePressure()
+                (pressure < 0f && editorListState.canScrollBackward) ||
+                    (pressure > 0f && editorListState.canScrollForward)
+            }
+        }
+    }
+    LaunchedEffect(dragging, canAutoScroll) {
+        val key = dragging?.takeIf { canAutoScroll } ?: return@LaunchedEffect
         var previousFrame = withFrameNanos { it }
         while (true) {
             val frame = withFrameNanos { it }
             val seconds = ((frame - previousFrame) / 1_000_000_000f).coerceIn(0f, .032f)
             previousFrame = frame
-            val layout = editorListState.layoutInfo
-            val center = dragStartCenter + dragOffset
-            val top = layout.viewportStartOffset + edgeZone
-            val bottom = layout.viewportEndOffset - edgeZone
-            val pressure = when {
-                center < top -> ((center - top) / edgeZone).coerceAtLeast(-1f)
-                center > bottom -> ((center - bottom) / edgeZone).coerceAtMost(1f)
-                else -> 0f
-            }
-            if (pressure != 0f && editorListState.scrollBy(pressure * maxScrollSpeed * seconds) != 0f) {
+            val pressure = edgePressure()
+            if (pressure == 0f) break
+            if (editorListState.scrollBy(pressure * maxScrollSpeed * seconds) != 0f) {
                 moveToDragTarget(key)
             }
         }
@@ -511,17 +529,23 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                             }
                             .pointerInput(entry.key,state.saving) {if(!state.saving)detectDragGesturesAfterLongPress(
                                 onDragStart={
+                                    val carriedOffset = if (settlingKey == entry.key) settlingOffset else 0f
                                     settlingKey = null
+                                    dragStartItems = draft.items
                                     dragging=entry.key;dragOffset=0f
                                     val row=editorListState.layoutInfo.visibleItemsInfo.firstOrNull {it.key==entry.key}
-                                    dragStartCenter=(row?.offset ?: 0)+(row?.size ?: 0)/2f
+                                    dragStartCenter=(row?.offset ?: 0)+(row?.size ?: 0)/2f + carriedOffset
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 },
                                 onDrag={change,amount ->
                                     change.consume();dragOffset+=amount.y
                                     moveToDragTarget(entry.key)
                                 },
-                                onDragCancel={dragging=null;dragOffset=0f},
+                                onDragCancel={
+                                    draft = draft.copy(items = dragStartItems)
+                                    dragging = null
+                                    dragOffset = 0f
+                                },
                                 onDragEnd={
                                     moveToDragTarget(entry.key)
                                     val row = editorListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == entry.key }

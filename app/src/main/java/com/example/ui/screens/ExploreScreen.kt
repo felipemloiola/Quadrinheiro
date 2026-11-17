@@ -141,20 +141,23 @@ fun ExploreScreen(
     val appContext = LocalContext.current.applicationContext
     var collection by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(viewModel) {
-        viewModel.curation.load()
-        viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
-    }
+    val isBackPreview = com.example.ui.components.LocalBackPreview.current
     val exploreRecommendationState by viewModel.exploreRecommendationState.collectAsStateWithLifecycle()
     val recommendations = exploreRecommendationState.recommendations
     val editorial by EditorialDiscovery.shelves.collectAsStateWithLifecycle()
     val editorialScope = rememberCoroutineScope()
     var editorialLoading by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        try {
-            withContext(Dispatchers.IO) { EditorialDiscovery.load(appContext) }
-        } finally {
-            editorialLoading = false
+    if (!isBackPreview) {
+        LaunchedEffect(viewModel) {
+            viewModel.curation.load()
+            viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
+        }
+        LaunchedEffect(appContext) {
+            try {
+                withContext(Dispatchers.IO) { EditorialDiscovery.load(appContext) }
+            } finally {
+                editorialLoading = false
+            }
         }
     }
     fun retryEditorial(title: String) {

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -30,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
@@ -81,9 +82,12 @@ fun LiquidBottomTabs(
 ) {
     val tabsBackdrop = rememberLayerBackdrop()
 
-    val collapsed = collapsedFraction().fastCoerceIn(0f, 1f)
-    val containerHeight = if (compact) 44.dp else lerp(64f.dp, 54f.dp, collapsed)
-    val indicatorHeight = if (compact) 36.dp else lerp(56f.dp, 46f.dp, collapsed)
+    val containerHeight: () -> Dp = {
+        if (compact) 44.dp else lerp(64f.dp, 54f.dp, collapsedFraction().fastCoerceIn(0f, 1f))
+    }
+    val indicatorHeight: () -> Dp = {
+        if (compact) 36.dp else lerp(56f.dp, 46f.dp, collapsedFraction().fastCoerceIn(0f, 1f))
+    }
 
     val currentSelectedIndex = selectedTabIndex()
     val isIndicatorVisible = currentSelectedIndex in 0 until tabsCount
@@ -116,7 +120,7 @@ fun LiquidBottomTabs(
 
     Box(
         modifier
-            .height(containerHeight)
+            .deferredHeight(containerHeight)
             .onSizeChanged { sz ->
                 if (sz.width > 0 && sz.width != containerWidthPx) {
                     containerWidthPx = sz.width
@@ -141,6 +145,12 @@ fun LiquidBottomTabs(
         var didDrag by remember { mutableStateOf(false) }
         var totalDragDistance by remember { mutableStateOf(0f) }
         val dampedDragAnimation = remember(animationScope) {
+            fun settlePanelOffset() {
+                animationScope.launch {
+                    if (reduceMotion()) offsetAnimation.snapTo(0f)
+                    else offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
+                }
+            }
             DampedDragAnimation(
                 animationScope = animationScope,
                 initialValue = lastValidTabIndex.toFloat(),
@@ -165,16 +175,14 @@ fun LiquidBottomTabs(
                     }
                     totalDragDistance = 0f
                     animateToValue(targetIndex.toFloat())
-                    animationScope.launch {
-                        if (reduceMotion()) {
-                            offsetAnimation.snapTo(0f)
-                        } else {
-                            offsetAnimation.animateTo(
-                                0f,
-                                spring(1f, 300f, 0.5f)
-                            )
-                        }
-                    }
+                    settlePanelOffset()
+                },
+                onDragCancelled = {
+                    didDrag = false
+                    totalDragDistance = 0f
+                    val selected = currentSelectedTabIndexLambda().takeIf { it >= 0 } ?: lastValidTabIndex
+                    animateToValue(selected.toFloat())
+                    settlePanelOffset()
                 },
                 onDrag = { _, dragAmount ->
                     if (!didDrag) {
@@ -264,7 +272,7 @@ fun LiquidBottomTabs(
                     onDrawSurface = { drawRect(containerColor) }
                 )
                 .then(interactiveHighlight.modifier)
-                .height(containerHeight)
+                .deferredHeight(containerHeight)
                 .fillMaxWidth()
                 .padding(4f.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -314,7 +322,7 @@ fun LiquidBottomTabs(
                         onDrawSurface = { drawRect(containerColor) }
                     )
                     .then(interactiveHighlight.modifier)
-                    .height(indicatorHeight)
+                    .deferredHeight(indicatorHeight)
                     .fillMaxWidth()
                     .padding(horizontal = 4f.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -323,15 +331,13 @@ fun LiquidBottomTabs(
         }
 
         // Camada 3: Lupa / Indicador (56.dp -> 46.dp escalado por dampedDragAnimation.scaleX/scaleY = 78/56)
-        val effectiveDisplayIndex = if (!wasIndicatorVisible && isIndicatorVisible) {
-            currentSelectedIndex.toFloat()
-        } else {
-            dampedDragAnimation.value
-        }
+        val useSelectedIndex = !wasIndicatorVisible && isIndicatorVisible
         Box(
             Modifier
                 .padding(horizontal = 4f.dp)
                 .graphicsLayer {
+                    val effectiveDisplayIndex = if (useSelectedIndex) currentSelectedIndex.toFloat()
+                        else dampedDragAnimation.value
                     val tw = currentTabWidth
                     translationX =
                         if (isLtr) effectiveDisplayIndex * tw + panelOffset
@@ -391,9 +397,15 @@ fun LiquidBottomTabs(
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
                     }
                 )
-                .height(indicatorHeight)
+                .deferredHeight(indicatorHeight)
                 .fillMaxWidth(1f / tabsCount)
         )
     }
+}
+
+private fun Modifier.deferredHeight(height: () -> Dp): Modifier = layout { measurable, constraints ->
+    val px = constraints.constrainHeight(height().roundToPx())
+    val child = measurable.measure(constraints.copy(minHeight = px, maxHeight = px))
+    layout(child.width, child.height) { child.placeRelative(0, 0) }
 }
 

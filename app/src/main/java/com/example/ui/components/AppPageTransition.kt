@@ -40,6 +40,7 @@ data class AppPage(val tab: String, val settings: String?, val parent: String?, 
 
 /** Page navigation owns Back; modal handlers inside a page still take precedence. */
 val LocalPageBackManaged = staticCompositionLocalOf { false }
+internal val LocalBackPreview = compositionLocalOf { false }
 
 /** At most two live pages, even when navigation is interrupted repeatedly. */
 @Composable
@@ -51,6 +52,7 @@ fun AppPageTransition(
     content: @Composable (AppPage) -> Unit
 ) {
     val motion = LocalAppMotion.current
+    val parentIsBackPreview = LocalBackPreview.current
     val surface = LocalIOS27Theme.current.bgPrimary
     val backShape = remember { RoundedCornerShape(28.dp) }
     var current by remember { mutableStateOf(page) }
@@ -70,10 +72,15 @@ fun AppPageTransition(
     val latestPage by rememberUpdatedState(page)
     val latestBackEnabled by rememberUpdatedState(backEnabled)
     // Register before the content: sheets and nested navigation can override this handler.
-    PredictiveBackHandler(enabled = backEnabled && backPage != null) { events ->
+    PredictiveBackHandler(enabled = backEnabled && backPage != null && !parentIsBackPreview) { events ->
         val startedPage = page
         val commitBack = latestOnBack
         val target = backPage ?: return@PredictiveBackHandler
+        if (motion.reduced) {
+            events.collect {}
+            if (latestPage == startedPage && latestBackEnabled) commitBack()
+            return@PredictiveBackHandler
+        }
         try {
             events.collect { event ->
                 if (latestPage != startedPage || !latestBackEnabled) return@collect
@@ -176,7 +183,10 @@ fun AppPageTransition(
                 // needs its own surface so text never shows through other text.
                 if (preview != null && destination == current) drawRect(surface)
             }) {
-                CompositionLocalProvider(LocalPageBackManaged provides backEnabled) { content(destination) }
+                CompositionLocalProvider(
+                    LocalPageBackManaged provides backEnabled,
+                    LocalBackPreview provides (parentIsBackPreview || destination == preview)
+                ) { content(destination) }
             }
         } }
     }

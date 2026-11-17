@@ -11,7 +11,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -158,7 +157,6 @@ fun CatalogSheetModal(
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
     onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null
 ) {
-    val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     var draftComic by remember(selectedComic.id) { mutableStateOf(selectedComic) }
@@ -353,11 +351,6 @@ fun CatalogSheetModal(
     val resolvedSynopsis = remember(rawSynopsis) {
         PortugueseComicTranslator.formatCleanSynopsis(rawSynopsis)
     }
-    val sheetWidthFraction by animateFloatAsState(
-        targetValue = if (isSheetExpanded) 1f else 0.96f,
-        animationSpec = motion.spring(dampingRatio = 0.85f, stiffness = 420f),
-        label = "sheetWidthFraction"
-    )
     val isSheetScrollingOrMoving = sheetScrollState.isScrollInProgress || sheet.isMoving
 
     Box(
@@ -373,7 +366,7 @@ fun CatalogSheetModal(
                 .graphicsLayer {
                     translationY = sheet.offset.coerceAtLeast(0f)
                 }
-                .fillMaxWidth(sheetWidthFraction)
+                .fillMaxWidth(if (isSheetExpanded) 1f else 0.96f)
                 .fillMaxHeight(0.96f)
                 .clip(sheetShape)
                 .clickable(
@@ -413,7 +406,7 @@ fun CatalogSheetModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(24.dp)
-                            .then(sheet.dragModifier),
+                            .then(sheet.grabberModifier),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -439,7 +432,7 @@ fun CatalogSheetModal(
 
                     // Compose and measure only the editor sections near the viewport.
                     val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
-                    val bottomOffsetDp = with(LocalDensity.current) { sheet.offset.coerceAtLeast(0f).toDp() }
+                    val bottomOffsetDp = with(LocalDensity.current) { sheet.restingOffset.toDp() }
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f).fillMaxWidth().clipToBounds().testTag("editor_list"),
@@ -823,7 +816,7 @@ fun ManualEntrySheetModal(
                 )
             }
 
-            val manualBottomOffsetDp = with(LocalDensity.current) { sheet.offset.coerceAtLeast(0f).toDp() }
+            val manualBottomOffsetDp = with(LocalDensity.current) { sheet.restingOffset.toDp() }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth(),
