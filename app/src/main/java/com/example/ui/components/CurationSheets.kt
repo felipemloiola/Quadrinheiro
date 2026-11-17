@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,6 +54,8 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import com.example.model.ComicEntry
+import com.example.model.ReaderProfile
+import com.example.ui.screens.ComicDetailDialog
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.screens.SettingsBackButton
 import kotlinx.coroutines.launch
@@ -76,19 +81,37 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
 }
 
 /** Uses the same anchored, retained glass renderer as the profile picker. */
-@Composable internal fun CurationActionMenu(label:String,items:List<LiquidGlassMenuItemData>,modifier:Modifier=Modifier,enabled:Boolean=true) {
+@Composable internal fun CurationActionMenu(label:String,items:List<LiquidGlassMenuItemData>,modifier:Modifier=Modifier,
+    enabled:Boolean=true, valueLabel:String?=null, selectionMenu:Boolean=false) {
     val host=LocalLiquidGlassMenuHost.current
     val id=remember {java.util.UUID.randomUUID().toString()}
     var bounds by remember {mutableStateOf(IntRect.Zero)}
     val latestItems by rememberUpdatedState(items)
     DisposableEffect(host,id) {onDispose {host?.dismissMenu(id)}}
-    IconButton(enabled=enabled,onClick={
-        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,Icons.Default.MoreHoriz,latestItems,{},selectionMenu=false))
-    },modifier=modifier.onGloballyPositioned {
+    val trigger=modifier.onGloballyPositioned {
         val point=it.positionInRoot()
         bounds=IntRect(point.x.toInt(),point.y.toInt(),point.x.toInt()+it.size.width,point.y.toInt()+it.size.height)
         host?.updateAnchorBounds(id,bounds)
-    }) {Icon(Icons.Default.MoreHoriz,label,tint=LocalIOS27Theme.current.textSecondary)}
+    }
+    val open = {
+        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,Icons.Default.MoreHoriz,latestItems,{},selectionMenu))
+        Unit
+    }
+    val theme = LocalIOS27Theme.current
+    if (valueLabel == null) {
+        IconButton(enabled=enabled,onClick=open,modifier=trigger) {
+            Icon(Icons.Default.MoreHoriz,label,tint=theme.textPrimary)
+        }
+    } else {
+        Row(trigger.heightIn(min=52.dp).clip(RoundedCornerShape(16.dp))
+            .background(theme.bgSecondary).clickable(enabled=enabled, role=Role.Button, onClick=open)
+            .padding(horizontal=14.dp,vertical=10.dp),
+            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+            Text(label,Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium,color=theme.textPrimary)
+            Text(valueLabel,style=MaterialTheme.typography.bodyMedium,color=theme.textSecondary)
+            Icon(LucideIcons.ChevronRight,null,modifier=Modifier.size(16.dp),tint=theme.textSecondary)
+        }
+    }
 }
 
 @Composable
@@ -139,13 +162,21 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                     translationY=if(childPage)0f else progress*(if(compact)panelHeight else screenHeight)
                 }
                 .background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
-                .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f))
+                .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f, edgeHighlight=false))
                 .pointerInput(Unit) {awaitEachGesture {awaitFirstDown(requireUnconsumed=false);waitForUpOrCancellation()}}.navigationBarsPadding().padding(bottom=16.dp)) {
-                Row(Modifier.fillMaxWidth().then(if(busy || childPage || panel.request>0)Modifier else sheet.dragModifier).padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().then(if(busy || childPage || panel.request>0)Modifier else sheet.dragModifier)
+                    .padding(start=14.dp,end=24.dp,top=8.dp,bottom=6.dp),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(enabled=!busy && panel.request==0,onClick={requestClose.value()}) { Icon(Icons.Default.Close,"Fechar",tint=theme.textSecondary) }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     headerActions()
-                    actionLabel?.let { label -> CurationGlassAction(label,onAction,Modifier.padding(start=8.dp,end=8.dp),enabled=actionEnabled && !busy && panel.request==0,primary=true) }
+                    actionLabel?.let { label ->
+                        val enabled = actionEnabled && !busy && panel.request==0
+                        TextButton(onClick=onAction,enabled=enabled,modifier=Modifier.padding(start=8.dp).heightIn(min=48.dp),
+                            contentPadding=PaddingValues(horizontal=12.dp,vertical=6.dp)) {
+                            Text(label,color=if(enabled) theme.accent else theme.textSecondary,
+                                style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.SemiBold)
+                        }
+                    }
                 }
                 content()
             }
@@ -250,12 +281,14 @@ internal enum class ListEditorDestination { Editor, AddComics, ChooseCover }
 @Composable
 fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationController,
     onSection: (String)->Unit, onBack: ()->Unit, onComic: (ComicEntry)->Unit, onConnectAccount: (()->Unit)?=null,
-    searchCatalog: ((String) -> Flow<List<ComicEntry>>)? = null) {
+    searchCatalog: ((String) -> Flow<List<ComicEntry>>)? = null, showLibraryHeader: Boolean = true,
+    profile: ReaderProfile = ReaderProfile(), onShareComic: (ComicEntry) -> Unit = {}) {
     val state by controller.state.collectAsStateWithLifecycle()
     val t=LocalIOS27Theme.current
     val scope=rememberCoroutineScope()
     var editing by remember(state.owner) { mutableStateOf<ComicList?>(null) }
     var viewing by remember(state.owner) { mutableStateOf<ComicList?>(null) }
+    var preview by remember(state.owner) { mutableStateOf<ComicEntry?>(null) }
     var drafts by remember(state.owner) { mutableStateOf(emptyList<ComicList>()) }
     var destination by remember(state.owner) { mutableStateOf(ListEditorDestination.Editor) }
     LaunchedEffect(state.owner) { controller.load(); drafts=controller.drafts() }
@@ -267,6 +300,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         editing = list
     }
     Column(Modifier.fillMaxSize().padding(horizontal=16.dp).padding(top=12.dp)) {
+        if (showLibraryHeader) {
         SettingsBackButton(onBack,label="Perfil")
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -279,6 +313,13 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         HorizontalDivider(color=t.divider,thickness=.5.dp)
         Spacer(Modifier.height(16.dp))
         AppleSegmentedPicker(value="lists",onChange=onSection,options=listOf(SegmentOption("shelf","Estante",LucideIcons.Library),SegmentOption("diary","Diário",LucideIcons.Calendar),SegmentOption("lists","Listas",Icons.Default.FormatListNumbered)))
+        } else if (active.isNotEmpty() || drafts.isNotEmpty()) {
+            TextButton(onClick={openEditor(ComicList())},enabled=!state.loading && !state.saving,modifier=Modifier.align(Alignment.End)) {
+                Icon(Icons.Default.Add,null,modifier=Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Criar lista")
+            }
+        }
         CurationError(controller)
         if(state.error!=null) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
         if(state.localOnly && state.owner!="guest_local") Text("Listas salvas nesta conta, neste aparelho",color=t.textSecondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
@@ -301,7 +342,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     viewing?.let {selected ->
         val list=active.firstOrNull {it.id==selected.id}
         if(list!=null) ListDetailSheet(list,{viewing=null},onComic={next ->
-            viewing=null;onComic(library.firstOrNull {ListComic.from(it).key==ListComic.from(next).key} ?: next)
+            preview=library.firstOrNull {ListComic.from(it).key==ListComic.from(next).key} ?: next
         },onEdit={openEditor(list)},onAdd={openEditor(list,ListEditorDestination.AddComics)},
             onChooseCover=if(list.coverItem()!=null) ({openEditor(list,ListEditorDestination.ChooseCover)}) else null,
             onHighlight={scope.launch {
@@ -310,8 +351,15 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         }},busy=state.saving || state.loading)
     }
     editing?.let { list -> CompositionLocalProvider(LocalCurationPageDepth provides if(viewing!=null)1 else 0) {key(state.owner,list.id) {
-        ListEditor(list,library,controller,searchCatalog,onOpenComic={viewing=null;onComic(it)},onConnectAccount=onConnectAccount,destination=destination) { editing=null;scope.launch {drafts=controller.drafts()} }
+        ListEditor(list,library,controller,searchCatalog,onOpenComic={preview=it},onConnectAccount=onConnectAccount,destination=destination) { editing=null;scope.launch {drafts=controller.drafts()} }
     }} }
+    preview?.let { comic ->
+        ComicDetailDialog(comic,profile,library,onClose={preview=null},
+            onRegister={ selected -> preview=null; viewing=null; editing=null; onComic(selected) },
+            onCover={},
+            onLogin={ preview=null; onConnectAccount?.invoke() },
+            onShare={ preview=null; viewing=null; editing=null; onShareComic(comic) })
+    }
 }
 
 @Composable
@@ -432,17 +480,15 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                     Text("Ranking numerado",Modifier.weight(1f),color=t.textPrimary)
                     AppleToggle(draft.ranked,onChange={if(!state.saving)draft=draft.copy(ranked=it)},modifier=Modifier.semantics {contentDescription="Ranking numerado";if(state.saving)disabled()})
                 }
-                Row(Modifier.fillMaxWidth().padding(vertical=14.dp),
-                    verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Icon(if(draft.isPublic) Icons.Default.Public else Icons.Default.Lock,null,tint=t.textSecondary)
-                    Text("Visibilidade",Modifier.weight(1f),color=t.textPrimary)
-                    if(state.saving)Text(if(draft.isPublic)"Pública" else "Privada",color=t.textSecondary)
-                    else AppleMenuPicker(options=listOf(SegmentOption(false,"Privada",Icons.Default.Lock),SegmentOption(true,"Pública",Icons.Default.Public)),
-                        value=draft.isPublic,modifier=Modifier.widthIn(min=144.dp),onChange={public ->
-                            if(!public)draft=draft.copy(isPublic=false)
-                            else if(state.localOnly || !state.ready)connectConfirmation=true else publishConfirmation=true
-                        })
-                }
+                CurationActionMenu("Visibilidade da lista",listOf(
+                    LiquidGlassMenuItemData("Privada",LucideIcons.Lock,selected=!draft.isPublic) { draft=draft.copy(isPublic=false) },
+                    LiquidGlassMenuItemData("Pública",LucideIcons.Globe,selected=draft.isPublic) {
+                        if(!draft.isPublic) {
+                            if(state.localOnly || !state.ready) connectConfirmation=true else publishConfirmation=true
+                        }
+                    }
+                ),modifier=Modifier.fillMaxWidth().padding(vertical=12.dp),enabled=!state.saving,
+                    valueLabel=if(draft.isPublic)"Pública" else "Privada",selectionMenu=true)
                 Text("${draft.items.size}/200 HQs",color=t.textSecondary,fontSize=12.sp)
                 Spacer(Modifier.height(12.dp))
                 CurationGlassAction("Adicionar HQs",{adding=true},Modifier.fillMaxWidth(),enabled=draft.items.size<200 && !state.saving,icon=Icons.Default.Add)
@@ -493,14 +539,18 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                         if(draft.ranked) Text("${index+1}",color=t.accent,fontWeight=FontWeight.Bold)
                         BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.size(52.dp,78.dp).clearAndSetSemantics {})
                         Box(Modifier.weight(1f).heightIn(min=48.dp).clickable(enabled=!state.saving,onClickLabel="Ver ${entry.title}") {
-                            scope.launch {if(controller.preserveDraft(draft,owner))editorPanel.close {onOpenComic(library.firstOrNull {ListComic.from(it).key==entry.key} ?: entry.comic())}}
+                            scope.launch {
+                                if (controller.preserveDraft(draft, owner)) {
+                                    onOpenComic(library.firstOrNull { ListComic.from(it).key == entry.key } ?: entry.comic())
+                                }
+                            }
                         }, contentAlignment = Alignment.CenterStart) {
                             Text(entry.title, color = t.textPrimary)
                         }
                         CurationActionMenu("Opções de ${entry.title}",listOf(
-                            LiquidGlassMenuItemData("Mover",Icons.Default.SwapVert) {moving=entry;position="${index+1}"},
-                            LiquidGlassMenuItemData("Editar nota",Icons.Default.Edit) {noting=entry;note=entry.note},
-                            LiquidGlassMenuItemData("Remover da lista",Icons.Default.Remove) {draft=draft.copy(items=draft.items.filterNot {it.key==entry.key})}
+                            LiquidGlassMenuItemData("Mover",Icons.Outlined.SwapVert) {moving=entry;position="${index+1}"},
+                            LiquidGlassMenuItemData("Editar nota",Icons.Outlined.Edit) {noting=entry;note=entry.note},
+                            LiquidGlassMenuItemData("Remover da lista",Icons.Outlined.RemoveCircleOutline) {draft=draft.copy(items=draft.items.filterNot {it.key==entry.key})}
                         ),Modifier.testTag("list_item_options_${entry.key}"),enabled=!state.saving)
                     }
                     if(entry.note.isNotBlank()) Text(entry.note,color=t.textSecondary,modifier=Modifier.padding(top=8.dp))

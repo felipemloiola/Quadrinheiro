@@ -303,18 +303,6 @@ fun HomeReadingNowTab(
             HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
         }
 
-        if (activeReading != null) {
-            item(key = "home-active-reading-header", contentType = "section_header") {
-                com.example.ui.components.HomeSkeletonText(
-                    text = "Continuar lendo", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary
-                )
-            }
-            item(key = "reading-${activeReading.id}", contentType = "reading_now_item") {
-                HomeReadingNowComicCard(activeReading, appSettings, onSelectComic = openReading,
-                    onQuickUpdateReadingPage = onQuickUpdateReadingPage)
-            }
-        }
-
         // Resumo da Meta de Leitura (Apple HIG Activity Rings + Gauge)
         if (profile.showGoalOnHome) {
             item(key = "home-goal-summary", contentType = "goal_summary_card") {
@@ -505,6 +493,18 @@ fun HomeReadingNowTab(
                         )
                     }
                 }
+            }
+        }
+
+        if (activeReading != null) {
+            item(key = "home-active-reading-header", contentType = "section_header") {
+                com.example.ui.components.HomeSkeletonText(
+                    text = "Continuar lendo", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = s.textPrimary
+                )
+            }
+            item(key = "reading-${activeReading.id}", contentType = "reading_now_item") {
+                HomeReadingNowComicCard(activeReading, appSettings, onSelectComic = openReading,
+                    onQuickUpdateReadingPage = onQuickUpdateReadingPage)
             }
         }
 
@@ -832,14 +832,100 @@ fun ShelfLibraryTab(
     onBackToProfile: () -> Unit = {},
     curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    val headerMaterials = LocalAppleMaterials.current
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val s = headerMaterials.scheme
+            SettingsBackButton(onBackToProfile, label = "Perfil")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = when (shelfSection) {
+                            "shelf" -> "Acervo catalogado"
+                            "lists" -> "Suas coleções"
+                            else -> "Registro cronológico"
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = s.textSecondary
+                    )
+                    Text(
+                        text = "Biblioteca",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = s.textPrimary,
+                        letterSpacing = (-0.5).sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (shelfSection == "shelf") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppleMenuPicker(
+                            modifier = Modifier.widthIn(max = 144.dp),
+                            value = shelfSort,
+                            onChange = onChangeShelfSort,
+                            options = listOf(
+                                SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
+                                SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
+                                SegmentOption("TITLE", "Título (A–Z)", Icons.AutoMirrored.Filled.MenuBook),
+                                SegmentOption("YEAR", "Ano de Lançamento", Icons.Default.CalendarMonth)
+                            )
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
+                                .clickable { onToggleShelfLayout() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = when (shelfLayout) {
+                                    "grid" -> Icons.AutoMirrored.Filled.FormatListBulleted
+                                    "list" -> LucideIcons.Layers
+                                    else -> Icons.Default.GridView
+                                },
+                                contentDescription = "Alternar Grade, Lista ou Sequências",
+                                tint = s.textPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            HorizontalDivider(color = headerMaterials.dividerColor, thickness = 0.5.dp)
+
+            AppleSegmentedPicker(
+                value = shelfSection,
+                onChange = onChangeShelfSection,
+                options = listOf(
+                    SegmentOption("shelf", "Estante", LucideIcons.Library),
+                    SegmentOption("diary", "Diário", LucideIcons.Calendar),
+                    SegmentOption("lists", "Listas", Icons.Default.FormatListNumbered)
+                )
+            )
+        }
     if (shelfSection == "lists") {
         val accountContext=LocalContext.current
         com.example.ui.components.PersonalListsScreen(
             comics, curationViewModel.curation, onChangeShelfSection, onBackToProfile, onSelectComic,
             onConnectAccount = { curationViewModel.loginWithGoogle(accountContext) },
-            searchCatalog = curationViewModel::searchCatalogForList
+            searchCatalog = curationViewModel::searchCatalogForList,
+            showLibraryHeader = false, profile = profile, onShareComic = onShareComicReview
         )
-        return
+        return@Column
     }
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -942,87 +1028,6 @@ fun ShelfLibraryTab(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "library-parent") { SettingsBackButton(onBackToProfile, label = "Perfil") }
-            item(key = "shelf-header", contentType = "tab_header") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = if (shelfSection == "shelf") "Acervo catalogado" else "Registro cronológico",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = s.textSecondary
-                        )
-                        Text(
-                            text = "Biblioteca",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = s.textPrimary,
-                            letterSpacing = (-0.5).sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    if (shelfSection == "shelf") {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            AppleMenuPicker(
-                                modifier = Modifier.widthIn(max = 144.dp),
-                                value = shelfSort,
-                                onChange = onChangeShelfSort,
-                                options = listOf(
-                                    SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
-                                    SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
-                                    SegmentOption("TITLE", "Título (A–Z)", Icons.AutoMirrored.Filled.MenuBook),
-                                    SegmentOption("YEAR", "Ano de Lançamento", Icons.Default.CalendarMonth)
-                                )
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
-                                    .clickable { onToggleShelfLayout() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = when (shelfLayout) {
-                                        "grid" -> Icons.AutoMirrored.Filled.FormatListBulleted
-                                        "list" -> LucideIcons.Layers
-                                        else -> Icons.Default.GridView
-                                    },
-                                    contentDescription = "Alternar Grade, Lista ou Sequências",
-                                    tint = s.textPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-            }
-
-            // Primary Section Switcher: Estante vs Diário
-            item(key = "shelf-section-switcher", contentType = "segmented_switcher") {
-                AppleSegmentedPicker(
-                    value = shelfSection,
-                    onChange = onChangeShelfSection,
-                    options = listOf(
-                        SegmentOption("shelf", "Estante", LucideIcons.Library),
-                        SegmentOption("diary", "Diário", LucideIcons.Calendar),
-                        SegmentOption("lists", "Listas", Icons.Default.FormatListNumbered)
-                    )
-                )
-            }
-
             if (shelfSection == "shelf") {
                 // Segmented Picker + Filter TextField + Genre Pills
                 item(key = "shelf-filter-controls", contentType = "shelf_filters") {
@@ -1553,6 +1558,7 @@ fun ShelfLibraryTab(
                 }
             }
         }
+    }
     }
     }
 }

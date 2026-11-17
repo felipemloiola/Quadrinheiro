@@ -38,6 +38,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     onHandleChange: (String) -> Unit = {}, handleFeedback: String = "",
     onComic: (ComicEntry) -> Unit, onStatistics: () -> Unit) {
     val theme = LocalIOS27Theme.current
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val context = androidx.compose.ui.platform.LocalContext.current
     var slotMenu by remember { mutableStateOf(false) }
     var remoteComics by remember { mutableStateOf(emptyList<ComicEntry>()) }
@@ -125,17 +126,19 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         finally { characterLoading = false }
     }
     if (editorOpen) {
+        Box(Modifier.statusBarsPadding()) {
         ProfileEditorScreen(profile, settings, { editorOpen = false }, onCommitProfile, onHandleChange, handleFeedback, { isCharacter, slot ->
             characters = isCharacter; editSlot = slot
             slotMenu = (if (isCharacter) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).getOrNull(slot) != null
             query = ""
         })
+        }
     } else LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("reader_profile"),
         contentPadding = PaddingValues(bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item(key = "profile_header") {
             Column(Modifier.fillMaxWidth().background(theme.bgPrimary)) {
                 val hasBanner = settings.profileBannerUrl.isNotBlank()
-                val bannerHeight = if (hasBanner) 144.dp else 88.dp
+                val bannerHeight = topInset + if (hasBanner) 144.dp else 88.dp
                 val avatarSize = 80.dp
                 val halfAvatar = 40.dp
 
@@ -172,6 +175,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .align(Alignment.TopCenter)
+                                .padding(top = topInset)
                                 .padding(horizontal = 20.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically

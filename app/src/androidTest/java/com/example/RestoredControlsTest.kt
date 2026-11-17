@@ -38,7 +38,7 @@ class RestoredControlsTest {
                     LiquidSlider({ value.value }, { value.value = it }, 0f..1f, 0.001f, emptyBackdrop(), Modifier.testTag("slider"))
                     LiquidBottomTabs({ tab.value }, { tab.value = it }, emptyBackdrop(), 3) {
                         listOf("Lendo", "Biblioteca", "Ajustes").forEachIndexed { index, label ->
-                            LiquidBottomTab(onClick = { tab.value = index }, selected = tab.value == index) { Text(label) }
+                            LiquidBottomTab(onClick = { tab.value = index }) { Text(label) }
                         }
                     }
                 }

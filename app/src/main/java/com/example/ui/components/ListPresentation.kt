@@ -140,7 +140,7 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
                 Text("Nenhuma HQ por aqui", color = t.textPrimary, modifier = Modifier.padding(24.dp), fontSize = 20.sp)
             }
             itemsIndexed(list.items, key = { _, it -> it.key }) { index, entry ->
-                Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Ver ${entry.title}") { panel.close {onComic(entry.comic())} }.padding(horizontal = 20.dp)) {
+                Column(Modifier.fillMaxWidth().clickable(onClickLabel = "Ver ${entry.title}") { onComic(entry.comic()) }.padding(horizontal = 20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (list.ranked) Text("${index + 1}", color = t.textPrimary, fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
                         BookCover(entry.cover, entry.title, spine3d = false,

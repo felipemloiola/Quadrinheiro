@@ -36,11 +36,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.CoverComposition
@@ -91,7 +93,25 @@ internal fun ComicArtwork(url:String, modifier:Modifier=Modifier, fade:Boolean=f
 }
 
 @Composable
-internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClose:()->Unit) {
+internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,inPlace:Boolean=false,onClose:()->Unit) {
+    val close by rememberUpdatedState(onClose)
+    val content: @Composable () -> Unit = { ExpandedCoverContent(url,title,source,close) }
+    if (inPlace) content()
+    else Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
+        val view=LocalView.current
+        DisposableEffect(view) {
+            (view.parent as? DialogWindowProvider)?.window?.apply {
+                setWindowAnimations(0)
+                setDimAmount(0f)
+            }
+            onDispose {}
+        }
+        content()
+    }
+}
+
+@Composable
+private fun ExpandedCoverContent(url:String,title:String,source:Rect?,onClose:()->Unit) {
     val motion=com.example.ui.theme.LocalAppMotion.current
     val reduceTransparency=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
     val progress=remember {Animatable(0f)}
@@ -109,12 +129,13 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
         scale = zoom.coerceIn(1f, 5f)
         offset = clamp(offset, scale)
     }
-    LaunchedEffect(closing) {
+    val positioned = viewport != null
+    LaunchedEffect(closing, positioned) {
+        if (!positioned && !closing) return@LaunchedEffect
         progress.animateTo(if(closing)0f else 1f,motion.tween(if(closing)150 else 240))
         if(closing)onClose()
     }
     BackHandler {closing=true}
-    Dialog(onDismissRequest={closing=true},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
     BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned {viewport=it.boundsInWindow()}) {
         Box(Modifier.fillMaxSize().graphicsLayer {alpha=progress.value}
             .background(Color.Black.copy(alpha=if(reduceTransparency).96f else .72f)).clickable(onClickLabel="Fechar capa ampliada") {closing=true})
@@ -124,19 +145,23 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
             .graphicsLayer {
                 val p=progress.value
                 val area=viewport
-                val destination=area?.let {Rect(it.center.x-size.width/2,it.center.y-size.height/2,it.center.x+size.width/2,it.center.y+size.height/2)}
                 val origin=source
-                val startX=if(origin!=null && destination!=null)origin.width/destination.width else .82f
-                val startY=if(origin!=null && destination!=null)origin.height/destination.height else .82f
-                scaleX=(startX+(1-startX)*p)*scale;scaleY=(startY+(1-startY)*p)*scale
-                translationX = offset.x
-                translationY = offset.y
-                if(origin!=null && destination!=null) {
-                    translationX += (origin.center.x-destination.center.x)*(1-p)
-                    translationY += (origin.center.y-destination.center.y)*(1-p)
+                val startX=origin?.width?.div(size.width.coerceAtLeast(1f)) ?: .94f
+                val startY=origin?.height?.div(size.height.coerceAtLeast(1f)) ?: .94f
+                val zoom = 1f + (scale - 1f) * p
+                scaleX=(startX+(1-startX)*p)*zoom
+                scaleY=(startY+(1-startY)*p)*zoom
+                translationX = offset.x * p
+                translationY = offset.y * p
+                if(origin!=null && area!=null) {
+                    translationX += (origin.center.x-area.center.x)*(1-p)
+                    translationY += (origin.center.y-area.center.y)*(1-p)
                 }
-                alpha=p.coerceIn(0f,1f)
-            }.clip(RoundedCornerShape(12.dp)).clipToBounds().semantics(mergeDescendants=true) {
+                alpha = if (area == null) 0f else (p * 12f).coerceIn(0f, 1f)
+                shape = RoundedCornerShape(18.dp)
+                clip = true
+            }.semantics(mergeDescendants=true) {
+                contentDescription = title
                 stateDescription="Ampliação de ${(scale*100).toInt()}%"
                 customActions=listOf(
                     CustomAccessibilityAction("Ampliar capa"){setZoom(scale + .5f);true},
@@ -149,10 +174,12 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
                     offset = clamp(zoomAroundCentroid(offset, centroid - center, pan, scale, next), next)
                     scale = next
                 }}) {
-            AsyncImage(url,title,Modifier.fillMaxSize(),contentScale=ContentScale.Fit)
+            BookCover(url,title,spine3d=false,contentScale=ContentScale.Fit,modifier=Modifier.fillMaxSize().clearAndSetSemantics {})
         }
-        IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp).background(Color.White.copy(alpha=.12f),RoundedCornerShape(50))) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
+        IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp)
+            .graphicsLayer { alpha = progress.value }.background(Color.White.copy(alpha=.12f),RoundedCornerShape(50))) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
         Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp)
+            .graphicsLayer { alpha = progress.value }
             .widthIn(max = 360.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF16161D))
             .padding(horizontal = 12.dp)) {
             TextButton(onClick = { adjusting = !adjusting }) {
@@ -164,6 +191,5 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
                 CropPositionControls(offset, positionLimit(scale), { offset = it }, Color.White)
             }
         }
-    }
     }
 }

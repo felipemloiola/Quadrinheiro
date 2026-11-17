@@ -26,9 +26,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -96,7 +95,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -510,12 +514,15 @@ fun QuadrinheiroApp(
 
     QuadrinheiroTheme(settings = appSettings) {
         val view = LocalView.current
-        val lightSystemBars = !com.example.ui.theme.LocalIsDarkTheme.current
+        val lightThemeWindow = !com.example.ui.theme.LocalIsDarkTheme.current
+        val lightStatusBar = lightThemeWindow &&
+            !(activeTab == "profile" && !isStatisticsOpen && appSettings.profileBannerUrl.isNotBlank())
         SideEffect {
             (view.context as? android.app.Activity)?.window?.let { window ->
+                if (android.os.Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = false
                 WindowCompat.getInsetsController(window, view).apply {
-                    isAppearanceLightStatusBars = lightSystemBars
-                    isAppearanceLightNavigationBars = lightSystemBars
+                    isAppearanceLightStatusBars = lightStatusBar
+                    isAppearanceLightNavigationBars = lightThemeWindow
                 }
             }
         }
@@ -684,7 +691,6 @@ fun QuadrinheiroApp(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .windowInsetsPadding(WindowInsets.statusBars)
                     ) {
                         Box(
                             modifier = Modifier
@@ -701,7 +707,7 @@ fun QuadrinheiroApp(
                                         isStatisticsOpen -> viewModel.closeReadingStatistics()
                                         activeTab == "settings" && settingsSubPage != null -> viewModel.goBackSettings()
                                         activeTab == "shelf" || activeTab == "settings" -> viewModel.switchMainTab("profile")
-                                        else -> viewModel.switchMainTab("home")
+                                        else -> Unit
                                     }
                                 }
                             ) { page ->
@@ -716,6 +722,10 @@ fun QuadrinheiroApp(
                                 val settingsSubPage = page.settings
                                 val settingsParentPage = page.parent
                                 val isStatisticsOpen = page.statistics
+                                Box(Modifier.fillMaxSize().then(
+                                    if (activeTab == "profile" && !isStatisticsOpen) Modifier
+                                    else Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                                )) {
                                 if (isStatisticsOpen) {
                                     ReadingStatisticsScreen(
                                         comics = comics,
@@ -914,6 +924,7 @@ fun QuadrinheiroApp(
                                         onSelectSavedComic = { viewModel.selectComicForSheet(it) },
                                         onOpenComicInfoModal = { viewModel.openInfoSynopsisModal(it) }
                                     )
+                                }
                                 }
                             }
                         }
@@ -1290,19 +1301,19 @@ private fun IOS27BottomTabViewContainer(
 
     val tabContentColor = if (isLightTheme) Color(0xFF1A1A1A) else Color.White
     val effectiveAccentColor = if (isLightTheme && s.accentColor == Color.White) Color(0xFF3A3A3C) else s.accentColor
-    val configuredGlassAlpha = if (settings.reduceTransparency) 1f else (0.4f * settings.glassOpacity).coerceIn(0.15f, 0.70f)
+    val configuredGlassAlpha = (0.4f * settings.glassOpacity).coerceIn(0.15f, 0.70f)
     val glassContainerColor = if (isLightTheme) {
         Color(0xFFFAFAFA).copy(alpha = configuredGlassAlpha)
     } else {
         Color(0xFF121212).copy(alpha = configuredGlassAlpha)
     }
-    val configuredBlurRadius = if (settings.reduceTransparency) 0.dp else (8f * settings.glassBlurIntensity).coerceIn(2f, 28f).dp
+    val configuredBlurRadius = if (settings.reduceTransparency) 20.dp else (8f * settings.glassBlurIntensity).coerceIn(2f, 28f).dp
     val configuredRefractionMultiplier = if (!settings.reduceTransparency && settings.enableLensRefraction && !isScrolling) settings.glassIntensity.coerceIn(0.2f, 2.5f) else 0f
     val configuredChromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration && !isScrolling
     val configuredDepthEffect = !settings.reduceTransparency && settings.edgeRefraction && !isScrolling
 
     val baseHighlightAlpha = if (isLightTheme) 0.5f else 0.35f
-    val effectiveGlassBlur = configuredBlurRadius.coerceAtMost(24.dp)
+    val effectiveGlassBlur = configuredBlurRadius.coerceIn(2f.dp, 24f.dp)
     val effectiveGlassRefraction = if (configuredRefractionMultiplier > 0f) {
         configuredRefractionMultiplier.coerceIn(0.25f, 2.2f)
     } else {
@@ -1346,7 +1357,7 @@ private fun IOS27BottomTabViewContainer(
                                 if (!settings.reduceTransparency) {
                                     vibrancy()
                                 }
-                                if (effectiveGlassBlur > 0.dp) blur(effectiveGlassBlur.toPx())
+                                blur(effectiveGlassBlur.toPx())
                                 if (effectiveGlassRefraction > 0f) {
                                     lens(
                                         refractionHeight = 24f.dp.toPx() * effectiveGlassRefraction,
@@ -1431,17 +1442,18 @@ private fun IOS27BottomTabViewContainer(
                         if (readingNowCount > 1) {
                             Row(
                                 modifier = Modifier
+                                    .height(26.dp)
                                     .clip(Capsule())
                                     .background(if (isLightTheme) Color.Black.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.12f))
-                                    .padding(horizontal = 2.dp),
+                                    .padding(horizontal = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(48.dp)
+                                        .size(22.dp)
                                         .clip(CircleShape)
-                                        .clickable(role = Role.Button) { onCycleReadingComic(-1) },
+                                        .clickable { onCycleReadingComic(-1) },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -1451,11 +1463,17 @@ private fun IOS27BottomTabViewContainer(
                                         modifier = Modifier.size(15.dp)
                                     )
                                 }
+                                Text(
+                                    text = "/",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isLightTheme) Color(0xFF111111).copy(0.7f) else Color.White.copy(0.7f)
+                                )
                                 Box(
                                     modifier = Modifier
-                                        .size(48.dp)
+                                        .size(22.dp)
                                         .clip(CircleShape)
-                                        .clickable(role = Role.Button) { onCycleReadingComic(1) },
+                                        .clickable { onCycleReadingComic(1) },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -1513,7 +1531,7 @@ private fun IOS27BottomTabViewContainer(
                 val tabLayerColor = com.kyant.backdrop.catalog.components.LocalLiquidBottomTabColor.current ?: tabContentColor
 
                 // Tab 0: Lendo (transição 100% em sub-pixels na GPU sem AnimatedVisibility que travava o layout)
-                LiquidBottomTab(onClick = { onSelectTab("home") }, selected = selectedTabIndex == 0) {
+                LiquidBottomTab(onClick = { onSelectTab("home") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 0) LucideIcons.OpenBookFilled else LucideIcons.OpenBook,
                         contentDescription = "Início",
@@ -1549,7 +1567,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 1: Biblioteca
-                LiquidBottomTab(onClick = { onSelectTab("explore") }, selected = selectedTabIndex == 1) {
+                LiquidBottomTab(onClick = { onSelectTab("explore") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 1) androidx.compose.material.icons.Icons.Default.Explore else androidx.compose.material.icons.Icons.Outlined.Explore,
                         contentDescription = "Explorar",
@@ -1585,7 +1603,7 @@ private fun IOS27BottomTabViewContainer(
                 }
 
                 // Tab 2: Ajustes
-                LiquidBottomTab(onClick = { onSelectTab("profile") }, selected = selectedTabIndex == 2) {
+                LiquidBottomTab(onClick = { onSelectTab("profile") }) {
                     Icon(
                         imageVector = if (selectedTabIndex == 2) androidx.compose.material.icons.Icons.Default.Person else androidx.compose.material.icons.Icons.Outlined.PersonOutline,
                         contentDescription = "Perfil",
@@ -1623,23 +1641,43 @@ private fun IOS27BottomTabViewContainer(
 
             // Botão Circular da Lupa — Animação Liquid Glass idêntica ao iOS 26
             val searchButtonSize = lerp(64f.dp, 54f.dp, collapsedFraction)
-            val searchInteractions = remember { MutableInteractionSource() }
-            val isSearchPressed by searchInteractions.collectIsPressedAsState()
-            val searchScale by animateFloatAsState(
-                if (isSearchPressed && !motion.reduced) 1.15f else 1f,
-                motion.spring(dampingRatio = 0.85f, stiffness = 550f),
-                label = "SearchPressScale"
-            )
-            val searchGlassProgress by animateFloatAsState(
-                if (isSearchPressed && !motion.reduced) 1f else 0f,
-                motion.spring(dampingRatio = 0.9f, stiffness = 700f),
-                label = "SearchPressGlass"
-            )
+            val searchAnimationScope = rememberCoroutineScope()
+            var isSearchPressed by remember { mutableStateOf(false) }
+            var handledByPointer by remember { mutableStateOf(false) }
+            val searchScaleAnim = remember { Animatable(1f) }
+            val searchGlassProgressAnim = remember { Animatable(0f) }
+
+            val searchInteractiveHighlight = remember(searchAnimationScope) {
+                com.kyant.backdrop.catalog.utils.InteractiveHighlight(
+                    animationScope = searchAnimationScope
+                )
+            }
+
+            // Caso a aba "search" seja acionada por atalho externo (ex.: botão Buscar na tela)
+            var wasSearchSelected by remember { mutableStateOf(isSearchSelected) }
+            LaunchedEffect(isSearchSelected) {
+                if (isSearchSelected && !wasSearchSelected && !handledByPointer) {
+                    searchAnimationScope.launch {
+                        searchGlassProgressAnim.animateTo(1f, motion.tween(55))
+                        searchGlassProgressAnim.animateTo(0f, motion.spring(dampingRatio = 0.85f, stiffness = 350f))
+                    }
+                    searchAnimationScope.launch {
+                        searchScaleAnim.animateTo(1.15f, motion.tween(55))
+                        searchScaleAnim.animateTo(1f, motion.spring(dampingRatio = 0.48f, stiffness = 380f))
+                    }
+                }
+                handledByPointer = false
+                wasSearchSelected = isSearchSelected
+            }
+
+            // No press-down (frames 24-25), o ícone escurece/reduz opacidade para 0.22f; no release (frame 26), volta a 1f já azul
             val searchIconAlpha by animateFloatAsState(
-                if (isSearchPressed) 0.65f else 1f,
-                motion.tween(durationMillis = 65),
-                label = "SearchPressAlpha"
+                targetValue = if (isSearchPressed && !isSearchSelected) 0.22f else 1f,
+                animationSpec = motion.tween(durationMillis = if (isSearchPressed) 65 else 50),
+                label = "SearchIconAlpha"
             )
+
+            val currentOnSelectTab by rememberUpdatedState(onSelectTab)
 
             Box(
                 modifier = Modifier
@@ -1648,13 +1686,13 @@ private fun IOS27BottomTabViewContainer(
                         backdrop = mainBackdrop,
                         shape = { ContinuousCapsule },
                         highlight = {
-                            val p = searchGlassProgress
+                            val p = searchGlassProgressAnim.value
                             Highlight.Default.copy(
                                 alpha = lerp(baseHighlightAlpha, 0.90f, p)
                             )
                         },
                         shadow = {
-                            val p = searchGlassProgress
+                            val p = searchGlassProgressAnim.value
                             if (p > 0.01f) {
                                 com.kyant.backdrop.shadow.Shadow(
                                     radius = 14.dp * p,
@@ -1665,7 +1703,7 @@ private fun IOS27BottomTabViewContainer(
                             }
                         },
                         innerShadow = {
-                            val p = searchGlassProgress
+                            val p = searchGlassProgressAnim.value
                             if (p > 0.01f) {
                                 com.kyant.backdrop.shadow.InnerShadow(
                                     radius = 8.dp * p,
@@ -1676,11 +1714,11 @@ private fun IOS27BottomTabViewContainer(
                             }
                         },
                         effects = {
-                            val p = searchGlassProgress
+                            val p = searchGlassProgressAnim.value
                             if (!settings.reduceTransparency) {
                                 vibrancy()
                             }
-                            if (effectiveGlassBlur > 0.dp) blur(effectiveGlassBlur.toPx())
+                            blur(effectiveGlassBlur.toPx())
                             if (effectiveGlassRefraction > 0f) {
                                 lens(
                                     refractionHeight = (24f.dp.toPx() + 8f.dp.toPx() * p) * effectiveGlassRefraction,
@@ -1691,11 +1729,12 @@ private fun IOS27BottomTabViewContainer(
                             }
                         },
                         layerBlock = {
-                            scaleX = searchScale
-                            scaleY = searchScale
+                            val sc = searchScaleAnim.value
+                            scaleX = sc
+                            scaleY = sc
                         },
                         onDrawSurface = {
-                            val p = searchGlassProgress
+                            val p = searchGlassProgressAnim.value
                             drawRect(glassContainerColor)
                             if (p > 0.01f) {
                                 drawRect(
@@ -1705,19 +1744,90 @@ private fun IOS27BottomTabViewContainer(
                             }
                         }
                     )
-                    .selectable(
-                        selected = isSearchSelected,
-                        interactionSource = searchInteractions,
-                        indication = null,
-                        role = Role.Tab,
-                        onClick = { onSelectTab("search") }
-                    ),
+                    .then(searchInteractiveHighlight.modifier)
+                    .then(searchInteractiveHighlight.gestureModifier)
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Tab
+                        selected = isSearchSelected
+                        onClick("Buscar") { currentOnSelectTab("search"); true }
+                    }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            isSearchPressed = true
+                            searchAnimationScope.launch {
+                                searchGlassProgressAnim.animateTo(
+                                    1f,
+                                    motion.spring(dampingRatio = 0.9f, stiffness = 700f)
+                                )
+                            }
+                            searchAnimationScope.launch {
+                                searchScaleAnim.animateTo(
+                                    1.15f,
+                                    motion.spring(dampingRatio = 0.75f, stiffness = 550f)
+                                )
+                            }
+
+                            var releasedInside = false
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: break
+                                if (!change.pressed) {
+                                    releasedInside = change.position.x in 0f..size.width.toFloat() &&
+                                        change.position.y in 0f..size.height.toFloat()
+                                    break
+                                }
+                            }
+
+                            isSearchPressed = false
+                            if (releasedInside) {
+                                handledByPointer = true
+                                currentOnSelectTab("search")
+                                searchAnimationScope.launch {
+                                    if (searchScaleAnim.value < 1.13f) {
+                                        searchScaleAnim.animateTo(1.15f, motion.tween(50))
+                                    }
+                                    searchScaleAnim.animateTo(
+                                        1f,
+                                        motion.spring(dampingRatio = 0.48f, stiffness = 380f)
+                                    )
+                                }
+                                searchAnimationScope.launch {
+                                    if (searchGlassProgressAnim.value < 0.85f) {
+                                        searchGlassProgressAnim.animateTo(1f, motion.tween(50))
+                                    }
+                                    searchGlassProgressAnim.animateTo(
+                                        0f,
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 340f)
+                                    )
+                                }
+                            } else {
+                                searchAnimationScope.launch {
+                                    searchScaleAnim.animateTo(
+                                        1f,
+                                        motion.spring(dampingRatio = 0.65f, stiffness = 400f)
+                                    )
+                                }
+                                searchAnimationScope.launch {
+                                    searchGlassProgressAnim.animateTo(
+                                        0f,
+                                        motion.spring(dampingRatio = 0.85f, stiffness = 400f)
+                                    )
+                                }
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Box(
                     modifier = Modifier
                         .size(34.dp)
-                        .graphicsLayer { alpha = searchIconAlpha },
+                        .graphicsLayer {
+                            val sc = searchScaleAnim.value
+                            scaleX = sc
+                            scaleY = sc
+                            alpha = searchIconAlpha
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

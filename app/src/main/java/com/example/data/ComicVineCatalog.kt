@@ -4,6 +4,8 @@ import com.example.model.ComicEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import org.json.JSONObject
@@ -21,7 +23,8 @@ data class CatalogDetails(val id: String, val type: String, val title: String, v
     val description: String, val publisher: String, val date: String, val url: String, val covers: List<String>,
     val characters: List<CatalogCredit>, val creators: List<CatalogCredit>, val issues: List<ComicEntry>,
     val realName: String = "", val aliases: String = "", val powers: List<String> = emptyList(), val appearances: Int = 0,
-    val creditsScope: String = "issue",val pageCount:Int=0,val isbn:String="",val format:String="",val issueNumber:Int=0)
+    val creditsScope: String = "issue",val pageCount:Int=0,val isbn:String="",val format:String="",val issueNumber:Int=0,
+    val volumeId: String = "")
 
 /** The app only talks to our bounded catalog service. Provider credentials never enter the APK. */
 object ComicVineCatalog {
@@ -134,7 +137,8 @@ object ComicVineCatalog {
         val combinedCovers = (strings("covers") + strings("portraits") + strings("artwork")).filter { it.isNotBlank() }.distinct().take(12)
         return CatalogDetails(resourceId, operation, j.optString("volume").ifBlank { j.optString("name") }, j.optString("image"), j.optString("banner"),
             plain(j.optString("description")), publisher, j.optString("date"), j.optString("url"), combinedCovers,
-            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"),j.optString("issue").toIntOrNull() ?: 0)
+            credits("characters"), credits("creators"), j.objects("issues").map(::comic), j.optString("realName"), j.optString("aliases"), strings("powers"), j.optInt("appearances"),j.optString("creditsScope","issue"),j.optInt("pageCount",0),j.optString("isbn"),j.optString("format"),j.optString("issue").toIntOrNull() ?: 0,
+            volumeId=j.optString("volumeId").takeIf { it.isNotBlank() && it.all(Char::isDigit) }.orEmpty())
             .also { synchronized(memory) { memory[key] = it } }
     }
     suspend fun resolve(comic: ComicEntry): CatalogDetails? {
@@ -147,24 +151,65 @@ object ComicVineCatalog {
         return id?.takeIf { it.all(Char::isDigit) }?.let { details("issue", it) }
     }
     suspend fun autoResolve(comic: ComicEntry): CatalogDetails? {
-        val direct = resolve(comic)
-        if (direct != null) return direct
+        val direct = resolve(comic)?.let { completeIssueCredits(it) }
+        if (direct != null && direct.characters.isNotEmpty() && direct.creators.isNotEmpty()) return direct
         val searchTitle = CatalogWorkIdentity.series(comic.seriesName.ifBlank { comic.displayTitle })
-        if (searchTitle.isBlank()) return null
-        return runCatching {
-            val results = search(searchTitle).items
-            if (results.isEmpty()) null
-            else {
-                matchingEdition(comic,results)?.let {resolve(it)} ?: kotlinx.coroutines.withTimeoutOrNull(10000L) {
-                    if(!CatalogWorkIdentity.collected(comic)) return@withTimeoutOrNull null
-                    for(candidate in results.filter {CatalogWorkIdentity.collected(it) && CatalogWorkIdentity.series(it.seriesName.ifBlank {it.title})==searchTitle}.take(3)) {
-                        val full=resolve(candidate) ?: continue
-                        CatalogWorkIdentity.companion(comic,full)?.let {return@withTimeoutOrNull it}
-                    }
-                    null
+        if (searchTitle.isBlank()) return direct
+        val related = try {
+            withTimeoutOrNull(10_000L) {
+                val knownSource = comic.externalId.ifBlank { comic.id }
+                val results = search(searchTitle).items.filterNot { direct != null && it.externalId == knownSource }
+                val edition = if (direct == null) comic else comic.copy(
+                    issueNumber = direct.issueNumber.takeIf { it > 0 } ?: comic.issueNumber,
+                    isbn = comic.isbn.ifBlank { direct.isbn }
+                )
+                val isbn = edition.isbn.filter(Char::isLetterOrDigit)
+                val comparable = when {
+                    direct == null -> results
+                    isbn.length in listOf(10,13) -> results.filter { it.isbn.filter(Char::isLetterOrDigit).equals(isbn,true) }
+                    edition.issueNumber > 0 && !CatalogWorkIdentity.collected(edition) ->
+                        results.filter { !CatalogWorkIdentity.collected(it) && it.issueNumber == edition.issueNumber }
+                    else -> emptyList()
                 }
+                matchingEdition(edition, comparable)?.let { candidate ->
+                    val match = resolve(candidate)?.let { completeIssueCredits(it) }
+                    if (match != null) return@withTimeoutOrNull match
+                }
+                if (!CatalogWorkIdentity.collected(comic)) return@withTimeoutOrNull null
+                for (candidate in results.filter {
+                    CatalogWorkIdentity.collected(it) && CatalogWorkIdentity.series(it.seriesName.ifBlank { it.title }) == searchTitle
+                }.take(3)) {
+                    val full = resolve(candidate)?.let { completeIssueCredits(it) } ?: continue
+                    CatalogWorkIdentity.companion(comic, full)?.let { return@withTimeoutOrNull it }
+                }
+                null
             }
-        }.getOrNull()
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            null
+        }
+        if (direct == null) return related
+        return if (related == null) direct else fillMissingCredits(direct, related, "work")
+    }
+
+    private suspend fun completeIssueCredits(issue: CatalogDetails): CatalogDetails {
+        if (issue.type != "issue" || issue.volumeId.isBlank() || (issue.characters.isNotEmpty() && issue.creators.isNotEmpty())) return issue
+        val volume = try {
+            withTimeoutOrNull(4_000L) { details("volume", issue.volumeId) }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Exception) {
+            null
+        }
+        return if (volume == null) issue else fillMissingCredits(issue, volume, "series")
+    }
+
+    internal fun fillMissingCredits(primary: CatalogDetails, source: CatalogDetails, scope: String): CatalogDetails {
+        val characters = primary.characters.ifEmpty { source.characters }
+        val creators = primary.creators.ifEmpty { source.creators }
+        if (characters == primary.characters && creators == primary.creators) return primary
+        return primary.copy(characters = characters, creators = creators, creditsScope = scope)
     }
     internal fun matchingEdition(comic:ComicEntry,results:List<ComicEntry>):ComicEntry? {
         val isbn=comic.isbn.filter(Char::isLetterOrDigit)

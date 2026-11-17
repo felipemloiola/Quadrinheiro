@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -39,6 +40,7 @@ import com.example.ui.theme.*
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.*
+import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.launch
@@ -55,6 +57,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val x = remember { Animatable(0f) }
     val y = remember { Animatable(0f) }
     var hovered by remember { mutableStateOf<Int?>(null) }
+    var drag by remember { mutableStateOf(Offset.Zero) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
     DisposableEffect(state) {
         state.menuProgressProvider = { ((x.value + y.value) * 0.5f).coerceIn(0f, 1f) }
@@ -63,6 +66,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     SideEffect { if (active != null) retained = active }
     LaunchedEffect(active?.id) {
         hovered = null
+        drag = Offset.Zero
         if (active != null) {
             retained = active
             state.morphingMenuId = active.id
@@ -86,6 +90,10 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val surfaceAlpha=if(settings.reduceTransparency)1f else
         ((if(dark).80f else .86f)*settings.glassOpacity).coerceIn(if(dark).74f else .78f,.94f)
     val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 48.dp
+    val highlightY by animateFloatAsState(
+        with(density) { (rowHeight + .5.dp).toPx() } * (hovered ?: 0),
+        motion.spring(.68f, 620f), label = "menuHighlightPosition"
+    )
     val firstItemFocus = remember(request.id) { FocusRequester() }
     val focusIndex = request.items.indexOfFirst { it.selected }.coerceAtLeast(0)
     LaunchedEffect(active?.id) {
@@ -123,11 +131,14 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                 transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
                 scaleX = (anchor.width.toFloat() / width + (1f - anchor.width.toFloat() / width) * x.value).coerceAtLeast(0.05f)
                 scaleY = (anchor.height.toFloat() / height + (1f - anchor.height.toFloat() / height) * y.value).coerceAtLeast(0.05f)
-                translationX = (if (right) anchor.right - left - width else anchor.left - left) * (1f - x.value)
-                translationY = (if (down) anchor.top - top else anchor.bottom - top - height) * (1f - y.value)
+                translationX = (if (right) anchor.right - left - width else anchor.left - left) * (1f - x.value) +
+                    if (motion.reduced) 0f else drag.x.coerceIn(-200f, 200f) * .035f
+                translationY = (if (down) anchor.top - top else anchor.bottom - top - height) * (1f - y.value) +
+                    if (motion.reduced) 0f else drag.y.coerceIn(-200f, 200f) * .035f
                 alpha = (minOf(x.value, y.value) * 5f).coerceIn(0f, 1f)
             }
             .drawBackdrop(backdrop, shape = { ContinuousRoundedRectangle(26.dp) },
+                highlight = { if (settings.reduceTransparency) null else Highlight.Default.copy(alpha = .42f) },
                 shadow = { Shadow(radius = 18.dp, alpha = 0.20f) },
                 effects = {
                     if (!settings.reduceTransparency) { vibrancy(); blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 20f).dp.toPx()) }
@@ -153,6 +164,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             val change = event.changes.firstOrNull { it.id == first.id } ?: break
                             if (change.isConsumed || event.changes.any { it.id != first.id && it.pressed }) break
+                            drag = change.position - first.position
                             hovered = row(change.position)
                             change.consume()
                             if (!change.pressed) {
@@ -160,16 +172,20 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                                 break
                             }
                         }
-                    } finally { hovered = null }
+                    } finally { hovered = null; drag = Offset.Zero }
                 }
             } else Modifier)) {
+            if (!scrollable && hovered != null) {
+                Box(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
+                    .graphicsLayer { translationY = 7.dp.toPx() + highlightY }
+                    .background(if (dark) Color.White.copy(alpha = .13f) else Color.Black.copy(alpha = .075f), RoundedCornerShape(16.dp)))
+            }
             val scrollModifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
             Column(scrollModifier.padding(vertical = 7.dp)) {
                 request.items.forEachIndexed { index, item ->
                     Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(when {
-                            hovered == index -> if (dark) Color.White.copy(alpha = .13f) else Color.Black.copy(alpha = .075f)
                             item.selected && hovered == null -> palette.accent.copy(alpha = .09f)
                             else -> Color.Transparent
                         })
@@ -183,8 +199,11 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                         )
                         .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Box(Modifier.width(18.dp)) { if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp)) }
+                        if (request.selectionMenu) Box(Modifier.width(18.dp)) {
+                            if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                        }
                         Text(item.label, modifier = Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                            style = menuTextStyle,
                             fontWeight = if (item.selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
                             color = if (item.selected) palette.accent else palette.textPrimary, maxLines = 2)
                         item.icon?.let { Icon(it, null, tint = palette.textSecondary, modifier = Modifier.size(18.dp)) }

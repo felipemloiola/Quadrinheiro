@@ -32,6 +32,16 @@ class EditorialContentPolicyTest {
         assertNull(CatalogWorkIdentity.companion(local,full.copy(description="Collects Absolute Batman #1-6.")))
         assertNull(CatalogWorkIdentity.companion(local,full.copy(title="Superman")))
     }
+    @Test fun creditsFromSeriesOnlyFillMissingGroupsAndKeepTheSelectedEdition() {
+        val hero = CatalogCredit("1", "Batman")
+        val creator = CatalogCredit("5", "Frank Miller")
+        val issue = CatalogDetails("9", "issue", "Ano Um", "cover", "", "", "DC", "1987", "",
+            emptyList(), listOf(hero), emptyList(), emptyList(), pageCount = 32, isbn = "edition-isbn")
+        val volume = issue.copy(id = "8", type = "volume", image = "volume-cover",
+            pageCount = 180, characters = listOf(CatalogCredit("2", "Robin")), creators = listOf(creator))
+        val complete = ComicVineCatalog.fillMissingCredits(issue, volume, "series")
+        assertEquals(issue.copy(creators = listOf(creator), creditsScope = "series"), complete)
+    }
     @Test fun italianIsNotPortugueseAndFullSynopsisIsTranslatedWithoutDroppingItsEnd() {
         val source=("Mentre Bruce Wayne indaga nella città, coinvolge gli amici in un gioco pericoloso. Cosa succede nella struttura? ").repeat(13).trim()+" FINALEDELLASTORIA"
         assertFalse(PortugueseComicTranslator.isPortugueseText(source))

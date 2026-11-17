@@ -28,7 +28,6 @@ data class AppPage(val tab: String, val settings: String?, val parent: String?, 
         statistics -> copy(statistics = false)
         tab == "settings" && settings != null -> copy(settings = parent, parent = null)
         tab == "settings" || tab == "shelf" -> AppPage("profile", null, null, false)
-        tab != "home" -> AppPage("home", null, null, false)
         else -> null
     }
     val depth: Int get() = when {

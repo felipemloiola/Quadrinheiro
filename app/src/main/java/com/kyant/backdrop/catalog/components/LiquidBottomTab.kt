@@ -1,6 +1,6 @@
 package com.kyant.backdrop.catalog.components
 
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.RowScope
@@ -21,7 +21,6 @@ val LocalLiquidBottomTabColor = staticCompositionLocalOf<Color?> { null }
 @Composable
 fun RowScope.LiquidBottomTab(
     onClick: () -> Unit,
-    selected: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -29,8 +28,7 @@ fun RowScope.LiquidBottomTab(
     Box(
         modifier
             .clip(ContinuousCapsule)
-            .selectable(
-                selected = selected,
+            .clickable(
                 interactionSource = null,
                 indication = null,
                 role = Role.Tab,

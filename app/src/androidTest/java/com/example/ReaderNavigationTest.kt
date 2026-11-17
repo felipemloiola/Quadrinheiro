@@ -77,6 +77,17 @@ class ReaderNavigationTest {
         compose.onNodeWithText("Para você").assertDoesNotExist()
         screenshot("search")
     }
+    @Test fun librarySectionsSwitchInBothDirectionsWithOneLabelEach() {
+        compose.runOnIdle {
+            vm.switchMainTab("shelf")
+            vm.setShelfSection("shelf")
+        }
+        for ((label, section) in listOf("Listas" to "lists", "Diário" to "diary", "Estante" to "shelf", "Listas" to "lists", "Estante" to "shelf")) {
+            compose.onNodeWithText(label).performTouchInput { click() }
+            compose.runOnIdle { assertEquals(section, vm.shelfSection.value) }
+            compose.onNodeWithText(label).assertIsSelected()
+        }
+    }
     @Test fun editingProfileReturnsToProfileAndHeaderSharesTheBanner() {
         compose.runOnIdle {
             vm.updateSettings { it.copy(profileBannerUrl = "https://comicvine.gamespot.com/a/uploads/scale_medium/11/110017/9911623-wwww.jpg") }

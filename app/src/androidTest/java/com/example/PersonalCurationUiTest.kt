@@ -78,6 +78,10 @@ class PersonalCurationUiTest {
         java.io.File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,"curation-list.png").outputStream().use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
         }
+        compose.onNodeWithText(library.last().displayTitle).performClick()
+        compose.onNodeWithTag("comic_detail_page").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.onNodeWithText("Minha primeira escolha").assertIsDisplayed()
     }
     @Test fun explanationsUseSavedEvidenceAndFeedbackCanBeUndone() {
         val c=library.first()

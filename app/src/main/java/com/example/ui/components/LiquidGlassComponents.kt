@@ -577,7 +577,8 @@ fun Modifier.tintedLiquidBlueButton(
 @Composable
 fun Modifier.liquidGlassRegistrationSheet(
     backdrop: Backdrop = rememberCurrentBackdrop(),
-    cornerRadiusDp: Float = 24f
+    cornerRadiusDp: Float = 24f,
+    edgeHighlight: Boolean = true
 ): Modifier {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -589,6 +590,7 @@ fun Modifier.liquidGlassRegistrationSheet(
         .drawBackdrop(
             backdrop = backdrop,
             shape = { sheetShape },
+            highlight = { if (edgeHighlight) Highlight.Default else null },
             effects = {
                 vibrancy()
                 with(density) {
@@ -933,6 +935,7 @@ fun BookCover(
     year: Int? = null,
     spine3d: Boolean = true,
     modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
     overlayContent: @Composable BoxScope.() -> Unit = {}
 ) {
     if (LocalHomeSkeleton.current != null) { HomeSkeletonBlock(modifier); return }
@@ -1054,7 +1057,7 @@ fun BookCover(
             AsyncImage(
                 model = imageRequest,
                 contentDescription = title,
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
                 onSuccess = { isImageLoaded = true },
                 onError = {
                     if(com.example.BuildConfig.DEBUG) android.util.Log.d("CoverLoad",
@@ -1601,302 +1604,109 @@ fun LiquidGlassSegmentedControl(
     modifier: Modifier = Modifier,
     tabIcons: List<ImageVector?>? = null
 ) {
-    val isLightTheme = !LocalIsDarkTheme.current
+    if (tabs.isEmpty()) return
+    val palette = LocalIOS27Theme.current
     val settings = com.example.ui.theme.LocalAppSettings.current
-    // Use the navigation bar renderer and gestures, rather than a second optical implementation.
-    if (!settings.reduceTransparency) {
-        com.kyant.backdrop.catalog.components.LiquidBottomTabs(
-            selectedTabIndex = { selectedIndex }, onTabSelected = onTabSelected,
-            backdrop = backdrop, tabsCount = tabs.size.coerceAtLeast(1),
-            modifier = modifier.fillMaxWidth().selectableGroup(), compact = true,
-            isLightTheme = isLightTheme,
-            accentColor = if (isLightTheme) Color.Black else Color.White,
-            unselectedContentColor = if (isLightTheme) Color.Black else Color.White,
-            containerColor = if (isLightTheme) Color.White.copy(alpha = 0.4f) else Color(0xFF121212).copy(alpha = 0.4f),
-            refractionMultiplier = if (settings.enableLensRefraction) settings.glassIntensity else 0f,
-            chromaticAberrationEnabled = settings.enableChromaticAberration
-        ) {
-            tabs.forEachIndexed { index, title ->
-                LiquidBottomTab(
-                    onClick = { onTabSelected(index) },
-                    selected = index == selectedIndex,
-                    modifier = Modifier.semantics { stateDescription = if (index == selectedIndex) "Selecionado" else "Não selecionado" }
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        tabIcons?.getOrNull(index)?.let { Icon(it, null, modifier = Modifier.size(16.dp), tint = if (isLightTheme) Color.Black else Color.White) }
-                        BasicText(title, style = TextStyle(color = if (isLightTheme) Color.Black else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium), maxLines = 1)
-                    }
-                }
-            }
-        }
-        return
-    }
-    val containerColor =
-        if (isLightTheme) Color(0xFFEAEAEF).copy(alpha = 0.72f)
-        else Color(0xFF2B2B30).copy(alpha = 0.62f)
-    val contentColor = if (isLightTheme) Color.Black else Color.White
-    val currentSelectedIndex by rememberUpdatedState(selectedIndex)
-    val currentOnTabSelected by rememberUpdatedState(onTabSelected)
-    val tabsCount = tabs.size.coerceAtLeast(1)
+    val isLight = !LocalIsDarkTheme.current
+    val trackColor = if (isLight) Color(0xFFEAEAEF) else Color(0xFF2B2B30)
+    val glass = !settings.reduceTransparency
+    val selectionColor = if (isLight) Color.Black else Color.White
+    val selected = selectedIndex.coerceIn(tabs.indices)
+    val latestSelection by rememberUpdatedState(selected)
+    val latestOnSelect by rememberUpdatedState(onTabSelected)
+    val reduced = com.example.ui.theme.rememberReducedMotion()
+    val scope = rememberCoroutineScope()
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = SegmentedControlGeometry.MIN_TOUCH_HEIGHT_DP.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
+    BoxWithConstraints(modifier.fillMaxWidth().heightIn(min = 48.dp).selectableGroup()) {
         val density = LocalDensity.current
-        val tabWidth = with(density) {
-            ((constraints.maxWidth.toFloat() - (SegmentedControlGeometry.TRACK_INSET_DP * 2f).dp.toPx()) / tabsCount)
-                .coerceAtLeast(1f)
-        }
-
-        val offsetAnimation = remember { Animatable(0f) }
-        val panelOffset by remember(density) {
-            derivedStateOf {
-                val fraction = (offsetAnimation.value / constraints.maxWidth.coerceAtLeast(1)).fastCoerceIn(-1f, 1f)
-                with(density) {
-                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
-                }
-            }
-        }
-
-        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
-        val animationScope = rememberCoroutineScope()
-        val reduceMotion = com.example.ui.theme.rememberReducedMotion()
-        var didDrag by remember { mutableStateOf(false) }
-
-        val dampedDragAnimation = remember(animationScope, tabsCount) {
-            DampedDragAnimation(
-                animationScope = animationScope,
-                initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
-                valueRange = 0f..(tabsCount - 1).toFloat(),
-                visibilityThreshold = 0.001f,
+        val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val trackWidth = (constraints.maxWidth - with(density) { 8.dp.toPx() }).coerceAtLeast(1f)
+        val segmentWidth by rememberUpdatedState(trackWidth / tabs.size)
+        val direction by rememberUpdatedState(if (ltr) 1f else -1f)
+        val indicator = remember(scope, tabs.size) {
+            com.kyant.backdrop.catalog.utils.DampedDragAnimation(
+                animationScope = scope,
+                initialValue = selected.toFloat(),
+                valueRange = 0f..tabs.lastIndex.toFloat(),
+                visibilityThreshold = .001f,
                 initialScale = 1f,
-                pressedScale = SegmentedControlGeometry.PRESSED_SCALE_TARGET,
+                pressedScale = 1.08f,
                 onDragStarted = {},
                 onDragStopped = {
-                    // SNAP INCONDICIONAL: garante que NUNCA pare no meio!
-                    val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
-                    didDrag = false
-                    if (currentSelectedIndex != targetIndex) {
-                        currentOnTabSelected(targetIndex)
-                    }
-                    animateToValue(targetIndex.toFloat())
-                    animationScope.launch {
-                        if (reduceMotion()) {
-                            offsetAnimation.snapTo(0f)
-                        } else {
-                            offsetAnimation.animateTo(
-                                0f,
-                                spring(1f, 300f, 0.5f)
-                            )
-                        }
-                    }
+                    val next = targetValue.roundToInt().coerceIn(tabs.indices)
+                    if (next != latestSelection) latestOnSelect(next)
+                    animateToValue(next.toFloat())
                 },
-                onDrag = { _, dragAmount ->
-                    if (!didDrag) {
-                        didDrag = dragAmount.x != 0f
-                    }
-                    updateValue(
-                        (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
-                            .fastCoerceIn(0f, (tabsCount - 1).toFloat())
-                    )
-                    animationScope.launch {
-                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
-                    }
-                },
-                reduceMotion = reduceMotion
+                onDrag = { _, delta -> updateValue(targetValue + delta.x / segmentWidth * direction) },
+                reduceMotion = reduced,
+                directTracking = true
             )
         }
-
-        LaunchedEffect(selectedIndex) {
-            val clamped = selectedIndex.coerceIn(0, tabsCount - 1).toFloat()
-            if (dampedDragAnimation.targetValue != clamped) {
-                dampedDragAnimation.animateToValue(clamped)
-            }
+        LaunchedEffect(selected) {
+            if (indicator.targetValue != selected.toFloat()) indicator.animateToValue(selected.toFloat())
         }
+        val track = if (glass) Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { ContinuousCapsule },
+            effects = { vibrancy(); blur(8.dp.toPx()) },
+            onDrawSurface = { drawRect(trackColor.copy(alpha = .45f)) }
+        ) else Modifier.background(trackColor, ContinuousCapsule)
 
-        val interactiveHighlight = remember(animationScope) {
-            com.kyant.backdrop.catalog.legacy.InteractiveHighlight(
-                animationScope = animationScope,
-                position = { size, _ ->
-                    Offset(
-                        if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset
-                        else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset,
-                        size.height / 2f
-                    )
-                },
-                reduceMotion = reduceMotion
-            )
-        }
-
-        val rowContent: @Composable RowScope.() -> Unit = {
-            tabs.forEachIndexed { index, title ->
-                Column(
-                    modifier = Modifier
-                        .clip(ContinuousCapsule)
-                        .pointerInput(dampedDragAnimation, index) {
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                dampedDragAnimation.press()
-                                val up = waitForUpOrCancellation()
-                                dampedDragAnimation.release()
-                            }
-                        }
-                        .selectable(
-                            selected = currentSelectedIndex == index,
-                            interactionSource = null,
-                            indication = null,
-                            role = androidx.compose.ui.semantics.Role.Tab,
-                            onClick = {
-                                currentOnTabSelected(index)
-                                animationScope.launch {
-                                    dampedDragAnimation.animateToValue(index.toFloat())
-                                }
-                            }
+        Box(Modifier.fillMaxWidth().then(track).then(if (tabs.size > 1) indicator.modifier else Modifier).padding(4.dp)) {
+            Box(Modifier.matchParentSize()) {
+                val shape = ContinuousCapsule
+                val thumb = if (glass) Modifier.drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { shape },
+                    effects = {
+                        if (settings.enableLensRefraction) lens(
+                            10.dp.toPx() * settings.glassIntensity,
+                            16.dp.toPx() * settings.glassIntensity,
+                            depthEffect = true,
+                            chromaticAberration = settings.enableChromaticAberration
                         )
-                        .fillMaxHeight()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
+                    },
+                    onDrawSurface = { drawRect(selectionColor.copy(alpha = .12f + .04f * indicator.pressProgress)) }
+                ) else Modifier.background(selectionColor.copy(alpha = .12f), shape)
+                Box(Modifier.fillMaxHeight().fillMaxWidth(1f / tabs.size).graphicsLayer {
+                    translationX = indicator.value * size.width * if (ltr) 1f else -1f
+                    scaleX = indicator.scaleX
+                    scaleY = indicator.scaleY
+                }.then(thumb))
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                tabs.forEachIndexed { index, label ->
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val icon = tabIcons?.getOrNull(index)
-                        if (icon != null) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = androidx.compose.material3.LocalContentColor.current,
-                                modifier = Modifier.size(16.dp)
+                        Modifier.weight(1f).heightIn(min = 40.dp).clip(ContinuousCapsule)
+                            .selectable(
+                                selected = index == selected,
+                                role = androidx.compose.ui.semantics.Role.Tab,
+                                onClick = { if (index != selected) onTabSelected(index) }
                             )
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+                    ) {
+                        if (density.fontScale <= 1.2f && tabs.size < 4) {
+                            tabIcons?.getOrNull(index)?.let {
+                                Icon(it, null, tint = palette.textPrimary, modifier = Modifier.size(14.dp))
+                            }
                         }
                         BasicText(
-                            text = title,
+                            label,
                             style = TextStyle(
-                                color = androidx.compose.material3.LocalContentColor.current,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
+                                color = palette.textPrimary,
+                                fontSize = if (tabs.size > 3) 12.sp else 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             ),
-                            maxLines = 1
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
         }
-
-        val trackBaseHighlightAlpha = if (isLightTheme) 0.55f else 0.42f
-
-        CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides contentColor
-        ) {
-            Row(
-                Modifier
-                    .graphicsLayer { translationX = panelOffset }
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { ContinuousCapsule },
-                        highlight = {
-                            Highlight.Default.copy(alpha = trackBaseHighlightAlpha)
-                        },
-                        effects = {
-                            vibrancy()
-                            blur(8f.dp.toPx())
-                            if (settings.enableLensRefraction && !settings.reduceTransparency) {
-                                lens(24f.dp.toPx() * settings.glassIntensity, 32f.dp.toPx() * settings.glassIntensity, depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
-                            }
-                        },
-                        layerBlock = {
-                            val progress = dampedDragAnimation.pressProgress
-                            val expandPx = SegmentedControlGeometry.TRACK_PRESS_EXPAND_DP.dp.toPx()
-                            scaleX = SegmentedControlGeometry.computeTrackScaleX(size.width, expandPx, progress)
-                            scaleY = SegmentedControlGeometry.computeTrackScaleY(size.height, expandPx, progress)
-                        },
-                        onDrawSurface = { drawRect(containerColor) }
-                    )
-                    .then(interactiveHighlight.modifier)
-                    .height(SegmentedControlGeometry.TRACK_HEIGHT_DP.dp)
-                    .fillMaxWidth()
-                    .padding(SegmentedControlGeometry.TRACK_INSET_DP.dp)
-                    .selectableGroup(),
-                verticalAlignment = Alignment.CenterVertically,
-                content = rowContent
-            )
-        }
-
-        Box(
-            Modifier
-                .padding(horizontal = SegmentedControlGeometry.TRACK_INSET_DP.dp)
-                .graphicsLayer {
-                    translationX =
-                        if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
-                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
-                }
-                .then(interactiveHighlight.gestureModifier)
-                .then(dampedDragAnimation.modifier)
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { ContinuousCapsule },
-                    highlight = {
-                        val progress = dampedDragAnimation.pressProgress
-                        Highlight.Default.copy(alpha = lerp(0.28f, 1f, progress))
-                    },
-                    shadow = {
-                        val progress = dampedDragAnimation.pressProgress
-                        Shadow(alpha = progress)
-                    },
-                    innerShadow = {
-                        val progress = dampedDragAnimation.pressProgress
-                        InnerShadow(radius = 6f.dp * progress, alpha = progress)
-                    },
-                    effects = {
-                        val progress = dampedDragAnimation.pressProgress
-                        val opticalProgress = 0.2f + 0.8f * progress
-                        if (opticalProgress > 0.005f) {
-                            val chromatic = !settings.reduceTransparency && settings.enableChromaticAberration
-                            if (settings.enableLensRefraction && !settings.reduceTransparency) {
-                                lens(
-                                    lerp(4f.dp.toPx(), 12f.dp.toPx(), progress) * settings.glassIntensity,
-                                    lerp(6f.dp.toPx(), 18f.dp.toPx(), progress) * settings.glassIntensity,
-                                    depthEffect = true,
-                                    chromaticAberration = chromatic
-                                )
-                            }
-                        }
-                    },
-                    layerBlock = {
-                        scaleX = SegmentedControlGeometry.computeLupaScaleX(
-                            indicatorWidthPx = size.width,
-                            expandWidthPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_WIDTH_DP.dp.toPx(),
-                            dampedScaleX = dampedDragAnimation.scaleX,
-                            velocity = dampedDragAnimation.velocity
-                        )
-                        scaleY = SegmentedControlGeometry.computeLupaScaleY(
-                            indicatorHeightPx = size.height,
-                            expandHeightPx = SegmentedControlGeometry.LUPA_PRESS_EXPAND_HEIGHT_DP.dp.toPx(),
-                            dampedScaleY = dampedDragAnimation.scaleY,
-                            velocity = dampedDragAnimation.velocity
-                        )
-                    },
-                    onDrawSurface = {
-                        val progress = dampedDragAnimation.pressProgress
-                        drawRect(
-                            if (isLightTheme) Color.Black.copy(alpha = 0.09f)
-                            else Color.White.copy(alpha = 0.14f),
-                            alpha = 1f - progress
-                        )
-                        drawRect(
-                            color = if (isLightTheme) Color.White.copy(alpha = 0.12f * progress)
-                            else Color.White.copy(alpha = 0.06f * progress)
-                        )
-                    }
-                )
-                .height(SegmentedControlGeometry.INDICATOR_REST_HEIGHT_DP.dp)
-                .fillMaxWidth(1f / tabsCount)
-        )
     }
 }
 

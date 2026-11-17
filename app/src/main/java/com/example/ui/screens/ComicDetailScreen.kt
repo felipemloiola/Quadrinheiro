@@ -18,7 +18,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.geometry.Rect
@@ -135,6 +134,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val curationState by curationViewModel.curation.state.collectAsStateWithLifecycle()
     LaunchedEffect(isComic, curationState.owner) { if (isComic) curationViewModel.curation.load() }
     var listToOpen by remember(curationState.owner, comic.id) { mutableStateOf<ComicList?>(null) }
+    var listComic by remember(curationState.owner, comic.id) { mutableStateOf<ComicEntry?>(null) }
     val currentReading = com.example.model.catalogEntryForEditing(comic, library)
     val readingPresentation = ComicReadingPresentation.from(currentReading)
     fun registerCurrent() {
@@ -156,7 +156,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
     Box(Modifier.fillMaxSize()) {
-    BoxWithConstraints(Modifier.fillMaxSize().then(if(expandedCover && !settings.reduceTransparency && !motion.reduced) Modifier.blur(16.dp) else Modifier).background(t.bgPrimary).testTag("comic_detail_page")) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
         val persistentBanner=detail?.banner.orEmpty().ifBlank {fallbackBanner}.ifBlank {if(isComic)effectiveCover else ""}
         val persistentHeroHeight=(maxWidth/1.85f).coerceIn(160.dp,260.dp)
         if (effectiveCover.isNotBlank() && !settings.reduceTransparency) {
@@ -258,13 +258,18 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 }
             } else {
                 val credits = (if (tab == 1) detail?.characters.orEmpty() else detail?.creators.orEmpty()).distinctBy { it.id }
-                if (detail?.creditsScope == "series") item { Text("Personagens e equipe da série", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp), fontSize = 12.sp) }
+                if (detail?.creditsScope == "series") item { Text("Esta ficha inclui créditos da série", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp), fontSize = 12.sp) }
                 if (detail?.creditsScope == "work") item { Text("Créditos de edição relacionada", color=t.textSecondary,modifier=Modifier.padding(horizontal=20.dp),fontSize=12.sp) }
                 itemsIndexed(credits, key = { _, it -> it.id }) { index, credit ->
                     val type = if (tab == 1) "character" else "person"
                     CreditRow(credit, type, autoLoad = index < 6) { openEntity(type, credit.id) }
                 }
-                if (!loading && credits.isEmpty()) item { Text("Ainda não há informações desta edição no catálogo.", color = t.textSecondary, modifier = Modifier.padding(horizontal = 20.dp)) }
+                if (!loading && credits.isEmpty()) item {
+                    Column(Modifier.padding(horizontal = 20.dp)) {
+                        Text("Ainda não há informações desta edição no catálogo.", color = t.textSecondary)
+                        TextButton(onClick = { editionPicker = true }) { Text("Escolher edição", color = t.accent) }
+                    }
+                }
             }
         }
         Row(Modifier.align(Alignment.TopStart).fillMaxWidth()
@@ -288,11 +293,24 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             }
         }
     }
-    if(expandedCover) ExpandedComicCover(effectiveCover,comic.displayTitle,coverBounds) {expandedCover=false}
+    if(expandedCover) ExpandedComicCover(effectiveCover,comic.displayTitle,coverBounds,inPlace=true) {expandedCover=false}
     }
     listToOpen?.let { selected ->
         val list = curationState.lists.firstOrNull { it.id == selected.id && !it.deleted }
-        if (list != null) ListDetailSheet(list, { listToOpen = null }, onComic = { next -> listToOpen = null; openComic(next) })
+        if (list != null) ListDetailSheet(list, { listToOpen = null }, onComic = { next -> listComic = next })
+    }
+    listComic?.let { selected ->
+        ComicDetailDialog(
+            selected, profile, library,
+            onClose = { listComic = null },
+            onRegister = { entry -> listComic = null; listToOpen = null; onRegister(entry) },
+            onCover = onCover,
+            onLogin = { listComic = null; listToOpen = null; onLogin() },
+            onShare = { listComic = null; listToOpen = null
+                onBack()
+                curationViewModel.openSocialShareSheet(SocialShareRequest(SocialShareCardType.COMPLETED_READING, selected))
+            }
+        )
     }
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->
         comic = comic.copy(externalId = edition.externalId, sourceLabel = edition.sourceLabel, publisher = edition.publisher.ifBlank { comic.publisher })
