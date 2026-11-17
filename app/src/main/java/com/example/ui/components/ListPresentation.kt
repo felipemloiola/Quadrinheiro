@@ -173,7 +173,7 @@ internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:
                                     Icon(Icons.Default.Check,null,tint=t.textPrimary,modifier=Modifier.fillMaxSize())
                                 }
                             }
-                            Text(entry.title,color=t.textPrimary,fontWeight=FontWeight.Medium,modifier=Modifier.fillMaxWidth().padding(top=10.dp),minLines=2,maxLines=2,overflow=TextOverflow.Ellipsis)
+                            Text(entry.title,color=t.textPrimary,fontSize=14.sp,lineHeight=20.sp,fontWeight=FontWeight.Medium,modifier=Modifier.fillMaxWidth().padding(top=10.dp),minLines=2,maxLines=2,overflow=TextOverflow.Ellipsis)
                         }
                     }
                     if(pair.size==1)Spacer(Modifier.weight(1f))

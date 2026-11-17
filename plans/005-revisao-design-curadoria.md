@@ -4,7 +4,7 @@ Revisão de 16/11/2026: escolha/recorte da capa, detalhe/editor/adição de list
 
 Referências estéticas: [Layout](https://developer.apple.com/design/human-interface-guidelines/layout), [Materials](https://developer.apple.com/design/human-interface-guidelines/materials), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) e [Pop-up buttons](https://developer.apple.com/design/human-interface-guidelines/pop-up-buttons). Controles e semântica seguem Android; não é certificação de conformidade com iOS.
 
-**Estado:** correções implementadas, testes automatizados aprovados e fluxo visual de capas conferido com vidro ativo após reiniciar o emulador no modo gráfico automático. A sessão apresentou ANRs no caminho gráfico emulado antes dessa verificação. Estabilidade prolongada e desempenho no aparelho físico não estão certificados.
+**Estado:** correções implementadas, testes automatizados e fluxo visual de capas conferido com vidro ativo no emulador e, adicionalmente, nos componentes de listas no Galaxy S23. A sessão emulada apresentou ANRs no caminho gráfico antes da verificação final. Estabilidade prolongada e orçamento de 8ms/120Hz não estão certificados.
 
 ## Achados e correções
 
@@ -52,6 +52,23 @@ O daemon Gradle ocioso foi encerrado para liberar memória. Foi tentada uma inic
 
 Após inicializar o AVD no modo automático e aguardar o boot, o fluxo real passou: biblioteca → detalhe da lista → editor → escolha de capa → retorno à biblioteca, sem salvar/aplicar alterações. Scripts design-review-restored-open.log e design-review-restored-visual.log terminaram sem erro; a captura final foi conferida e o processo permaneceu ativo. Os dados e o emulador foram preservados. Isso não prova correção definitiva do ANR observado sob a sessão anterior.
 
-Foi oferecida validação adicional no S23. A geometria, seleção e fonte efetiva estão cobertas por testes; a medição prolongada e a comparação física continuam pendentes.
+Foi oferecida e realizada a validação adicional no S23 descrita abaixo. A medição prolongada e a comparação de desempenho com/sem efeitos continuam pendentes.
 
 Sem certificação física de CPU/GPU, p95/p99, temperatura e bateria. A matriz visual de tablets e APIs 24/25/31/33+ não está integralmente executada; contratos unitários não substituem esses ensaios. Não publicar código ou APK nesta entrega.
+
+### Verificação adicional no Galaxy S23 (Android 17 / API 37)
+
+A instalação de distribuição existente foi preservada: a chave de assinatura correspondente não está disponível neste ambiente. Foi criada uma instalação de revisão separada, com nome distinto e dados sintéticos, usando os mesmos componentes de listas e o motor de vidro do repositório. Nenhuma conta, biblioteca ou preferência do aplicativo original foi copiada ou alterada. O dispositivo permaneceu com suas configurações de animação; manter a tela ligada foi restrito à Activity de revisão.
+
+No hardware, foram percorridos detalhe → menu de opções → editor → visibilidade → escolha → enquadramento nos temas claro e escuro, com transparência e movimento ativos. O slider alterou o zoom, o arraste moveu a arte e o gesto lateral de voltar retornou do recorte somente à escolha de capa. O retorno pelos demais níveis foi conferido sem aplicar/salvar alterações.
+
+Essa comparação revelou duas correções adicionais no código compartilhado:
+
+- O menu claro sobre arte escura perdia contraste. A superfície agora usa material regular com piso de opacidade para texto legível nos dois temas, respeitando o fallback opaco. O blur máximo fica em 20dp, sem nova captura nem animação contínua. Testes de pixels verificam contraste mínimo de 4,5:1 sobre fundos preto/branco na preferência de opacidade baixa.
+- A largura lógica de 360dp do S23 fazia o título de referência ocupar três linhas. A tipografia do seletor passou a 14sp/20sp, preservando a área uniforme de duas linhas e a escala de fonte configurada. Títulos arbitrariamente longos continuam com reticências e nome completo na semântica.
+
+As capturas, o harness e os APKs de revisão ficam somente em `.build-outputs/`, ignorados pelo Git. Esta validação cobre os componentes de listas isolados; não substitui o teste integral da distribuição, da ficha da HQ ou de sincronização com uma conta real. A coleta inicial de frames foi de um fluxo frio de debug sem baseline equivalente, portanto não fundamenta aprovação de fluidez/energia nem diagnóstico definitivo do emulador.
+
+Build final aprovado em `s23-review-card-width-build.log`. No S23, os nove cenários de `CurationGlassContrastTest`, `CurationDesignReviewTest` e `CurationMenuMotionTest` passaram (`s23-review/final-native.log`), incluindo os extremos de contraste e fonte efetiva de 160%. A primeira rodada havia passado oito de nove e revelou o corte do título na largura de 360dp; a segunda confirmou a correção, sem remover ou enfraquecer a asserção de overflow.
+
+A repetição visual final terminou sem erro nos scripts `s23-review/final-dark.log` e `s23-review/final-light.log`. Foram inspecionadas as capturas dos dois temas, cartões, visibilidade e botão Salvar em repouso. O processo de revisão permaneceu ativo, sem ANR observado nesse percurso. A instalação original manteve a versão e a data de atualização anteriores ao ensaio; o emulador continuou aberto.

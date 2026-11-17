@@ -78,6 +78,10 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val palette = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
     val dark = LocalIsDarkTheme.current
+    // Text-bearing menus need a regular material even over white/black artwork.
+    // Keep the opacity preference within a contrast-safe range for this surface.
+    val surfaceAlpha=if(settings.reduceTransparency)1f else
+        ((if(dark).80f else .86f)*settings.glassOpacity).coerceIn(if(dark).74f else .78f,.94f)
     val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 48.dp
     val hoverOffset by androidx.compose.animation.core.animateFloatAsState(
         targetValue = with(density) { (rowHeight + .5.dp).toPx() } * (hovered ?: 0),
@@ -121,10 +125,10 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
             .drawBackdrop(backdrop, shape = { ContinuousRoundedRectangle(26.dp) },
                 shadow = { Shadow(radius = 18.dp, alpha = 0.20f) },
                 effects = {
-                    if (!settings.reduceTransparency) { vibrancy(); blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 22f).dp.toPx()) }
+                    if (!settings.reduceTransparency) { vibrancy(); blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 20f).dp.toPx()) }
                     if (!settings.reduceTransparency && settings.enableLensRefraction) lens((24f * settings.glassIntensity).dp.toPx(), (42f * settings.glassIntensity).dp.toPx(), depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
                 },
-                onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = if (settings.reduceTransparency) 1f else ((if (dark) .28f else .24f) * settings.glassOpacity).coerceIn(.12f, .86f))) })
+                onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = surfaceAlpha)) })
             .clip(RoundedCornerShape(26.dp))
             .pointerInput(request.id) {
                 awaitEachGesture {
