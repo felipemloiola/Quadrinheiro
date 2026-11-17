@@ -94,7 +94,15 @@ open class MultiApiSearchEngine {
         } catch (_: Exception) {
         }
     }
-    open fun searchOnlineProgressive(query: String, searchLanguage: String = "PT", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> = channelFlow {
+    open fun searchOnlineProgressive(query: String, searchLanguage: String = "PT", provider: String = "MULTI", hdCovers: Boolean = true): Flow<List<ComicEntry>> =
+        search(query, searchLanguage, provider, hdCovers, reportUnavailable = false)
+
+    internal fun searchForUser(query: String, searchLanguage: String, provider: String, hdCovers: Boolean): Flow<List<ComicEntry>> =
+        search(query, searchLanguage, provider, hdCovers, reportUnavailable = true)
+
+    private fun search(
+        query: String, searchLanguage: String, provider: String, hdCovers: Boolean, reportUnavailable: Boolean
+    ): Flow<List<ComicEntry>> = channelFlow {
         val literal = query.trim().take(100)
         if (literal.length < 2) { send(emptyList()); return@channelFlow }
         val key = searchCacheKey(literal, searchLanguage, provider, hdCovers)
@@ -104,9 +112,11 @@ open class MultiApiSearchEngine {
         val mutex = Mutex(); val providers = Semaphore(4)
         var pool = emptyList<ComicEntry>()
         var emitted = emptyList<ComicEntry>()
+        var sourceAnswered = false
         suspend fun accept(batch: List<ComicEntry>) {
-            if (batch.isEmpty()) return
             mutex.withLock {
+                sourceAnswered = true
+                if (batch.isEmpty()) return
                 pool = CatalogSearchPolicy.unique(pool + batch.filter(PortugueseSearchPolicy::accepts).map(AdditionalCatalogSources::localize)).take(120)
                 emitted = CatalogWorkIdentity.preferred(CatalogSearchPolicy.ranked(pool, variants, searchLanguage)).take(60)
                 ModernCatalog.accept(emitted); send(emitted)
@@ -121,6 +131,7 @@ open class MultiApiSearchEngine {
                 }
             } }
         }
+        if (reportUnavailable && !sourceAnswered) throw java.io.IOException("Catálogo indisponível")
         if (emitted.isEmpty()) send(emptyList()) else synchronized(cache) { cache[key] = emitted }
     }
     data class CatalogPage(val items: List<ComicEntry>, val hasMore: Boolean)

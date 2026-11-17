@@ -1,6 +1,8 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.animation.core.Animatable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
@@ -105,7 +107,15 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         val menuHost=remember {LiquidGlassMenuHostState()}
         val menuBackdrop=if(menus)rememberLayerBackdrop() else null
         val fraction=if(compact || childPage)1f else .92f
-        val sheet=rememberFluidSheet(fraction,{panel.complete(onClose)},{},backEnabled=!busy && onCloseRequest==null && panel.request==0 && menuHost.currentRequest==null)
+        val sheet = rememberFluidSheet(
+            initialHeightFraction = fraction,
+            onDismiss = { panel.complete(onClose) },
+            backEnabled = !busy && onCloseRequest == null && panel.request == 0 && menuHost.currentRequest == null,
+            onDragDismissRequest = {
+                if (onCloseRequest != null) requestClose.value()
+                onCloseRequest == null && !busy && panel.request == 0
+            }
+        )
         val view=LocalView.current
         DisposableEffect(view){(view.parent as? DialogWindowProvider)?.window?.let {it.setWindowAnimations(0);it.setDimAmount(0f)};onDispose{}}
         SideEffect {requestClose.value={if(!busy && panel.request==0){if(onCloseRequest!=null)onCloseRequest() else panel.close()}}}
@@ -168,7 +178,7 @@ internal fun CurationGlassAction(label:String,onClick:()->Unit,modifier:Modifier
 internal fun CurationError(controller: CurationController) {
     val state by controller.state.collectAsStateWithLifecycle()
     state.error?.let { Text(it,color=LocalIOS27Theme.current.textSecondary,modifier=Modifier.padding(12.dp).semantics { liveRegion=LiveRegionMode.Polite }) }
-    if(state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth(),color=LocalIOS27Theme.current.accent)
+    if(state.loading || state.saving) LoadingLine(Modifier.fillMaxWidth(),color=LocalIOS27Theme.current.accent)
 }
 
 @Composable
@@ -326,6 +336,8 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
     var note by remember {mutableStateOf("")}
     var dragging by remember {mutableStateOf<String?>(null)}
     var dragOffset by remember {mutableFloatStateOf(0f)}
+    var settlingKey by remember { mutableStateOf<String?>(null) }
+    var settlingOffset by remember { mutableFloatStateOf(0f) }
     var dragStartCenter by remember {mutableFloatStateOf(0f)}
     val motion=LocalAppMotion.current
     val editorListState=rememberLazyListState()
@@ -357,6 +369,38 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
             val index = latest.items.indexOfFirst { it.key == target.key }
             if (index >= 0) move(key, index)
         }
+    }
+    val edgeZone = with(LocalDensity.current) { 56.dp.toPx() }
+    val maxScrollSpeed = with(LocalDensity.current) { 760.dp.toPx() }
+    LaunchedEffect(dragging) {
+        val key = dragging ?: return@LaunchedEffect
+        var previousFrame = withFrameNanos { it }
+        while (true) {
+            val frame = withFrameNanos { it }
+            val seconds = ((frame - previousFrame) / 1_000_000_000f).coerceIn(0f, .032f)
+            previousFrame = frame
+            val layout = editorListState.layoutInfo
+            val center = dragStartCenter + dragOffset
+            val top = layout.viewportStartOffset + edgeZone
+            val bottom = layout.viewportEndOffset - edgeZone
+            val pressure = when {
+                center < top -> ((center - top) / edgeZone).coerceAtLeast(-1f)
+                center > bottom -> ((center - bottom) / edgeZone).coerceAtMost(1f)
+                else -> 0f
+            }
+            if (pressure != 0f && editorListState.scrollBy(pressure * maxScrollSpeed * seconds) != 0f) {
+                moveToDragTarget(key)
+            }
+        }
+    }
+    LaunchedEffect(settlingKey, motion.reduced) {
+        if (settlingKey != null && !motion.reduced) {
+            Animatable(settlingOffset).animateTo(0f, motion.spring(stiffness = 650f)) {
+                settlingOffset = value
+            }
+        }
+        settlingKey = null
+        settlingOffset = 0f
     }
     fun closeDraft() { if(state.saving) return;scope.launch {if(controller.preserveDraft(draft,owner)) editorPanel.close() else closeFailure++} }
     CurationSheet(if(initial.revision==0L) "Criar lista" else "Editar lista",onClose,busy=state.saving,error=state.error,reopenKey=closeFailure,panel=editorPanel,menus=true,
@@ -405,17 +449,26 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
             }
             itemsIndexed(draft.items,key={_, entry -> entry.key},contentType={_, _ -> "comic"}) { index, entry ->
                 Column(Modifier.fillMaxWidth()
-                    .animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(motion.reduced || dragging==entry.key)null else motion.spring(stiffness=500f))
-                    .zIndex(if(dragging==entry.key)1f else 0f)
-                    .then(if (dragging == entry.key) Modifier.graphicsLayer {
-                        val row=editorListState.layoutInfo.visibleItemsInfo.firstOrNull {it.key==entry.key}
-                        translationY=if(row!=null)dragStartCenter+dragOffset-(row.offset+row.size/2f) else 0f
-                    } else Modifier)
+                    .animateItem(fadeInSpec=null,fadeOutSpec=null,placementSpec=if(motion.reduced || dragging==entry.key || settlingKey==entry.key)null else motion.spring(stiffness=500f))
+                    .zIndex(if(dragging==entry.key || settlingKey==entry.key)1f else 0f)
+                    .graphicsLayer {
+                        translationY = when (entry.key) {
+                            dragging -> editorListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == entry.key }
+                                ?.let { dragStartCenter + dragOffset - (it.offset + it.size / 2f) } ?: 0f
+                            settlingKey -> settlingOffset
+                            else -> 0f
+                        }
+                    }
                     .padding(vertical=8.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Box(Modifier.size(48.dp).semantics {contentDescription="Arrastar ${entry.title} para reordenar"}
+                        Box(Modifier.size(48.dp).semantics { contentDescription = "Reordenar ${entry.title}" }
+                            .clickable(enabled = !state.saving, role = Role.Button, onClickLabel = "Mover para posição") {
+                                moving = entry
+                                position = "${index + 1}"
+                            }
                             .pointerInput(entry.key,state.saving) {if(!state.saving)detectDragGesturesAfterLongPress(
                                 onDragStart={
+                                    settlingKey = null
                                     dragging=entry.key;dragOffset=0f
                                     val row=editorListState.layoutInfo.visibleItemsInfo.firstOrNull {it.key==entry.key}
                                     dragStartCenter=(row?.offset ?: 0)+(row?.size ?: 0)/2f
@@ -428,6 +481,11 @@ internal fun ListEditor(initial: ComicList, library: List<ComicEntry>, controlle
                                 onDragCancel={dragging=null;dragOffset=0f},
                                 onDragEnd={
                                     moveToDragTarget(entry.key)
+                                    val row = editorListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == entry.key }
+                                    if (row != null && !motion.reduced) {
+                                        settlingOffset = dragStartCenter + dragOffset - (row.offset + row.size / 2f)
+                                        settlingKey = entry.key
+                                    }
                                     dragging=null;dragOffset=0f
                                 })},contentAlignment=Alignment.Center) {
                             Icon(Icons.Default.DragHandle,null,tint=t.textSecondary)

@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.platform.LocalDensity
@@ -363,6 +364,7 @@ fun CatalogSheetModal(
         modifier = Modifier
             .fillMaxSize()
             .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
+            .imePadding()
             .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {
@@ -430,6 +432,8 @@ fun CatalogSheetModal(
                         onClose = { sheet.dismiss() },
                         onShare = { onShareComic(buildFinalComicForSave(), SocialShareCardType.COMPLETED_READING, null) },
                         onSave = { saveDraft() },
+                        expandLabel = if (isSheetExpanded) "Recolher painel" else "Expandir painel",
+                        onToggleExpand = onToggleExpand,
                         modifier = sheet.dragModifier
                     )
 
@@ -785,13 +789,14 @@ fun ManualEntrySheetModal(
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
     val shape = remember { RoundedRectangle(24f.dp) }
-    val sheet = rememberFluidSheet(onDismiss = onDismiss, onExpand = {})
+    val sheet = rememberFluidSheet(onDismiss = onDismiss)
     val listState = rememberLazyListState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) 0.14f else 0.24f) * sheet.scrimFraction)) }
+            .imePadding()
             .clickable { sheet.dismiss() },
         contentAlignment = Alignment.BottomCenter
     ) {

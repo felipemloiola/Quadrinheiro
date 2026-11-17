@@ -34,7 +34,7 @@ internal fun PublicListsSheet(onClose:()->Unit,onComic:(ComicEntry)->Unit) {
     }}
     LaunchedEffect(Unit){load()}
     CurationSheet("Listas públicas",onClose) {
-        if(loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if(loading) LoadingLine(Modifier.fillMaxWidth())
         if(error) {
             Text("Não foi possível carregar as listas públicas.",color=theme.textSecondary,modifier=Modifier.padding(16.dp))
             TextButton(onClick=::load){Text("Tentar novamente")}

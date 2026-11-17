@@ -75,7 +75,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -1205,7 +1204,7 @@ fun SocialShareCardSheetModal(
     onDismiss: () -> Unit
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val shareSheet = rememberFluidSheet(initialHeightFraction = 1f, onDismiss = onDismiss, onExpand = {})
+    val shareSheet = rememberFluidSheet(initialHeightFraction = 1f, onDismiss = onDismiss)
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1744,7 +1743,7 @@ fun SocialShareCardSheetModal(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     if (isExporting) {
-                        CircularProgressIndicator(
+                        LoadingSpinner(
                             modifier = Modifier.size(18.dp),
                             color = s.accentText,
                             strokeWidth = 2.dp

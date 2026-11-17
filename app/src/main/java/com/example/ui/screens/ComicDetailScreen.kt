@@ -203,7 +203,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             }
             if (isComic) item { DetailTabs(tab, { tab = it }) }
             if (isComic && tab == 0) item { ComicReadingSummary(readingPresentation, ::registerCurrent) }
-            if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = t.accent) }
+            if (loading) item { LoadingLine(Modifier.fillMaxWidth().padding(horizontal = 20.dp), color = t.accent) }
             if (failed) item { TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 12.dp)) { Text("Tentar carregar informações novamente", color = t.accent) } }
             if (!isComic || tab == 0) {
                 val candidateSynopsis = translatedSynopsis.ifBlank {synopsisSource}
@@ -377,7 +377,7 @@ private fun EditionChooser(initialQuery: String, onClose: () -> Unit, onChoose: 
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 620.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item { SectionHeading("Edição", "Escolha a edição correspondente para ver personagens e equipe.") }
             item { AppleTextField(query, { query = it.take(100) }, "Buscar edição") }
-            if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = t.accent) }
+            if (busy) item { LoadingLine(Modifier.fillMaxWidth(), color = t.accent) }
             if (failed) item { Text("Não foi possível buscar. Tente outro termo.", color = t.textSecondary) }
             items(entries.distinctBy { it.id }, key = { it.id }) { entry ->
                 Row(Modifier.fillMaxWidth().clickable { onChoose(entry) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {

@@ -185,7 +185,7 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                             }
                         }
                         if (imageBusy) {
-                            CircularProgressIndicator(
+                            LoadingSpinner(
                                 Modifier.align(Alignment.Center).size(24.dp),
                                 color = theme.accent
                             )

@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.LoadingSpinner
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -64,7 +66,7 @@ internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(Comi
                 }}
                 item(span={GridItemSpan(3)}){
                     Box(Modifier.fillMaxWidth().padding(vertical=20.dp),contentAlignment=androidx.compose.ui.Alignment.Center){
-                        if(busy)CircularProgressIndicator(Modifier.size(24.dp),color=t.accent,strokeWidth=2.dp)
+                        if(busy)LoadingSpinner(Modifier.size(24.dp),color=t.accent,strokeWidth=2.dp)
                         else if(error||(!window.autoLoad&&window.hasMore))TextButton(onClick={load()}){Text(if(error)"Tentar novamente" else "Carregar mais",color=t.accent)}
                         else if(entries.isEmpty())Text("Nenhuma edição disponível agora.",color=t.textSecondary)
                     }

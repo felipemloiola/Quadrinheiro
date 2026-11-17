@@ -320,6 +320,9 @@ class QuadrinheiroViewModel(
 
     private val _isSearchingApi = MutableStateFlow(false)
     val isSearchingApi: StateFlow<Boolean> = _isSearchingApi.asStateFlow()
+    private val _searchUnavailable = MutableStateFlow(false)
+    val searchUnavailable: StateFlow<Boolean> = _searchUnavailable.asStateFlow()
+    private var activeSearchTerm = ""
 
     private val _searchSourceFilter = MutableStateFlow("ALL") // "ALL" | "ONLINE" | "LOCAL"
     val searchSourceFilter: StateFlow<String> = _searchSourceFilter.asStateFlow()
@@ -2092,12 +2095,17 @@ class QuadrinheiroViewModel(
 
     internal fun searchCatalogForList(query: String): kotlinx.coroutines.flow.Flow<List<ComicEntry>> {
         val settings = _appSettings.value
-        return searchEngine.searchOnlineProgressive(query, "PT", settings.searchProvider, settings.hdCovers)
+        return searchEngine.searchForUser(query, "PT", settings.searchProvider, settings.hdCovers)
     }
 
     private fun triggerOnlineSearchIfNeeded(immediate: Boolean = false) {
         searchJob?.cancel()
         val q = _searchQuery.value.trim()
+        _searchUnavailable.value = false
+        if (q != activeSearchTerm) {
+            activeSearchTerm = q
+            _remoteResults.value = emptyList()
+        }
         if (q.isEmpty()) {
             _remoteResults.value = emptyList()
             _isSearchingApi.value = false
@@ -2118,12 +2126,14 @@ class QuadrinheiroViewModel(
             if (!immediate) {
                 delay(260)
             }
-            searchEngine.searchOnlineProgressive(
+            searchEngine.searchForUser(
                 query = q,
                 provider = s.searchProvider,
                 searchLanguage = "PT",
                 hdCovers = s.hdCovers
-            ).collectLatest { list ->
+            ).catch {
+                _searchUnavailable.value = true
+            }.collectLatest { list ->
                 _remoteResults.value = list
                 if (list.isNotEmpty()) {
                     _isSearchingApi.value = false

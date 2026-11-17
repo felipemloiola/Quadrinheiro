@@ -1,5 +1,10 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -199,15 +204,15 @@ fun ProfilePhotoCropModal(
     val srcH = bitmap.height.toFloat().coerceAtLeast(1f)
     val baseScale = max(circleDiameterPx / srcW, circleDiameterPx / srcH)
 
-    fun clampOffset(candidate: Offset, zoom: Float): Offset {
+    fun positionLimit(zoom: Float): Offset {
         val scaledW = srcW * baseScale * zoom
         val scaledH = srcH * baseScale * zoom
         val maxDx = max(0f, (scaledW - circleDiameterPx) / 2f)
         val maxDy = max(0f, (scaledH - circleDiameterPx) / 2f)
-        return Offset(
-            x = candidate.x.coerceIn(-maxDx, maxDx),
-            y = candidate.y.coerceIn(-maxDy, maxDy)
-        )
+        return Offset(maxDx, maxDy)
+    }
+    fun clampOffset(candidate: Offset, zoom: Float): Offset = positionLimit(zoom).let {
+        Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
     }
 
     Dialog(
@@ -228,7 +233,8 @@ fun ProfilePhotoCropModal(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 460.dp),
+                    .widthIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -502,6 +508,7 @@ fun ProfilePhotoCropModal(
                         Slider(
                             value = userZoom,
                             onValueChange = { nextZoom ->
+                                settleJob?.cancel()
                                 val clampedZoom = nextZoom.coerceIn(1f, 4f)
                                 userZoom = clampedZoom
                                 panOffset = clampOffset(panOffset, clampedZoom)
@@ -514,10 +521,16 @@ fun ProfilePhotoCropModal(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .semantics { contentDescription = "Zoom da foto" }
                                 .testTag("avatar_zoom_slider")
                         )
                     }
                 }
+
+                CropPositionControls(panOffset, positionLimit(userZoom), {
+                    settleJob?.cancel()
+                    panOffset = it
+                }, Color.White)
 
                 // Botões de Ação: Cancelar e Salvar Foto
                 Row(

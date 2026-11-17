@@ -9,6 +9,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +22,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -51,13 +55,16 @@ fun BannerCropModal(bitmap: Bitmap,onDismiss:()->Unit,onConfirm:(String)->Unit) 
     val t=LocalIOS27Theme.current;val scope=rememberCoroutineScope()
     var zoom by remember { mutableFloatStateOf(1f) };var offset by remember { mutableStateOf(Offset.Zero) }
     var viewport by remember { mutableStateOf(IntSize(1,1)) };var busy by remember { mutableStateOf(false) }
-    fun clamp(candidate:Offset,z:Float):Offset {
+    fun positionLimit(z: Float): Offset {
         val base=max(viewport.width.toFloat()/bitmap.width,viewport.height.toFloat()/bitmap.height)
         val dx=max(0f,(bitmap.width*base*z-viewport.width)/2f);val dy=max(0f,(bitmap.height*base*z-viewport.height)/2f)
-        return Offset(candidate.x.coerceIn(-dx,dx),candidate.y.coerceIn(-dy,dy))
+        return Offset(dx, dy)
+    }
+    fun clamp(candidate: Offset, z: Float): Offset = positionLimit(z).let {
+        Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
     }
     Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.fillMaxWidth().background(t.bgPrimary).padding(20.dp).testTag("banner_crop"),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.fillMaxWidth().background(t.bgPrimary).verticalScroll(rememberScrollState()).padding(20.dp).testTag("banner_crop"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text("Ajustar banner",style=MaterialTheme.typography.titleLarge,color=t.textPrimary)
             Box(Modifier.fillMaxWidth().aspectRatio(3f).onSizeChanged { viewport=it }.pointerInput(bitmap) {
                 detectTransformGestures { centroid,pan,change,_ ->
@@ -68,7 +75,9 @@ fun BannerCropModal(bitmap: Bitmap,onDismiss:()->Unit,onConfirm:(String)->Unit) 
                 Image(bitmap.asImageBitmap(),"Prévia do banner",Modifier.fillMaxSize().graphicsLayer { scaleX=zoom;scaleY=zoom;translationX=offset.x;translationY=offset.y },contentScale=ContentScale.Crop)
             }
             Text("Arraste para enquadrar. Use dois dedos para ampliar.",style=MaterialTheme.typography.bodySmall,color=t.textSecondary)
-            Slider(zoom,{zoom=it;offset=clamp(offset,it)},valueRange=1f..4f)
+            Slider(zoom,{zoom=it;offset=clamp(offset,it)}, valueRange=1f..4f, enabled = !busy,
+                modifier = Modifier.semantics { contentDescription = "Zoom do banner" })
+            CropPositionControls(offset, positionLimit(zoom), { offset = it }, t.textPrimary, enabled = !busy)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                 TextButton(onClick=onDismiss,enabled=!busy){Text("Cancelar",color=t.textSecondary)}
                 TextButton(onClick={zoom=1f;offset=Offset.Zero},enabled=!busy){Text("Repor",color=t.textSecondary)}

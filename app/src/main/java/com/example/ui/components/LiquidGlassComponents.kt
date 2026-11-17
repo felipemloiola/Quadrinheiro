@@ -1619,6 +1619,7 @@ fun LiquidGlassSegmentedControl(
             tabs.forEachIndexed { index, title ->
                 LiquidBottomTab(
                     onClick = { onTabSelected(index) },
+                    selected = index == selectedIndex,
                     modifier = Modifier.semantics { stateDescription = if (index == selectedIndex) "Selecionado" else "Não selecionado" }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

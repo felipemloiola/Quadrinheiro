@@ -162,7 +162,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (failedRefresh != null) Text("Não foi possível carregar as publicações.", color = t.textSecondary)
-                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp) }
+                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { LoadingSpinner(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp) }
                     else if (!busy && (more || failedRefresh != null)) TextButton(onClick = { load(failedRefresh ?: false) }) {
                         Text(if (failedRefresh == null) "Ver mais" else "Tentar novamente", color = t.accent)
                     }
@@ -272,7 +272,7 @@ private fun CommunityComments(
                 }
                 item {
                     if (deleteFailed) Text("Não foi possível excluir o comentário.", color = t.textSecondary)
-                    if (loading) CircularProgressIndicator(Modifier.size(24.dp), color = t.accent)
+                    if (loading) LoadingSpinner(Modifier.size(24.dp), color = t.accent)
                     else if (commentLoadFailure != null) {
                         Text("Não foi possível carregar os comentários.", color = t.textSecondary)
                         TextButton(onClick = { load(commentLoadFailure ?: false) }) { Text("Tentar novamente", color = t.accent) }

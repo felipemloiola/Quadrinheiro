@@ -8,8 +8,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -17,6 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -33,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
@@ -92,7 +98,17 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
     var closing by remember {mutableStateOf(false)}
     var viewport by remember {mutableStateOf<Rect?>(null)}
     var scale by remember(url){mutableFloatStateOf(1f)}
-    var offset by remember(url){mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)}
+    var offset by remember(url){mutableStateOf(Offset.Zero)}
+    var coverSize by remember { mutableStateOf(IntSize.Zero) }
+    var adjusting by remember { mutableStateOf(false) }
+    fun positionLimit(zoom: Float) = Offset(coverSize.width * (zoom - 1f) / 2f, coverSize.height * (zoom - 1f) / 2f)
+    fun clamp(candidate: Offset, zoom: Float): Offset = positionLimit(zoom).let {
+        Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
+    }
+    fun setZoom(zoom: Float) {
+        scale = zoom.coerceIn(1f, 5f)
+        offset = clamp(offset, scale)
+    }
     LaunchedEffect(closing) {
         progress.animateTo(if(closing)0f else 1f,motion.tween(if(closing)150 else 240))
         if(closing)onClose()
@@ -104,6 +120,7 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
             .background(Color.Black.copy(alpha=if(reduceTransparency).96f else .72f)).clickable(onClickLabel="Fechar capa ampliada") {closing=true})
         val width=minOf(maxWidth*.82f,maxHeight*.74f*2f/3f)
         Box(Modifier.align(Alignment.Center).width(width).aspectRatio(2f/3f)
+            .onSizeChanged { coverSize = it; offset = clamp(offset, scale) }
             .graphicsLayer {
                 val p=progress.value
                 val area=viewport
@@ -112,25 +129,41 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,onClos
                 val startX=if(origin!=null && destination!=null)origin.width/destination.width else .82f
                 val startY=if(origin!=null && destination!=null)origin.height/destination.height else .82f
                 scaleX=(startX+(1-startX)*p)*scale;scaleY=(startY+(1-startY)*p)*scale
+                translationX = offset.x
+                translationY = offset.y
                 if(origin!=null && destination!=null) {
-                    translationX=(origin.center.x-destination.center.x)*(1-p)+offset.x
-                    translationY=(origin.center.y-destination.center.y)*(1-p)+offset.y
+                    translationX += (origin.center.x-destination.center.x)*(1-p)
+                    translationY += (origin.center.y-destination.center.y)*(1-p)
                 }
                 alpha=p.coerceIn(0f,1f)
             }.clip(RoundedCornerShape(12.dp)).clipToBounds().semantics(mergeDescendants=true) {
                 stateDescription="Ampliação de ${(scale*100).toInt()}%"
                 customActions=listOf(
-                    CustomAccessibilityAction("Ampliar capa"){scale=(scale+.5f).coerceAtMost(5f);true},
-                    CustomAccessibilityAction("Reduzir capa"){scale=(scale-.5f).coerceAtLeast(1f);if(scale==1f)offset=androidx.compose.ui.geometry.Offset.Zero;true},
-                    CustomAccessibilityAction("Redefinir ampliação"){scale=1f;offset=androidx.compose.ui.geometry.Offset.Zero;true})
+                    CustomAccessibilityAction("Ampliar capa"){setZoom(scale + .5f);true},
+                    CustomAccessibilityAction("Reduzir capa"){setZoom(scale - .5f);true},
+                    CustomAccessibilityAction("Redefinir ampliação"){setZoom(1f);true})
             }
-                .pointerInput(url){detectTransformGestures {_,pan,zoom,_ ->
-                    scale=(scale*zoom).coerceIn(1f,5f)
-                    offset=if(scale==1f) androidx.compose.ui.geometry.Offset.Zero else androidx.compose.ui.geometry.Offset((offset.x+pan.x).coerceIn(-size.width*(scale-1)/2,size.width*(scale-1)/2),(offset.y+pan.y).coerceIn(-size.height*(scale-1)/2,size.height*(scale-1)/2))
+                .pointerInput(url){detectTransformGestures {centroid,pan,zoom,_ ->
+                    val next = (scale * zoom).coerceIn(1f, 5f)
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    offset = clamp(zoomAroundCentroid(offset, centroid - center, pan, scale, next), next)
+                    scale = next
                 }}) {
             AsyncImage(url,title,Modifier.fillMaxSize(),contentScale=ContentScale.Fit)
         }
         IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp).background(Color.White.copy(alpha=.12f),RoundedCornerShape(50))) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
+        Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp)
+            .widthIn(max = 360.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF16161D))
+            .padding(horizontal = 12.dp)) {
+            TextButton(onClick = { adjusting = !adjusting }) {
+                Text(if (adjusting) "Ocultar ajustes" else "Ajustar ampliação", color = Color.White)
+            }
+            if (adjusting) {
+                Slider(scale, ::setZoom, valueRange = 1f..5f,
+                    modifier = Modifier.semantics { contentDescription = "Zoom da capa" })
+                CropPositionControls(offset, positionLimit(scale), { offset = it }, Color.White)
+            }
+        }
     }
     }
 }

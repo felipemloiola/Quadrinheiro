@@ -4,8 +4,10 @@ import androidx.compose.runtime.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.model.AppSettings
 import com.example.ui.components.*
@@ -18,6 +20,30 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CurationMenuMotionTest {
     @get:Rule val compose=createComposeRule()
+
+    @Test fun draggingAnEditedPanelRequestsConfirmationBeforeClosing() {
+        var confirmations = 0
+        var dismissals = 0
+        compose.setContent {
+            QuadrinheiroTheme(AppSettings(reduceMotion = true, reduceTransparency = true)) {
+                CurationSheet(
+                    title = "Editar lista",
+                    onClose = { dismissals++ },
+                    onCloseRequest = { confirmations++ }
+                ) {
+                    androidx.compose.material3.Text("Rascunho em edição")
+                }
+            }
+        }
+        compose.onNodeWithText("Editar lista").performTouchInput {
+            swipe(center, center + Offset(0f, 300.dp.toPx()), durationMillis = 250)
+        }
+        compose.onNodeWithText("Rascunho em edição").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(1, confirmations)
+            assertEquals(0, dismissals)
+        }
+    }
 
     @Test fun panelStaysAliveDuringExitAndClosesOnlyOnce() {
         compose.mainClock.autoAdvance=false

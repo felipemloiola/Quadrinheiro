@@ -30,9 +30,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -54,7 +52,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.catalog.legacy.DampedDragAnimation
+import com.kyant.backdrop.catalog.utils.DampedDragAnimation
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
@@ -137,7 +135,8 @@ fun LiquidSlider(
                 onDragStarted = {},
                 onDragStopped = {},
                 onDrag = { _, _ -> },
-                reduceMotion = reduceMotion
+                reduceMotion = reduceMotion,
+                directTracking = true
             )
         }
 
@@ -172,88 +171,74 @@ fun LiquidSlider(
                 )
                 .pointerInput(Unit) {
                     awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-
+                        val down = awaitFirstDown()
                         val anim = currentDampedAnim
-                        val rng = currentValueRange
-                        val span = (rng.endInclusive - rng.start).coerceAtLeast(0.0001f)
-                        val uWidth = currentUsableTrackWidth
-                        val tInset = currentTrackInsetPx
-                        val tWidth = currentThumbWidthPx
+                        val range = currentValueRange
+                        val usableWidth = currentUsableTrackWidth
+                        val trackInset = currentTrackInsetPx
+                        val thumbWidth = currentThumbWidthPx
                         val ltr = currentIsLtr
+                        val direction = if (ltr) 1f else -1f
+                        val touchSlop = viewConfiguration.touchSlop
 
-                        val currentProgress = anim.progress.fastCoerceIn(0f, 1f)
-                        val visualProgress = if (ltr) currentProgress else 1f - currentProgress
-                        val thumbLeftPx = tInset + uWidth * visualProgress
-                        val thumbRightPx = thumbLeftPx + tWidth
-                        val hitSlopPx = tWidth * 0.35f
+                        fun valueAt(x: Float): Float {
+                            val progress = ((x - trackInset - thumbWidth / 2) / usableWidth).coerceIn(0f, 1f)
+                            return lerp(range.start, range.endInclusive, if (ltr) progress else 1f - progress)
+                        }
 
-                        isDraggingNow = true
-                        SliderTouchLock.isAnySliderActive = true
-                        view.parent?.requestDisallowInterceptTouchEvent(true)
-                        anim.press()
+                        val initialValue = anim.value.coerceIn(range)
+                        val visualProgress = if (ltr) anim.progress else 1f - anim.progress
+                        val thumbLeft = trackInset + usableWidth * visualProgress
+                        val thumbSlop = thumbWidth * 0.35f
+                        val onThumb = down.position.x in (thumbLeft - thumbSlop)..(thumbLeft + thumbWidth + thumbSlop)
+                        var horizontalDrag = false
 
                         try {
-                            // Se o toque inicial foi fora do thumb (direto na barra), move suavemente até o ponto tocado
-                            if (down.position.x < thumbLeftPx - hitSlopPx || down.position.x > thumbRightPx + hitSlopPx) {
-                                val rawProgress = ((down.position.x - tInset - tWidth / 2f) / uWidth)
-                                    .fastCoerceIn(0f, 1f)
-                                val effectiveProgress = if (ltr) rawProgress else 1f - rawProgress
-                                val tappedValue = lerp(rng.start, rng.endInclusive, effectiveProgress)
-                                    .fastCoerceIn(rng.start, rng.endInclusive)
-                                anim.updateValue(tappedValue)
-                                currentOnValueChange(tappedValue)
-                            }
-
-                            var pointerId = down.id
                             while (true) {
-                                // PointerEventPass.Initial garante captura e consumo antes de qualquer container pai (LazyColumn, Scrollable, etc.)
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.fastFirstOrNull { it.id == down.id } ?: break
+                                if (change.isConsumed || event.changes.any { it.id != down.id && it.pressed }) break
 
-                                val change = event.changes.fastFirstOrNull { it.id == pointerId }
-                                    ?: event.changes.fastFirstOrNull { it.pressed }
-                                    ?: break
-
-                                pointerId = change.id
-                                if (change.changedToUpIgnoreConsumed() || !change.pressed) {
-                                    val otherPressed = event.changes.fastFirstOrNull { it.pressed }
-                                    if (otherPressed != null) {
-                                        pointerId = otherPressed.id
-                                        event.changes.forEach { it.consume() }
-                                        continue
+                                val delta = change.position - down.position
+                                if (!change.pressed) {
+                                    if (!horizontalDrag && !onThumb && delta.getDistance() <= touchSlop &&
+                                        change.position.x in 0f..size.width.toFloat() &&
+                                        change.position.y in 0f..size.height.toFloat()
+                                    ) {
+                                        val next = valueAt(change.position.x)
+                                        anim.updateValue(next)
+                                        currentOnValueChange(next)
                                     }
-                                    event.changes.forEach { it.consume() }
+                                    if (horizontalDrag) change.consume()
                                     break
                                 }
 
-                                // Calcula o deltaX a partir das coordenadas antes do consume
-                                val deltaX = change.position.x - change.previousPosition.x
-                                if (deltaX != 0f) {
-                                    val activeRange = currentValueRange
-                                    val activeSpan = (activeRange.endInclusive - activeRange.start).coerceAtLeast(0.0001f)
-                                    val deltaValue = activeSpan * (deltaX / currentUsableTrackWidth)
-                                    val nextValue = if (currentIsLtr) {
-                                        (anim.targetValue + deltaValue)
-                                            .fastCoerceIn(activeRange.start, activeRange.endInclusive)
-                                    } else {
-                                        (anim.targetValue - deltaValue)
-                                            .fastCoerceIn(activeRange.start, activeRange.endInclusive)
-                                    }
-                                    anim.updateValue(nextValue)
-                                    currentOnValueChange(nextValue)
+                                if (!horizontalDrag) {
+                                    if (abs(delta.y) > touchSlop && abs(delta.y) >= abs(delta.x)) break
+                                    if (abs(delta.x) <= touchSlop || abs(delta.x) <= abs(delta.y)) continue
+                                    horizontalDrag = true
+                                    isDraggingNow = true
+                                    SliderTouchLock.isAnySliderActive = true
+                                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                                    anim.press()
                                 }
 
-                                // Consome 100% de todos os movimentos de ponteiro (incluindo qualquer movimento vertical Y para cima/baixo)
-                                // Isso impede totalmente que a tela se mova verticalmente enquanto o usuário estiver segurando o slider
-                                event.changes.forEach { it.consume() }
+                                val next = if (onThumb) {
+                                    (initialValue + (range.endInclusive - range.start) * delta.x / usableWidth * direction)
+                                        .coerceIn(range)
+                                } else valueAt(change.position.x)
+                                anim.updateValue(next)
+                                currentOnValueChange(next)
+                                change.consume()
                             }
                         } finally {
-                            isDraggingNow = false
-                            SliderTouchLock.isAnySliderActive = false
-                            view.parent?.requestDisallowInterceptTouchEvent(false)
-                            currentOnValueChange(anim.targetValue)
-                            anim.release()
+                            if (horizontalDrag) {
+                                anim.animateToValue(anim.targetValue, initialVelocity = 0f)
+                                anim.release()
+                                isDraggingNow = false
+                                SliderTouchLock.isAnySliderActive = false
+                                view.parent?.requestDisallowInterceptTouchEvent(false)
+                            }
                         }
                     }
                 }

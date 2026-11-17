@@ -391,7 +391,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                 }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
                     if (characters) {
-                        if (characterLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
+                        if (characterLoading) item { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
                         if (characterError) item { Text("Não foi possível carregar os personagens. Confira sua conexão e tente outra busca.", color = theme.textSecondary) }
                         items(characterResults.filter { it.name.take(60) !in excluded }, key = { it.id }) { result ->
                             Row(Modifier.fillMaxWidth().clickable { select(result.name.take(60), result.image) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -404,7 +404,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         }
                         if (!characterLoading && !characterError && characterResults.isEmpty()) item { Text("Nenhum personagem encontrado. Tente o nome em português ou inglês.", color = theme.textSecondary) }
                     } else {
-                        if (comicLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
+                        if (comicLoading) item { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
                         items(shownComics, key = { it.id }) { comic ->
                             val metaLine = remember(comic.authors, comic.publisher, comic.releaseYear, comic.pageCount) {
                                 listOfNotNull(

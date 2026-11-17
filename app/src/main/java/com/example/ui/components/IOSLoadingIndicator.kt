@@ -8,6 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.progressSemantics
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -15,9 +19,41 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.LocalAppMotion
+
+@Composable
+internal fun LoadingLine(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+    val status = modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    if (LocalAppMotion.current.reduced) {
+        Text("Carregando…", status.progressSemantics(), color = LocalIOS27Theme.current.textSecondary)
+    } else {
+        LinearProgressIndicator(status.semantics { stateDescription = "Carregando" }, color = color)
+    }
+}
+
+@Composable
+internal fun LoadingSpinner(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    strokeWidth: Dp = 4.dp
+) {
+    val status = modifier.semantics {
+        liveRegion = LiveRegionMode.Polite
+        stateDescription = "Carregando"
+    }
+    if (LocalAppMotion.current.reduced) {
+        IOSLoadingIndicator(status, color, strokeWidth)
+    } else {
+        CircularProgressIndicator(status, color = color, strokeWidth = strokeWidth)
+    }
+}
 
 /** Compose approximation of a twelve-spoke activity indicator, not an Apple native control. */
 @Composable
@@ -27,8 +63,7 @@ fun IOSLoadingIndicator(
     strokeWidth: Dp = 2.dp
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val transition = rememberInfiniteTransition(label = "iosActivity")
-    val phase = if (motion.reduced) 0f else transition.animateFloat(
+    val phase = if (motion.reduced) 0f else rememberInfiniteTransition(label = "iosActivity").animateFloat(
         initialValue = 0f,
         targetValue = 12f,
         animationSpec = infiniteRepeatable(motion.tween(900, easing = LinearEasing)),

@@ -3,7 +3,10 @@ package com.example.ui.components
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -16,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -42,7 +46,8 @@ class FluidSheetState internal constructor(
     private val expandThreshold: Float,
     private val reduced: () -> Boolean,
     private val onDismiss: () -> Unit,
-    private val onExpand: () -> Unit
+    private val onExpand: (() -> Unit)?,
+    private val onDragDismissRequest: () -> Boolean
 ) {
     private val animation = Animatable(if (reduced()) initialOffset else height)
     private var held by mutableStateOf<Float?>(null)
@@ -50,14 +55,22 @@ class FluidSheetState internal constructor(
     private val tracker = VelocityTracker()
     private var rawPosition = initialOffset
     private var backStartOffset = initialOffset
+    private var restOffset = initialOffset
     val offset: Float get() = held ?: animation.value
     val isMoving: Boolean get() = held != null || animation.isRunning
     val scrimFraction: Float get() = (1f - offset / height.coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     fun dismiss() = settle(height, 0f, dismiss = true)
-    fun enter() = settle(initialOffset, 0f)
-    fun expandToTop() = settle(0f, 0f)
-    fun snapToRest() = settle(initialOffset, 0f)
+    fun enter() = settle(restOffset, 0f)
+    fun expandToTop() {
+        if (restOffset == 0f) return
+        restOffset = 0f
+        settle(restOffset, 0f)
+    }
+    fun snapToRest() {
+        restOffset = initialOffset
+        settle(restOffset, 0f)
+    }
 
     fun beginBack() {
         backStartOffset = offset
@@ -84,35 +97,54 @@ class FluidSheetState internal constructor(
         }
     }
 
+    private fun trackDrag(delta: Float, timeMillis: Long) {
+        rawPosition += delta
+        tracker.addPosition(timeMillis, Offset(0f, rawPosition))
+        held = sheetResistance(rawPosition, height)
+    }
+
+    private fun finishDrag() {
+        val velocity = tracker.calculateVelocity().y
+        val endpoint = projectSheetEndpoint(rawPosition, velocity)
+        when {
+            endpoint > restOffset + dismissThreshold -> {
+                if (onDragDismissRequest()) settle(height, velocity, dismiss = true)
+                else settle(restOffset, 0f)
+            }
+            onExpand != null && restOffset > 0f && endpoint < restOffset - expandThreshold -> {
+                restOffset = 0f
+                settle(restOffset, velocity)
+                onExpand.invoke()
+            }
+            else -> settle(restOffset, velocity)
+        }
+    }
+
     val dragModifier = Modifier.pointerInput(this) {
-        detectVerticalDragGestures(
-            onDragStart = {
-                rawPosition = offset
-                job?.cancel()
-                held = rawPosition
-                tracker.resetTracking()
-            },
-            onVerticalDrag = { change, amount ->
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var overSlop = 0f
+            val start = if (animation.isRunning) {
+                down.consume()
+                down
+            } else {
+                awaitVerticalTouchSlopOrCancellation(down.id) { change, excess ->
+                    overSlop = excess
+                    change.consume()
+                } ?: return@awaitEachGesture
+            }
+            rawPosition = offset
+            job?.cancel()
+            held = rawPosition
+            tracker.resetTracking()
+            tracker.addPosition(down.uptimeMillis, Offset(0f, rawPosition))
+            if (overSlop != 0f) trackDrag(overSlop, start.uptimeMillis)
+            val released = verticalDrag(start.id) { change ->
+                trackDrag(change.positionChange().y, change.uptimeMillis)
                 change.consume()
-                rawPosition += amount
-                tracker.addPosition(change.uptimeMillis, Offset(0f, rawPosition))
-                // Permite arrastar entre o topo (0f) e a parte inferior com resistência suave
-                held = if (rawPosition < 0f) sheetResistance(rawPosition, height) else rawPosition
-            },
-            onDragEnd = {
-                val velocity = tracker.calculateVelocity().y
-                val endpoint = projectSheetEndpoint(rawPosition, velocity)
-                when {
-                    endpoint > initialOffset + dismissThreshold -> settle(height, velocity, dismiss = true)
-                    endpoint < initialOffset - expandThreshold -> {
-                        settle(0f, velocity)
-                        onExpand()
-                    }
-                    else -> settle(initialOffset, velocity)
-                }
-            },
-            onDragCancel = { settle(initialOffset, 0f) }
-        )
+            }
+            if (released) finishDrag() else settle(restOffset, 0f)
+        }
     }
 }
 
@@ -120,8 +152,9 @@ class FluidSheetState internal constructor(
 fun rememberFluidSheet(
     initialHeightFraction: Float = 0.82f,
     onDismiss: () -> Unit,
-    onExpand: () -> Unit,
-    backEnabled: Boolean = true
+    onExpand: (() -> Unit)? = null,
+    backEnabled: Boolean = true,
+    onDragDismissRequest: () -> Boolean = { true }
 ): FluidSheetState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -131,9 +164,11 @@ fun rememberFluidSheet(
     val expandThreshold = with(density) { 55.dp.toPx() }
     val dismiss = rememberUpdatedState(onDismiss)
     val expand = rememberUpdatedState(onExpand)
+    val dragDismiss = rememberUpdatedState(onDragDismissRequest)
     val reduced = rememberReducedMotion()
-    val state = remember(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold) {
-        FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced, { dismiss.value() }, { expand.value() })
+    val state = remember(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, onExpand != null) {
+        FluidSheetState(scope, totalHeight, initialOffset, dismissThreshold, expandThreshold, reduced,
+            { dismiss.value() }, if (onExpand != null) ({ expand.value?.invoke() }) else null, { dragDismiss.value() })
     }
     LaunchedEffect(state) { state.enter() }
     PredictiveBackHandler(enabled = backEnabled) {

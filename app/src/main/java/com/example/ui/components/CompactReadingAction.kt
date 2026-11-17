@@ -28,15 +28,16 @@ fun CompactReadingAction(label: String, prominent: Boolean = false, onClick: () 
     val motion = LocalAppMotion.current
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, motion.spring(1f, 800f), label = "catalogActionPress")
+    val scale by animateFloatAsState(if (pressed && !motion.reduced) 0.97f else 1f, motion.spring(1f, 800f), label = "catalogActionPress")
     val surface = if (prominent) theme.accent else theme.bgTertiary
     val foreground = if (prominent) {
         if (contrastRatio(Color.White, surface) > contrastRatio(Color.Black, surface)) Color.White else Color.Black
     } else theme.textPrimary
-    Box(modifier.heightIn(min = 48.dp).widthIn(min = 44.dp)
+    Box(modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
         .clickable(interactions, indication = null, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Box(Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(16.dp))
-            .background(surface).heightIn(min = 30.dp).testTag("catalog-action-face-$label")
+            .background(if (pressed) androidx.compose.ui.graphics.lerp(surface, foreground, 0.12f) else surface)
+            .heightIn(min = 30.dp).testTag("catalog-action-face-$label")
             .padding(horizontal = 9.dp, vertical = 5.dp), contentAlignment = Alignment.Center) {
             Text(label, color = foreground, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold)
         }

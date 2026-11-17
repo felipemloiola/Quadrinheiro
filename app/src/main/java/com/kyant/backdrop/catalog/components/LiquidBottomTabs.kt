@@ -45,7 +45,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.catalog.legacy.DampedDragAnimation
+import com.kyant.backdrop.catalog.utils.DampedDragAnimation
 import com.kyant.backdrop.catalog.legacy.InteractiveHighlight
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
@@ -98,7 +98,7 @@ fun LiquidBottomTabs(
     val currentSelectedTabIndexLambda by rememberUpdatedState(selectedTabIndex)
 
     val effectiveRefraction = refractionMultiplier.coerceIn(0f, 2.4f)
-    val effectiveBlur = blurRadius.coerceIn(2f.dp, 24f.dp)
+    val effectiveBlur = blurRadius.coerceIn(0.dp, 24.dp)
 
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
@@ -153,7 +153,8 @@ fun LiquidBottomTabs(
                     totalDragDistance = 0f
                 },
                 onDragStopped = {
-                    val targetIndex = targetValue.fastRoundToInt().coerceIn(0, tabsCount - 1)
+                    val momentum = if (didDrag && !compact) (velocity * (tabsCount - 1) * .10f).coerceIn(-.65f, .65f) else 0f
+                    val targetIndex = (targetValue + momentum).fastRoundToInt().coerceIn(0, tabsCount - 1)
                     val tapSlopPx = with(density) { 18.dp.toPx() }
                     if (didDrag) {
                         didDrag = false
@@ -190,7 +191,8 @@ fun LiquidBottomTabs(
                         offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
                     }
                 },
-                reduceMotion = reduceMotion
+                reduceMotion = reduceMotion,
+                directTracking = true
             )
         }
 
@@ -245,7 +247,7 @@ fun LiquidBottomTabs(
                     },
                     effects = {
                         if (vibrancyEnabled) vibrancy()
-                        blur(effectiveBlur.toPx())
+                        if (effectiveBlur > 0.dp) blur(effectiveBlur.toPx())
                         if (effectiveRefraction > 0f) {
                             lens(
                                 refractionHeight = 24f.dp.toPx() * effectiveRefraction,
@@ -297,7 +299,7 @@ fun LiquidBottomTabs(
                         effects = {
                             val progress = dampedDragAnimation.pressProgress
                             if (vibrancyEnabled) vibrancy()
-                            blur(effectiveBlur.toPx())
+                            if (effectiveBlur > 0.dp) blur(effectiveBlur.toPx())
                             if (effectiveRefraction > 0f) {
                                 lens(
                                     refractionHeight = 24f.dp.toPx() * progress * effectiveRefraction,

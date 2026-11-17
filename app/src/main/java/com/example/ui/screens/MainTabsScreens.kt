@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.LoadingSpinner
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.FormatListNumbered
 
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,7 +55,6 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -1479,7 +1481,7 @@ fun ShelfLibraryTab(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingMoreComics) {
-                        androidx.compose.material3.CircularProgressIndicator(
+                        LoadingSpinner(
                             modifier = Modifier.size(24.dp),
                             color = s.accentColor,
                             strokeWidth = 2.dp
@@ -1693,6 +1695,7 @@ fun SearchMultiApiTab(
     searchQuery: String,
     remoteResults: List<ComicEntry>,
     isSearchingApi: Boolean,
+    searchUnavailable: Boolean,
     searchSourceFilter: String,
     listState: LazyListState,
     searchFocusTrigger: Long = 0L,
@@ -1806,7 +1809,7 @@ fun SearchMultiApiTab(
     ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().imePadding(),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
@@ -1926,7 +1929,7 @@ fun SearchMultiApiTab(
                     }
 
                     if (isSearchingApi) {
-                        CircularProgressIndicator(
+                        LoadingSpinner(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
                             color = s.accentColor
@@ -1985,7 +1988,11 @@ fun SearchMultiApiTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = if (searchQuery.isBlank()) "Qual será sua próxima leitura?" else "Nenhum resultado encontrado para “$searchQuery”",
+                        text = when {
+                            searchQuery.isBlank() -> "Qual será sua próxima leitura?"
+                            searchUnavailable && searchSourceFilter != "LOCAL" -> "O catálogo está indisponível no momento"
+                            else -> "Nenhum resultado encontrado para “$searchQuery”"
+                        },
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = s.textPrimary
@@ -1995,7 +2002,9 @@ fun SearchMultiApiTab(
                         fontSize = 12.sp,
                         color = s.textSecondary
                     )
-
+                    if (searchUnavailable && searchSourceFilter != "LOCAL") {
+                        androidx.compose.material3.TextButton(onClick = onTriggerImmediateSearch) { Text("Tentar novamente") }
+                    }
                 }
             }
         } else {

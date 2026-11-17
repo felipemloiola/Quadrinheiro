@@ -12,6 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,6 +31,8 @@ internal fun SheetToolbar(
     onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: (() -> Unit)? = null,
+    expandLabel: String,
+    onToggleExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val theme = LocalIOS27Theme.current
@@ -38,16 +43,18 @@ internal fun SheetToolbar(
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(44.dp).testTag(closeTag).clickable(role = Role.Button, onClickLabel = "Fechar", onClick = onClose), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(48.dp).testTag(closeTag).clickable(role = Role.Button, onClickLabel = "Fechar", onClick = onClose), contentAlignment = Alignment.Center) {
             Icon(Icons.Default.Close, "Fechar", tint = theme.textSecondary, modifier = Modifier.size(21.dp))
         }
-        Text(title, Modifier.weight(1f).padding(horizontal = 8.dp), color = theme.textPrimary, fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Box(Modifier.size(44.dp).testTag(shareTag).clickable(role = Role.Button, onClickLabel = "Compartilhar", onClick = onShare), contentAlignment = Alignment.Center) {
+        Text(title, Modifier.weight(1f).padding(horizontal = 8.dp).semantics {
+            customActions = listOf(CustomAccessibilityAction(expandLabel) { onToggleExpand(); true })
+        }, color = theme.textPrimary, fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.size(48.dp).testTag(shareTag).clickable(role = Role.Button, onClickLabel = "Compartilhar", onClick = onShare), contentAlignment = Alignment.Center) {
             Icon(LucideIcons.ShareIos, "Compartilhar", tint = theme.accent, modifier = Modifier.size(21.dp))
         }
         onSave?.let { save ->
-            Box(Modifier.size(44.dp).testTag("modal_header_save_button").clickable(role = Role.Button, onClickLabel = "Salvar", onClick = save), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(48.dp).testTag("modal_header_save_button").clickable(role = Role.Button, onClickLabel = "Salvar", onClick = save), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.Check, "Salvar", tint = theme.accent, modifier = Modifier.size(23.dp))
             }
         }

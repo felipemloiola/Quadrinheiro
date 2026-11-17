@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.LoadingSpinner
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +35,7 @@ internal fun CloudCacheRecoveryScreen(onContinue: () -> Unit) {
             color=theme.textSecondary,style=MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(24.dp))
         if(busy) {
-            CircularProgressIndicator(color=theme.accent)
+            LoadingSpinner(color=theme.accent)
             Spacer(Modifier.height(12.dp));Text("Preservando os dados e preparando a sincronização…",color=theme.textSecondary)
         } else if(repaired) Button(onClick=onContinue){Text("Continuar")}
         else {

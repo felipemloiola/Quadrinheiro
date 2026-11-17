@@ -76,7 +76,7 @@ internal fun FavoriteArtworkSheet(
                 else "Imagem do personagem"
             )
             if (loading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth(), color = t.accent)
+                LoadingLine(Modifier.fillMaxWidth(), color = t.accent)
             }
             if (images.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {

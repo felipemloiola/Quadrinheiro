@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.LoadingLine
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -139,7 +141,7 @@ internal fun BannerArtworkPicker(
                     }
                 }
             }
-            if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = t.accent) }
+            if (loading) item { LoadingLine(Modifier.fillMaxWidth(), color = t.accent) }
             if (errorMessage != null) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

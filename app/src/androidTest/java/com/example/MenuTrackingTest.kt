@@ -2,7 +2,6 @@ package com.example
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
@@ -21,7 +20,7 @@ import org.junit.runner.RunWith
 class MenuTrackingTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun draggingOutsideRetainsAndCommitsLastValidMenuRow() {
+    @Test fun releasingOutsideCancelsAndReenteringAllowsSelection() {
         var chosen = -1
         val host = LiquidGlassMenuHostState()
         compose.setContent {
@@ -44,6 +43,13 @@ class MenuTrackingTest {
             advanceEventTime(500)
             moveTo(Offset(width - 1f, point.y))
             advanceEventTime(300)
+            up()
+        }
+        compose.runOnIdle { assertEquals(-1, chosen) }
+        compose.onRoot().performTouchInput {
+            down(point)
+            moveTo(Offset(width - 1f, point.y))
+            moveTo(point)
             up()
         }
         compose.runOnIdle { assertEquals(1, chosen) }

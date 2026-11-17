@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.components.LoadingSpinner
+
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.AccessibilityNew
 
@@ -66,7 +68,6 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -1887,7 +1888,7 @@ fun SettingsTabScreen(
                                                     ) {
                                                         when {
                                                             usernameVerification.isChecking -> {
-                                                                CircularProgressIndicator(
+                                                                LoadingSpinner(
                                                                     modifier = Modifier.size(10.dp),
                                                                     strokeWidth = 1.5.dp,
                                                                     color = statusColor
@@ -2665,7 +2666,7 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
             }
 
             if (isSyncing || isAuthLoading) {
-                CircularProgressIndicator(
+                LoadingSpinner(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
                     color = themeColors.accent

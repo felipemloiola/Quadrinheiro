@@ -69,7 +69,9 @@ class ReaderNavigationTest {
         compose.onNodeWithText("Biblioteca").assertExists()
         compose.onNodeWithText("Catálogo").assertDoesNotExist()
         screenshot("library-profile")
-        compose.runOnIdle { vm.setSearchQuery(""); vm.switchMainTab("search") }
+        compose.runOnIdle { vm.setSearchQuery("") }
+        compose.onNodeWithContentDescription("Buscar").assertHasClickAction().performClick()
+        compose.onNodeWithContentDescription("Buscar").assertIsSelected()
         compose.onNodeWithText("Qual será sua próxima leitura?").assertExists()
         compose.onNodeWithText("Destaques do catálogo").assertDoesNotExist()
         compose.onNodeWithText("Para você").assertDoesNotExist()
