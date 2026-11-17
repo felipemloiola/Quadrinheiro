@@ -53,9 +53,26 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk dist/quadrinheiro.apk
           signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$signer" verify --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-certs.txt"
-          digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-certs.txt")
-          test "$digest" = "$(tr -d '\r\n ' < docs/release-signing-sha256.txt)"
+          "$signer" verify --verbose --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-certs.txt"
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          report = (Path(os.environ["RUNNER_TEMP"]) / "apk-certs.txt").read_text()
+          expected = Path("docs/release-signing-sha256.txt").read_text().strip().lower()
+          counts = re.findall(r"^Number of signers:\s*(\d+)\s*$", report, re.M)
+          digests = {
+              value.lower()
+              for value in re.findall(
+                  r"^(?:Signer #\d+|V\d+(?:\.\d+)* Signer): certificate SHA-256 digest:\s*([0-9a-fA-F]{64})\s*$",
+                  report,
+                  re.M,
+              )
+          }
+          if counts != ["1"] or digests != {expected}:
+              raise SystemExit("::error::Expected exactly one signer with the permanent signing certificate.")
+          PY
           (cd dist && sha256sum quadrinheiro.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
