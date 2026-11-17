@@ -4,6 +4,8 @@ Revisão de 16/11/2026: escolha/recorte da capa, detalhe/editor/adição de list
 
 Referências estéticas: [Layout](https://developer.apple.com/design/human-interface-guidelines/layout), [Materials](https://developer.apple.com/design/human-interface-guidelines/materials), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) e [Pop-up buttons](https://developer.apple.com/design/human-interface-guidelines/pop-up-buttons). Controles e semântica seguem Android; não é certificação de conformidade com iOS.
 
+**Estado:** correções implementadas, testes automatizados aprovados e fluxo visual de capas conferido com vidro ativo após reiniciar o emulador no modo gráfico automático. A sessão apresentou ANRs no caminho gráfico emulado antes dessa verificação. Estabilidade prolongada e desempenho no aparelho físico não estão certificados.
+
 ## Achados e correções
 
 | Prioridade / arquivo | Antes | Depois | Por quê / evidência |
@@ -34,12 +36,22 @@ Executados 37 testes unitários (PersonalCurationTest, FluidMotionPolicyTest e L
 
 Na rodada ampla de 20 cenários de interface, os 18 cenários de menus, navegação, seleção múltipla, ranking, notas, contas, registro e expansão passaram. Dois testes novos do grid falharam apenas na seleção porque seus exemplos não tinham imagem: coverItem ignora capa vazia. As verificações de igualdade das dimensões já passavam. Os exemplos foram corrigidos para usar um PNG local válido.
 
-Rodada final: os dois testes do grid corrigidos, o novo teste de enquadramento sem gestos e os dois da ficha/zoom passaram (5/5). São 21 cenários distintos cobertos entre as rodadas, sem falhas pendentes. Capturas do tema claro com fonte 160% e do tema escuro foram geradas. Logs locais: design-review-build.log, design-review-catalog.log, design-review-native.log, design-review-verified-build.log e design-review-final-native.log. APK instalado preservando dados; revisão da lista real não aplica nem salva alterações.
+Rodada final: os dois testes do grid corrigidos, o novo teste de enquadramento sem gestos e os dois da ficha/zoom passaram (5/5). São 21 cenários distintos cobertos entre as rodadas, com testes aprovados após as correções descritas. A aprovação da escala efetiva de 160% ocorreu na rodada definitiva abaixo. Logs locais: design-review-build.log, design-review-catalog.log, design-review-native.log, design-review-verified-build.log e design-review-final-native.log. APK instalado preservando dados; revisão da lista real não aplica nem salva alterações.
 
 A captura com capas reais revelou que o check ao lado do texto reduzia a largura útil do título. O marcador foi movido para o canto da miniatura. Os dois cenários do grid foram repetidos e aprovados, incluindo uma nova asserção de ausência de overflow no título/número da edição em fonte normal. Logs: design-review-card-title-build.log e design-review-card-title-native.log.
 
 Uma asserção adicional de escala efetiva revelou que a configuração 160% do teste não chegava ao texto dentro do Dialog (era 100%). As verificações anteriores de geometria permanecem válidas em fonte normal, mas não comprovavam fonte ampliada. O painel passou a preservar a LocalDensity do chamador; a validação final deve incluir a asserção de escala interna antes de considerar fonte 160% aprovada.
 
 Validação definitiva da escala: build design-review-scaled-panels-build.log aprovado; os 7 cenários de CurationDesignReviewTest e CurationMenuMotionTest passaram em design-review-scaled-panels-native.log. A asserção confirmou fontScale 1,6 no TextLayoutResult, cartões uniformes e ausência de overflow do título em fonte normal. A captura clara com fonte ampliada foi inspecionada; o conteúdo continua rolável. Não houve alteração nas preferências de fonte do sistema ou da conta: o teste injeta a densidade apenas na composição, e a correção respeita a densidade já fornecida pelo tema.
+
+### Pendência gráfica encontrada no teste real
+
+O fluxo real com transparência ativa apresentou ANR de foco/entrada. O relatório do próprio processo, obtido pela API pública ApplicationExitInfo, mostrou a thread principal aguardando DrawFrameTask e a RenderThread bloqueada em qemu_pipe_read → glGenTextures_enc → GrGLGpu::createTexture. Isso identifica o bloqueio no caminho gráfico emulado; a causa raiz ainda requer comparação em ambiente estável/hardware real. Os testes com redução de transparência não reproduziram esse cenário.
+
+O daemon Gradle ocioso foi encerrado para liberar memória. Foi tentada uma inicialização com debug.hwui.renderer=skiavk, restaurando imediatamente skiagl; a mudança efetiva de pipeline não foi confirmada. O mesmo AVD foi reiniciado preservando seus dados, com backend software para comparação; esse modo também apresentou falhas de inicialização em outros apps do sistema. O modo gráfico automático foi restaurado. Nenhuma preferência gráfica foi adicionada ao produto, e o APK não força Vulkan nem desativa o vidro.
+
+Após inicializar o AVD no modo automático e aguardar o boot, o fluxo real passou: biblioteca → detalhe da lista → editor → escolha de capa → retorno à biblioteca, sem salvar/aplicar alterações. Scripts design-review-restored-open.log e design-review-restored-visual.log terminaram sem erro; a captura final foi conferida e o processo permaneceu ativo. Os dados e o emulador foram preservados. Isso não prova correção definitiva do ANR observado sob a sessão anterior.
+
+Foi oferecida validação adicional no S23. A geometria, seleção e fonte efetiva estão cobertas por testes; a medição prolongada e a comparação física continuam pendentes.
 
 Sem certificação física de CPU/GPU, p95/p99, temperatura e bateria. A matriz visual de tablets e APIs 24/25/31/33+ não está integralmente executada; contratos unitários não substituem esses ensaios. Não publicar código ou APK nesta entrega.
