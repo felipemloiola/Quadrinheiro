@@ -1,5 +1,5 @@
 name: Sign Android device review APK
-run-name: Signed UI restoration for Galaxy
+run-name: Signed edge-to-edge UI restoration for Galaxy
 
 on:
   push:

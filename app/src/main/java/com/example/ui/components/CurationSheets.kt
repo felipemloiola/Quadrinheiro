@@ -41,7 +41,6 @@ import com.example.ui.theme.LocalAppMotion
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.*
@@ -50,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import com.example.model.ComicEntry
@@ -139,8 +137,7 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                 onCloseRequest == null && !busy && panel.request == 0
             }
         )
-        val view=LocalView.current
-        DisposableEffect(view){(view.parent as? DialogWindowProvider)?.window?.let {it.setWindowAnimations(0);it.setDimAmount(0f)};onDispose{}}
+        FullScreenDialogWindow()
         SideEffect {requestClose.value={if(!busy && panel.request==0){if(onCloseRequest!=null)onCloseRequest() else panel.close()}}}
         BackHandler(enabled=busy || panel.request>0) {}
         BackHandler(enabled=!busy && onCloseRequest!=null && panel.request==0) {onCloseRequest?.invoke()}

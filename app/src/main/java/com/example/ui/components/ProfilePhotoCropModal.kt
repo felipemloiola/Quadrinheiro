@@ -222,6 +222,7 @@ fun ProfilePhotoCropModal(
             decorFitsSystemWindows = false
         )
     ) {
+        FullScreenDialogWindow(lightStatusBar=false)
         Box(
             modifier = Modifier
                 .fillMaxSize()

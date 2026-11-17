@@ -80,7 +80,7 @@ class PersonalCurationUiTest {
         }
         compose.onNodeWithText(library.last().displayTitle).performClick()
         compose.onNodeWithTag("comic_detail_page").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.onNode(hasContentDescription("Voltar") and hasText("Voltar")).performClick()
         compose.onNodeWithText("Minha primeira escolha").assertIsDisplayed()
     }
     @Test fun explanationsUseSavedEvidenceAndFeedbackCanBeUndone() {

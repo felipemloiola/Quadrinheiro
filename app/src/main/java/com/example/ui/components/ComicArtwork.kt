@@ -36,13 +36,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.CoverComposition
@@ -98,14 +96,7 @@ internal fun ExpandedComicCover(url:String,title:String,source:Rect?=null,inPlac
     val content: @Composable () -> Unit = { ExpandedCoverContent(url,title,source,close) }
     if (inPlace) content()
     else Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
-        val view=LocalView.current
-        DisposableEffect(view) {
-            (view.parent as? DialogWindowProvider)?.window?.apply {
-                setWindowAnimations(0)
-                setDimAmount(0f)
-            }
-            onDispose {}
-        }
+        FullScreenDialogWindow(lightStatusBar=false)
         content()
     }
 }

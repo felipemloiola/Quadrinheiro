@@ -145,6 +145,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
         ))
     }
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
+    FullScreenDialogWindow(
+        lightStatusBar = !com.example.ui.theme.LocalIsDarkTheme.current &&
+            (tab == 3 || (effectiveCover.isBlank() && detail?.banner.isNullOrBlank() && fallbackBanner.isBlank()))
+    )
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
     val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
     val related = remember(comic.id, comic.externalId, detail?.issues, detail?.characters, detail?.creators, library, catalogEntries) {
