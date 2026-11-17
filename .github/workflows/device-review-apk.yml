@@ -1,0 +1,68 @@
+name: Sign Android device review APK
+
+on:
+  push:
+    branches: [codex/revisao-ux-android-apk]
+    paths: ['.github/workflows/device-review-apk.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    if: github.repository == 'felipemloiola/Quadrinheiro' && github.ref == 'refs/heads/codex/revisao-ux-android-apk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Verify signing certificate and Firebase configuration
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          GOOGLE_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEY_B64" && test -n "$KEY_PASSWORD"
+          umask 077
+          printf '%s' "$KEY_B64" | base64 --decode > "$RUNNER_TEMP/quadrinheiro-release.p12"
+          keytool -exportcert -keystore "$RUNNER_TEMP/quadrinheiro-release.p12" -storetype PKCS12 -alias upload -storepass:env KEY_PASSWORD > "$RUNNER_TEMP/release-cert.der"
+          test "$(sha256sum "$RUNNER_TEMP/release-cert.der" | cut -d' ' -f1)" = "$(tr -d '\r\n ' < docs/release-signing-sha256.txt)"
+          if [ -n "$GOOGLE_JSON" ]; then printf '%s' "$GOOGLE_JSON" | base64 --decode > app/google-services.json; fi
+          node .github/scripts/validate_google_services.cjs app/google-services.json "$RUNNER_TEMP/release-cert.der"
+          python3 .github/scripts/configure_android_release.py
+      - name: Assemble the in-place device update
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/quadrinheiro-release.p12
+          KEYSTORE_TYPE: PKCS12
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          gradle :app:assembleRelease -PreleaseVersionCode=1091 -PreleaseVersionName="1.0.91-revisao.${GITHUB_RUN_NUMBER}" --no-daemon --console=plain
+      - name: Verify and stage the APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk dist/quadrinheiro.apk
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$signer" verify --print-certs dist/quadrinheiro.apk > "$RUNNER_TEMP/apk-certs.txt"
+          digest=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-certs.txt")
+          test "$digest" = "$(tr -d '\r\n ' < docs/release-signing-sha256.txt)"
+          (cd dist && sha256sum quadrinheiro.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quadrinheiro-device-review
+          path: dist/
+          retention-days: 1
+          if-no-files-found: error
+      - name: Remove temporary signing inputs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/quadrinheiro-release.p12" "$RUNNER_TEMP/release-cert.der" app/google-services.json
