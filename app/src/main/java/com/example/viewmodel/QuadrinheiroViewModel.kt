@@ -689,6 +689,7 @@ class QuadrinheiroViewModel(
             settings.searchLanguage,
             settings.searchProvider,
             settings.hdCovers,
+            settings.aiRecommendationsEnabled,
             settings.spoilerProtection,
             settings.halfStarRatings,
             settings.allowRereads,
@@ -1972,9 +1973,11 @@ class QuadrinheiroViewModel(
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
         val nowMs = System.currentTimeMillis()
-        val candidateSettings = transform(_appSettings.value)
-        val showcaseChanged = com.example.data.ProfileShowcase.differs(_appSettings.value, candidateSettings)
-        var nextSettings = if (showcaseChanged) candidateSettings.copy(profileShowcaseUpdatedAt = maxOf(nowMs, _appSettings.value.profileShowcaseUpdatedAt + 1)) else candidateSettings
+        val prevSettings = _appSettings.value
+        val candidateSettings = transform(prevSettings)
+        val showcaseChanged = com.example.data.ProfileShowcase.differs(prevSettings, candidateSettings)
+        val aiPrefChanged = prevSettings.aiRecommendationsEnabled != candidateSettings.aiRecommendationsEnabled
+        var nextSettings = if (showcaseChanged) candidateSettings.copy(profileShowcaseUpdatedAt = maxOf(nowMs, prevSettings.profileShowcaseUpdatedAt + 1)) else candidateSettings
         nextSettings = nextSettings.copy(settingsUpdatedAt = nowMs)
         if (showcaseChanged) storage.saveShowcase(activeOwnerUid(), nextSettings)
         _appSettings.value = nextSettings
@@ -2000,6 +2003,8 @@ class QuadrinheiroViewModel(
         scheduleCloudProfileSave(nowMs)
         if (showcaseChanged) {
             triggerRecommendationRefreshIfNeeded(forceRefresh = false)
+        } else if (aiPrefChanged) {
+            triggerRecommendationRefreshIfNeeded(forceRefresh = true)
         }
     }
 
@@ -2751,21 +2756,48 @@ class QuadrinheiroViewModel(
                     favoriteUniverse = universeSnapshot,
                     settings = settingsSnapshot,
                     feedback = feedbackSnapshot
-                ).take(com.example.data.PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS)
+                ).take(42)
 
                 val enhancedUnverified = com.example.data.FirebaseAiRecommendationEnhancer.enhanceOrFallback(
                     taste = taste,
-                    candidates = ranked
+                    candidates = ranked,
+                    context = appContext,
+                    enabled = settingsSnapshot.aiRecommendationsEnabled
                 )
 
                 ensureActive()
                 if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration) return@launch
 
-                val enhanced = com.example.data.RecommendationCoverCheck.filter(appContext, enhancedUnverified)
+                val enhanced = com.example.data.RecommendationCoverCheck.filter(
+                    context = appContext,
+                    items = enhancedUnverified,
+                    maxItems = com.example.data.PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS
+                ) { initialBatch ->
+                    if (activeOwnerUid() == currentUid &&
+                        authSessionGeneration == currentGeneration &&
+                        requestedRecommendationKey == requestKey
+                    ) {
+                        val unownedInitial = filterOwnedFromRecommendations(initialBatch, librarySnapshot)
+                        if (unownedInitial.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                if (activeOwnerUid() == currentUid && requestedRecommendationKey == requestKey) {
+                                    _exploreRecommendationState.value = ExploreRecommendationUiState(
+                                        ownerUid = currentUid,
+                                        recommendations = unownedInitial,
+                                        tasteFingerprint = canonicalFingerprint,
+                                        isRefreshing = false,
+                                        isLegacyProvisional = false,
+                                        hasComputed = true
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 ensureActive()
-                if(activeOwnerUid()!=currentUid || authSessionGeneration!=currentGeneration || requestedRecommendationKey!=requestKey) return@launch
+                if (activeOwnerUid() != currentUid || authSessionGeneration != currentGeneration || requestedRecommendationKey != requestKey) return@launch
                 if (enhanced.isNotEmpty()) {
-                    // Grava snapshot durável de 24 itens em filesDir
+                    // Grava snapshot durável de até 30 itens em filesDir (<= 96 KB)
                     storage.saveAccountRecommendationsSnapshot(
                         ownerUid = currentUid,
                         tasteFingerprint = canonicalFingerprint,

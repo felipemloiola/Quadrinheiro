@@ -82,7 +82,18 @@ class OnlineDiscoveryPolicyTest {
         val correct=comic("b","Watchmen")
         assertEquals("b",EditorialDiscovery.select("Watchmen",listOf(unrelated,correct))?.id)
         assertNull(EditorialDiscovery.select("Watchmen",listOf(unrelated)))
-        assertEquals(setOf("Para começar","Universo DC","Universo Marvel"),EditorialDiscovery.selections.keys)
+        assertEquals(
+            setOf(
+                "Para começar",
+                "Universo DC & Vertigo",
+                "Universo Marvel",
+                "Mangás Essenciais",
+                "Independentes & Autorais",
+                "Quadrinhos Nacionais"
+            ),
+            EditorialDiscovery.selections.keys
+        )
+        assertTrue(EditorialDiscovery.selections.values.all { it.size >= 12 })
     }
 
     @Test fun translatedEditionsAppearOnlyOnceInRecommendations() {

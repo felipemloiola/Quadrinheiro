@@ -116,4 +116,46 @@ class PersonalizedDiscoveryTest {
         val other = book("other", "Outra trama", "Pessoa dois")
         assertTrue(PersonalizedDiscovery.recommend(listOf(other), listOf(read)).isEmpty())
     }
+    @Test fun durableSelectionSupportsUpTo30ItemsAndPrefersPtOverEnglishSpecialistCatalog() {
+        assertEquals(30, PersonalizedDiscovery.MAX_DURABLE_RECOMMENDATIONS)
+        val thirtyItems = (1..30).map { idx ->
+            com.example.data.RecommendedComic(
+                comic = book("rec-$idx", "Obra Curada $idx", author = "Autor $idx"),
+                reasonLabel = "Sugestão $idx",
+                score = 200 - idx,
+                signalSource = "FAVORITE_AUTHOR"
+            )
+        }
+        val encoded = PersonalizedDiscovery.encodeDurableAccountRecommendations(thirtyItems)
+        assertTrue(encoded.toByteArray(Charsets.UTF_8).size <= PersonalizedDiscovery.MAX_DURABLE_ENVELOPE_BYTES)
+        val decoded = PersonalizedDiscovery.decodeCachedRecommendations(encoded)
+        assertEquals(30, decoded.size)
+
+        val metronIssue = ComicEntry(
+            id = "mt-500",
+            externalId = "mt-500",
+            title = "Daredevil: Born Again",
+            authors = "Frank Miller",
+            publisher = "Marvel",
+            editionLanguage = "en",
+            sourceLabel = "Metron",
+            isOnlineResult = true
+        )
+        assertNotNull(PersonalizedDiscovery.verifiedCandidate(metronIssue))
+
+        val dislikedSeriesEntry = book("bad-1", "Série Ruim #1", "Escritor Ruim", "DC Comics")
+            .copy(status = ReadingStatus.READ, rating = 1.0f, seriesName = "Série Ruim", issueNumber = 1)
+        val likedDcEntry = book("good-1", "Grandes Astros: Superman", "Grant Morrison", "DC Comics")
+            .copy(status = ReadingStatus.READ, rating = 5.0f, favorite = true)
+        val badFollowup = book("bad-other", "Série Ruim Especial", "Escritor Ruim", "DC Comics")
+            .copy(seriesName = "Série Ruim")
+        val goodUniverse = book("good-dc", "Reino do Amanhã", "Mark Waid", "DC Comics")
+
+        val ranked = PersonalizedDiscovery.recommendWithReasons(
+            catalog = listOf(badFollowup, goodUniverse),
+            library = listOf(dislikedSeriesEntry, likedDcEntry),
+            favoriteUniverse = "DC Comics"
+        )
+        assertEquals(listOf("good-dc"), ranked.map { it.comic.id })
+    }
 }

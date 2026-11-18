@@ -1,5 +1,5 @@
 name: Sign Android device review APK
-run-name: Signed animation and gesture improvements for Galaxy
+run-name: Signed HIG, recommendations v16, and Firebase review APK for Galaxy
 
 on:
   push:
@@ -47,7 +47,7 @@ jobs:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          gradle :app:assembleRelease -PreleaseVersionCode=1091 -PreleaseVersionName="1.0.91-revisao.${GITHUB_RUN_NUMBER}" --no-daemon --console=plain
+          gradle :app:assembleRelease -PreleaseVersionCode=1092 -PreleaseVersionName="1.0.91-revisao.${GITHUB_RUN_NUMBER}" --no-daemon --console=plain
       - name: Verify and stage the APK
         run: |
           set -euo pipefail

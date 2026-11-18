@@ -87,4 +87,28 @@ class Patch5FirebaseAiSafetyContractTest {
 
         assertNull(result)
     }
+
+    @Test
+    fun applyValidatedEnrichmentReordersTopSliceAndRetainsRemainingDeterministicItems() {
+        val candidates = (1..20).map { idx ->
+            com.example.data.RecommendedComic(
+                comic = sample("c$idx", "HQ $idx"),
+                reasonLabel = "Motivo original $idx",
+                score = 200 - idx,
+                signalSource = "FAVORITE_AUTHOR"
+            )
+        }
+        val enrichment = FirebaseAiRecommendationEnhancer.AiEnrichmentResult(
+            orderedCandidateIds = listOf("c3", "c1"),
+            reasonOverrides = mapOf("c3" to "Afinidade direta com Alan Moore"),
+            relatedSearchTerms = emptyList()
+        )
+        val merged = FirebaseAiRecommendationEnhancer.applyValidatedEnrichment(candidates, enrichment)
+        assertEquals(20, merged.size)
+        assertEquals("c3", merged[0].comic.id)
+        assertEquals("Afinidade direta com Alan Moore", merged[0].reasonLabel)
+        assertEquals("c1", merged[1].comic.id)
+        assertEquals("c2", merged[2].comic.id)
+        assertEquals("c20", merged.last().comic.id)
+    }
 }

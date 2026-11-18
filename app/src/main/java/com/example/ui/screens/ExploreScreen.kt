@@ -147,6 +147,8 @@ fun ExploreScreen(
     val editorial by EditorialDiscovery.shelves.collectAsStateWithLifecycle()
     val editorialScope = rememberCoroutineScope()
     var editorialLoading by remember { mutableStateOf(true) }
+    val editorialExtraPages = remember { mutableStateMapOf<String, Int>() }
+    var loadingMoreShelf by remember { mutableStateOf<String?>(null) }
     if (!isBackPreview) {
         LaunchedEffect(viewModel) {
             viewModel.curation.load()
@@ -245,6 +247,38 @@ fun ExploreScreen(
                                 if (personal) RecommendationEmptyState(exploreRecommendationState.isRefreshing)
                                 else EditorialEmptyState(editorialLoading) { retryEditorial(selected) }
                             }
+                        } else if (!personal && entries.size < 48) {
+                            item(key = "selected_load_more", contentType = "explore_load_more") {
+                                val isLoadingMore = loadingMoreShelf == selected
+                                Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+                                    TextButton(
+                                        enabled = !isLoadingMore,
+                                        onClick = {
+                                            if (loadingMoreShelf != null) return@TextButton
+                                            val nextPage = editorialExtraPages.getOrDefault(selected, 0)
+                                            loadingMoreShelf = selected
+                                            editorialScope.launch {
+                                                try {
+                                                    withContext(Dispatchers.IO) {
+                                                        EditorialDiscovery.loadMoreForShelf(appContext, selected, nextPage)
+                                                    }
+                                                    editorialExtraPages[selected] = nextPage + 1
+                                                } finally {
+                                                    if (loadingMoreShelf == selected) loadingMoreShelf = null
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Text(
+                                            if (isLoadingMore) "Buscando mais edições…" else "Carregar mais edições",
+                                            color = theme.accent,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     } else {
                         item(key = "Para você", contentType = "explore_for_you_section") {
@@ -291,7 +325,7 @@ private fun ExploreForYouSection(
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(
-                    items = recommendations.take(8),
+                    items = recommendations.take(10),
                     key = { it.comic.id },
                     contentType = { "explore_poster" }
                 ) { recommendation ->
@@ -334,7 +368,7 @@ private fun ExploreCatalogSection(
         if (entries.isEmpty()) EditorialEmptyState(loading, onRetry)
         else LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(
-                items = entries.take(8),
+                items = entries.take(10),
                 key = { it.id },
                 contentType = { "explore_poster" }
             ) { comic ->

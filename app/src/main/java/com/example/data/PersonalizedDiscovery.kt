@@ -9,12 +9,16 @@ import java.security.MessageDigest
 /** Metadata ranking only. No account history or favorite list is sent to a provider. */
 object PersonalizedDiscovery {
     internal fun verifiedCandidate(c: ComicEntry): ComicEntry? {
-        val language = c.editionLanguage.lowercase().substringBefore('-')
+        val language = c.editionLanguage.trim().lowercase().replace('_', '-').substringBefore('-')
         val original = c.title.trim()
-        val translated = PortugueseComicTranslator.translateTitleToPtBr(original)
-        val neutral = normalized(original) in setOf("batman", "superman", "watchmen", "maus", "marvels", "sandman", "hellboy", "flashpoint")
-        if (language.isNotBlank() && language != "pt") return null
-        if ((c.isOnlineResult || c.id.startsWith("ab-") || c.id.startsWith("gb-") || c.id.startsWith("cv-") || c.id.startsWith("mt-")) && language.isBlank() && !neutral) return null
+        val specialized = PortugueseSearchPolicy.isSpecializedComicCatalog(c)
+        if (specialized) {
+            if (language.isNotBlank() && language !in setOf("pt", "por", "portuguese", "en", "eng", "english")) return null
+        } else {
+            val neutral = normalized(original) in setOf("batman", "superman", "watchmen", "maus", "marvels", "sandman", "hellboy", "flashpoint")
+            if (language.isNotBlank() && language !in setOf("pt", "por")) return null
+            if ((c.isOnlineResult || c.id.startsWith("ab-") || c.id.startsWith("gb-") || c.id.startsWith("ol-")) && language.isBlank() && !neutral) return null
+        }
         if (PortugueseComicTranslator.isUnwantedForeignOrBundleResult(c.title, c.synopsis)) return null
         // A cached translation must not invent a character absent from the original title.
         val rawTitle = " " + normalized(c.title) + " "
@@ -91,7 +95,7 @@ object PersonalizedDiscovery {
             .map { SeriesSequenceEngine.inferBaseSeriesTitle(it) to SeriesSequenceEngine.inferIssueNumber(it) }
             .filter { it.first.isNotBlank() }
 
-        val read = library.filter { it.status == ReadingStatus.READ }
+        val read = library.filter { it.status == ReadingStatus.READ && (it.rating == 0f || it.rating > 2.0f || it.favorite) }
             .map { SeriesSequenceEngine.inferBaseSeriesTitle(it) to SeriesSequenceEngine.inferIssueNumber(it) }
             .filter { it.first.isNotBlank() }
 
@@ -102,6 +106,22 @@ object PersonalizedDiscovery {
             .map { SeriesSequenceEngine.extractPrimaryAuthor(it.authors) }
             .filter { it.isNotBlank() && it !in setOf("autor", "unknown", "varios") }
             .distinct()
+
+        val likedSeriesSet = library.filter {
+            it.rating >= 3.5f || it.favorite || it.rereadCount > 0 || it.status == ReadingStatus.READING
+        }.map { normalized(SeriesSequenceEngine.inferBaseSeriesTitle(it)) }.filter { it.isNotBlank() }.toSet()
+
+        val topAuthorsNorm = topAuthors.map(::normalized).filter { it.isNotBlank() }.toSet()
+
+        val lowRatedEntries = library.filter { it.rating in 0.5f..2.0f && !it.favorite }
+        val dislikedSeries = lowRatedEntries
+            .map { normalized(SeriesSequenceEngine.inferBaseSeriesTitle(it)) }
+            .filter { it.isNotBlank() && it !in likedSeriesSet }
+            .toSet()
+        val dislikedAuthors = lowRatedEntries
+            .map { normalized(SeriesSequenceEngine.extractPrimaryAuthor(it.authors)) }
+            .filter { it.length >= 4 && it !in setOf("autor", "unknown", "varios") && it !in topAuthorsNorm }
+            .toSet()
 
         val snapshots = settings.profileFavoriteComicIds.mapNotNull { id ->
             settings.profileShowcaseDetails["comic:$id"]?.let(ProfileShowcase::restoreComic)
@@ -127,7 +147,9 @@ object PersonalizedDiscovery {
             wantToReadSeries = wantToRead,
             favoriteUniverse = favoriteUniverse,
             tasteHash = hash,
-            moreLike = feedback.boosted.map { it.comic() }
+            moreLike = feedback.boosted.map { it.comic() },
+            dislikedSeries = dislikedSeries,
+            dislikedAuthors = dislikedAuthors
         )
     }
 
@@ -159,7 +181,7 @@ object PersonalizedDiscovery {
         val sortedFavChars = settings.profileFavoriteCharacters.map { normalized(it) }.filter { it.isNotBlank() }.sorted().joinToString(",")
         val cleanUniverse = normalized(favoriteUniverse)
 
-        val canonicalPayload = "v15|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}|feedback:${feedback.canonical()}"
+        val canonicalPayload = "v16|u:${cleanUniverse}|chars:${sortedFavChars}|comics:${sortedFavComicIds}|lib:${comicsPart}|feedback:${feedback.canonical()}"
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(canonicalPayload.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
@@ -184,7 +206,7 @@ object PersonalizedDiscovery {
         val candidates = CatalogSearchPolicy.deduplicateByCanonicalWork(pool.mapNotNull(::verifiedCandidate), "PT")
             .sortedByDescending { CatalogSearchPolicy.isPortugueseEdition(it) }.filter { c ->
             if (feedback.hides(c)) return@filter false
-            if (!prefersManga && (c.sourceLabel.contains("MangaDex", true) || c.sourceLabel.contains("Kitsu", true))) return@filter false
+            if (!prefersManga && (c.sourceLabel.contains("MangaDex", true) || c.sourceLabel.contains("Kitsu", true) || c.id.startsWith("md-") || c.id.startsWith("kt-"))) return@filter false
             val isbn = c.isbn.filter { ch -> ch.isDigit() || ch.equals('X', true) }
             c.id !in ownedIds &&
                 (c.externalId.isBlank() || c.externalId !in ownedIds) &&
@@ -305,9 +327,20 @@ object PersonalizedDiscovery {
                 reference = favoriteUniverse
             }
 
+            // 8. Penalidade para séries/autores avaliados negativamente (<= 2.0★) sem sinal explícito superior
+            if (score > 0 && signal !in setOf("EXPLICIT_MORE", "FAVORITE_CHARACTER", "FAVORITE_COMIC", "READING_CONTINUATION")) {
+                val candSeriesNorm = normalized(SeriesSequenceEngine.inferBaseSeriesTitle(candidate).ifBlank { candidate.seriesName })
+                val candAuthorNorm = normalized(SeriesSequenceEngine.extractPrimaryAuthor(candidate.authors))
+                if (candSeriesNorm.isNotBlank() && candSeriesNorm in taste.dislikedSeries) {
+                    score -= 55
+                } else if (candAuthorNorm.isNotBlank() && candAuthorNorm in taste.dislikedAuthors) {
+                    score -= 40
+                }
+            }
+
             if (score > 0) {
-                // Desempate por metadados reais apenas quando há sinal real de afinidade
-                if (CatalogSearchPolicy.isPortugueseEdition(candidate) && PortugueseComicTranslator.isPortugueseText(candidate.title)) score += 45
+                // Desempate por metadados reais e prioridade forte para edições em português
+                if (CatalogSearchPolicy.isPortugueseEdition(candidate) || candidate.editionLanguage.startsWith("pt", true)) score += 60
                 if (candidate.coverUrl.isNotBlank()) score += 10
                 val publisher = normalized(candidate.publisher)
                 if (publisher.contains("dc comics") || publisher.contains("marvel") || publisher.contains("vertigo")) score += 25
@@ -356,11 +389,14 @@ object PersonalizedDiscovery {
             emptyList()
         }
 
-        // Aplica diversidade MMR: no máximo 2 edições da mesma série e 3 do mesmo autor no topo
+        // Diversidade escalonada MMR:
+        // - Posições 1..8 (carrossel inicial): diversidade estrita (máx. 2 série / 3 autor / 2 motivo)
+        // - Posições 9..30 (grade expandida "Para você"): diversidade relaxada (máx. 4 série / 6 autor / 8 motivo)
         val seriesCount = mutableMapOf<String, Int>()
         val authorCount = mutableMapOf<String, Int>()
         val reasonCount = mutableMapOf<String, Int>()
-        val diverseList = mutableListOf<RecommendedComic>()
+        val carouselList = mutableListOf<RecommendedComic>()
+        val expandedList = mutableListOf<RecommendedComic>()
         val deferredList = mutableListOf<RecommendedComic>()
         val monthlySeries = HashSet<String>()
 
@@ -369,23 +405,31 @@ object PersonalizedDiscovery {
             val format = normalized(item.comic.format)
             val monthly = item.comic.issueNumber > 0 &&
                 listOf("encadernado", "graphic", "capa dura", "omnibus", "colecao", "manga").none { format.contains(it) }
-            if(monthly && !monthlySeries.add(seriesKey)) continue
+            if (monthly && !monthlySeries.add(seriesKey)) continue
             val authorKey = SeriesSequenceEngine.extractPrimaryAuthor(item.comic.authors)
 
             val currentSeriesCount = seriesCount.getOrDefault(seriesKey, 0)
             val currentAuthorCount = authorCount.getOrDefault(authorKey, 0)
+            val currentReasonCount = reasonCount.getOrDefault(item.reasonLabel, 0)
 
-            if (currentSeriesCount < 2 && currentAuthorCount < 3 && reasonCount.getOrDefault(item.reasonLabel, 0) < 2) {
-                diverseList.add(item)
+            if (carouselList.size < 8 && currentSeriesCount < 2 && currentAuthorCount < 3 && currentReasonCount < 2) {
+                carouselList.add(item)
                 seriesCount[seriesKey] = currentSeriesCount + 1
                 authorCount[authorKey] = currentAuthorCount + 1
-                reasonCount[item.reasonLabel] = reasonCount.getOrDefault(item.reasonLabel, 0) + 1
+                reasonCount[item.reasonLabel] = currentReasonCount + 1
+            } else if ((carouselList.size + expandedList.size) < MAX_DURABLE_RECOMMENDATIONS &&
+                currentSeriesCount < 4 && currentAuthorCount < 6 && currentReasonCount < 8
+            ) {
+                expandedList.add(item)
+                seriesCount[seriesKey] = currentSeriesCount + 1
+                authorCount[authorKey] = currentAuthorCount + 1
+                reasonCount[item.reasonLabel] = currentReasonCount + 1
             } else {
                 deferredList.add(item)
             }
         }
 
-        return (diverseList + deferredList).take(48)
+        return (carouselList + expandedList + deferredList).take(48)
     }
 
     fun recommend(
@@ -397,8 +441,8 @@ object PersonalizedDiscovery {
         return recommendWithReasons(catalog, library, favoriteUniverse, settings).map { it.comic }
     }
 
-    const val MAX_DURABLE_RECOMMENDATIONS = 24
-    const val MAX_DURABLE_ENVELOPE_BYTES = 64 * 1024 // 64 KB
+    const val MAX_DURABLE_RECOMMENDATIONS = 30
+    const val MAX_DURABLE_ENVELOPE_BYTES = 96 * 1024 // 96 KB
     const val MAX_CLOUD_RECOMMENDATIONS = 16
     const val MAX_CLOUD_PREFS_BYTES = 12 * 1024 // 12 KB
 
@@ -463,10 +507,10 @@ object PersonalizedDiscovery {
     }
 
     /**
-     * Serializa até 24 recomendações completas para o snapshot durável da conta em filesDir (<= 64 KB).
+     * Serializa até 30 recomendações completas para o snapshot durável da conta em filesDir (<= 96 KB com envelope).
      */
     fun encodeDurableAccountRecommendations(items: List<RecommendedComic>): String {
-        return encodeRecommendationsWithByteBudget(items, MAX_DURABLE_RECOMMENDATIONS, MAX_DURABLE_ENVELOPE_BYTES)
+        return encodeRecommendationsWithByteBudget(items, MAX_DURABLE_RECOMMENDATIONS, MAX_DURABLE_ENVELOPE_BYTES - 2048)
     }
 
     /**

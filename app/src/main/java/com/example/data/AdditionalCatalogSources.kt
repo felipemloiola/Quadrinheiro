@@ -90,8 +90,8 @@ internal object AdditionalCatalogSources {
             "apple-br" -> PortugueseBookSources.appleBrazil(q, page = safePage)
             "google-pt" -> PortugueseBookSources.googlePortuguese(q, page = safePage)
             "apple-us" -> if (safePage > 0) emptyList() else parseAppleUs(fetch("https://itunes.apple.com/search".toHttpUrl().newBuilder().addQueryParameter("term", q).addQueryParameter("media", "ebook").addQueryParameter("entity", "ebook").addQueryParameter("country", "US").addQueryParameter("limit", "16").build()))
-            "kitsu" -> parseKitsu(fetch("https://kitsu.io/api/edge/manga".toHttpUrl().newBuilder().addQueryParameter("filter[text]", q).addQueryParameter("page[limit]", "12").addQueryParameter("page[offset]", (safePage * 12).toString()).build(), "application/vnd.api+json"))
-            "mangadex" -> parseMangaDex(fetch("https://api.mangadex.org/manga".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("limit", "12").addQueryParameter("offset", (safePage * 12).toString()).addQueryParameter("includes[]", "cover_art").addQueryParameter("includes[]", "author").addQueryParameter("includes[]", "artist").addQueryParameter("contentRating[]", "safe").addQueryParameter("contentRating[]", "suggestive").build()))
+            "kitsu" -> parseKitsu(fetch("https://kitsu.io/api/edge/manga".toHttpUrl().newBuilder().addQueryParameter("filter[text]", q).addQueryParameter("page[limit]", "18").addQueryParameter("page[offset]", (safePage * 18).toString()).build(), "application/vnd.api+json"))
+            "mangadex" -> parseMangaDex(fetch("https://api.mangadex.org/manga".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("limit", "20").addQueryParameter("offset", (safePage * 20).toString()).addQueryParameter("order[relevance]", "desc").addQueryParameter("includes[]", "cover_art").addQueryParameter("includes[]", "author").addQueryParameter("includes[]", "artist").addQueryParameter("contentRating[]", "safe").addQueryParameter("contentRating[]", "suggestive").build()))
             "open-library" -> {
                 val root = openLibraryFetch("https://openlibrary.org/search.json".toHttpUrl().newBuilder().addQueryParameter("title", q).addQueryParameter("lang", "pt").addQueryParameter("page", (safePage + 1).toString()).addQueryParameter("limit", "8").addQueryParameter("fields", "key,title,author_name,subject,editions,editions.key").build())
                 val selections = selectOpenLibraryEditions(root, maxEditions = 3)
@@ -109,23 +109,27 @@ internal object AdditionalCatalogSources {
     }
     internal fun parseKitsu(root: JSONObject): List<ComicEntry> {
         val data = root.optJSONArray("data") ?: return emptyList()
-        return (0 until minOf(data.length(), 12)).mapNotNull { i ->
+        return (0 until minOf(data.length(), 18)).mapNotNull { i ->
             val j = data.optJSONObject(i) ?: return@mapNotNull null
             val a = j.optJSONObject("attributes") ?: return@mapNotNull null
             val id = text(j, "id"); val titles = a.optJSONObject("titles")
-            val title = pt(titles).ifBlank { text(a, "canonicalTitle") }.ifBlank { localized(titles) }
+            val ptTitle = pt(titles)
+            val title = ptTitle.ifBlank { text(a, "canonicalTitle") }.ifBlank { localized(titles) }
             if (!id.matches(Regex("[0-9]{1,12}")) || title.isBlank() || a.optBoolean("nsfw") || text(a, "ageRating") == "R18") return@mapNotNull null
             val poster = a.optJSONObject("posterImage"); val key = "kt-$id"
-            ComicEntry(key, key, title.take(300), titlePtBr = pt(titles).take(300), authors = "", publisher = "", genre = "Mangá", format = "Série de mangá",
+            val synopsisText = ComicVineCatalog.plain(text(a, "synopsis")).take(8000)
+            val hasPt = ptTitle.isNotBlank() || (synopsisText.isNotBlank() && PortugueseComicTranslator.isPortugueseText(synopsisText))
+            ComicEntry(key, key, title.take(300), titlePtBr = ptTitle.take(300), editionLanguage = if (hasPt) "pt" else "",
+                authors = "", publisher = "", genre = "Mangá", format = "Série de mangá",
                 releaseYear = text(a, "startDate").take(4).toIntOrNull() ?: 0, pageCount = 0, currentPage = 0,
                 coverUrl = image(text(poster, "medium").ifBlank { text(poster, "small") }
                     .ifBlank { text(poster, "large") }.ifBlank { text(poster, "original") }),
-                synopsis = ComicVineCatalog.plain(text(a, "synopsis")).take(8000), sourceLabel = "Catálogo online", isOnlineResult = true)
+                synopsis = synopsisText, sourceLabel = "Catálogo online", isOnlineResult = true)
         }
     }
     internal fun parseMangaDex(root: JSONObject): List<ComicEntry> {
         val data = root.optJSONArray("data") ?: return emptyList()
-        return (0 until minOf(data.length(), 12)).mapNotNull { i ->
+        return (0 until minOf(data.length(), 20)).mapNotNull { i ->
             val j = data.optJSONObject(i) ?: return@mapNotNull null
             val a = j.optJSONObject("attributes") ?: return@mapNotNull null
             val id = text(j, "id"); val titles = a.optJSONObject("title"); val title = localized(titles)
@@ -136,9 +140,14 @@ internal object AdditionalCatalogSources {
             val cover = if (file.matches(Regex("[A-Za-z0-9._-]{1,180}"))) "https://uploads.mangadex.org/covers/$id/$file.256.jpg" else ""
             val creators = rel.filter { text(it, "type") in setOf("author", "artist") }.map { text(it.optJSONObject("attributes"), "name") }.filter(String::isNotBlank).distinct().joinToString(", ")
             val description = a.optJSONObject("description"); val key = "md-$id"
-            ComicEntry(key, key, title.take(300), titlePtBr = pt(titles).take(300), authors = creators.take(500), publisher = "", genre = "Mangá", format = "Série de mangá",
+            val ptTitle = pt(titles)
+            val ptDesc = ComicVineCatalog.plain(pt(description)).take(8000)
+            val hasPt = ptTitle.isNotBlank() || ptDesc.isNotBlank() ||
+                strings(a, "availableTranslatedLanguages").any { it.startsWith("pt", ignoreCase = true) }
+            ComicEntry(key, key, title.take(300), titlePtBr = ptTitle.take(300), editionLanguage = if (hasPt) "pt" else "",
+                authors = creators.take(500), publisher = "", genre = "Mangá", format = "Série de mangá",
                 releaseYear = a.optInt("year").takeIf { it > 0 } ?: 0, pageCount = 0, currentPage = 0, coverUrl = cover,
-                synopsis = ComicVineCatalog.plain(localized(description)).take(8000), synopsisPtBr = ComicVineCatalog.plain(pt(description)).take(8000),
+                synopsis = ComicVineCatalog.plain(localized(description)).take(8000), synopsisPtBr = ptDesc,
                 sourceLabel = "Catálogo online", isOnlineResult = true)
         }
     }
@@ -168,7 +177,8 @@ internal object AdditionalCatalogSources {
         val works = edition.optJSONArray("works")
         if (works != null && works.length() > 0 && (0 until works.length()).none { text(works.optJSONObject(it), "key").removePrefix("/works/") == text(work, "key").removePrefix("/works/") }) return null
         val languages = edition.optJSONArray("languages")
-        if (ptOnly && (0 until (languages?.length() ?: 0)).none { text(languages!!.optJSONObject(it), "key") == "/languages/por" }) return null
+        val hasPortuguese = (0 until (languages?.length() ?: 0)).any { text(languages!!.optJSONObject(it), "key") == "/languages/por" }
+        if (ptOnly && !hasPortuguese) return null
         val title = text(edition, "title"); if (title.isBlank()) return null
         val isbn = (strings(edition, "isbn_13") + strings(edition, "isbn_10")).firstNotNullOfOrNull(CatalogSearchPolicy::canonicalIsbn).orEmpty()
         val year = Regex("(?:18|19|20)[0-9]{2}").find(text(edition, "publish_date"))?.value?.toIntOrNull() ?: 0
@@ -176,7 +186,8 @@ internal object AdditionalCatalogSources {
         val cover = (0 until (covers?.length() ?: 0)).map { covers!!.optLong(it) }.firstOrNull { it > 0 }
         val description = text(edition, "description").ifBlank { text(edition.optJSONObject("description"), "value") }
         val key = "ol-$requested"
-        return ComicEntry(key, key, title.take(300), authors = strings(work, "author_name").joinToString(", ").take(500), publisher = strings(edition, "publishers").joinToString(", ").take(160),
+        return ComicEntry(key, key, title.take(300), editionLanguage = if (hasPortuguese) "pt" else "",
+            authors = strings(work, "author_name").joinToString(", ").take(500), publisher = strings(edition, "publishers").joinToString(", ").take(160),
             genre = "Quadrinhos", format = text(edition, "physical_format").ifBlank { "Edição" }.take(60), releaseYear = year,
             pageCount = edition.optInt("number_of_pages").takeIf { it in 1..20000 } ?: 0, currentPage = 0, isbn = isbn,
             coverUrl = cover?.let { "https://covers.openlibrary.org/b/id/$it-L.jpg" }.orEmpty(), synopsis = ComicVineCatalog.plain(description).take(8000),

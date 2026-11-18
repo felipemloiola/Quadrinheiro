@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.DeleteOutline
+import com.kyant.shapes.ContinuousRoundedRectangle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,7 +75,7 @@ internal fun ListCoverStack(list: ComicList, modifier: Modifier = Modifier) {
 @Composable
 internal fun CompactListRow(list: ComicList, onClick: () -> Unit, enabled: Boolean = true, trailing: String? = null) {
     val t = LocalIOS27Theme.current
-    Row(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(18.dp))
+    Row(Modifier.fillMaxWidth().contentMaterialSurface(ContinuousRoundedRectangle(18.dp))
         .clickable(enabled = enabled, onClickLabel = "Abrir lista ${list.name}", onClick = onClick)
         .padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ListCoverStack(list, Modifier.width(92.dp))
@@ -87,7 +89,7 @@ internal fun CompactListRow(list: ComicList, onClick: () -> Unit, enabled: Boole
 
 @Composable
 internal fun FeaturedListCard(list: ComicList, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(listArtworkBackground)
+    Column(Modifier.fillMaxWidth().clip(ContinuousRoundedRectangle(22.dp)).background(listArtworkBackground)
         .clickable(onClickLabel = "Abrir lista ${list.name}", onClick = onClick)) {
         ListHero(list)
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start=14.dp,end=14.dp,bottom=16.dp)) {
@@ -121,16 +123,19 @@ internal fun ListHero(list: ComicList) {
 @Composable
 internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (ComicEntry) -> Unit,
     onEdit: (() -> Unit)? = null, onAdd: (() -> Unit)? = onEdit, onHighlight: (() -> Unit)? = null,
-    onChooseCover: (() -> Unit)? = null, busy: Boolean = false) {
+    onChooseCover: (() -> Unit)? = null, onDelete: (() -> Unit)? = null, busy: Boolean = false) {
     val t = LocalIOS27Theme.current
-    val panel=rememberCurationPanelState()
-    val hasMenu = onHighlight != null || onChooseCover != null
-    CurationSheet(list.name, onClose, busy = busy, menus=hasMenu, actionLabel=if(onEdit!=null) "Editar" else null,
-        onAction={onEdit?.invoke()},panel=panel, headerActions={
+    val panel = rememberCurationPanelState()
+    var confirmingDelete by remember(list.id) { mutableStateOf(false) }
+    val hasMenu = onAdd != null || onHighlight != null || onChooseCover != null || onDelete != null
+    CurationSheet(list.name, onClose, busy = busy, menus = hasMenu, actionLabel = if (onEdit != null) "Editar" else null,
+        onAction = { onEdit?.invoke() }, panel = panel, headerActions = {
             if (hasMenu) CurationActionMenu("Opções da lista", buildList {
-                if (onChooseCover != null) add(LiquidGlassMenuItemData("Escolher capa", Icons.Default.Image, onClick=onChooseCover))
-                if (onHighlight != null) add(LiquidGlassMenuItemData("Destacar na Biblioteca", Icons.Default.Star, onClick=onHighlight))
-            },enabled=!busy)
+                if (onAdd != null) add(LiquidGlassMenuItemData("Adicionar HQs", Icons.Default.Add, onClick = onAdd))
+                if (onChooseCover != null) add(LiquidGlassMenuItemData("Escolher capa", Icons.Default.Image, onClick = onChooseCover))
+                if (onHighlight != null) add(LiquidGlassMenuItemData("Destacar na Biblioteca", Icons.Default.Star, onClick = onHighlight))
+                if (onDelete != null) add(LiquidGlassMenuItemData("Excluir lista", Icons.Outlined.DeleteOutline, onClick = { confirmingDelete = true }))
+            }, enabled = !busy)
         }) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { ListHero(list) }
@@ -152,6 +157,18 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
                     }
                     HorizontalDivider(Modifier.padding(top = 12.dp), color = t.divider)
                 }
+            }
+        }
+    }
+    if (confirmingDelete && onDelete != null) {
+        CurationSubpage {
+            CurationPrompt(
+                "Excluir esta lista?",
+                { confirmingDelete = false },
+                "Excluir lista",
+                { panel.close { onDelete() } }
+            ) {
+                Text("Suas HQs, resenhas e registros de leitura serão preservados.", color = t.textSecondary)
             }
         }
     }

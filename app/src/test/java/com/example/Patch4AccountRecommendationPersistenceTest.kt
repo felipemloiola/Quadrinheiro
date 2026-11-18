@@ -50,4 +50,48 @@ class Patch4AccountRecommendationPersistenceTest {
         assertEquals(cloud.cachedRecommendationsJson, restored.cachedRecommendationsJson)
         assertEquals(cloud.recommendationTasteHash, restored.recommendationTasteHash)
     }
+
+    @Test
+    fun cloudUserPreferencesNeverSlicesJsonArrayMidElementAndCloudComicKeepsEditionLanguage() {
+        val largeArray = org.json.JSONArray()
+        for (i in 1..60) {
+            largeArray.put(
+                org.json.JSONObject()
+                    .put("id", "rec-$i")
+                    .put("title", "Edição Especial Muito Longa Número $i com Subtítulo Completo")
+                    .put("authors", "Autor Um, Autor Dois, Autor Três")
+                    .put("coverUrl", "https://example.org/covers/very-long-cover-path-number-$i.jpg")
+                    .put("reasonLabel", "Continuação da sua leitura favorita")
+            )
+        }
+        val rawLargeJson = largeArray.toString()
+        assertTrue(rawLargeJson.length > 12288)
+
+        val cloud = CloudUserPreferences.fromAppSettings(
+            AppSettings(cachedRecommendationsJson = rawLargeJson, recommendationTasteHash = "hash_v16")
+        )
+        assertTrue(cloud.cachedRecommendationsJson.length <= 12288)
+        val parsedBack = org.json.JSONArray(cloud.cachedRecommendationsJson)
+        assertTrue(parsedBack.length() > 0)
+
+        val comic = com.example.model.ComicEntry(
+            id = "mt-777",
+            externalId = "mt-777",
+            title = "Daredevil: Born Again",
+            authors = "Frank Miller",
+            publisher = "Marvel",
+            editionLanguage = "pt"
+        )
+        val cloudDoc = com.example.data.CloudComicDocument.fromComicEntry("uid_test", comic)
+        assertEquals("pt", cloudDoc.editionLanguage)
+        assertEquals("pt", cloudDoc.toComicEntry().editionLanguage)
+
+        val sanitizedLog = com.example.data.formatSanitizedFirestoreLog(
+            IllegalStateException("secret@email.com /users/uid_secret_123"),
+            com.example.data.OperationType.WRITE
+        )
+        org.junit.Assert.assertFalse(sanitizedLog.contains("secret@email.com"))
+        org.junit.Assert.assertFalse(sanitizedLog.contains("uid_secret_123"))
+        assertTrue(sanitizedLog.contains("\"operationType\":\"write\""))
+    }
 }

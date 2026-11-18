@@ -65,6 +65,7 @@ service cloud.firestore {
     //   - moments: list (required, size <= 100)
     //   - seriesName: string (optional, 0..200 chars)
     //   - issueNumber: int (optional, 0..100000)
+    //   - editionLanguage: string (optional, 0..20 chars)
     //   - updatedAt: timestamp (required)
     // ===============================================================
 
@@ -107,7 +108,7 @@ service cloud.firestore {
 
     function isValidUserPreferences(prefs) {
       return prefs is map &&
-        prefs.size() <= 45 &&
+        prefs.size() <= 50 &&
         (!('profileFavoriteComicIds' in prefs) || validShowcaseList(prefs.profileFavoriteComicIds, 200)) &&
         (!('profileFavoriteCharacters' in prefs) || validShowcaseList(prefs.profileFavoriteCharacters, 100)) &&
         (!('profileShowcaseDetails' in prefs) || validShowcaseDetails(prefs.profileShowcaseDetails)) &&
@@ -124,6 +125,8 @@ service cloud.firestore {
         (!('defaultFormat' in prefs) || (prefs.defaultFormat is string && prefs.defaultFormat.size() <= 120)) &&
         (!('searchLanguage' in prefs) || (prefs.searchLanguage is string && prefs.searchLanguage.size() <= 20)) &&
         (!('searchProvider' in prefs) || (prefs.searchProvider is string && prefs.searchProvider.size() <= 30)) &&
+        (!('aiRecommendationsEnabled' in prefs) || (prefs.aiRecommendationsEnabled is bool)) &&
+        (!('cachedRecommendationsPayload' in prefs) || (prefs.cachedRecommendationsPayload is string && prefs.cachedRecommendationsPayload.size() <= 16384)) &&
         (!('quickReviewTags' in prefs) || isValidQuickReviewTags(prefs.quickReviewTags));
     }
 
@@ -213,7 +216,7 @@ service cloud.firestore {
         'status', 'rating', 'favorite', 'rereadCount', 'tags',
         'review', 'readDate', 'addedAt', 'isbn', 'coverUrl',
         'synopsis', 'synopsisPtBr', 'sourceLabel', 'moments',
-        'seriesName', 'issueNumber', 'updatedAtMillis', 'updatedAt'
+        'seriesName', 'issueNumber', 'editionLanguage', 'updatedAtMillis', 'updatedAt'
       ];
       return data.keys().hasAll(requiredKeys) &&
         data.keys().hasOnly(allowedKeys) &&
@@ -244,6 +247,7 @@ service cloud.firestore {
         isValidComicMomentsList(data.moments) &&
         (!('seriesName' in data) || (data.seriesName is string && data.seriesName.size() <= 200)) &&
         (!('issueNumber' in data) || (data.issueNumber is int && data.issueNumber >= 0 && data.issueNumber <= 100000)) &&
+        (!('editionLanguage' in data) || (data.editionLanguage is string && data.editionLanguage.size() <= 20)) &&
         (!('updatedAtMillis' in data) || (data.updatedAtMillis is int && data.updatedAtMillis >= 0)) &&
         data.updatedAt is timestamp && data.updatedAt <= request.time;
     }

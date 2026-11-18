@@ -24,4 +24,16 @@ class PortugueseEditionSearchTest {
     @Test fun verifiedCuratedAndLocalEntriesArePreserved() {
         assertTrue(PortugueseSearchPolicy.accepts(book.copy(id="cat-batman",externalId="",isOnlineResult=false)))
     }
+    @Test fun specialistComicCatalogsAcceptPtAndEnWhileBlockingThirdLanguages() {
+        val metronEn = ComicEntry(id="mt-101", externalId="mt-101", title="Batman: Year One", authors="Frank Miller", publisher="DC Comics", editionLanguage="en", sourceLabel="Metron", isOnlineResult=true)
+        val cvUnknown = ComicEntry(id="cv-volume-796", externalId="cv-volume-796", title="Daredevil: Born Again", authors="Frank Miller", publisher="Marvel", editionLanguage="", sourceLabel="Comic Vine", isOnlineResult=true)
+        val mdPt = ComicEntry(id="md-8f3e1818-a015-491d-bd81-3addc4d7d56a", externalId="md-8f3e1818-a015-491d-bd81-3addc4d7d56a", title="Berserk", authors="Kentaro Miura", publisher="", genre="Mangá", format="Série de mangá", editionLanguage="pt", isOnlineResult=true)
+        assertTrue(PortugueseSearchPolicy.accepts(metronEn))
+        assertTrue(PortugueseSearchPolicy.accepts(cvUnknown))
+        assertTrue(PortugueseSearchPolicy.accepts(mdPt))
+
+        assertFalse(PortugueseSearchPolicy.accepts(metronEn.copy(editionLanguage="de", title="Batman: Die Rückkehr")))
+        assertFalse(PortugueseSearchPolicy.accepts(cvUnknown.copy(title="Lanterna Verde - La notte più profonda")))
+        assertFalse(PortugueseSearchPolicy.accepts(cvUnknown.copy(title="雲海爭奇錄")))
+    }
 }

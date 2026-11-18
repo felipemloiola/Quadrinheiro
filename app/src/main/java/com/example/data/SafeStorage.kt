@@ -1507,6 +1507,7 @@ class SafeStorage(context: Context) {
         put("searchLanguage", s.searchLanguage)
         put("searchProvider", s.searchProvider)
         put("hdCovers", s.hdCovers)
+        put("aiRecommendationsEnabled", s.aiRecommendationsEnabled)
         put("spoilerProtection", s.spoilerProtection)
         put("halfStarRatings", s.halfStarRatings)
         put("allowRereads", s.allowRereads)
@@ -1581,6 +1582,7 @@ class SafeStorage(context: Context) {
             searchLanguage = obj.optString("searchLanguage", def.searchLanguage),
             searchProvider = obj.optString("searchProvider", def.searchProvider),
             hdCovers = obj.optBoolean("hdCovers", def.hdCovers),
+            aiRecommendationsEnabled = obj.optBoolean("aiRecommendationsEnabled", def.aiRecommendationsEnabled),
             spoilerProtection = obj.optBoolean("spoilerProtection", def.spoilerProtection),
             halfStarRatings = obj.optBoolean("halfStarRatings", def.halfStarRatings),
             allowRereads = obj.optBoolean("allowRereads", def.allowRereads),

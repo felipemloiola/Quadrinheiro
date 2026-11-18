@@ -135,8 +135,16 @@ data class CloudUserPreferences(
         }
 
     @get:com.google.firebase.firestore.Exclude
+    val aiRecommendationsEnabled: Boolean
+        get() {
+            val header = cachedRecommendationsPayload.substringBefore('\n', "")
+            val parts = header.split('\t')
+            return parts.getOrNull(3) != "0"
+        }
+
+    @get:com.google.firebase.firestore.Exclude
     val cachedRecommendationsJson: String
-        get() = if ('\n' in cachedRecommendationsPayload) cachedRecommendationsPayload.substringAfter('\n').take(12288) else ""
+        get() = if ('\n' in cachedRecommendationsPayload) trimRecommendationsJsonSafely(cachedRecommendationsPayload.substringAfter('\n'), 12288) else ""
 
     fun toAppSettings(): AppSettings {
         val cleanFavComics = profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
@@ -178,6 +186,7 @@ data class CloudUserPreferences(
         searchLanguage = searchLanguage.ifBlank { "ALL" },
         searchProvider = searchProvider.ifBlank { "MULTI" },
         hdCovers = hdCovers,
+        aiRecommendationsEnabled = aiRecommendationsEnabled,
         spoilerProtection = spoilerProtection,
         halfStarRatings = halfStarRatings,
         allowRereads = allowRereads,
@@ -193,13 +202,38 @@ data class CloudUserPreferences(
     }
 
     companion object {
+        internal fun trimRecommendationsJsonSafely(raw: String, maxChars: Int = 12288): String {
+            if (raw.length <= maxChars) return raw
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("[")) {
+                try {
+                    val arr = JSONArray(trimmed)
+                    while (arr.length() > 0) {
+                        val candidate = arr.toString()
+                        if (candidate.length <= maxChars && candidate.toByteArray(Charsets.UTF_8).size <= maxChars) {
+                            return candidate
+                        }
+                        arr.remove(arr.length() - 1)
+                    }
+                    return "[]"
+                } catch (_: Throwable) {
+                    return "[]"
+                }
+            }
+            return raw.take(maxChars)
+        }
+
         fun fromAppSettings(s: AppSettings): CloudUserPreferences {
             val cleanHash = s.recommendationTasteHash.replace("\n", "").replace("\t", "").take(64)
-            val cleanJson = s.cachedRecommendationsJson.take(12288)
+            val cleanJson = trimRecommendationsJsonSafely(s.cachedRecommendationsJson, 12288)
             val cleanMode = s.launcherIconMode.replace("\n", "").replace("\t", "").ifBlank { "original" }.take(30)
             val cleanUpdatedAt = s.settingsUpdatedAt.coerceAtLeast(0L)
-            val hasMeta = cleanUpdatedAt > 0L || cleanMode != "original"
-            val header = if (hasMeta) "$cleanHash\t$cleanUpdatedAt\t$cleanMode" else cleanHash
+            val hasMeta = cleanUpdatedAt > 0L || cleanMode != "original" || !s.aiRecommendationsEnabled
+            val header = when {
+                !s.aiRecommendationsEnabled -> "$cleanHash\t$cleanUpdatedAt\t$cleanMode\t0"
+                hasMeta -> "$cleanHash\t$cleanUpdatedAt\t$cleanMode"
+                else -> cleanHash
+            }
             val payload = if (header.isEmpty() && cleanJson.isEmpty()) "" else "$header\n$cleanJson"
             val cleanFavComics = s.profileFavoriteComicIds.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(4)
             val cleanFavChars = s.profileFavoriteCharacters.map { it.take(60) }.filter { it.isNotBlank() }.distinct().take(4)
@@ -389,6 +423,7 @@ data class CloudComicDocument(
     val externalId: String = "",
     val title: String = "",
     val titlePtBr: String = "",
+    val editionLanguage: String = "",
     val authors: String = "",
     val publisher: String = "",
     val genre: String = "Graphic Novel",
@@ -437,6 +472,7 @@ data class CloudComicDocument(
             externalId = externalId.ifBlank { docId },
             title = resolvedTitle,
             titlePtBr = resolvedTitlePtBr,
+            editionLanguage = editionLanguage.trim().take(20),
             authors = authors.ifBlank { "Autor Desconhecido" },
             publisher = publisher.ifBlank { "Editora" },
             genre = genre.ifBlank { "Graphic Novel" },
@@ -490,6 +526,7 @@ data class CloudComicDocument(
                 externalId = comic.externalId.ifBlank { safeId }.take(200),
                 title = resolvedOriginalTitle,
                 titlePtBr = resolvedTitlePtBr,
+                editionLanguage = comic.editionLanguage.trim().take(20),
                 authors = comic.authors.trim().take(300),
                 publisher = comic.publisher.trim().take(160),
                 genre = comic.genre.take(120),
@@ -520,44 +557,27 @@ data class CloudComicDocument(
     }
 }
 
+internal fun formatSanitizedFirestoreLog(
+    error: Exception,
+    operationType: OperationType
+): String {
+    val code = if (error is FirebaseFirestoreException) error.code.name else error::class.java.simpleName
+    return JSONObject().apply {
+        put("operationType", operationType.name.lowercase())
+        put("code", code)
+    }.toString()
+}
+
 fun handleFirestoreError(
     error: Exception,
     operationType: OperationType,
-    path: String?,
-    auth: FirebaseAuth = FirebaseAuth.getInstance()
+    @Suppress("UNUSED_PARAMETER") path: String?,
+    @Suppress("UNUSED_PARAMETER") auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
-    val currentUser = auth.currentUser
-    val providerArray = JSONArray()
-    currentUser?.providerData?.forEach { userInfo ->
-        providerArray.put(
-            JSONObject().apply {
-                put("providerId", userInfo.providerId)
-                put("displayName", userInfo.displayName ?: JSONObject.NULL)
-                put("email", userInfo.email ?: JSONObject.NULL)
-                put("photoUrl", userInfo.photoUrl?.toString() ?: JSONObject.NULL)
-            }
-        )
+    // Zero PII: nunca registra email, userId, displayName, photoUrl ou caminhos de usuário em logcat.
+    if (com.example.BuildConfig.DEBUG) {
+        Log.e("FirestoreError", formatSanitizedFirestoreLog(error, operationType))
     }
-
-    val authJson = JSONObject().apply {
-        put("userId", currentUser?.uid ?: JSONObject.NULL)
-        put("email", currentUser?.email ?: JSONObject.NULL)
-        put("emailVerified", currentUser?.isEmailVerified ?: false)
-        put("isAnonymous", currentUser?.isAnonymous ?: false)
-        put("providerInfo", providerArray)
-    }
-
-    val errorInfo = JSONObject().apply {
-        put("error", error.message ?: error.toString())
-        if (error is FirebaseFirestoreException) {
-            put("code", error.code.name)
-        }
-        put("operationType", operationType.name.lowercase())
-        put("path", path ?: JSONObject.NULL)
-        put("authInfo", authJson)
-    }
-
-    Log.e("FirestoreError", errorInfo.toString())
     throw error
 }
 
@@ -776,6 +796,7 @@ class QuadrinheiroCloudRepository(
                 externalId = getString("externalId").orEmpty().ifBlank { id },
                 title = getString("title").orEmpty(),
                 titlePtBr = getString("titlePtBr").orEmpty(),
+                editionLanguage = getString("editionLanguage").orEmpty(),
                 authors = getString("authors").orEmpty(),
                 publisher = getString("publisher").orEmpty(),
                 genre = getString("genre").orEmpty().ifBlank { "Graphic Novel" },
@@ -1298,7 +1319,8 @@ class QuadrinheiroCloudRepository(
                         val winner = local.copy(
                             id = remoteMatch.id,
                             titlePtBr = local.titlePtBr.ifBlank { remoteMatch.titlePtBr },
-                            synopsisPtBr = local.synopsisPtBr.ifBlank { remoteMatch.synopsisPtBr }
+                            synopsisPtBr = local.synopsisPtBr.ifBlank { remoteMatch.synopsisPtBr },
+                            editionLanguage = local.editionLanguage.ifBlank { remoteMatch.editionLanguage }
                         )
                         mergedById[remoteMatch.id] = winner
                         if (local.isDirty) {
@@ -1309,6 +1331,7 @@ class QuadrinheiroCloudRepository(
                         val mergedRemote = remoteMatch.copy(
                             titlePtBr = remoteMatch.titlePtBr.ifBlank { local.titlePtBr },
                             synopsisPtBr = remoteMatch.synopsisPtBr.ifBlank { local.synopsisPtBr },
+                            editionLanguage = remoteMatch.editionLanguage.ifBlank { local.editionLanguage },
                             synopsis = remoteMatch.synopsisPtBr.ifBlank {
                                 local.synopsisPtBr.ifBlank { remoteMatch.synopsis }
                             },

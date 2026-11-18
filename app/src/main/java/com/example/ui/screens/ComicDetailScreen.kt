@@ -35,6 +35,11 @@ import com.example.data.*
 import com.example.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.LocalIsDarkTheme
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.shapes.ContinuousCapsule
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -135,6 +140,13 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     LaunchedEffect(isComic, curationState.owner) { if (isComic) curationViewModel.curation.load() }
     var listToOpen by remember(curationState.owner, comic.id) { mutableStateOf<ComicList?>(null) }
     var listComic by remember(curationState.owner, comic.id) { mutableStateOf<ComicEntry?>(null) }
+    var addedListNotice by remember(curationState.owner, comic.id) { mutableStateOf<ComicList?>(null) }
+    LaunchedEffect(addedListNotice?.id) {
+        if (addedListNotice != null) {
+            kotlinx.coroutines.delay(3600)
+            addedListNotice = null
+        }
+    }
     val currentReading = com.example.model.catalogEntryForEditing(comic, library)
     val readingPresentation = ComicReadingPresentation.from(currentReading)
     fun registerCurrent() {
@@ -151,18 +163,45 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     )
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
     val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
-    val related = remember(comic.id, comic.externalId, detail?.issues, detail?.characters, detail?.creators, library, catalogEntries) {
-        val pool = library + catalogEntries + CuratedCatalog.curatedComicsCatalog
+    val onlineSequence by curationViewModel.onlineSequencePool.collectAsStateWithLifecycle()
+    val editorialShelves by EditorialDiscovery.shelves.collectAsStateWithLifecycle()
+    val exploreRecState by curationViewModel.exploreRecommendationState.collectAsStateWithLifecycle()
+    val related = remember(
+        comic.id,
+        comic.externalId,
+        detail?.issues,
+        detail?.characters,
+        detail?.creators,
+        library,
+        catalogEntries,
+        onlineSequence,
+        editorialShelves,
+        exploreRecState.recommendations
+    ) {
+        val pool = library +
+            onlineSequence +
+            catalogEntries +
+            editorialShelves.values.flatten() +
+            exploreRecState.recommendations.map { it.comic } +
+            CuratedCatalog.curatedComicsCatalog
         ComicDetailPresentation.relatedEditionsWithReasons(comic, detail, pool)
     }
     val motion=com.example.ui.theme.LocalAppMotion.current
     val settings=com.example.ui.theme.LocalAppSettings.current
+    val isDark=LocalIsDarkTheme.current
+    val detailBackdrop=rememberLayerBackdrop()
+    val freezeDetailBackdrop=expandedCover || editionPicker || listToOpen != null || listComic != null
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
     Box(Modifier.fillMaxSize()) {
     BoxWithConstraints(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
         val persistentBanner=detail?.banner.orEmpty().ifBlank {fallbackBanner}.ifBlank {if(isComic)effectiveCover else ""}
         val persistentHeroHeight=(maxWidth/1.85f).coerceIn(160.dp,260.dp)
+        Box(
+            Modifier.fillMaxSize()
+                .background(t.bgPrimary)
+                .layerBackdrop(detailBackdrop, reuseRecordedContent = true, freezeSnapshot = freezeDetailBackdrop)
+        ) {
         if (effectiveCover.isNotBlank() && !settings.reduceTransparency) {
             ReadingCoverAtmosphere(effectiveCover, t.bgPrimary, fraction = .55f, modifier=Modifier.graphicsLayer {alpha=if(motion.reduced) .08f else scrollFraction()*.35f})
         }
@@ -189,7 +228,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                         Spacer(Modifier.height(if (banner.isNotBlank()) (heroHeight - 54.dp).coerceAtLeast(68.dp) else 68.dp))
                         Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Top) {
                             if (isComic) BookCover(effectiveCover, comic.displayTitle, spine3d = false, modifier = Modifier.width(104.dp).aspectRatio(2f / 3f).onGloballyPositioned {coverBounds=it.boundsInWindow()}.clickable(onClickLabel="Ampliar capa",enabled=effectiveCover.isNotBlank()) {expandedCover=true})
-                            else ProfileImage(detail?.image.orEmpty(), detail?.title, Modifier.size(110.dp).clip(RoundedCornerShape(22.dp)), face = true)
+                            else ProfileImage(detail?.image.orEmpty(), detail?.title, Modifier.size(110.dp).clip(ContinuousRoundedRectangle(22.dp)), face = true)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (isComic) comic.displayTitle else detail?.title ?: "Carregando…", color = t.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
                                 val publisher = detail?.publisher.orEmpty().ifBlank { if (isComic) comic.publisher else "" }
@@ -276,24 +315,107 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 }
             }
         }
-        Row(Modifier.align(Alignment.TopStart).fillMaxWidth()
-            .drawWithContent {drawRect(Brush.verticalGradient(listOf(t.bgPrimary.copy(alpha=scrollFraction()*.96f),Color.Transparent)));drawContent()}
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .heightIn(min = 54.dp)
-            .padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            SettingsBackButton({ goBack() }, collapsed = collapsed, label = if (isComic) "Voltar" else "HQ")
-            if (collapsed) Text(if (isComic) comic.displayTitle else detail?.title.orEmpty(), color = t.textPrimary,
-                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
-            else Spacer(Modifier.weight(1f))
-            if (isComic) IconButton(onClick = onShare,modifier=Modifier.liquidGlass(shape=RoundedCornerShape(50))) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.textPrimary) }
-        }
-        if (isComic && tab != 3) Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .navigationBarsPadding().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 32.dp)
-            .contentMaterialSurface(RoundedCornerShape(28.dp)).padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            EditorialAction(readingPresentation.action, ::registerCurrent, Modifier.weight(1f))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                AddToListAction(comic, curationViewModel.curation, compact = true)
+        } // end detailBackdrop layer
+        CompositionLocalProvider(LocalLiquidGlassBackdrop provides detailBackdrop) {
+            Row(Modifier.align(Alignment.TopStart).fillMaxWidth()
+                .drawWithContent {
+                    val sf = scrollFraction()
+                    if (sf > 0.01f) {
+                        drawRect(
+                            Brush.verticalGradient(
+                                listOf(
+                                    t.bgPrimary.copy(alpha = sf * 0.94f),
+                                    t.bgPrimary.copy(alpha = sf * 0.62f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                    }
+                    drawContent()
+                }
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .heightIn(min = 54.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                SettingsBackButton({ goBack() }, collapsed = collapsed, label = if (isComic) "Voltar" else "HQ")
+                if (collapsed) Text(if (isComic) comic.displayTitle else detail?.title.orEmpty(), color = t.textPrimary,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+                else Spacer(Modifier.weight(1f))
+                if (isComic) IconButton(onClick = onShare, modifier = Modifier.liquidGlass(shape = ContinuousCapsule)) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.textPrimary) }
+            }
+            addedListNotice?.let { targetList ->
+                val pillShape = ContinuousCapsule
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 104.dp, start = 20.dp, end = 20.dp)
+                        .then(
+                            if (settings.reduceTransparency) Modifier.contentMaterialSurface(pillShape)
+                            else Modifier.liquidGlass(shape = pillShape, elevation = 12.dp, surfaceAlpha = if (isDark) 0.52f else 0.68f)
+                        )
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF34D399), modifier = Modifier.size(16.dp))
+                        Text(
+                            "Adicionada a \"${targetList.name}\"",
+                            color = t.textPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Box(
+                            Modifier
+                                .clip(pillShape)
+                                .background(t.textPrimary, pillShape)
+                                .clickable {
+                                    val fresh = curationState.lists.firstOrNull { it.id == targetList.id && !it.deleted } ?: targetList
+                                    addedListNotice = null
+                                    listToOpen = fresh
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text("Ver lista", color = t.bgPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            if (isComic && tab != 3) {
+                val dockShape = ContinuousRoundedRectangle(28.dp)
+                Row(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .navigationBarsPadding().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 32.dp)
+                        .then(
+                            if (settings.reduceTransparency) Modifier.contentMaterialSurface(dockShape)
+                            else Modifier.liquidGlass(
+                                radiusX = 32f,
+                                radiusY = 32f,
+                                shape = dockShape,
+                                elevation = 10.dp,
+                                surfaceAlpha = if (isDark) 0.42f else 0.58f
+                            )
+                        )
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EditorialAction(readingPresentation.action, ::registerCurrent, Modifier.weight(1f))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        AddToListAction(
+                            comic = comic,
+                            controller = curationViewModel.curation,
+                            compact = true,
+                            library = library,
+                            searchCatalog = curationViewModel::searchCatalogForList,
+                            onAddedToList = { added -> addedListNotice = added }
+                        )
+                    }
+                }
             }
         }
     }
@@ -366,7 +488,7 @@ private fun CreditRow(credit: CatalogCredit, type: String, autoLoad: Boolean = t
         }
     }
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(Modifier.size(62.dp).clip(RoundedCornerShape(14.dp)).background(t.bgSecondary), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(62.dp).clip(ContinuousRoundedRectangle(14.dp)).background(t.bgSecondary), contentAlignment = Alignment.Center) {
             if (image.isNotBlank()) ProfileImage(image, null, Modifier.fillMaxSize(), face = true)
             else Text(credit.name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }, color = t.textSecondary, fontSize = 18.sp)
         }
@@ -378,10 +500,10 @@ private fun CreditRow(credit: CatalogCredit, type: String, autoLoad: Boolean = t
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditionChooser(initialQuery: String, onClose: () -> Unit, onChoose: (ComicEntry) -> Unit) {
     val t = LocalIOS27Theme.current
+    val panel = rememberCurationPanelState()
     var query by remember { mutableStateOf(initialQuery) }
     var entries by remember { mutableStateOf(emptyList<ComicEntry>()) }
     var busy by remember { mutableStateOf(false) }
@@ -395,18 +517,22 @@ private fun EditionChooser(initialQuery: String, onClose: () -> Unit, onChoose: 
         catch (_: Exception) { failed = true }
         finally { busy = false }
     }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 620.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { SectionHeading("Edição", "Escolha a edição correspondente para ver personagens e equipe.") }
+    CurationSheet("Escolher edição", onClose, panel = panel, compact = true) {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp).imePadding(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { Text("Escolha a edição correspondente para ver personagens e equipe.", color = t.textSecondary, fontSize = 13.sp) }
             item { AppleTextField(query, { query = it.take(100) }, "Buscar edição") }
             if (busy) item { LoadingLine(Modifier.fillMaxWidth(), color = t.accent) }
             if (failed) item { Text("Não foi possível buscar. Tente outro termo.", color = t.textSecondary) }
             items(entries.distinctBy { it.id }, key = { it.id }) { entry ->
-                Row(Modifier.fillMaxWidth().clickable { onChoose(entry) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = panel.request == 0) { panel.close { onChoose(entry) } }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                     BookCover(entry.coverUrl, entry.displayTitle, spine3d = false, modifier = Modifier.width(48.dp).height(72.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(entry.displayTitle, color = t.textPrimary)
-                        Text(listOfNotNull(entry.issueNumber.takeIf { it > 0 }?.let { "Edição $it" }, entry.releaseYear.toString()).joinToString(" · "), color = t.textSecondary, fontSize = 12.sp)
+                        Text(entry.displayTitle, color = t.textPrimary, fontWeight = FontWeight.Medium)
+                        Text(listOfNotNull(entry.issueNumber.takeIf { it > 0 }?.let { "Edição $it" }, entry.releaseYear.takeIf { it > 0 }?.toString()).joinToString(" · "), color = t.textSecondary, fontSize = 12.sp)
                     }
                 }
             }

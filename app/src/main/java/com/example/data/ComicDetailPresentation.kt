@@ -28,9 +28,9 @@ internal object ComicDetailPresentation {
             candidate.id.isNotBlank() && candidate.id !in current &&
                 (candidate.externalId.isBlank() || candidate.externalId !in current)
         }
-        if (direct.isNotEmpty()) {
-            val baseIssue = SeriesSequenceEngine.inferIssueNumber(comic)
-            return direct.distinctBy { it.externalId.ifBlank { it.id } }.take(8).map { issue ->
+        val baseIssue = SeriesSequenceEngine.inferIssueNumber(comic)
+        val directMapped = if (direct.isNotEmpty()) {
+            direct.distinctBy { it.externalId.ifBlank { it.id }.ifBlank { it.title } }.take(8).map { issue ->
                 val candIssue = SeriesSequenceEngine.inferIssueNumber(issue)
                 val reason = when {
                     baseIssue > 0 && candIssue == baseIssue + 1 -> "Próxima edição • #$candIssue"
@@ -44,9 +44,11 @@ internal object ComicDetailPresentation {
                     signalSource = "DETAIL_ISSUES"
                 )
             }
-        }
+        } else emptyList()
 
-        if (catalogPool.isEmpty()) return emptyList()
+        if (directMapped.size >= 8 || catalogPool.isEmpty()) {
+            return directMapped
+        }
 
         val primaryAuthor = comic.authors.split(",")
             .map { it.trim() }
@@ -61,7 +63,6 @@ internal object ComicDetailPresentation {
         val normBaseSeries = CatalogSearchPolicy.normalize(baseSeries)
         val normAuthor = CatalogSearchPolicy.normalize(primaryAuthor)
         val normPub = CatalogSearchPolicy.normalize(comic.publisher.ifBlank { detail?.publisher.orEmpty() })
-        val baseIssue = SeriesSequenceEngine.inferIssueNumber(comic)
 
         // Strictly real credited characters from detail.characters — never invented
         val creditedCharacters = detail?.characters.orEmpty()
@@ -193,7 +194,7 @@ internal object ComicDetailPresentation {
             sameCreditedCharacter.drop(2) +
             canonicalRelated.drop(2)
 
-        val combinedPrimary = deduplicateRelated(prioritized)
+        val combinedPrimary = deduplicateRelated(directMapped + prioritized)
         if (combinedPrimary.isNotEmpty()) {
             return combinedPrimary.take(8)
         }
@@ -213,7 +214,7 @@ internal object ComicDetailPresentation {
             }
         } else emptyList()
 
-        return deduplicateRelated(samePublisher).take(8)
+        return deduplicateRelated(directMapped + samePublisher).take(8)
     }
 
     private fun deduplicateRelated(items: List<RecommendedComic>): List<RecommendedComic> {

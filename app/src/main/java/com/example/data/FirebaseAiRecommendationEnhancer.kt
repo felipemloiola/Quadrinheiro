@@ -1,6 +1,13 @@
 package com.example.data
 
+import android.content.Context
 import com.example.model.ComicEntry
+import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.generationConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -8,8 +15,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Contrato seguro e opcional para enriquecimento semântico via Firebase AI / Gemini.
- * 
+ * Contrato seguro e opcional para enriquecimento semântico via Firebase AI Logic (Gemini).
+ *
  * Regras estritas de segurança:
  * 1. NUNCA envia biblioteca bruta, notas, avaliações, emails ou IDs sensíveis (Zero PII).
  * 2. A IA NUNCA pode inventar HQs, autores, sinopses ou links.
@@ -20,6 +27,7 @@ import org.json.JSONObject
 object FirebaseAiRecommendationEnhancer {
 
     private const val TIMEOUT_MS = 3500L
+    private const val MODEL_NAME = "gemini-2.5-flash"
 
     data class AiEnrichmentResult(
         val orderedCandidateIds: List<String>,
@@ -28,12 +36,24 @@ object FirebaseAiRecommendationEnhancer {
     )
 
     /**
-     * Valida em runtime se a IA está provisionada e pronta.
-     * Como libs.firebase.ai e ai_logic ainda não estão ativos em build.gradle.kts/firebase_applet_config,
-     * retorna false de forma segura e não bloqueante.
+     * Valida em runtime se o FirebaseApp padrão está inicializado com credenciais reais
+     * (evitando chamadas em testes unitários sem backend ou projetos demo/offline).
      */
-    fun isAiAvailable(): Boolean {
-        return false
+    fun isAiAvailable(context: Context? = null): Boolean {
+        return try {
+            val app = if (context != null) {
+                FirebaseApp.getApps(context).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
+            } else {
+                runCatching { FirebaseApp.getInstance() }.getOrNull()
+            } ?: return false
+            val opts = app.options
+            opts.projectId?.isNotBlank() == true &&
+                !opts.projectId!!.startsWith("demo-") &&
+                opts.apiKey.isNotBlank() &&
+                !opts.apiKey.startsWith("fake-")
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /**
@@ -133,22 +153,75 @@ object FirebaseAiRecommendationEnhancer {
         }
     }
 
+    internal fun applyValidatedEnrichment(
+        candidates: List<RecommendedComic>,
+        enrichment: AiEnrichmentResult
+    ): List<RecommendedComic> {
+        if (candidates.isEmpty()) return candidates
+        val byId = candidates.associateBy { it.comic.id }
+        val ordered = mutableListOf<RecommendedComic>()
+        val seen = HashSet<String>()
+
+        for (id in enrichment.orderedCandidateIds) {
+            val existing = byId[id] ?: continue
+            if (!seen.add(id)) continue
+            val refinedReason = enrichment.reasonOverrides[id]?.take(42)?.takeIf { it.length >= 8 } ?: existing.reasonLabel
+            ordered.add(existing.copy(reasonLabel = refinedReason))
+        }
+
+        for (item in candidates) {
+            if (seen.add(item.comic.id)) {
+                val refinedReason = enrichment.reasonOverrides[item.comic.id]?.take(42)?.takeIf { it.length >= 8 } ?: item.reasonLabel
+                ordered.add(item.copy(reasonLabel = refinedReason))
+            }
+        }
+        return ordered
+    }
+
     /**
-     * Tenta enriquecer a lista de recomendações. Se offline ou falhar, retorna a lista original intacta.
+     * Tenta enriquecer a lista de recomendações via Firebase AI Logic (Gemini Flash).
+     * Se desativado, sem credenciais ou em caso de timeout/erro, retorna a lista determinística original intacta.
      */
     suspend fun enhanceOrFallback(
         taste: UserTasteProfile,
-        candidates: List<RecommendedComic>
-    ): List<RecommendedComic> = withContext(Dispatchers.Default) {
-        if (!isAiAvailable() || candidates.isEmpty()) {
+        candidates: List<RecommendedComic>,
+        context: Context? = null,
+        enabled: Boolean = true
+    ): List<RecommendedComic> = withContext(Dispatchers.IO) {
+        if (!enabled || candidates.isEmpty() || !isAiAvailable(context)) {
             return@withContext candidates
         }
 
-        val enriched = withTimeoutOrNull(TIMEOUT_MS) {
-            // Placeholder seguro para chamada assíncrona Firebase.ai
-            null
-        } ?: return@withContext candidates
+        val slice = candidates.take(16).map { it.comic }
+        val payload = buildSafeAnonymizedPayload(taste, slice)
+        val prompt = buildString {
+            append("Reordene os candidateId do JSON abaixo priorizando afinidade literária real com os sinais do leitor ")
+            append("e gere motivos curtos e verídicos em português do Brasil (8 a 42 caracteres) em reasonOverrides. ")
+            append("NUNCA invente IDs fora de candidatePool. Retorne APENAS JSON no formato ")
+            append("{\"orderedCandidateIds\":[...],\"reasonOverrides\":{\"id\":\"motivo\"},\"relatedSearchQueries\":[]}.\n")
+            append(payload)
+        }
 
-        enriched
+        val enriched = try {
+            withTimeoutOrNull(TIMEOUT_MS) {
+                val model = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
+                    modelName = MODEL_NAME,
+                    generationConfig = generationConfig {
+                        responseMimeType = "application/json"
+                        temperature = 0.2f
+                        maxOutputTokens = 512
+                    }
+                )
+                val rawText = model.generateContent(prompt).text.orEmpty()
+                val validated = validateAiResponse(rawText, slice) ?: return@withTimeoutOrNull null
+                applyValidatedEnrichment(candidates, validated)
+            }
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Throwable) {
+            null
+        }
+
+        enriched ?: candidates
     }
 }

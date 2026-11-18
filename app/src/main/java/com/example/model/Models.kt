@@ -637,6 +637,7 @@ data class AppSettings(
     val searchLanguage: String = "PT", // "ALL" | "PT"
     val searchProvider: String = "MULTI", // "MULTI" | "BOOKS" | "MANGA"
     val hdCovers: Boolean = true,
+    val aiRecommendationsEnabled: Boolean = true,
     val spoilerProtection: Boolean = false,
     val halfStarRatings: Boolean = true,
     val allowRereads: Boolean = true,
