@@ -22,6 +22,29 @@ import org.junit.runner.RunWith
 class CurationMenuMotionTest {
     @get:Rule val compose=createComposeRule()
 
+    @Test fun pickerWithoutHostCanOpenAgainAfterChangingSelection() {
+        compose.setContent {
+            var selected by remember { mutableStateOf("first") }
+            QuadrinheiroTheme(AppSettings(reduceMotion = true, reduceTransparency = true)) {
+                AppleMenuPicker(
+                    options = listOf(SegmentOption("first", "Primeira"), SegmentOption("second", "Segunda")),
+                    value = selected,
+                    onChange = { selected = it }
+                )
+            }
+        }
+        val menu = hasAnyAncestor(hasTestTag("retained_glass_menu"))
+        compose.onNodeWithText("Primeira").performClick()
+        compose.onNode(menu and hasText("Primeira")).assertIsSelected()
+        compose.onNode(menu and hasText("Segunda")).performClick()
+        compose.onNodeWithTag("retained_glass_menu").assertDoesNotExist()
+
+        compose.onNodeWithText("Segunda").performClick()
+        compose.onNode(menu and hasText("Segunda")).assertIsSelected()
+        compose.onNode(menu and hasText("Primeira")).performClick()
+        compose.onNodeWithText("Primeira").assertIsDisplayed()
+    }
+
     @Test fun compactPanelTracksTheDragDistanceAfterTouchSlop() {
         compose.setContent {
             QuadrinheiroTheme(AppSettings(reduceMotion = true, reduceTransparency = true)) {

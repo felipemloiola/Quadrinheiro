@@ -15,6 +15,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.OnlineSession
@@ -44,13 +47,21 @@ internal fun OnlineSessionGate(content: @Composable () -> Unit) {
       if(started) Box(if(connected) Modifier else Modifier.clearAndSetSemantics {}) { content() }
       if (!connected) {
         val dark = isSystemInDarkTheme()
+        val insetShape = com.kyant.shapes.ContinuousRoundedRectangle(26.dp)
         Column(Modifier.fillMaxSize().background(if(dark) Color.Black else Color(0xFFF2F2F7))
             .pointerInput(Unit) { awaitPointerEventScope { while(true) awaitPointerEvent().changes.forEach { it.consume() } } }
             .safeDrawingPadding().padding(28.dp), verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Sem conexão", color = if(dark) Color.White else Color.Black, fontSize = 24.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("Conecte-se à internet para usar o Quadrinheiro.", color = if(dark) Color.LightGray else Color.DarkGray)
+            Column(
+                Modifier.widthIn(max = 420.dp).fillMaxWidth()
+                    .background(if (dark) Color(0xFF1C1C22) else Color.White, insetShape)
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Sem conexão", color = if(dark) Color.White else Color.Black, fontSize = 24.sp)
+                Text("Conecte-se à internet para usar o Quadrinheiro.", color = if(dark) Color.LightGray else Color.DarkGray)
+            }
         }
     }
     }

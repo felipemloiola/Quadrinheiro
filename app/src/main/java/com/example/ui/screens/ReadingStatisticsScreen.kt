@@ -31,7 +31,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
@@ -879,6 +878,8 @@ fun ReadingStatisticsScreen(
         label = "statsChartProgress"
     )
 
+    val backCollapsed by rememberScrollCollapsed(listState)
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -887,7 +888,7 @@ fun ReadingStatisticsScreen(
         contentPadding = PaddingValues(
             start = 16.dp,
             end = 16.dp,
-            top = 12.dp,
+            top = 68.dp,
             bottom = 104.dp
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -900,31 +901,6 @@ fun ReadingStatisticsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .testTag("stats_back_button")
-                            .liquidGlassNavSurface(RoundedCornerShape(999.dp), elevation = 6.dp)
-                            .clickable { onBack() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Voltar",
-                            tint = s.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Resumo",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = s.textPrimary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-
                     Text(
                         text = "${stats.monthlyBuckets.getOrNull(selectedMonthIndex)?.fullName ?: stats.currentMonthName}, 2026",
                         fontSize = 13.sp,
@@ -1948,6 +1924,14 @@ fun ReadingStatisticsScreen(
                 }
             }
         }
+    }
+        SettingsBackButton(
+            onBack,
+            Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp),
+            collapsed = backCollapsed,
+            label = "Resumo",
+            testTag = "stats_back_button"
+        )
     }
 }
 

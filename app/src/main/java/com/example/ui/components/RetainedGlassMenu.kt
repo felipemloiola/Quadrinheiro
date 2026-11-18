@@ -51,6 +51,7 @@ import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.ContinuousCapsule
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -127,10 +128,8 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         previousHovered = hovered
     }
     val firstItemFocus = remember(request.id) { FocusRequester() }
+    val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
     val focusIndex = request.items.indexOfFirst { it.selected }.coerceAtLeast(0)
-    LaunchedEffect(active?.id) {
-        if (active != null) firstItemFocus.requestFocus()
-    }
     BackHandler(active != null) { state.dismissMenu() }
     fun choose(index: Int) {
         if (state.currentRequest?.id != currentRequest.id) return
@@ -338,6 +337,14 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                             )
                             .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (active != null && index == focusIndex) {
+                                LaunchedEffect(active.id, index) {
+                                    // The menu rows are subcomposed during layout.
+                                    snapshotFlow { windowInfo.isWindowFocused }.first { it }
+                                    androidx.compose.runtime.withFrameNanos { }
+                                    firstItemFocus.requestFocus()
+                                }
+                            }
                             if (request.selectionMenu) Box(Modifier.width(18.dp)) {
                                 if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp))
                             }

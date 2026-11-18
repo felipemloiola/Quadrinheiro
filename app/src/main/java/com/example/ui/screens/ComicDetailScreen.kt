@@ -47,6 +47,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+internal val LocalComicDetailViewModel =
+    staticCompositionLocalOf<com.example.viewmodel.QuadrinheiroViewModel?> { null }
+
 @Composable
 fun ComicDetailDialog(
     comic: ComicEntry,
@@ -89,9 +92,12 @@ private fun ComicDetailScreen(
     recommendationContext: RecommendedComic? = null,
     resolveDetails: suspend (ComicEntry) -> CatalogDetails?
 ) {
-    val curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val curationViewModel = LocalComicDetailViewModel.current
+        ?: androidx.lifecycle.viewmodel.compose.viewModel<com.example.viewmodel.QuadrinheiroViewModel>()
     val liveLibrary by curationViewModel.comics.collectAsStateWithLifecycle()
-    val effectiveLibrary = if (liveLibrary.isNotEmpty()) liveLibrary else library
+    var observedLiveLibrary by remember(curationViewModel) { mutableStateOf(liveLibrary.isNotEmpty()) }
+    SideEffect { if (liveLibrary.isNotEmpty()) observedLiveLibrary = true }
+    val effectiveLibrary = if (observedLiveLibrary || liveLibrary.isNotEmpty()) liveLibrary else library
     val libraryMatch = remember(initialComic.id, initialComic.externalId, initialComic.displayTitle, effectiveLibrary) {
         com.example.model.catalogEntryForEditing(initialComic, effectiveLibrary)
     }
@@ -138,8 +144,11 @@ private fun ComicDetailScreen(
     var rating by remember(comic.id, comic.externalId) { mutableStateOf<CommunityRating?>(null) }
     val repository = remember { CommunityRepository(context) }
     val listState = rememberLazyListState()
+    val communityListState = rememberLazyListState()
     LaunchedEffect(comic.id, comic.externalId, entity, tab) { listState.scrollToItem(0) }
-    BackHandler(enabled = !shareSheetOpen && !registrationSheetOpen && !expandedCover && detailMenuHost.currentRequest == null) { goBack() }
+    val canNavigateBack = !shareSheetOpen && !registrationSheetOpen && !expandedCover && detailMenuHost.currentRequest == null
+    val dialogBackProgress = rememberDialogBackProgress(enabled = canNavigateBack && history.isEmpty(), onClose = onBack)
+    BackHandler(enabled = canNavigateBack && history.isNotEmpty()) { goBack() }
     LaunchedEffect(comic.id, comic.externalId, entity, retry) {
         loading = true; failed = false
         try {
@@ -204,7 +213,7 @@ private fun ComicDetailScreen(
         lightStatusBar = !com.example.ui.theme.LocalIsDarkTheme.current &&
             (tab == 3 || (effectiveCover.isBlank() && detail?.banner.isNullOrBlank() && fallbackBanner.isBlank()))
     )
-    val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 } }
+    val collapsed by rememberScrollCollapsed(if (isComic && tab == 3) communityListState else listState)
     val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
     val onlineSequence by curationViewModel.onlineSequencePool.collectAsStateWithLifecycle()
     val editorialShelves by EditorialDiscovery.shelves.collectAsStateWithLifecycle()
@@ -238,7 +247,7 @@ private fun ComicDetailScreen(
         shareSheetOpen || addToListOpen || whySheetOpen || registrationSheetOpen || detailMenuHost.currentRequest != null
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * dialogBackProgress.value }) {
     BoxWithConstraints(Modifier.fillMaxSize().background(t.bgPrimary).testTag("comic_detail_page")) {
         val persistentBanner=detail?.banner.orEmpty().ifBlank {fallbackBanner}.ifBlank {if(isComic)effectiveCover else ""}
         val persistentHeroHeight=(maxWidth/1.85f).coerceIn(160.dp,260.dp)
@@ -256,7 +265,7 @@ private fun ComicDetailScreen(
         if (isComic && tab == 3) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars).padding(top = 68.dp)) {
                 DetailTabs(tab, { tab = it })
-                CommunityScreen(library, profile, onLogin, comic)
+                CommunityScreen(library, profile, onLogin, comic, listState = communityListState)
             }
         } else LazyColumn(
             state = listState,
@@ -651,7 +660,7 @@ private fun ComicDetailScreen(
         ComicDetailDialog(
             selected, profile, library,
             onClose = { listComic = null },
-            onRegister = { entry -> listComic = null; listToOpen = null; onRegister(entry) },
+            onRegister = {},
             onCover = onCover,
             onLogin = { listComic = null; listToOpen = null; onLogin() },
             onShare = { onShare() }
@@ -679,14 +688,13 @@ private fun ComicDetailScreen(
             onToggleExpand = {},
             onSave = { updated ->
                 registrationSheetOpen = false
-                curationViewModel.saveComic(updated)
+                curationViewModel.saveComicInPlace(updated)
                 comic = updated
                 onRegister(updated)
             },
             onDelete = { id ->
                 registrationSheetOpen = false
-                curationViewModel.deleteComic(id)
-                goBack()
+                curationViewModel.deleteComicInPlace(id)
             },
             onDismiss = { registrationSheetOpen = false },
             onShareComic = { c, type, mid ->

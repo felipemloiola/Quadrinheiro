@@ -43,8 +43,6 @@ import com.kyant.shapes.ContinuousCapsule
 import com.example.ui.theme.LocalIOS27Theme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -436,7 +434,7 @@ fun ProfilePhotoCropModal(
                             color = s.accentColor
                         )
                     }
-                    Slider(
+                    AppleSlider(
                         value = userZoom,
                         onValueChange = { nextZoom ->
                             settleJob?.cancel()
@@ -445,11 +443,7 @@ fun ProfilePhotoCropModal(
                             panOffset = clampOffset(panOffset, clampedZoom)
                         },
                         valueRange = 1f..4f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = theme.textPrimary,
-                            activeTrackColor = s.accentColor,
-                            inactiveTrackColor = theme.divider
-                        ),
+                        activeTrackColor = s.accentColor,
                         modifier = Modifier
                             .fillMaxWidth()
                             .semantics { contentDescription = "Zoom da foto" }

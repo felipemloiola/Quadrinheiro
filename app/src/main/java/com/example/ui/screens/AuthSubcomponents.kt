@@ -134,6 +134,19 @@ fun AuthCredentialsFieldsSection(
     val theme = LocalIOS27Theme.current
     val focus = LocalFocusManager.current
     val registering = form.mode != AuthMode.LOGIN
+    val opaque = LocalAppSettings.current.reduceTransparency
+    val inputShape = ContinuousRoundedRectangle(18.dp)
+    val inputColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = theme.textPrimary,
+        unfocusedTextColor = theme.textPrimary,
+        focusedContainerColor = if (opaque) theme.bgSecondary else theme.textPrimary.copy(alpha = .10f),
+        unfocusedContainerColor = if (opaque) theme.bgSecondary else theme.textPrimary.copy(alpha = .06f),
+        focusedBorderColor = theme.accent,
+        unfocusedBorderColor = if (opaque) theme.divider else Color.Transparent,
+        focusedLabelColor = theme.accent,
+        unfocusedLabelColor = theme.textSecondary,
+        cursorColor = theme.accent
+    )
     val next = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) })
     // AUTH_UNIFIED_HEIGHT_V5: a single size animation, not two competing field springs.
     Column(
@@ -144,18 +157,7 @@ fun AuthCredentialsFieldsSection(
     ) {
         if (registering) {
             OutlinedTextField(
-            shape = ContinuousRoundedRectangle(18.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = theme.textPrimary,
-                unfocusedTextColor = theme.textPrimary,
-                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
-                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
-                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
-                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
-                focusedLabelColor = theme.accent,
-                unfocusedLabelColor = theme.textSecondary,
-                cursorColor = theme.accent
-            ),
+            shape = inputShape, colors = inputColors,
             value = form.name, onValueChange = onNameChange,
             label = { Text("Nome") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_name_field"),
@@ -163,18 +165,7 @@ fun AuthCredentialsFieldsSection(
         )
         }
         OutlinedTextField(
-            shape = ContinuousRoundedRectangle(18.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = theme.textPrimary,
-                unfocusedTextColor = theme.textPrimary,
-                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
-                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
-                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
-                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
-                focusedLabelColor = theme.accent,
-                unfocusedLabelColor = theme.textSecondary,
-                cursorColor = theme.accent
-            ),
+            shape = inputShape, colors = inputColors,
             value = form.email, onValueChange = onEmailChange,
             label = { Text("E-mail") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_email_field"),
@@ -182,18 +173,7 @@ fun AuthCredentialsFieldsSection(
             keyboardActions = next
         )
         OutlinedTextField(
-            shape = ContinuousRoundedRectangle(18.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = theme.textPrimary,
-                unfocusedTextColor = theme.textPrimary,
-                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
-                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
-                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
-                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
-                focusedLabelColor = theme.accent,
-                unfocusedLabelColor = theme.textSecondary,
-                cursorColor = theme.accent
-            ),
+            shape = inputShape, colors = inputColors,
             value = form.password, onValueChange = onPasswordChange,
             label = { Text("Senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_password_field"),
@@ -216,18 +196,7 @@ fun AuthCredentialsFieldsSection(
         )
         if (registering) {
             OutlinedTextField(
-                shape = ContinuousRoundedRectangle(18.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = theme.textPrimary,
-                unfocusedTextColor = theme.textPrimary,
-                focusedContainerColor = theme.textPrimary.copy(alpha = 0.05f),
-                unfocusedContainerColor = theme.textPrimary.copy(alpha = 0.04f),
-                focusedBorderColor = theme.accent.copy(alpha = 0.45f),
-                unfocusedBorderColor = theme.textPrimary.copy(alpha = 0.12f),
-                focusedLabelColor = theme.accent,
-                unfocusedLabelColor = theme.textSecondary,
-                cursorColor = theme.accent
-            ),
+                shape = inputShape, colors = inputColors,
             value = form.confirmPassword, onValueChange = onConfirmPasswordChange,
             label = { Text("Confirmar senha") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().testTag("auth_confirm_password_field"),

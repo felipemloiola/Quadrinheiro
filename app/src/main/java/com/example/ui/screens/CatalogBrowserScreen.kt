@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -20,6 +22,8 @@ import com.example.data.CatalogWindow
 import com.example.data.MultiApiSearchEngine
 import com.example.model.ComicEntry
 import com.example.ui.components.BookCover
+import com.example.ui.components.FullScreenDialogWindow
+import com.example.ui.components.rememberDialogBackProgress
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -28,6 +32,7 @@ import kotlinx.coroutines.launch
 internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(ComicEntry)->Unit){
     val t=LocalIOS27Theme.current
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)){
+        FullScreenDialogWindow()
         val state=rememberLazyGridState()
         val window=remember{CatalogWindow()}
         val engine=remember{MultiApiSearchEngine()}
@@ -51,14 +56,19 @@ internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(Comi
                 if(last>=entries.size-6)load()
             }
         }
-        Column(Modifier.fillMaxSize().background(t.bgPrimary).windowInsetsPadding(WindowInsets.systemBars).testTag("catalog_browser")){
-            Column(Modifier.padding(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-                SettingsBackButton(onClose,label="Perfil")
-                Text("Catálogo",color=t.textPrimary,fontSize=32.sp,fontWeight=FontWeight.Bold)
-                Text("Edições para descobrir e registrar.",color=t.textSecondary,fontSize=14.sp)
-            }
-            LazyVerticalGrid(columns=GridCells.Fixed(3),state=state,modifier=Modifier.weight(1f),contentPadding=PaddingValues(20.dp),
+        val backCollapsed by rememberScrollCollapsed(state)
+        val backProgress = rememberDialogBackProgress(onClose = onClose)
+        Box(Modifier.fillMaxSize().graphicsLayer { translationX = size.width * backProgress.value }
+            .background(t.bgPrimary).windowInsetsPadding(WindowInsets.systemBars).testTag("catalog_browser")){
+            LazyVerticalGrid(columns=GridCells.Fixed(3),state=state,modifier=Modifier.fillMaxSize(),
+                contentPadding=PaddingValues(start=20.dp,end=20.dp,top=68.dp,bottom=20.dp),
                 horizontalArrangement=Arrangement.spacedBy(12.dp),verticalArrangement=Arrangement.spacedBy(20.dp)){
+                item(span={GridItemSpan(maxLineSpan)}) {
+                    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text("Catálogo",color=t.textPrimary,fontSize=32.sp,fontWeight=FontWeight.Bold)
+                        Text("Edições para descobrir e registrar.",color=t.textSecondary,fontSize=14.sp)
+                    }
+                }
                 items(entries,key={it.id}){comic->Column(Modifier.clickable{onComic(comic)},verticalArrangement=Arrangement.spacedBy(8.dp)){
                     BookCover(comic.coverUrl,comic.displayTitle,spine3d=false,modifier=Modifier.fillMaxWidth().aspectRatio(2f/3f))
                     Text(comic.displayTitle,color=t.textPrimary,fontSize=12.sp,maxLines=2,overflow=TextOverflow.Ellipsis)
@@ -72,6 +82,8 @@ internal fun CatalogBrowserDialog(universe:String,onClose:()->Unit,onComic:(Comi
                     }
                 }
             }
+            SettingsBackButton(onClose, Modifier.align(Alignment.TopStart).padding(start=20.dp,top=12.dp),
+                collapsed=backCollapsed,label="Perfil")
         }
     }
 }

@@ -171,19 +171,23 @@ private fun ExpandedCoverContent(url:String,title:String,source:Rect?,onClose:()
                 }) {
             BookCover(url,title,spine3d=false,contentScale=ContentScale.Fit,modifier=Modifier.fillMaxSize().clearAndSetSemantics {})
         }
+        val theme = com.example.ui.theme.LocalIOS27Theme.current
         IconButton(onClick={closing=true},modifier=Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp)
-            .graphicsLayer { alpha = progress.value }.background(Color.White.copy(alpha=.12f),RoundedCornerShape(50))) {Icon(Icons.Default.Close,"Fechar capa",tint=Color.White)}
+            .size(48.dp).graphicsLayer { alpha = progress.value }
+            .contentMaterialSurface(com.kyant.shapes.ContinuousCapsule)) {
+            Icon(Icons.Default.Close,"Fechar capa",tint=theme.textPrimary)
+        }
         Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp)
             .graphicsLayer { alpha = progress.value }
-            .widthIn(max = 360.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF16161D))
+            .widthIn(max = 360.dp).contentMaterialSurface(com.kyant.shapes.ContinuousRoundedRectangle(18.dp))
             .padding(horizontal = 12.dp)) {
             TextButton(onClick = { adjusting = !adjusting }) {
-                Text(if (adjusting) "Ocultar ajustes" else "Ajustar ampliação", color = Color.White)
+                Text(if (adjusting) "Ocultar ajustes" else "Ajustar ampliação", color = theme.textPrimary)
             }
             if (adjusting) {
-                Slider(scale, ::setZoom, valueRange = 1f..5f,
+                AppleSlider(scale, ::setZoom, valueRange = 1f..5f,
                     modifier = Modifier.semantics { contentDescription = "Zoom da capa" })
-                CropPositionControls(offset, positionLimit(scale), { if (!closing) offset = it }, Color.White)
+                CropPositionControls(offset, positionLimit(scale), { if (!closing) offset = it }, theme.textPrimary)
             }
         }
     }

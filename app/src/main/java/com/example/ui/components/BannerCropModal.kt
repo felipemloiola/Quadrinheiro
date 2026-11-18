@@ -72,8 +72,13 @@ fun BannerCropModal(bitmap: Bitmap,onDismiss:()->Unit,onConfirm:(String)->Unit) 
                 Image(bitmap.asImageBitmap(),"Prévia do banner",Modifier.fillMaxSize().graphicsLayer { scaleX=zoom;scaleY=zoom;translationX=offset.x;translationY=offset.y },contentScale=ContentScale.Crop)
             }
             Text("Arraste para enquadrar. Use dois dedos para ampliar.",style=MaterialTheme.typography.bodySmall,color=t.textSecondary)
-            Slider(zoom,{zoom=it;offset=clamp(offset,it)}, valueRange=1f..4f, enabled = !busy,
-                modifier = Modifier.semantics { contentDescription = "Zoom do banner" })
+            val zoomLabel = Modifier.semantics { contentDescription = "Zoom do banner" }
+            if (busy) {
+                Slider(zoom, {}, valueRange = 1f..4f, enabled = false, modifier = zoomLabel)
+            } else {
+                AppleSlider(zoom, { zoom = it; offset = clamp(offset, it) },
+                    valueRange = 1f..4f, modifier = zoomLabel)
+            }
             CropPositionControls(offset, positionLimit(zoom), { offset = it }, t.textPrimary, enabled = !busy)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
                 LiquidGlassPillButton("Repor", onClick = { zoom = 1f; offset = Offset.Zero }, enabled = !busy, modifier = Modifier.weight(1f))

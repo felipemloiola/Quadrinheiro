@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.progressSemantics
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,11 +47,7 @@ internal fun LoadingSpinner(
         liveRegion = LiveRegionMode.Polite
         stateDescription = "Carregando"
     }
-    if (LocalAppMotion.current.reduced) {
-        IOSLoadingIndicator(status, color, strokeWidth)
-    } else {
-        CircularProgressIndicator(status, color = color, strokeWidth = strokeWidth)
-    }
+    IOSLoadingIndicator(status, color, strokeWidth)
 }
 
 /** Compose approximation of a twelve-spoke activity indicator, not an Apple native control. */
@@ -63,16 +58,17 @@ fun IOSLoadingIndicator(
     strokeWidth: Dp = 2.dp
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
-    val phase = if (motion.reduced) 0f else rememberInfiniteTransition(label = "iosActivity").animateFloat(
+    val phase = if (motion.reduced) null else rememberInfiniteTransition(label = "iosActivity").animateFloat(
         initialValue = 0f,
         targetValue = 12f,
         animationSpec = infiniteRepeatable(motion.tween(900, easing = LinearEasing)),
         label = "activityPhase"
-    ).value
+    )
     Canvas(modifier.size(24.dp).progressSemantics()) {
         val radius = size.minDimension / 2f
+        val rotationStep = phase?.value?.toInt() ?: 0
         repeat(12) { index ->
-            val age = (index - phase.toInt() + 24) % 12
+            val age = (index - rotationStep + 24) % 12
             val opacity = 0.18f + 0.82f * age / 11f
             rotate(index * 30f, pivot = center) {
                 drawLine(

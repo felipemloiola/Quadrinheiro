@@ -18,8 +18,8 @@ android {
     minSdk = 24
     targetSdk = 36
     // SIGNED_RELEASE_VERSION_V1: the device review is the local default; publishing CI supplies its own version.
-    versionCode = providers.gradleProperty("releaseVersionCode").orNull?.toInt() ?: 1094
-    versionName = providers.gradleProperty("releaseVersionName").orNull ?: "1.0.91-revisao.9"
+    versionCode = providers.gradleProperty("releaseVersionCode").orNull?.toInt() ?: 1095
+    versionName = providers.gradleProperty("releaseVersionName").orNull ?: "1.0.91-revisao.10"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

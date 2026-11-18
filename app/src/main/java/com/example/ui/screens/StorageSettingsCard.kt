@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.StorageMaintenance
 import com.example.data.StorageUsage
 import com.example.ui.components.contentMaterialSurface
+import com.example.ui.components.CurationGlassAction
+import com.kyant.shapes.ContinuousRoundedRectangle
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -44,14 +46,13 @@ internal fun StorageSettingsCard() {
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { error = "Não foi possível medir o armazenamento." }
     }
-    Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(24.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().contentMaterialSurface(ContinuousRoundedRectangle(24.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Neste aparelho", color = theme.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Text("Cache: ${usage?.let { StorageMaintenance.formatBytes(it.cacheBytes) } ?: "Calculando…"}", color = theme.textSecondary, fontSize = 13.sp)
         Text("Dados locais: ${usage?.let { StorageMaintenance.formatBytes(it.localBytes) } ?: "Calculando…"}", color = theme.textSecondary, fontSize = 13.sp)
         if (usage != null) {
-            TextButton(onClick = { expanded = !expanded }, modifier = Modifier.heightIn(min = 44.dp).testTag("storage_details"), contentPadding = PaddingValues(0.dp)) {
-                Text(if (expanded) "Ocultar detalhes" else "Ver detalhes", color = theme.accent)
-            }
+            CurationGlassAction(if (expanded) "Ocultar detalhes" else "Ver detalhes",
+                onClick = { expanded = !expanded }, modifier = Modifier.testTag("storage_details"))
             if (expanded) {
                 usage?.categories?.forEach { (label, size) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -69,7 +70,8 @@ internal fun StorageSettingsCard() {
                     }
                     Text("A lista contém apenas caminhos e tamanhos; nenhum arquivo foi aberto ou enviado.", color = theme.textSecondary, fontSize = 11.sp)
                 }
-                TextButton(
+                CurationGlassAction(
+                    label = if (diagnosticCopied) "Diagnóstico copiado (sem dados pessoais)" else "Copiar diagnóstico técnico",
                     onClick = {
                         scope.launch {
                             val current = usage ?: return@launch
@@ -80,15 +82,8 @@ internal fun StorageSettingsCard() {
                             diagnosticCopied = true
                         }
                     },
-                    modifier = Modifier.heightIn(min = 44.dp).testTag("copy_storage_diagnostic"),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text(
-                        if (diagnosticCopied) "Diagnóstico copiado (sem dados pessoais)" else "Copiar diagnóstico técnico",
-                        color = theme.accent,
-                        fontSize = 13.sp
-                    )
-                }
+                    modifier = Modifier.testTag("copy_storage_diagnostic")
+                )
                 Text("Os valores podem mudar durante a sincronização. O aplicativo instalado não está incluído.", color = theme.textSecondary, fontSize = 12.sp)
             }
         }

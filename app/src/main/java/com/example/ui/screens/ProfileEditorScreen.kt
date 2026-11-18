@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -80,10 +81,13 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         }
     }
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().testTag("profile_editor"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 200.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+    val editorScroll = rememberLazyListState()
+    val backCollapsed by rememberScrollCollapsed(editorScroll)
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().testTag("profile_editor"), state = editorScroll,
+        contentPadding = PaddingValues(20.dp, 68.dp, 20.dp, 200.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                SettingsBackButton(onBack, label = "Perfil")
                 Text("Editar perfil", color = theme.textPrimary, fontSize = 18.sp)
                 TextButton(enabled = name.isNotBlank() && !imageBusy, onClick = {
                     onSave(profile.copy(name = name.trim().take(80), bio = bio.trim().take(400), avatarUrl = avatar,
@@ -327,6 +331,9 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                 }
             }
         }
+    }
+        SettingsBackButton(onBack, Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 12.dp),
+            collapsed = backCollapsed, label = "Perfil")
     }
     if (bannerSearchOpen) {
         val favoriteTitle = settings.profileFavoriteComicIds.firstOrNull()?.let { settings.profileShowcaseDetails["comic:$it"]?.let(com.example.data.ProfileShowcase::restoreComic)?.displayTitle }.orEmpty()

@@ -110,13 +110,14 @@ fun WelcomeIntroScreen(onContinue: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(if (isFeaturesView) 24.dp else 32.dp))
-            Button(onClick = { if (isFeaturesView) onContinue() else isFeaturesView = true },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+            LiquidGlassPillButton(
+                label = "Continuar",
+                onClick = { if (isFeaturesView) onContinue() else isFeaturesView = true },
+                modifier = Modifier.fillMaxWidth()
                     .testTag(if (isFeaturesView) "welcome_primary_button" else "welcome_start_button"),
-                shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = theme.accent,
-                    contentColor = if (contrastRatio(Color.White, theme.accent) > contrastRatio(Color.Black, theme.accent)) Color.White else Color.Black)) {
-                Text("Continuar", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-            }
+                prominent = true,
+                fontSize = 17.sp
+            )
         }
     }
 }

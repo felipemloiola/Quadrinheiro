@@ -820,11 +820,12 @@ fun ShelfLibraryTab(
     curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val headerMaterials = LocalAppleMaterials.current
+    val backCollapsed by rememberScrollCollapsed(listState)
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val s = headerMaterials.scheme
-            SettingsBackButton(onBackToProfile, label = "Perfil")
+            SettingsBackButton(onBackToProfile, collapsed = backCollapsed, label = "Perfil")
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -910,7 +911,8 @@ fun ShelfLibraryTab(
             comics, curationViewModel.curation, onChangeShelfSection, onBackToProfile, onSelectComic,
             onConnectAccount = { curationViewModel.loginWithGoogle(accountContext) },
             searchCatalog = curationViewModel::searchCatalogForList,
-            showLibraryHeader = false, profile = profile, onShareComic = onShareComicReview
+            showLibraryHeader = false, profile = profile, onShareComic = onShareComicReview,
+            listState = listState
         )
         return@Column
     }

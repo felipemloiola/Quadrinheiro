@@ -640,7 +640,8 @@ fun QuadrinheiroApp(
             LocalLiquidGlassBackdrop provides backgroundBackdrop,
             LocalLiquidGlassScrollState provides activeListState,
             com.example.ui.components.LocalLiquidGlassExtremeFling provides (isExtremeFling || activeListState.isScrollInProgress),
-            com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState
+            com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState,
+            com.example.ui.screens.LocalComicDetailViewModel provides viewModel
         ) {
             Box(
                 modifier = Modifier

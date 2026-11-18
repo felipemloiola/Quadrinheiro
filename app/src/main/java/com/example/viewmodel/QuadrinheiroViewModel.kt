@@ -2383,7 +2383,11 @@ class QuadrinheiroViewModel(
         QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
     }
 
-    fun saveComic(itemData: ComicEntry) {
+    fun saveComic(itemData: ComicEntry) = saveComic(itemData, closePanels = true)
+
+    fun saveComicInPlace(itemData: ComicEntry) = saveComic(itemData, closePanels = false)
+
+    private fun saveComic(itemData: ComicEntry, closePanels: Boolean) {
         val uniqueId = itemData.id.ifBlank {
             itemData.externalId.ifBlank { "hq-${System.currentTimeMillis()}" }
         }
@@ -2495,11 +2499,13 @@ class QuadrinheiroViewModel(
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
-        _selectedComic.value = null
-        _infoModalComic.value = null
-        _activeRecommendationContext.value = null
-        _showManualModal.value = false
-        _isSheetExpanded.value = false
+        if (closePanels) {
+            _selectedComic.value = null
+            _infoModalComic.value = null
+            _activeRecommendationContext.value = null
+            _showManualModal.value = false
+            _isSheetExpanded.value = false
+        }
 
         if (isRead) {
             showNotice(
@@ -2532,7 +2538,11 @@ class QuadrinheiroViewModel(
         }
     }
 
-    fun deleteComic(id: String) {
+    fun deleteComic(id: String) = deleteComic(id, closePanels = true)
+
+    fun deleteComicInPlace(id: String) = deleteComic(id, closePanels = false)
+
+    private fun deleteComic(id: String, closePanels: Boolean) {
         val updated = _comics.value.filterNot { it.id == id }
         _comics.value = updated
         persistAll()
@@ -2544,9 +2554,11 @@ class QuadrinheiroViewModel(
                 runCatching { repo.deleteComic(uid, id) }
             }
         }
-        _selectedComic.value = null
-        _infoModalComic.value = null
-        _activeRecommendationContext.value = null
+        if (closePanels) {
+            _selectedComic.value = null
+            _infoModalComic.value = null
+            _activeRecommendationContext.value = null
+        }
         showNotice("Edição removida da Biblioteca")
     }
 

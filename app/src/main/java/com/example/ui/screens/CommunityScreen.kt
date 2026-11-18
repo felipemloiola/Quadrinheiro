@@ -35,7 +35,13 @@ private object CommunityMemory {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, onLogin: () -> Unit, comic: ComicEntry? = null) {
+internal fun CommunityScreen(
+    comics: List<ComicEntry>,
+    profile: ReaderProfile,
+    onLogin: () -> Unit,
+    comic: ComicEntry? = null,
+    listState: LazyListState = rememberLazyListState()
+) {
     val context = LocalContext.current
     val storage = remember { SafeStorage(context) }
     val repo = remember { runCatching { CommunityRepository(context) }.getOrNull() }
@@ -119,7 +125,7 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
             if (cached == null || cached.revision != publicationRevision) load(true)
             else { cursor = cached.page.cursor; more = cached.page.hasMore }
         }
-        LazyColumn(Modifier.fillMaxSize().testTag("community_feed"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyColumn(Modifier.fillMaxSize().testTag("community_feed"), state = listState, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             if (posts.isEmpty() && attempted && !busy && failedRefresh == null) item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Default.ChatBubbleOutline, null, tint = t.textSecondary, modifier = Modifier.size(32.dp))

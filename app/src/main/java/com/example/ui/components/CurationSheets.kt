@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,6 +66,7 @@ import com.example.model.ReaderProfile
 import com.example.ui.screens.ComicDetailDialog
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.screens.SettingsBackButton
+import com.example.ui.screens.rememberScrollCollapsed
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -173,7 +175,7 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         val screenHeight=with(LocalDensity.current) {LocalConfiguration.current.screenHeightDp.dp.toPx()}
         val screenWidth=with(LocalDensity.current) {LocalConfiguration.current.screenWidthDp.dp.toPx()}
         val restOffset=screenHeight*(1-fraction)
-        CompositionLocalProvider(LocalLiquidGlassMenuHost provides menuHost) {
+        CompositionLocalProvider(LocalLiquidGlassMenuHost provides if (menus) menuHost else null) {
         Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().then(if(menuBackdrop!=null)Modifier.layerBackdrop(menuBackdrop,reuseRecordedContent=true,freezeSnapshot=menuHost.currentRequest!=null) else Modifier).statusBarsPadding().imePadding()) {
             if (ambientBackdrop != null) {
@@ -227,17 +229,14 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                         onClick = { requestClose.value() },
                         modifier = Modifier.size(48.dp).semantics { contentDescription = "Fechar" }
                     ) {
-                        Icon(Icons.Default.Close, null, tint = theme.textSecondary)
+                        Icon(LucideIcons.X, null, tint = theme.textSecondary)
                     }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     headerActions()
                     actionLabel?.let { label ->
                         val enabled = actionEnabled && !busy && panel.request==0
-                        TextButton(onClick=onAction,enabled=enabled,modifier=Modifier.padding(start=8.dp).heightIn(min=48.dp),
-                            contentPadding=PaddingValues(horizontal=12.dp,vertical=6.dp)) {
-                            Text(label,color=if(enabled) theme.accent else theme.textSecondary,
-                                style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.SemiBold)
-                        }
+                        CurationGlassAction(label, onAction, Modifier.padding(start = 8.dp),
+                            enabled = enabled, primary = true)
                     }
                     }
                 }
@@ -298,7 +297,7 @@ internal fun CurationField(label: String, value: String, max: Int, enabled: Bool
     val t=LocalIOS27Theme.current
     TextField(value=value,enabled=enabled,onValueChange={ if(it.length<=max) onChange(it) },label={ Text(label) },
         modifier=Modifier.fillMaxWidth().inputWellSurface(),maxLines=if(max>300) 4 else 2,
-        shape=RoundedCornerShape(16.dp),
+        shape=ContinuousRoundedRectangle(16.dp),
         colors=TextFieldDefaults.colors(focusedTextColor=t.textPrimary,unfocusedTextColor=t.textPrimary,
             focusedLabelColor=t.accent,unfocusedLabelColor=t.textSecondary,cursorColor=t.accent,
             focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,
@@ -361,7 +360,7 @@ internal fun AddToListSheet(
             BookCover(comic.coverUrl,comic.displayTitle,spine3d=false,modifier=Modifier.size(48.dp,72.dp))
             Text(comic.displayTitle, color = t.textPrimary, fontWeight = FontWeight.SemiBold)
         }
-        AppleTextField(query,{query=it},"Buscar lista",modifier=Modifier.padding(horizontal=16.dp))
+        AppleTextField(query,{query=it},"Buscar lista",modifier=Modifier.padding(horizontal=16.dp), capsuleSearch = true)
         EditorialAction("Criar nova lista",{creating=ComicList(items=listOf(ref))},Modifier.fillMaxWidth().padding(16.dp),!state.saving && !state.loading)
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             items(matchingDrafts,key={"draft:${it.id}"}) {pending ->
@@ -408,7 +407,8 @@ internal enum class ListEditorDestination { Editor, AddComics, ChooseCover }
 fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationController,
     onSection: (String)->Unit, onBack: ()->Unit, onComic: (ComicEntry)->Unit, onConnectAccount: (()->Unit)?=null,
     searchCatalog: ((String) -> Flow<List<ComicEntry>>)? = null, showLibraryHeader: Boolean = true,
-    profile: ReaderProfile = ReaderProfile(), onShareComic: (ComicEntry) -> Unit = {}) {
+    profile: ReaderProfile = ReaderProfile(), onShareComic: (ComicEntry) -> Unit = {},
+    listState: LazyListState = rememberLazyListState()) {
     val state by controller.state.collectAsStateWithLifecycle()
     val t=LocalIOS27Theme.current
     val scope=rememberCoroutineScope()
@@ -420,6 +420,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     LaunchedEffect(state.owner) { controller.load(); drafts=controller.drafts() }
     val active = remember(state.lists) { state.lists.filterNot { it.deleted } }
     val featured = remember(active) { featuredComicList(active) }
+    val backCollapsed by rememberScrollCollapsed(listState)
     val compactLists = remember(active, featured?.id) { active.filterNot { it.id == featured?.id } }
     fun openEditor(list: ComicList, target: ListEditorDestination = ListEditorDestination.Editor) {
         destination = target
@@ -427,7 +428,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     }
     Column(Modifier.fillMaxSize().padding(horizontal=16.dp).padding(top=12.dp)) {
         if (showLibraryHeader) {
-        SettingsBackButton(onBack,label="Perfil")
+        SettingsBackButton(onBack,collapsed=backCollapsed,label="Perfil")
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -449,7 +450,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
         CurationError(controller)
         if(state.error!=null) TextButton(onClick={controller.load(true)}) {Text("Tentar novamente",color=t.textPrimary)}
         if(state.localOnly && state.owner!="guest_local") Text("Listas salvas nesta conta, neste aparelho",color=t.textSecondary,fontSize=12.sp,modifier=Modifier.padding(top=12.dp))
-        LazyColumn(Modifier.testTag("lists_page"), contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.testTag("lists_page"), state=listState, contentPadding=PaddingValues(top=16.dp,bottom=110.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             items(drafts,key={"draft:${it.id}"}) {pending ->
                 CompactListRow(pending,{openEditor(pending)},trailing="Continuar rascunho · ${pending.items.size} HQs")
             }
@@ -485,7 +486,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
     }} }
     preview?.let { comic ->
         ComicDetailDialog(comic,profile,library,onClose={preview=null},
-            onRegister={ selected -> preview=null; viewing=null; editing=null; onComic(selected) },
+            onRegister={},
             onCover={},
             onLogin={ preview=null; onConnectAccount?.invoke() },
             onShare={ onShareComic(comic) })

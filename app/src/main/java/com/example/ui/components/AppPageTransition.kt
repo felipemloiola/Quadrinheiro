@@ -45,6 +45,28 @@ data class AppPage(val tab: String, val settings: String?, val parent: String?, 
 val LocalPageBackManaged = staticCompositionLocalOf { false }
 internal val LocalBackPreview = compositionLocalOf { false }
 
+/** Moves a full-screen dialog aside so Android can reveal its existing parent window. */
+@Composable
+internal fun rememberDialogBackProgress(enabled: Boolean = true, onClose: () -> Unit): State<Float> {
+    val motion = LocalAppMotion.current
+    val progress = remember { Animatable(0f) }
+    val close by rememberUpdatedState(onClose)
+    val settle = motion.spring<Float>(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow, .005f)
+    PredictiveBackHandler(enabled = enabled) { events ->
+        try {
+            events.collect { event ->
+                if (!motion.reduced) progress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+            if (progress.value > 0f) progress.animateTo(1f, settle)
+            close()
+        } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) { progress.animateTo(0f, settle) }
+            throw cancelled
+        }
+    }
+    return progress.asState()
+}
+
 /** At most two live pages, even when navigation is interrupted repeatedly. */
 @Composable
 fun AppPageTransition(

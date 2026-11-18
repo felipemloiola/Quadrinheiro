@@ -129,20 +129,26 @@ class ReaderNavigationTest {
     }
     @Test fun fullPageRegistrationOpensEditorForNewAndWantedComics() {
         val newComic = ComicEntry("cv-1142807", "cv-1142807", "Batman", authors = "Autor", publisher = "DC", sourceLabel = "Comic Vine")
-        val wanted = newComic.copy(id = "owned-wanted", title = "HQ na fila", status = ReadingStatus.WANT_TO_READ)
+        val wanted = newComic.copy(id = "owned-wanted", externalId = "cv-1142808", title = "HQ na fila", status = ReadingStatus.WANT_TO_READ)
         listOf(newComic, wanted).forEachIndexed { index, comic ->
             compose.runOnIdle {
                 if (index == 1) vm.saveComic(comic)
                 vm.openInfoSynopsisModal(comic)
             }
             compose.onNodeWithTag("open_comic_page").performClick()
-            compose.onNodeWithText("Registrar leitura").performClick()
-            compose.onNodeWithTag("modal_cancel_button").assertExists()
+            compose.onNodeWithText(if (index == 1) "Iniciar leitura" else "Registrar leitura").performClick()
+            compose.onNodeWithTag("modal_cancel_button").assertIsDisplayed()
+            compose.onNodeWithTag("comic_detail_page").assertExists()
+            compose.onNodeWithTag("modal_header_save_button").performClick()
             compose.runOnIdle {
-                assertNotNull(vm.selectedComic.value)
-                assertEquals(if (index == 1) ReadingStatus.WANT_TO_READ else ReadingStatus.READ, vm.selectedComic.value!!.status)
-                vm.selectComicForSheet(null); vm.openInfoSynopsisModal(null)
+                assertNotNull(vm.infoModalComic.value)
+                assertNull(vm.selectedComic.value)
+                assertTrue(vm.comics.value.any { it.id == comic.id })
             }
+            compose.onNodeWithTag("comic_detail_page").assertIsDisplayed()
+            compose.onNodeWithTag("modal_cancel_button").assertDoesNotExist()
+            compose.onNodeWithTag("settings_back_button").performClick()
+            compose.onNodeWithTag("synopsis_close_button").performClick()
         }
     }
     @Test fun confirmSavesEveryStatusWhenTheSourceDoesNotKnowThePageCount() {
