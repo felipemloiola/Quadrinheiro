@@ -130,6 +130,7 @@ private fun ComicDetailScreen(
     var addToListOpen by remember(comic.id) { mutableStateOf(false) }
     var whySheetOpen by remember(comic.id) { mutableStateOf(false) }
     var registrationSheetOpen by remember(comic.id) { mutableStateOf(false) }
+    var registrationSheetExpanded by remember(comic.id) { mutableStateOf(false) }
     var shareNoticeText by remember(comic.id) { mutableStateOf<String?>(null) }
     val detailMenuHost = remember { LiquidGlassMenuHostState() }
     val moreMenuId = remember { "comic_detail_more_menu" }
@@ -206,6 +207,7 @@ private fun ComicDetailScreen(
     val currentReading = com.example.model.catalogEntryForEditing(comic, effectiveLibrary)
     val readingPresentation = ComicReadingPresentation.from(currentReading)
     fun registerCurrent() {
+        registrationSheetExpanded = false
         registrationSheetOpen = true
     }
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
@@ -679,13 +681,14 @@ private fun ComicDetailScreen(
         CatalogSheetModal(
             selectedComic = sheetTarget,
             isExistingInShelf = currentReading != null,
-            isSheetExpanded = false,
+            isSheetExpanded = registrationSheetExpanded,
             appSettings = settings,
             allUserComics = library,
             onlineSequencePool = onlineSequence,
             onSelectSequenceComic = { openComic(it) },
             onUpdateComic = {},
-            onToggleExpand = {},
+            onToggleExpand = { registrationSheetExpanded = !registrationSheetExpanded },
+            onSetExpanded = { registrationSheetExpanded = it },
             onSave = { updated ->
                 registrationSheetOpen = false
                 curationViewModel.saveComicInPlace(updated)
