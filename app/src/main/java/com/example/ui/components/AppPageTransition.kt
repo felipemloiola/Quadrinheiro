@@ -36,6 +36,7 @@ data class AppPage(val tab: String, val settings: String?, val parent: String?, 
         statistics -> 4
         tab == "settings" && settings != null -> 2 + if (parent != null) 1 else 0
         tab == "settings" || tab == "shelf" -> 1
+        tab == "explore" && settings != null -> 1
         else -> 0
     }
 }
@@ -66,6 +67,7 @@ fun AppPageTransition(
     var exitAlpha by remember { mutableFloatStateOf(1f) }
     var preview by remember { mutableStateOf<AppPage?>(null) }
     var committed by remember { mutableStateOf(false) }
+    var backGestureId by remember { mutableIntStateOf(0) }
     val backProgress = remember { Animatable(0f) }
     val latestOnBack by rememberUpdatedState(onBack)
     val latestPage by rememberUpdatedState(page)
@@ -80,6 +82,7 @@ fun AppPageTransition(
         val startedPage = page
         val commitBack = latestOnBack
         val target = backPage ?: return@PredictiveBackHandler
+        val gestureId = ++backGestureId
         if (motion.reduced) {
             events.collect {}
             if (latestPage == startedPage && latestBackEnabled) commitBack()
@@ -95,6 +98,7 @@ fun AppPageTransition(
                 // Hierarchical pop always slides the current page right, revealing the parent exclusively on the left.
                 backProgress.snapTo(event.progress.coerceIn(0f, 1f))
             }
+            if (gestureId != backGestureId) return@PredictiveBackHandler
             if (latestPage != startedPage || !latestBackEnabled) {
                 preview = null
                 backProgress.snapTo(0f)
@@ -103,6 +107,7 @@ fun AppPageTransition(
             // Button/keyboard Back may not emit progress events.
             preview = target
             backProgress.animateTo(1f, backSpring)
+            if (gestureId != backGestureId) return@PredictiveBackHandler
             if (latestPage != startedPage || !latestBackEnabled) {
                 preview = null
                 backProgress.snapTo(0f)
@@ -111,9 +116,14 @@ fun AppPageTransition(
             committed = true
             commitBack()
         } catch (cancelled: CancellationException) {
-            withContext(NonCancellable) {
-                backProgress.animateTo(0f, backSpring)
-                preview = null
+            if (gestureId == backGestureId && latestPage == startedPage) {
+                withContext(NonCancellable) {
+                    try {
+                        backProgress.animateTo(0f, backSpring)
+                    } finally {
+                        if (gestureId == backGestureId) preview = null
+                    }
+                }
             }
             throw cancelled
         }

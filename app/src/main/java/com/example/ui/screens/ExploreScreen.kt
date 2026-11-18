@@ -174,29 +174,31 @@ fun ExploreScreen(
             }
         }
     }
-    Column(Modifier.fillMaxSize()) {
-        if (collection == null) Column(
-            Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Explorar", Modifier.weight(1f), color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                IconButton(onClick = { onSearch("") }) {
-                    Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
+    com.example.ui.components.AppPageTransition(
+        page = com.example.ui.components.AppPage("explore", collection, null, false),
+        backEnabled = collection != null,
+        backPage = com.example.ui.components.AppPage("explore", null, null, false),
+        onBack = { collection = null }
+    ) { destination ->
+        val selected = destination.settings
+        Column(Modifier.fillMaxSize()) {
+            if (selected == null) {
+                Column(
+                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Explorar", Modifier.weight(1f), color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+                        IconButton(onClick = { onSearch("") }) {
+                            Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
+                        }
+                    }
+                    AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
                 }
             }
-            AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
-        }
-        if (collection == null && tab == 1) {
-            CommunityScreen(comics, profile, onLogin)
-        } else {
-            com.example.ui.components.AppPageTransition(
-                page = com.example.ui.components.AppPage("explore", collection, null, false),
-                backEnabled = collection != null,
-                backPage = com.example.ui.components.AppPage("explore", null, null, false),
-                onBack = { collection = null }
-            ) { destination ->
-                val selected = destination.settings
+            if (selected == null && tab == 1) {
+                CommunityScreen(comics, profile, onLogin)
+            } else {
                 val expandedState = rememberLazyListState()
                 val backCollapsed by remember {
                     derivedStateOf {
