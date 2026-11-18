@@ -102,9 +102,20 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
     }
     val theme = LocalIOS27Theme.current
     if (valueLabel == null) {
-        IconButton(enabled=enabled,onClick=open,modifier=trigger) {
-            Icon(Icons.Default.MoreHoriz,label,tint=theme.textPrimary)
-        }
+        LiquidMorphingIconButton(
+            icon = Icons.Default.MoreHoriz,
+            contentDescription = label,
+            onClick = open,
+            modifier = modifier,
+            size = 40.dp,
+            enabled = enabled,
+            menuId = id,
+            iconRotationWhenMenuOpen = 90f,
+            onAnchorBoundsChanged = {
+                bounds = it
+                host?.updateAnchorBounds(id, it)
+            }
+        )
     } else {
         Row(trigger.heightIn(min=52.dp).clip(RoundedCornerShape(16.dp))
             .background(theme.bgSecondary).clickable(enabled=enabled, role=Role.Button, onClick=open)
@@ -262,7 +273,7 @@ fun AddToListAction(
 }
 
 @Composable
-private fun AddToListSheet(
+internal fun AddToListSheet(
     comic: ComicEntry,
     controller: CurationController,
     library: List<ComicEntry> = emptyList(),
@@ -414,7 +425,7 @@ fun PersonalListsScreen(library: List<ComicEntry>, controller: CurationControlle
             onRegister={ selected -> preview=null; viewing=null; editing=null; onComic(selected) },
             onCover={},
             onLogin={ preview=null; onConnectAccount?.invoke() },
-            onShare={ preview=null; viewing=null; editing=null; onShareComic(comic) })
+            onShare={ onShareComic(comic) })
     }
 }
 
@@ -768,53 +779,71 @@ fun RecommendationExplanationAction(recommendation: RecommendedComic, controller
     val t=LocalIOS27Theme.current
     TextButton(onClick={controller.load();show=true},modifier=Modifier.heightIn(min=48.dp)) {Text("Por que esta HQ?",color=t.accent,fontSize=12.sp)}
     if(show) {
-        val state by controller.state.collectAsStateWithLifecycle()
-        val scope=rememberCoroutineScope()
-        val largeFont = LocalDensity.current.fontScale > 1.35f
-        CurationSheet("Por que esta HQ?",{show=false},compact=true) {
-            CurationError(controller)
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        RecommendationExplanationSheet(
+            recommendation = recommendation,
+            controller = controller,
+            onClose = { show = false },
+            onRegister = onRegister
+        )
+    }
+}
+
+@Composable
+internal fun RecommendationExplanationSheet(
+    recommendation: RecommendedComic,
+    controller: CurationController,
+    onClose: () -> Unit,
+    onRegister: ((ComicEntry) -> Unit)? = null
+) {
+    val state by controller.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val t = LocalIOS27Theme.current
+    val largeFont = LocalDensity.current.fontScale > 1.35f
+    CurationSheet("Por que esta HQ?", onClose, compact = true) {
+        CurationError(controller)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                BookCover(recommendation.comic.coverUrl, recommendation.comic.displayTitle, spine3d = false, modifier = Modifier.size(52.dp, 78.dp).clearAndSetSemantics {})
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(recommendation.comic.displayTitle, color = t.textPrimary, fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 23.sp)
+                    if (recommendation.reasonLabel.isNotBlank()) {
+                        Text(recommendation.reasonLabel, color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Text(
+                recommendation.explanation?.detail ?: "${recommendation.reasonLabel}. Esta seleção foi calculada com base no seu histórico de leituras e favoritos.",
+                color = t.textSecondary,
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+            if (largeFont) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EditorialAction("Mais como esta", { scope.launch { controller.feedback(recommendation.comic, "more") } }, Modifier.fillMaxWidth(), !state.saving && !state.loading)
+                    EditorialAction("Não tenho interesse", { scope.launch { controller.feedback(recommendation.comic, "hide") } }, Modifier.fillMaxWidth(), !state.saving && !state.loading)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EditorialAction("Mais como esta", { scope.launch { controller.feedback(recommendation.comic, "more") } }, Modifier.weight(1f), !state.saving && !state.loading)
+                    EditorialAction("Não tenho interesse", { scope.launch { controller.feedback(recommendation.comic, "hide") } }, Modifier.weight(1f), !state.saving && !state.loading)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = if (onRegister != null) Arrangement.SpaceBetween else Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    BookCover(recommendation.comic.coverUrl, recommendation.comic.displayTitle, spine3d = false, modifier = Modifier.size(52.dp, 78.dp).clearAndSetSemantics {})
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(recommendation.comic.displayTitle, color = t.textPrimary, fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 23.sp)
-                        if (recommendation.reasonLabel.isNotBlank()) {
-                            Text(recommendation.reasonLabel, color = t.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
+                TextButton(enabled = !state.saving, onClick = { scope.launch { controller.feedback(recommendation.comic, "undo") } }) {
+                    Text("Desfazer preferência", color = t.accent)
                 }
-                Text(
-                    recommendation.explanation?.detail ?: "${recommendation.reasonLabel}. Esta seleção antiga não tem uma referência detalhada salva.",
-                    color = t.textSecondary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-                if (largeFont) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EditorialAction("Mais como esta", { scope.launch { controller.feedback(recommendation.comic, "more") } }, Modifier.fillMaxWidth(), !state.saving && !state.loading)
-                        EditorialAction("Não tenho interesse", { scope.launch { controller.feedback(recommendation.comic, "hide") } }, Modifier.fillMaxWidth(), !state.saving && !state.loading)
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EditorialAction("Mais como esta", { scope.launch { controller.feedback(recommendation.comic, "more") } }, Modifier.weight(1f), !state.saving && !state.loading)
-                        EditorialAction("Não tenho interesse", { scope.launch { controller.feedback(recommendation.comic, "hide") } }, Modifier.weight(1f), !state.saving && !state.loading)
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(enabled = !state.saving, onClick = { scope.launch { controller.feedback(recommendation.comic, "undo") } }) {
-                        Text("Desfazer preferência", color = t.accent)
-                    }
-                    TextButton(onClick = { show = false; onRegister(recommendation.comic) }) {
+                if (onRegister != null) {
+                    TextButton(onClick = { onClose(); onRegister(recommendation.comic) }) {
                         Text("Já li / Quero ler…", color = t.accent)
                     }
                 }
@@ -824,18 +853,81 @@ fun RecommendationExplanationAction(recommendation: RecommendedComic, controller
 }
 
 @Composable
-fun RecommendationPreferencesAction(controller: CurationController) {
+fun RecommendationPreferencesAction(
+    controller: CurationController,
+    asSettingsRow: Boolean = false
+) {
     val state by controller.state.collectAsStateWithLifecycle()
-    var show by remember(state.owner) {mutableStateOf(false)}
-    val scope=rememberCoroutineScope()
-    TextButton(onClick={controller.load();show=true}) {Text("Gerenciar preferências de sugestões",color=LocalIOS27Theme.current.accent)}
-    if(show) CurationSheet("Preferências de sugestões",{show=false}) {
+    var show by remember(state.owner) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val t = LocalIOS27Theme.current
+    if (asSettingsRow) {
+        val count = state.feedback.hidden.size + state.feedback.boosted.size
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button) {
+                    controller.load()
+                    show = true
+                }
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Preferências de sugestões",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = t.textPrimary
+                )
+                Text(
+                    text = if (count > 0) "$count ${if (count == 1) "preferência salva" else "preferências salvas"}"
+                    else "Gerenciar obras ocultas e sinalizadas em Para você",
+                    fontSize = 12.sp,
+                    color = t.textSecondary
+                )
+            }
+            Icon(
+                imageVector = LucideIcons.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = t.textSecondary
+            )
+        }
+    } else {
+        TextButton(onClick = { controller.load(); show = true }) {
+            Text("Gerenciar preferências de sugestões", color = t.accent)
+        }
+    }
+    if (show) CurationSheet("Preferências de sugestões", { show = false }) {
         CurationError(controller)
-        LazyColumn(contentPadding=PaddingValues(16.dp)) {
-            if(state.feedback.hidden.isEmpty() && state.feedback.boosted.isEmpty()) item {Text("Nenhuma preferência registrada.",color=LocalIOS27Theme.current.textSecondary)}
-            items(state.feedback.hidden.map {it to "Oculta"}+state.feedback.boosted.map {it to "Mais como esta"},key={it.first.key+it.second}) { (item,label) ->
-                Text("${item.title} · $label",color=LocalIOS27Theme.current.textPrimary)
-                TextButton(enabled=!state.saving,onClick={scope.launch {controller.feedback(item.comic(),"undo")}}) {Text("Remover preferência",color=LocalIOS27Theme.current.accent)}
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.feedback.hidden.isEmpty() && state.feedback.boosted.isEmpty()) {
+                item {
+                    Text("Nenhuma preferência registrada.", color = t.textSecondary)
+                }
+            }
+            items(
+                state.feedback.hidden.map { it to "Oculta" } + state.feedback.boosted.map { it to "Mais como esta" },
+                key = { it.first.key + it.second }
+            ) { (item, label) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, color = t.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(label, color = t.textSecondary, fontSize = 12.sp)
+                    }
+                    TextButton(
+                        enabled = !state.saving,
+                        onClick = { scope.launch { controller.feedback(item.comic(), "undo") } }
+                    ) {
+                        Text("Remover", color = t.accent)
+                    }
+                }
             }
         }
     }

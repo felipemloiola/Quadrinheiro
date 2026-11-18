@@ -6,11 +6,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
@@ -53,8 +56,6 @@ fun AppPageTransition(
 ) {
     val motion = LocalAppMotion.current
     val parentIsBackPreview = LocalBackPreview.current
-    val surface = LocalIOS27Theme.current.bgPrimary
-    val backShape = remember { RoundedCornerShape(28.dp) }
     var current by remember { mutableStateOf(page) }
     var outgoing by remember { mutableStateOf<AppPage?>(null) }
     val progress = remember { Animatable(1f) }
@@ -66,7 +67,6 @@ fun AppPageTransition(
     var exitAlpha by remember { mutableFloatStateOf(1f) }
     var preview by remember { mutableStateOf<AppPage?>(null) }
     var committed by remember { mutableStateOf(false) }
-    var edge by remember { mutableFloatStateOf(1f) }
     val backProgress = remember { Animatable(0f) }
     val latestOnBack by rememberUpdatedState(onBack)
     val latestPage by rememberUpdatedState(page)
@@ -88,7 +88,7 @@ fun AppPageTransition(
                     outgoing = null
                     preview = target
                 }
-                edge = if (event.swipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                // Hierarchical pop always slides the current page right, revealing the parent exclusively on the left.
                 backProgress.snapTo(event.progress.coerceIn(0f, 1f))
             }
             if (latestPage != startedPage || !latestBackEnabled) {
@@ -98,7 +98,7 @@ fun AppPageTransition(
             }
             // Button/keyboard Back may not emit progress events.
             preview = target
-            backProgress.animateTo(1f, motion.tween(150))
+            backProgress.animateTo(1f, motion.spring(dampingRatio = 0.96f, stiffness = 620f))
             if (latestPage != startedPage || !latestBackEnabled) {
                 preview = null
                 backProgress.snapTo(0f)
@@ -108,7 +108,7 @@ fun AppPageTransition(
             commitBack()
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
-                backProgress.animateTo(0f, motion.tween(150))
+                backProgress.animateTo(0f, motion.spring(dampingRatio = 0.96f, stiffness = 680f))
                 preview = null
             }
             throw cancelled
@@ -153,36 +153,114 @@ fun AppPageTransition(
         else progress.animateTo(1f, motion.spring(1f, if (slide) 650f else 1200f))
         outgoing = null
     }
+    val orderedPages = remember(preview, outgoing, current, slide, direction) {
+        when {
+            preview != null -> listOfNotNull(preview, current).distinct()
+            outgoing != null && slide && direction < 0f -> listOfNotNull(current, outgoing).distinct()
+            else -> listOfNotNull(outgoing, current).distinct()
+        }
+    }
     Box(Modifier.fillMaxSize().clipToBounds()) {
-        listOfNotNull(preview ?: outgoing, current).distinct().forEach { destination -> key(destination) {
+        orderedPages.forEach { destination -> key(destination) {
             val interactive = destination == current && preview == null
             val input = if (interactive) Modifier else Modifier.clearAndSetSemantics { }
                 .pointerInput(Unit) { awaitEachGesture { do { val event = awaitPointerEvent(); event.changes.forEach { it.consume() } } while (event.changes.any { it.pressed }) } }
-            Box(Modifier.fillMaxSize().then(input).graphicsLayer {
-                scaleX = 1f
-                scaleY = 1f
-                clip = false
-                val p = progress.value
-                if (preview != null) {
-                    val b = if (motion.reduced) 0f else backProgress.value
-                    translationX = size.width * edge * (if (destination == current) b else -.12f * (1f - b))
-                    scaleX = if (destination == current) 1f - .04f * b else 1f
-                    scaleY = scaleX
-                    shape = backShape
-                    clip = destination == current && b > 0f
-                    alpha = if (destination == current) 1f else .85f + .15f * b
-                } else if (destination == current) {
-                    translationX = size.width * enterX * (1f - p)
-                    alpha = (enterAlpha + (1f - enterAlpha) * p).coerceIn(0f, 1f)
-                } else {
-                    translationX = size.width * (exitX + ((if (slide) -direction * .25f else 0f) - exitX) * p)
-                    alpha = (exitAlpha * (1f - p)).coerceIn(0f, 1f)
-                }
-            }.drawBehind {
-                // Pages normally share the atmosphere; while overlapping, the front page
-                // needs its own surface so text never shows through other text.
-                if (preview != null && destination == current) drawRect(surface)
-            }) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(input)
+                    .drawWithContent {
+                        val p = progress.value.coerceIn(0f, 1f)
+                        if (preview != null) {
+                            val b = if (motion.reduced) 0f else backProgress.value.coerceIn(0f, 1f)
+                            val splitX = (size.width * b).coerceIn(0f, size.width)
+                            if (destination == preview) {
+                                if (splitX > 0.5f) {
+                                    clipRect(left = 0f, top = 0f, right = splitX, bottom = size.height) {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                    val shadowW = minOf(18.dp.toPx(), splitX)
+                                    drawRect(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.16f * (1f - b * 0.5f))),
+                                            startX = splitX - shadowW,
+                                            endX = splitX
+                                        ),
+                                        topLeft = Offset(splitX - shadowW, 0f),
+                                        size = Size(shadowW, size.height)
+                                    )
+                                }
+                            } else {
+                                drawContent()
+                                if (b > 0.005f && b < 0.995f) {
+                                    drawRect(
+                                        color = Color.White.copy(alpha = 0.08f * (1f - b)),
+                                        topLeft = Offset(splitX, 0f),
+                                        size = Size(1.dp.toPx(), size.height)
+                                    )
+                                }
+                            }
+                        } else if (outgoing != null && slide) {
+                            val splitX = if (direction >= 0f) {
+                                (size.width * (1f - p)).coerceIn(0f, size.width)
+                            } else {
+                                (size.width * p).coerceIn(0f, size.width)
+                            }
+                            val isLeftUnderlay = (direction >= 0f && destination == outgoing) ||
+                                (direction < 0f && destination == current)
+                            if (isLeftUnderlay) {
+                                if (splitX > 0.5f) {
+                                    clipRect(left = 0f, top = 0f, right = splitX, bottom = size.height) {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                }
+                            } else {
+                                drawContent()
+                            }
+                        } else {
+                            drawContent()
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = 1f
+                        scaleY = 1f
+                        clip = false
+                        val p = progress.value.coerceIn(0f, 1f)
+                        if (preview != null) {
+                            val b = if (motion.reduced) 0f else backProgress.value.coerceIn(0f, 1f)
+                            translationX = if (destination == current) {
+                                size.width * b
+                            } else {
+                                -size.width * 0.24f * (1f - b)
+                            }
+                            alpha = if (destination == current) 1f else (0.86f + 0.14f * b).coerceIn(0f, 1f)
+                        } else if (outgoing != null && slide) {
+                            if (direction >= 0f) {
+                                if (destination == current) {
+                                    translationX = size.width * (1f - p)
+                                    alpha = 1f
+                                } else {
+                                    translationX = -size.width * 0.24f * p
+                                    alpha = (1f - 0.14f * p).coerceIn(0f, 1f)
+                                }
+                            } else {
+                                if (destination == current) {
+                                    translationX = -size.width * 0.24f * (1f - p)
+                                    alpha = (0.86f + 0.14f * p).coerceIn(0f, 1f)
+                                } else {
+                                    translationX = size.width * p
+                                    alpha = 1f
+                                }
+                            }
+                        } else if (destination == current) {
+                            translationX = size.width * enterX * (1f - p)
+                            alpha = (enterAlpha + (1f - enterAlpha) * p).coerceIn(0f, 1f)
+                        } else {
+                            translationX = size.width * (exitX + (-exitX) * p)
+                            alpha = (exitAlpha * (1f - p)).coerceIn(0f, 1f)
+                        }
+                    }
+            ) {
                 CompositionLocalProvider(
                     LocalPageBackManaged provides backEnabled,
                     LocalBackPreview provides (parentIsBackPreview || destination == preview)

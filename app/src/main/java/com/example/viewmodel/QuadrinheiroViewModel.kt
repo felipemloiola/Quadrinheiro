@@ -342,6 +342,10 @@ class QuadrinheiroViewModel(
     private val _infoModalComic = MutableStateFlow<ComicEntry?>(null)
     val infoModalComic: StateFlow<ComicEntry?> = _infoModalComic.asStateFlow()
 
+    // Contexto opcional quando a HQ é aberta a partir da prateleira "Para você" (recomendações)
+    private val _activeRecommendationContext = MutableStateFlow<com.example.data.RecommendedComic?>(null)
+    val activeRecommendationContext: StateFlow<com.example.data.RecommendedComic?> = _activeRecommendationContext.asStateFlow()
+
     // Modal de Exportação e Compartilhamento Social (Cards Estilo Apple)
     private val _socialShareRequest = MutableStateFlow<SocialShareRequest?>(null)
     val socialShareRequest: StateFlow<SocialShareRequest?> = _socialShareRequest.asStateFlow()
@@ -416,11 +420,21 @@ class QuadrinheiroViewModel(
         viewModelScope.launch {
             _profile.collect { p ->
                 com.example.data.LibraryDiskCacheRegistry.registerUrls(listOfNotNull(p.avatarUrl))
+                if (p.avatarUrl.startsWith("data:image")) {
+                    withContext(Dispatchers.Default) {
+                        com.example.ui.components.ProfileBitmapMemoryCache.prewarmAll(listOf(p.avatarUrl))
+                    }
+                }
             }
         }
         viewModelScope.launch {
             _appSettings.collect { s ->
                 com.example.data.LibraryDiskCacheRegistry.registerUrls(listOfNotNull(s.profileBannerUrl))
+                withContext(Dispatchers.Default) {
+                    com.example.ui.components.ProfileBitmapMemoryCache.prewarmAll(
+                        listOf(s.profileBannerUrl) + s.profileShowcaseDetails.values
+                    )
+                }
             }
         }
 
@@ -471,6 +485,13 @@ class QuadrinheiroViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { com.example.data.ModernCatalog.restoreFromDiskCache(storage) }
+            runCatching {
+                com.example.ui.components.ProfileBitmapMemoryCache.prewarmAll(
+                    listOf(_profile.value.avatarUrl, _appSettings.value.profileBannerUrl) +
+                        _appSettings.value.profileShowcaseDetails.values
+                )
+                com.example.data.CharacterDirectory.preload(appContext)
+            }
             delay(600)
             // Se houver itens sujos pendentes de sessão offline anterior e não estiver em modo convidado, agenda o WorkManager
             if (!storage.isGuestMode() && (initial.comics.any { it.isDirty } || initial.profile.isDirty)) {
@@ -2198,14 +2219,16 @@ class QuadrinheiroViewModel(
         }
     }
 
-    fun openInfoSynopsisModal(comic: ComicEntry?) {
+    fun openInfoSynopsisModal(comic: ComicEntry?, recommendation: com.example.data.RecommendedComic? = null) {
         _selectedComic.value = null
         if (comic == null) {
             _infoModalComic.value = null
+            _activeRecommendationContext.value = null
             loadSequenceIssuesForComic(null)
             _isSheetExpanded.value = false
             return
         }
+        _activeRecommendationContext.value = recommendation
         val localized = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = false)
         _infoModalComic.value = localized
         loadSequenceIssuesForComic(localized)
@@ -2224,6 +2247,7 @@ class QuadrinheiroViewModel(
 
     fun selectComicForSheet(comic: ComicEntry?) {
         _infoModalComic.value = null
+        _activeRecommendationContext.value = null
         if (comic == null) {
             _selectedComic.value = null
             loadSequenceIssuesForComic(null)
@@ -2281,6 +2305,12 @@ class QuadrinheiroViewModel(
      */
     fun openCatalogSheetForComic(itemData: ComicEntry, chosenStatus: ReadingStatus) {
         _infoModalComic.value = null
+        val activeRec = _activeRecommendationContext.value
+        if (activeRec != null) {
+            val matchesRec = (itemData.id.isNotBlank() && activeRec.comic.id == itemData.id) ||
+                (itemData.externalId.isNotBlank() && activeRec.comic.externalId == itemData.externalId)
+            if (!matchesRec) _activeRecommendationContext.value = null
+        }
         val existing = _comics.value.firstOrNull { c ->
             (itemData.id.isNotBlank() && c.id == itemData.id) ||
                 (itemData.externalId.isNotBlank() && c.externalId == itemData.externalId)
@@ -2467,6 +2497,7 @@ class QuadrinheiroViewModel(
 
         _selectedComic.value = null
         _infoModalComic.value = null
+        _activeRecommendationContext.value = null
         _showManualModal.value = false
         _isSheetExpanded.value = false
 
@@ -2515,6 +2546,7 @@ class QuadrinheiroViewModel(
         }
         _selectedComic.value = null
         _infoModalComic.value = null
+        _activeRecommendationContext.value = null
         showNotice("Edição removida da Biblioteca")
     }
 

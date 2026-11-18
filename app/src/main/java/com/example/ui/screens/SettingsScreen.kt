@@ -1535,12 +1535,32 @@ fun SettingsTabScreen(
                                         checked = appSettings.hdCovers,
                                         onChange = { v -> viewModel.updateSettings { it.copy(hdCovers = v) } }
                                     )
-                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                }
+                            }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Sugestões Para você",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = s.textSecondary,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .contentMaterialSurface(RoundedCornerShape(24.dp))
+                                ) {
                                     SettingsToggleItem(
                                         title = "Refinamento de sugestões com IA",
                                         subtitle = "Ajusta ordem e motivos em Para você sem enviar dados pessoais",
                                         checked = appSettings.aiRecommendationsEnabled,
                                         onChange = { v -> viewModel.updateSettings { it.copy(aiRecommendationsEnabled = v) } }
+                                    )
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                    com.example.ui.components.RecommendationPreferencesAction(
+                                        controller = viewModel.curation,
+                                        asSettingsRow = true
                                     )
                                 }
                             }

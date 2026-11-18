@@ -370,6 +370,8 @@ fun QuadrinheiroApp(
 
     val selectedComic by viewModel.selectedComic.collectAsStateWithLifecycle()
     val infoModalComic by viewModel.infoModalComic.collectAsStateWithLifecycle()
+    val activeRecommendationContext by viewModel.activeRecommendationContext.collectAsStateWithLifecycle()
+    val usernameVerificationState by viewModel.usernameVerification.collectAsStateWithLifecycle()
     val socialShareRequest by viewModel.socialShareRequest.collectAsStateWithLifecycle()
     val onlineSequencePool by viewModel.onlineSequencePool.collectAsStateWithLifecycle()
     val showManualModal by viewModel.showManualModal.collectAsStateWithLifecycle()
@@ -685,8 +687,17 @@ fun QuadrinheiroApp(
                         )
                         // Neutral system surface; cover atmosphere supplies the only background tint.
                         // Cover light fades into the neutral surface within the top quarter.
-                        if (hasReadingCoverBg) {
-                            com.example.ui.components.ReadingCoverAtmosphere(resolvedCoverUrl, themeColors.bgPrimary)
+                        val atmosphereAlpha by animateFloatAsState(
+                            targetValue = if (hasReadingCoverBg) 1f else 0f,
+                            animationSpec = if (motion.reduced) motion.tween(0) else motion.tween(260),
+                            label = "readingAtmosphereAlpha"
+                        )
+                        if (atmosphereAlpha > 0.005f && resolvedCoverUrl.isNotEmpty()) {
+                            com.example.ui.components.ReadingCoverAtmosphere(
+                                resolvedCoverUrl,
+                                themeColors.bgPrimary,
+                                modifier = Modifier.graphicsLayer { alpha = atmosphereAlpha }
+                            )
                         }
                     }
 
@@ -882,7 +893,7 @@ fun QuadrinheiroApp(
                                         onLibrary = { viewModel.switchMainTab("shelf") },
                                         onEditProfile = { viewModel.switchMainTab("settings"); viewModel.openSettingsCategory("profile") },
                                         onUpdateShowcase = { ids, characters, details -> viewModel.updateSettings { it.copy(profileFavoriteComicIds = ids, profileFavoriteCharacters = characters, profileShowcaseDetails = details) } },
-                                        onHandleChange = viewModel::onHandleInputChanged, handleFeedback = viewModel.usernameVerification.collectAsStateWithLifecycle().value.message,
+                                        onHandleChange = viewModel::onHandleInputChanged, handleFeedback = usernameVerificationState.message,
                                         onCommitProfile = { next, banner -> viewModel.updateProfile { next }; viewModel.updateSettings { it.copy(profileBannerUrl = banner) } },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
                                         onStatistics = { viewModel.openReadingStatistics() }
@@ -890,6 +901,7 @@ fun QuadrinheiroApp(
                                     "explore" -> com.example.ui.screens.ExploreScreen(comics, routeListState,
                                         profile = profile, onLogin = { viewModel.openAuthModalForLinking() },
                                         onComic = { viewModel.openInfoSynopsisModal(it) },
+                                        onRecommendedComic = { rec -> viewModel.openInfoSynopsisModal(rec.comic, rec) },
                                         onSearch = { query -> viewModel.setSearchQuery(query); viewModel.switchMainTab("search") })
                                     "settings" -> SettingsTabScreen(
                                         viewModel = viewModel,
@@ -1121,6 +1133,7 @@ fun QuadrinheiroApp(
                             viewModel.selectComicForSheet(saved)
                         },
                         onDismiss = { viewModel.openInfoSynopsisModal(null) },
+                        recommendationContext = activeRecommendationContext,
                         onShareComic = { shareComic, cardType, momentId ->
                             viewModel.openSocialShareSheet(
                                 com.example.ui.components.SocialShareRequest(
@@ -1165,6 +1178,7 @@ fun QuadrinheiroApp(
                         onSave = viewModel::saveComic,
                         onDelete = viewModel::deleteComic,
                         onDismiss = { viewModel.selectComicForSheet(null) },
+                        recommendationContext = activeRecommendationContext,
                         onShareComic = { shareComic, cardType, momentId ->
                             viewModel.openSocialShareSheet(
                                 com.example.ui.components.SocialShareRequest(

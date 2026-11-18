@@ -43,7 +43,11 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     var slotMenu by remember { mutableStateOf(false) }
     var remoteComics by remember { mutableStateOf(emptyList<ComicEntry>()) }
     val remoteCatalog by com.example.data.ModernCatalog.entries.collectAsState()
-    LaunchedEffect(Unit) { com.example.data.CharacterDirectory.preload(context) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.example.data.CharacterDirectory.preload(context)
+        }
+    }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var characterResults by remember { mutableStateOf(emptyList<com.example.data.CharacterResult>()) }
     var characterLoading by remember { mutableStateOf(false) }
@@ -51,14 +55,35 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     var editSlot by rememberSaveable { mutableIntStateOf(-1) }
     var characters by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    val candidates = remember(comics, settings.profileShowcaseDetails, remoteComics, remoteCatalog) {
-        val snapshots = settings.profileShowcaseDetails.filterKeys { it.startsWith("comic:") }.values.mapNotNull(com.example.data.ProfileShowcase::restoreComic)
-        com.example.data.CatalogSearchPolicy.unique(
-            snapshots + comics + remoteComics + remoteCatalog + com.example.data.CuratedCatalog.curatedComicsCatalog
-        )
+    // Fast O(1) lookup for the 4 showcase comic slots — avoids scanning/normalizing hundreds of catalog entries on tab switch.
+    val byId = remember(comics, settings.profileFavoriteComicIds, settings.profileShowcaseDetails) {
+        buildMap<String, ComicEntry> {
+            for (favId in settings.profileFavoriteComicIds) {
+                if (favId.isBlank()) continue
+                val resolved = comics.firstOrNull { it.id == favId || it.externalId == favId }
+                    ?: settings.profileShowcaseDetails["comic:$favId"]?.let(com.example.data.ProfileShowcase::restoreComic)
+                    ?: com.example.data.CuratedCatalog.curatedComicsCatalog.firstOrNull { it.id == favId || it.externalId == favId }
+                if (resolved != null) put(favId, resolved)
+            }
+        }
     }
-    val byId = remember(candidates) { candidates.associateBy { it.id } }
+    var candidates by remember { mutableStateOf(emptyList<ComicEntry>()) }
+    val needsComicPickerCandidates = editSlot >= 0 && !slotMenu && !characters
+    LaunchedEffect(needsComicPickerCandidates, comics, settings.profileShowcaseDetails, remoteComics, remoteCatalog) {
+        if (!needsComicPickerCandidates) return@LaunchedEffect
+        candidates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val snapshots = settings.profileShowcaseDetails
+                .filterKeys { it.startsWith("comic:") }
+                .values
+                .mapNotNull(com.example.data.ProfileShowcase::restoreComic)
+            com.example.data.CatalogSearchPolicy.unique(
+                snapshots + comics + remoteComics + remoteCatalog + com.example.data.CuratedCatalog.curatedComicsCatalog
+            )
+        }
+    }
     val readCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
+    val readingCount = remember(comics) { comics.count { it.status == ReadingStatus.READING } }
+    val ratedCount = remember(comics) { comics.count { it.rating > 0f } }
     val reviews = remember(comics) { comics.filter { it.review.isNotBlank() }.sortedByDescending { it.updatedAt }.take(3) }
     LaunchedEffect(settings.profileFavoriteCharacters, settings.profileShowcaseDetails) {
         val missing = settings.profileFavoriteCharacters.filter { settings.profileShowcaseDetails["character:$it"].isNullOrBlank() || settings.profileShowcaseDetails["character:$it"]?.trimStart()?.startsWith("{") != true }
@@ -277,9 +302,9 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                     Row(Modifier.fillMaxWidth().clickable(onClick = onStatistics).padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceAround) {
                         ProfileMetric("$readCount", "Lidos", Modifier.weight(1f))
                         Box(Modifier.width(1.dp).height(36.dp).background(theme.divider))
-                        ProfileMetric("${comics.count { it.status == ReadingStatus.READING }}", "Em leitura", Modifier.weight(1f))
+                        ProfileMetric("$readingCount", "Em leitura", Modifier.weight(1f))
                         Box(Modifier.width(1.dp).height(36.dp).background(theme.divider))
-                        ProfileMetric("${comics.count { it.rating > 0 }}", "Avaliações", Modifier.weight(1f))
+                        ProfileMetric("$ratedCount", "Avaliações", Modifier.weight(1f))
                     }
                 }
             }

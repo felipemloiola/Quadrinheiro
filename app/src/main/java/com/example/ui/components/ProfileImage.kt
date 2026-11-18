@@ -6,9 +6,14 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.util.Base64
+import android.util.LruCache
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
@@ -17,27 +22,90 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
+internal object ProfileBitmapMemoryCache {
+    private val cache = object : LruCache<String, ImageBitmap>(24) {}
+
+    fun getCached(dataUri: String): ImageBitmap? {
+        if (!dataUri.startsWith("data:image")) return null
+        return synchronized(cache) { cache.get(cacheKey(dataUri)) }
+    }
+
+    fun decodeAndCache(dataUri: String): ImageBitmap? {
+        if (!dataUri.startsWith("data:image")) return null
+        val key = cacheKey(dataUri)
+        synchronized(cache) { cache.get(key) }?.let { return it }
+        return try {
+            val base64Part = dataUri.substringAfter("base64,", "")
+            if (base64Part.isEmpty()) return null
+            val bytes = Base64.decode(base64Part, Base64.DEFAULT)
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            if (bmp != null) {
+                synchronized(cache) { cache.put(key, bmp) }
+            }
+            bmp
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    fun prewarmAll(rawSources: Iterable<String>) {
+        for (raw in rawSources) {
+            if (raw.isBlank()) continue
+            val resolved = com.example.data.ProfileShowcase.characterImage(raw).trim()
+            if (resolved.startsWith("data:image")) {
+                decodeAndCache(resolved)
+            }
+        }
+    }
+
+    private fun cacheKey(dataUri: String): String =
+        "${dataUri.length}:${dataUri.hashCode()}:${dataUri.takeLast(32)}"
+}
+
 @Composable
 internal fun ProfileImage(source: String, description: String?, modifier: Modifier = Modifier, face: Boolean = false) {
     val context = LocalContext.current
-    val resolved = com.example.data.ProfileShowcase.characterImage(source)
-    val data = remember(resolved) { if (resolved.startsWith("data:image")) runCatching { Base64.decode(resolved.substringAfter("base64,"), Base64.DEFAULT) }.getOrNull() else resolved }
+    val resolved = remember(source) { com.example.data.ProfileShowcase.characterImage(source).trim() }
+    val alignment = if (face) Alignment.TopCenter else Alignment.Center
+    if (resolved.startsWith("data:image")) {
+        var bitmap by remember(resolved) { mutableStateOf(ProfileBitmapMemoryCache.getCached(resolved)) }
+        LaunchedEffect(resolved) {
+            if (bitmap == null) {
+                bitmap = withContext(Dispatchers.Default) {
+                    ProfileBitmapMemoryCache.decodeAndCache(resolved)
+                }
+            }
+        }
+        val currentBmp = bitmap
+        if (currentBmp != null) {
+            Image(
+                bitmap = currentBmp,
+                contentDescription = description,
+                modifier = modifier,
+                contentScale = ContentScale.Crop,
+                alignment = alignment
+            )
+        } else {
+            Box(modifier)
+        }
+        return
+    }
     LaunchedEffect(resolved) {
         if (resolved.startsWith("http")) {
             com.example.data.LibraryDiskCacheRegistry.registerUrls(listOf(resolved))
         }
     }
-    val request = remember(data, face) {
+    val request = remember(resolved, face) {
         val diskPolicy = if (resolved.startsWith("http")) com.example.data.LibraryDiskCacheRegistry.diskCachePolicyFor(resolved) else coil.request.CachePolicy.ENABLED
         ImageRequest.Builder(context)
-            .data(data)
+            .data(resolved)
             .allowHardware(true)
             .allowRgb565(true)
             .size(if (face) 140 else 720, if (face) 140 else 240)
             .diskCachePolicy(diskPolicy)
             .build()
     }
-    AsyncImage(request, description, modifier, contentScale = ContentScale.Crop, alignment = if (face) Alignment.TopCenter else Alignment.Center)
+    AsyncImage(request, description, modifier, contentScale = ContentScale.Crop, alignment = alignment)
 }
 
 /** Bounds decoding, EXIF rotation and 3:1 center crop happen off the UI thread. */

@@ -25,10 +25,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntRect
@@ -41,10 +45,15 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.*
 import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+import com.kyant.shapes.ContinuousCapsule
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.tanh
 
 /** The menu is measured once at its final size. Springs only transform its render layer. */
 @Composable
@@ -70,12 +79,23 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         if (active != null) {
             retained = active
             state.morphingMenuId = active.id
-            launch { x.animateTo(1f, motion.spring(0.58f, 460f)) }
-            y.animateTo(1f, motion.spring(0.62f, 420f))
+            if (motion.reduced) {
+                x.snapTo(1f)
+                y.snapTo(1f)
+            } else {
+                // Expressive jelly droplet expansion (underdamped spring with volume-preserving overshoot)
+                launch { x.animateTo(1f, motion.spring(0.55f, 430f)) }
+                y.animateTo(1f, motion.spring(0.50f, 375f))
+            }
         } else if (retained != null) {
-            kotlinx.coroutines.coroutineScope {
-                launch { x.animateTo(0f, motion.spring(1f, 850f)) }
-                y.animateTo(0f, motion.spring(1f, 850f))
+            if (motion.reduced) {
+                x.snapTo(0f)
+                y.snapTo(0f)
+            } else {
+                kotlinx.coroutines.coroutineScope {
+                    launch { x.animateTo(0f, motion.spring(0.84f, 740f)) }
+                    y.animateTo(0f, motion.spring(0.84f, 740f))
+                }
             }
             if (state.currentRequest == null) { retained = null; state.morphingMenuId = null }
         }
@@ -84,6 +104,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     if (request.items.isEmpty()) return
     val currentRequest by rememberUpdatedState(request)
     val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
     val palette = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
     val dark = LocalIsDarkTheme.current
@@ -94,8 +115,15 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     val rowHeight = if (density.fontScale > 1.2f) (32f * density.fontScale + 16f).dp else 48.dp
     val highlightY by animateFloatAsState(
         with(density) { (rowHeight + .5.dp).toPx() } * (hovered ?: 0),
-        motion.spring(.68f, 620f), label = "menuHighlightPosition"
+        motion.spring(.62f, 560f), label = "menuHighlightPosition"
     )
+    var previousHovered by remember(request.id) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(hovered) {
+        if (hovered != null && hovered != previousHovered && !motion.reduced) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        previousHovered = hovered
+    }
     val firstItemFocus = remember(request.id) { FocusRequester() }
     val focusIndex = request.items.indexOfFirst { it.selected }.coerceAtLeast(0)
     LaunchedEffect(active?.id) {
@@ -128,91 +156,179 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
         if (active != null) Box(Modifier.fillMaxSize().pointerInput(request.id) {
             awaitEachGesture { awaitFirstDown(false); state.dismissMenu() }
         })
-        Box(Modifier.offset { IntOffset(left, top) }.size(menuWidth, menuHeight).testTag("retained_glass_menu")
-            .graphicsLayer {
-                transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
-                scaleX = (anchor.width.toFloat() / width + (1f - anchor.width.toFloat() / width) * x.value).coerceAtLeast(0.05f)
-                scaleY = (anchor.height.toFloat() / height + (1f - anchor.height.toFloat() / height) * y.value).coerceAtLeast(0.05f)
-                translationX = (if (right) anchor.right - left - width else anchor.left - left) * (1f - x.value) +
-                    if (motion.reduced) 0f else drag.x.coerceIn(-200f, 200f) * .035f
-                translationY = (if (down) anchor.top - top else anchor.bottom - top - height) * (1f - y.value) +
-                    if (motion.reduced) 0f else drag.y.coerceIn(-200f, 200f) * .035f
-                alpha = (minOf(x.value, y.value) * 5f).coerceIn(0f, 1f)
-            }
-            .drawBackdrop(backdrop, shape = { ContinuousRoundedRectangle(26.dp) },
-                highlight = { if (settings.reduceTransparency) null else Highlight.Default.copy(alpha = .42f) },
-                shadow = { Shadow(radius = 18.dp, alpha = 0.20f) },
-                effects = {
-                    if (!settings.reduceTransparency) { vibrancy(); blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 20f).dp.toPx()) }
-                    if (!settings.reduceTransparency && settings.enableLensRefraction) lens((24f * settings.glassIntensity).dp.toPx(), (42f * settings.glassIntensity).dp.toPx(), depthEffect = true, chromaticAberration = settings.enableChromaticAberration)
-                },
-                onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = surfaceAlpha)) })
-            .clip(RoundedCornerShape(26.dp))
-            .then(if (!scrollable && active != null) Modifier.pointerInput(request.id, rowHeight) {
-                awaitEachGesture {
-                    val first = awaitFirstDown(pass = PointerEventPass.Initial)
-                    val rowPx = rowHeight.toPx()
-                    val stride = (rowHeight + .5.dp).toPx()
-                    fun row(position: Offset): Int? {
-                        val y = position.y - 7.dp.toPx()
-                        if (position.x < 0f || position.x >= size.width || y < 0f) return null
-                        val index = (y / stride).toInt()
-                        return index.takeIf { it in currentRequest.items.indices && y - it * stride < rowPx }
+        val safeAnchorW = anchor.width.coerceAtLeast(with(density) { 36.dp.roundToPx() }).toFloat()
+        val safeAnchorH = anchor.height.coerceAtLeast(with(density) { 36.dp.roundToPx() }).toFloat()
+        val anchorCornerDp = with(density) { (minOf(safeAnchorW, safeAnchorH) * 0.5f).toDp() }
+        Box(
+            Modifier
+                .offset { IntOffset(left, top) }
+                .size(menuWidth, menuHeight)
+                .testTag("retained_glass_menu")
+                .then(if (!scrollable && active != null) Modifier.pointerInput(request.id, rowHeight) {
+                    awaitEachGesture {
+                        val first = awaitFirstDown(pass = PointerEventPass.Initial)
+                        val rowPx = rowHeight.toPx()
+                        val stride = (rowHeight + .5.dp).toPx()
+                        fun row(position: Offset): Int? {
+                            val yPos = position.y - 7.dp.toPx()
+                            if (position.x < 0f || position.x >= size.width || yPos < 0f) return null
+                            val index = (yPos / stride).toInt()
+                            return index.takeIf { it in currentRequest.items.indices && yPos - it * stride < rowPx }
+                        }
+                        hovered = row(first.position)
+                        first.consume()
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == first.id } ?: break
+                                if (change.isConsumed || event.changes.any { it.id != first.id && it.pressed }) break
+                                drag = change.position - first.position
+                                hovered = row(change.position)
+                                change.consume()
+                                if (!change.pressed) {
+                                    hovered?.let(::choose)
+                                    break
+                                }
+                            }
+                        } finally { hovered = null; drag = Offset.Zero }
                     }
-                    hovered = row(first.position)
-                    first.consume()
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                            if (change.isConsumed || event.changes.any { it.id != first.id && it.pressed }) break
-                            drag = change.position - first.position
-                            hovered = row(change.position)
-                            change.consume()
-                            if (!change.pressed) {
-                                hovered?.let(::choose)
-                                break
+                } else Modifier)
+        ) {
+            // 1. Liquid Glass Droplet Shell: morphs smoothly from the circular/capsule trigger into a 26.dp G2 card
+            // with volume-preserving jelly overshoot and tanh finger-drag elasticity (never squashing text glyphs).
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        val xv = x.value
+                        val yv = y.value
+                        val clamped = ((xv + yv) * 0.5f).coerceIn(0f, 1f)
+                        val baseRatioX = (safeAnchorW / width.coerceAtLeast(1)).coerceIn(0.08f, 1f)
+                        val baseRatioY = (safeAnchorH / height.coerceAtLeast(1)).coerceIn(0.08f, 1f)
+                        val overY = (yv - 1f).coerceAtLeast(0f)
+                        val overX = (xv - 1f).coerceAtLeast(0f)
+                        val dragStretchX = if (motion.reduced) 0f else (abs(drag.x).coerceAtMost(220f) / 220f) * 0.045f
+                        val dragStretchY = if (motion.reduced) 0f else (abs(drag.y).coerceAtMost(220f) / 220f) * 0.045f
+                        val rubberX = if (motion.reduced) 0f else 14f * tanh(drag.x / 160f)
+                        val rubberY = if (motion.reduced) 0f else 14f * tanh(drag.y / 160f)
+
+                        transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
+                        // Volume-conserving jelly deformation: vertical overshoot subtly narrows horizontal waist
+                        scaleX = (baseRatioX + (1f - baseRatioX) * xv - overY * 0.14f + dragStretchX - dragStretchY * 0.30f).coerceAtLeast(0.06f)
+                        scaleY = (baseRatioY + (1f - baseRatioY) * yv - overX * 0.10f + dragStretchY - dragStretchX * 0.30f).coerceAtLeast(0.06f)
+                        translationX = (if (right) anchor.right - left - width else anchor.left - left) * (1f - clamped) + rubberX
+                        translationY = (if (down) anchor.top - top else anchor.bottom - top - height) * (1f - clamped) + rubberY
+                        alpha = (minOf(xv, yv) * 4.2f).coerceIn(0f, 1f)
+                    }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = {
+                            val clamped = ((x.value + y.value) * 0.5f).coerceIn(0f, 1f)
+                            val radiusDp = androidx.compose.ui.unit.lerp(anchorCornerDp, 26.dp, clamped)
+                            ContinuousRoundedRectangle(radiusDp)
+                        },
+                        highlight = { if (settings.reduceTransparency) null else Highlight.Default.copy(alpha = .54f) },
+                        shadow = { Shadow(radius = 20.dp, alpha = 0.24f) },
+                        innerShadow = {
+                            if (settings.reduceTransparency) null else InnerShadow(radius = 5.dp, alpha = if (dark) 0.26f else 0.16f)
+                        },
+                        effects = {
+                            if (!settings.reduceTransparency) {
+                                vibrancy()
+                                blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 20f).dp.toPx())
+                            }
+                            if (!settings.reduceTransparency && settings.enableLensRefraction) {
+                                val clamped = ((x.value + y.value) * 0.5f).coerceIn(0f, 1f)
+                                val morphPulse = 1f + 0.28f * sin(clamped * Math.PI).toFloat()
+                                lens(
+                                    (24f * settings.glassIntensity).dp.toPx(),
+                                    (42f * settings.glassIntensity * morphPulse).dp.toPx(),
+                                    depthEffect = true,
+                                    chromaticAberration = settings.enableChromaticAberration
+                                )
+                            }
+                        },
+                        onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = surfaceAlpha)) }
+                    )
+            )
+
+            // 2. Crisp Menu Content Layer: uniform aspect-preserving scale + progressive droplet clip (zero text distortion!)
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .drawWithContent {
+                        val xv = x.value.coerceIn(0f, 1.15f)
+                        val yv = y.value.coerceIn(0f, 1.15f)
+                        if (xv >= 0.99f && yv >= 0.99f) {
+                            drawContent()
+                        } else {
+                            val wClip = (size.width * xv.coerceIn(0f, 1f))
+                            val hClip = (size.height * yv.coerceIn(0f, 1f))
+                            val cLeft = if (right) size.width - wClip else 0f
+                            val cTop = if (down) 0f else size.height - hClip
+                            clipRect(left = cLeft, top = cTop, right = cLeft + wClip, bottom = cTop + hClip) {
+                                this@drawWithContent.drawContent()
                             }
                         }
-                    } finally { hovered = null; drag = Offset.Zero }
-                }
-            } else Modifier)) {
-            if (!scrollable && hovered != null) {
-                Box(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
-                    .graphicsLayer { translationY = 7.dp.toPx() + highlightY }
-                    .background(if (dark) Color.White.copy(alpha = .13f) else Color.Black.copy(alpha = .075f), RoundedCornerShape(16.dp)))
-            }
-            val scrollModifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
-            Column(scrollModifier.padding(vertical = 7.dp)) {
-                request.items.forEachIndexed { index, item ->
-                    Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(when {
-                            item.selected && hovered == null -> palette.accent.copy(alpha = .09f)
-                            else -> Color.Transparent
-                        })
-                        .then(if (active != null && index == focusIndex) Modifier.focusRequester(firstItemFocus) else Modifier)
-                        .semantics { if (request.selectionMenu) selected = item.selected }
-                        .clickable(
-                            enabled = active != null,
-                            onClickLabel = if (request.selectionMenu) "Selecionar ${item.label}" else item.label,
-                            role = if (request.selectionMenu) Role.RadioButton else Role.Button,
-                            onClick = { choose(index) }
-                        )
-                        .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (request.selectionMenu) Box(Modifier.width(18.dp)) {
-                            if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp))
-                        }
-                        Text(item.label, modifier = Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
-                            style = menuTextStyle,
-                            fontWeight = if (item.selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
-                            color = if (item.selected) palette.accent else palette.textPrimary, maxLines = 2)
-                        item.icon?.let { Icon(it, null, tint = palette.textSecondary, modifier = Modifier.size(18.dp)) }
                     }
-                    if (index < request.items.lastIndex) Box(Modifier.fillMaxWidth().padding(horizontal = 13.dp)
-                        .height(.5.dp).testTag("menu-divider-$index")
-                        .background(if (dark) Color.White.copy(alpha = .11f) else Color.Black.copy(alpha = .08f)))
+                    .graphicsLayer {
+                        val contentProgress = (((x.value + y.value) * 0.5f - 0.16f) / 0.84f).coerceIn(0f, 1f)
+                        val uniformScale = if (motion.reduced) 1f else (0.90f + 0.10f * contentProgress)
+                        val rubberX = if (motion.reduced) 0f else 14f * tanh(drag.x / 160f)
+                        val rubberY = if (motion.reduced) 0f else 14f * tanh(drag.y / 160f)
+                        transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
+                        scaleX = uniformScale
+                        scaleY = uniformScale
+                        translationX = rubberX
+                        translationY = (if (motion.reduced) 0f else (if (down) -8.dp.toPx() else 8.dp.toPx()) * (1f - contentProgress)) + rubberY
+                        alpha = if (motion.reduced) 1f else (contentProgress * 1.25f).coerceIn(0f, 1f)
+                    }
+            ) {
+                if (!scrollable && hovered != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(rowHeight)
+                            .padding(horizontal = 7.dp)
+                            .graphicsLayer { translationY = 7.dp.toPx() + highlightY }
+                            .background(
+                                if (dark) Color.White.copy(alpha = .15f) else Color.Black.copy(alpha = .085f),
+                                ContinuousCapsule
+                            )
+                    )
+                }
+                val scrollModifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier
+                Column(scrollModifier.padding(vertical = 7.dp)) {
+                    request.items.forEachIndexed { index, item ->
+                        Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
+                            .clip(ContinuousRoundedRectangle(16.dp))
+                            .background(when {
+                                item.selected && hovered == null -> palette.accent.copy(alpha = .10f)
+                                else -> Color.Transparent
+                            })
+                            .then(if (active != null && index == focusIndex) Modifier.focusRequester(firstItemFocus) else Modifier)
+                            .semantics { if (request.selectionMenu) selected = item.selected }
+                            .clickable(
+                                enabled = active != null,
+                                onClickLabel = if (request.selectionMenu) "Selecionar ${item.label}" else item.label,
+                                role = if (request.selectionMenu) Role.RadioButton else Role.Button,
+                                onClick = { choose(index) }
+                            )
+                            .padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (request.selectionMenu) Box(Modifier.width(18.dp)) {
+                                if (item.selected) Icon(Icons.Default.Check, null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                            }
+                            Text(item.label, modifier = Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp,
+                                style = menuTextStyle,
+                                fontWeight = if (item.selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                                color = if (item.selected) palette.accent else palette.textPrimary, maxLines = 2)
+                            item.icon?.let { Icon(it, null, tint = palette.textSecondary, modifier = Modifier.size(18.dp)) }
+                        }
+                        if (index < request.items.lastIndex) Box(Modifier.fillMaxWidth().padding(horizontal = 13.dp)
+                            .height(.5.dp).testTag("menu-divider-$index")
+                            .background(if (dark) Color.White.copy(alpha = .11f) else Color.Black.copy(alpha = .08f)))
+                    }
                 }
             }
         }

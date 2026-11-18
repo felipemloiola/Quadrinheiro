@@ -135,7 +135,8 @@ fun ExploreScreen(
     onSearch: (String) -> Unit,
     profile: ReaderProfile = ReaderProfile(),
     viewModel: QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
-    onLogin: () -> Unit = {}
+    onLogin: () -> Unit = {},
+    onRecommendedComic: (RecommendedComic) -> Unit = { onComic(it.comic) }
 ) {
     val theme = LocalIOS27Theme.current
     val appContext = LocalContext.current.applicationContext
@@ -233,10 +234,15 @@ fun ExploreScreen(
                                 row.forEach { comic ->
                                     val recommendation = recommendationsById[comic.id]
                                     Column(Modifier.weight(1f)) {
-                                        ExplorePoster(comic, Modifier.fillMaxWidth(), onComic, recommendation?.reasonLabel)
-                                        recommendation?.let {
-                                            com.example.ui.components.RecommendationExplanationAction(it,viewModel.curation,onComic)
-                                        }
+                                        ExplorePoster(
+                                            comic = comic,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            onComic = { selectedComic ->
+                                                if (recommendation != null) onRecommendedComic(recommendation)
+                                                else onComic(selectedComic)
+                                            },
+                                            reasonLabel = recommendation?.reasonLabel
+                                        )
                                     }
                                 }
                                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -286,8 +292,7 @@ fun ExploreScreen(
                                 recommendations = recommendations,
                                 loading = exploreRecommendationState.isRefreshing,
                                 onExpand = { collection = "Para você" },
-                                onComic = onComic,
-                                controller = viewModel.curation
+                                onRecommendedComic = onRecommendedComic
                             )
                         }
                         items(EditorialDiscovery.selections.keys.toList(), key = { it }, contentType = { "explore_shelf_section" }) { title ->
@@ -309,8 +314,7 @@ private fun ExploreForYouSection(
     recommendations: List<RecommendedComic>,
     loading: Boolean,
     onExpand: () -> Unit,
-    onComic: (ComicEntry) -> Unit,
-    controller: com.example.data.CurationController
+    onRecommendedComic: (RecommendedComic) -> Unit
 ) {
     val theme = LocalIOS27Theme.current
     if (recommendations.isNotEmpty()) {
@@ -329,9 +333,13 @@ private fun ExploreForYouSection(
                     key = { it.comic.id },
                     contentType = { "explore_poster" }
                 ) { recommendation ->
-                    Column(Modifier.width(132.dp)) {
-                        ExplorePoster(recommendation.comic, Modifier.fillMaxWidth(), onComic, recommendation.reasonLabel)
-                        com.example.ui.components.RecommendationExplanationAction(recommendation,controller,onComic)
+                    Column(Modifier.width(124.dp)) {
+                        ExplorePoster(
+                            comic = recommendation.comic,
+                            modifier = Modifier.fillMaxWidth(),
+                            onComic = { onRecommendedComic(recommendation) },
+                            reasonLabel = recommendation.reasonLabel
+                        )
                     }
                 }
             }
@@ -342,7 +350,6 @@ private fun ExploreForYouSection(
             RecommendationEmptyState(loading)
         }
     }
-    com.example.ui.components.RecommendationPreferencesAction(controller)
 }
 
 @Composable

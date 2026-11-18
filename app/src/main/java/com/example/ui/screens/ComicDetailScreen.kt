@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -45,19 +48,47 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ComicDetailDialog(comic: ComicEntry, profile: ReaderProfile, library: List<ComicEntry>, onClose: () -> Unit,
-    onRegister: (ComicEntry) -> Unit, onCover: (String) -> Unit, onLogin: () -> Unit, onShare: () -> Unit,
-    resolveDetails: suspend (ComicEntry) -> CatalogDetails? = { ComicVineCatalog.autoResolve(it) }) {
+fun ComicDetailDialog(
+    comic: ComicEntry,
+    profile: ReaderProfile,
+    library: List<ComicEntry>,
+    onClose: () -> Unit,
+    onRegister: (ComicEntry) -> Unit,
+    onCover: (String) -> Unit,
+    onLogin: () -> Unit,
+    onShare: () -> Unit,
+    recommendationContext: RecommendedComic? = null,
+    resolveDetails: suspend (ComicEntry) -> CatalogDetails? = { ComicVineCatalog.autoResolve(it) }
+) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        ComicDetailScreen(comic, profile, library, onClose, onRegister, onCover,
-            onLogin = { onClose(); onLogin() }, onShare = { onClose(); onShare() }, resolveDetails=resolveDetails)
+        ComicDetailScreen(
+            initialComic = comic,
+            profile = profile,
+            library = library,
+            onBack = onClose,
+            onRegister = onRegister,
+            onCover = onCover,
+            onLogin = { onClose(); onLogin() },
+            onShare = onShare,
+            recommendationContext = recommendationContext,
+            resolveDetails = resolveDetails
+        )
     }
 }
 
 @Composable
-private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, library: List<ComicEntry>, onBack: () -> Unit,
-    onRegister: (ComicEntry) -> Unit, onCover: (String) -> Unit, onLogin: () -> Unit, onShare: () -> Unit,
-    resolveDetails: suspend (ComicEntry) -> CatalogDetails?) {
+private fun ComicDetailScreen(
+    initialComic: ComicEntry,
+    profile: ReaderProfile,
+    library: List<ComicEntry>,
+    onBack: () -> Unit,
+    onRegister: (ComicEntry) -> Unit,
+    onCover: (String) -> Unit,
+    onLogin: () -> Unit,
+    onShare: () -> Unit,
+    recommendationContext: RecommendedComic? = null,
+    resolveDetails: suspend (ComicEntry) -> CatalogDetails?
+) {
     val libraryMatch = remember(initialComic.id, initialComic.externalId, initialComic.displayTitle, library) {
         com.example.model.catalogEntryForEditing(initialComic, library)
     }
@@ -87,12 +118,25 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     var editionPicker by remember { mutableStateOf(false) }
     var expandedCover by remember(comic.id) { mutableStateOf(false) }
     var coverBounds by remember(comic.id) {mutableStateOf<Rect?>(null)}
+    var shareSheetOpen by remember(comic.id) { mutableStateOf(false) }
+    var addToListOpen by remember(comic.id) { mutableStateOf(false) }
+    var whySheetOpen by remember(comic.id) { mutableStateOf(false) }
+    var shareNoticeText by remember(comic.id) { mutableStateOf<String?>(null) }
+    val detailMenuHost = remember { LiquidGlassMenuHostState() }
+    val moreMenuId = remember { "comic_detail_more_menu" }
+    var moreMenuBounds by remember { mutableStateOf(IntRect.Zero) }
+    LaunchedEffect(shareNoticeText) {
+        if (shareNoticeText != null) {
+            kotlinx.coroutines.delay(3200)
+            shareNoticeText = null
+        }
+    }
     var translatedSynopsis by remember(comic.id,entity) {mutableStateOf("")}
     var rating by remember(comic.id, comic.externalId) { mutableStateOf<CommunityRating?>(null) }
     val repository = remember { CommunityRepository(context) }
     val listState = rememberLazyListState()
     LaunchedEffect(comic.id, comic.externalId, entity, tab) { listState.scrollToItem(0) }
-    BackHandler { goBack() }
+    BackHandler(enabled = !shareSheetOpen && !expandedCover && detailMenuHost.currentRequest == null) { goBack() }
     LaunchedEffect(comic.id, comic.externalId, entity, retry) {
         loading = true; failed = false
         try {
@@ -190,7 +234,9 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
     val settings=com.example.ui.theme.LocalAppSettings.current
     val isDark=LocalIsDarkTheme.current
     val detailBackdrop=rememberLayerBackdrop()
-    val freezeDetailBackdrop=expandedCover || editionPicker || listToOpen != null || listComic != null
+    val activeRecommendation = if (history.isEmpty() && isComic) recommendationContext else null
+    val freezeDetailBackdrop=expandedCover || editionPicker || listToOpen != null || listComic != null ||
+        shareSheetOpen || addToListOpen || whySheetOpen || detailMenuHost.currentRequest != null
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
     Box(Modifier.fillMaxSize()) {
@@ -316,7 +362,10 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             }
         }
         } // end detailBackdrop layer
-        CompositionLocalProvider(LocalLiquidGlassBackdrop provides detailBackdrop) {
+        CompositionLocalProvider(
+            LocalLiquidGlassBackdrop provides detailBackdrop,
+            LocalLiquidGlassMenuHost provides detailMenuHost
+        ) {
             Row(Modifier.align(Alignment.TopStart).fillMaxWidth()
                 .drawWithContent {
                     val sf = scrollFraction()
@@ -340,7 +389,82 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                 if (collapsed) Text(if (isComic) comic.displayTitle else detail?.title.orEmpty(), color = t.textPrimary,
                     fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
                 else Spacer(Modifier.weight(1f))
-                if (isComic) IconButton(onClick = onShare, modifier = Modifier.liquidGlass(shape = ContinuousCapsule)) { Icon(LucideIcons.ShareIos, "Compartilhar", tint = t.textPrimary) }
+                if (isComic) {
+                    LiquidGlassEffectContainer(spacing = 8.dp, backdrop = detailBackdrop) {
+                        LiquidMorphingIconButton(
+                            icon = LucideIcons.ShareIos,
+                            contentDescription = "Compartilhar",
+                            onClick = { shareSheetOpen = true },
+                            size = 42.dp,
+                            slotIndex = 0
+                        )
+                        LiquidMorphingIconButton(
+                            icon = Icons.Default.MoreHoriz,
+                            contentDescription = "Mais opções",
+                            menuId = moreMenuId,
+                            iconRotationWhenMenuOpen = 90f,
+                            size = 42.dp,
+                            slotIndex = 1,
+                            onAnchorBoundsChanged = {
+                                moreMenuBounds = it
+                                detailMenuHost.updateAnchorBounds(moreMenuId, it)
+                            },
+                            onClick = {
+                                val menuItems = buildList {
+                                    if (activeRecommendation != null) {
+                                        add(
+                                            LiquidGlassMenuItemData(
+                                                label = "Por que esta HQ?",
+                                                icon = Icons.Default.AutoAwesome,
+                                                onClick = {
+                                                    curationViewModel.curation.load()
+                                                    whySheetOpen = true
+                                                }
+                                            )
+                                        )
+                                    }
+                                    add(
+                                        LiquidGlassMenuItemData(
+                                            label = "Escolher edição",
+                                            icon = Icons.Default.CollectionsBookmark,
+                                            onClick = { editionPicker = true }
+                                        )
+                                    )
+                                    add(
+                                        LiquidGlassMenuItemData(
+                                            label = "Adicionar a uma lista",
+                                            icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                                            onClick = {
+                                                curationViewModel.curation.load()
+                                                addToListOpen = true
+                                            }
+                                        )
+                                    )
+                                    add(
+                                        LiquidGlassMenuItemData(
+                                            label = "Compartilhar leitura",
+                                            icon = LucideIcons.ShareIos,
+                                            onClick = { shareSheetOpen = true }
+                                        )
+                                    )
+                                }
+                                if (moreMenuBounds.width > 0 && moreMenuBounds.height > 0) {
+                                    detailMenuHost.showMenu(
+                                        LiquidGlassMenuRequest(
+                                            id = moreMenuId,
+                                            anchorBounds = moreMenuBounds,
+                                            triggerLabel = "Opções",
+                                            triggerIcon = Icons.Default.MoreHoriz,
+                                            items = menuItems,
+                                            onDismiss = {},
+                                            selectionMenu = false
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
             }
             addedListNotice?.let { targetList ->
                 val pillShape = ContinuousCapsule
@@ -385,41 +509,140 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
                     }
                 }
             }
-            if (isComic && tab != 3) {
-                val dockShape = ContinuousRoundedRectangle(28.dp)
-                Row(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .navigationBarsPadding().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 32.dp)
+            shareNoticeText?.let { noticeMsg ->
+                val pillShape = ContinuousCapsule
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 104.dp, start = 20.dp, end = 20.dp)
                         .then(
-                            if (settings.reduceTransparency) Modifier.contentMaterialSurface(dockShape)
-                            else Modifier.liquidGlass(
-                                radiusX = 32f,
-                                radiusY = 32f,
-                                shape = dockShape,
-                                elevation = 10.dp,
-                                surfaceAlpha = if (isDark) 0.42f else 0.58f
-                            )
+                            if (settings.reduceTransparency) Modifier.contentMaterialSurface(pillShape)
+                            else Modifier.liquidGlass(shape = pillShape, elevation = 12.dp, surfaceAlpha = if (isDark) 0.52f else 0.68f)
                         )
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    EditorialAction(readingPresentation.action, ::registerCurrent, Modifier.weight(1f))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        AddToListAction(
-                            comic = comic,
-                            controller = curationViewModel.curation,
-                            compact = true,
-                            library = library,
-                            searchCatalog = curationViewModel::searchCatalogForList,
-                            onAddedToList = { added -> addedListNotice = added }
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF34D399), modifier = Modifier.size(16.dp))
+                        Text(
+                            noticeMsg,
+                            color = t.textPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
+            if (isComic && tab != 3) {
+                val editionKey = remember(comic) { ListComic.from(comic).key }
+                val listCount = remember(curationState.lists, editionKey) {
+                    curationState.lists.count { !it.deleted && it.items.any { entry -> entry.key == editionKey } }
+                }
+                val primaryIcon = when (readingPresentation.title) {
+                    "Lido" -> Icons.Default.CheckCircle
+                    "Lendo" -> Icons.AutoMirrored.Filled.MenuBook
+                    "Quero ler" -> Icons.Default.Bookmark
+                    else -> Icons.Default.BookmarkBorder
+                }
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(108.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    t.bgPrimary.copy(alpha = 0.52f),
+                                    t.bgPrimary.copy(alpha = 0.86f)
+                                )
+                            )
+                        )
+                )
+                LiquidGlassEffectContainer(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 8.dp, bottom = 24.dp),
+                    spacing = 10.dp,
+                    backdrop = detailBackdrop
+                ) {
+                    LiquidGlassPillButton(
+                        label = readingPresentation.action,
+                        icon = primaryIcon,
+                        prominent = true,
+                        slotIndex = 0,
+                        height = 52.dp,
+                        modifier = Modifier.weight(1f),
+                        onClick = ::registerCurrent
+                    )
+                    LiquidGlassPillButton(
+                        label = if (listCount > 0) "Listas ($listCount)" else "Lista",
+                        icon = if (listCount > 0) Icons.Default.Check else Icons.AutoMirrored.Filled.PlaylistAdd,
+                        prominent = false,
+                        slotIndex = 1,
+                        height = 52.dp,
+                        accessibilityLabel = "Adicionar a uma lista",
+                        onClick = {
+                            curationViewModel.curation.load()
+                            addToListOpen = true
+                        }
+                    )
+                }
+            }
+            LiquidGlassMenuOverlayHost(
+                detailMenuHost,
+                detailBackdrop,
+                Modifier.matchParentSize()
+            )
+            if (shareSheetOpen) {
+                val shareSource = (currentReading ?: comic).copy(
+                    coverUrl = comic.coverUrl.ifBlank { detail?.image.orEmpty() },
+                    pageCount = detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount
+                )
+                SocialShareCardSheetModal(
+                    request = SocialShareRequest(
+                        initialCardType = SocialShareCardType.COMPLETED_READING,
+                        comic = shareSource
+                    ),
+                    allComics = library,
+                    profile = profile,
+                    appSettings = settings,
+                    onShowToast = { msg -> shareNoticeText = msg },
+                    onDismiss = { shareSheetOpen = false }
+                )
+            }
         }
     }
     if(expandedCover) ExpandedComicCover(effectiveCover,comic.displayTitle,coverBounds,inPlace=true) {expandedCover=false}
+    }
+    if (addToListOpen) {
+        AddToListSheet(
+            comic = comic,
+            controller = curationViewModel.curation,
+            library = library,
+            searchCatalog = curationViewModel::searchCatalogForList,
+            onAddedToList = { added -> addedListNotice = added },
+            onClose = { addToListOpen = false }
+        )
+    }
+    if (whySheetOpen && activeRecommendation != null) {
+        RecommendationExplanationSheet(
+            recommendation = activeRecommendation,
+            controller = curationViewModel.curation,
+            onClose = { whySheetOpen = false },
+            onRegister = {
+                whySheetOpen = false
+                registerCurrent()
+            }
+        )
     }
     listToOpen?.let { selected ->
         val list = curationState.lists.firstOrNull { it.id == selected.id && !it.deleted }
@@ -432,10 +655,7 @@ private fun ComicDetailScreen(initialComic: ComicEntry, profile: ReaderProfile, 
             onRegister = { entry -> listComic = null; listToOpen = null; onRegister(entry) },
             onCover = onCover,
             onLogin = { listComic = null; listToOpen = null; onLogin() },
-            onShare = { listComic = null; listToOpen = null
-                onBack()
-                curationViewModel.openSocialShareSheet(SocialShareRequest(SocialShareCardType.COMPLETED_READING, selected))
-            }
+            onShare = { onShare() }
         )
     }
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->

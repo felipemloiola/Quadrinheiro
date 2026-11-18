@@ -1172,17 +1172,16 @@ fun UserAvatar(
     val themeColors = LocalIOS27Theme.current
     val initial = (profile.name.trim().firstOrNull()?.uppercaseChar() ?: 'F').toString()
 
-    val decodedBitmap = remember(profile.avatarUrl) {
-        val raw = profile.avatarUrl.trim()
-        if (raw.startsWith("data:image")) {
-            try {
-                val base64Part = raw.substringAfter("base64,", "")
-                val bytes = Base64.decode(base64Part, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            } catch (_: Throwable) {
-                null
+    val trimmedAvatar = remember(profile.avatarUrl) { profile.avatarUrl.trim() }
+    var decodedBitmap by remember(trimmedAvatar) {
+        mutableStateOf(ProfileBitmapMemoryCache.getCached(trimmedAvatar))
+    }
+    LaunchedEffect(trimmedAvatar) {
+        if (decodedBitmap == null && trimmedAvatar.startsWith("data:image")) {
+            decodedBitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                ProfileBitmapMemoryCache.decodeAndCache(trimmedAvatar)
             }
-        } else null
+        }
     }
 
     val preset = AppleAvatarPreset.fromId(profile.avatarPreset)
@@ -1213,9 +1212,10 @@ fun UserAvatar(
             .border(1.5.dp, borderColor, CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        if (decodedBitmap != null) {
+        val avatarBmp = decodedBitmap
+        if (avatarBmp != null) {
             Image(
-                bitmap = decodedBitmap,
+                bitmap = avatarBmp,
                 contentDescription = profile.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

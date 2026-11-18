@@ -53,6 +53,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
@@ -155,7 +156,10 @@ fun CatalogSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
-    onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null
+    onLogin: () -> Unit = {},
+    closeTag: String = "modal_cancel_button",
+    onRegisterFromPage: ((ComicEntry) -> Unit)? = null,
+    recommendationContext: com.example.data.RecommendedComic? = null
 ) {
     val mat = LocalAppleMaterials.current
     val s = mat.scheme
@@ -174,6 +178,7 @@ fun CatalogSheetModal(
     var draftMoments by remember(selectedComic.id) { mutableStateOf(selectedComic.moments) }
 
     var fullPage by remember(selectedComic.id) { mutableStateOf(false) }
+    var showWhyRecommendation by remember(selectedComic.id) { mutableStateOf(false) }
     val totalPagesInput = draftComic.pageCount.takeIf { it > 0 }?.toString().orEmpty()
     var remoteInfo by remember(selectedComic.id){mutableStateOf<com.example.data.CatalogDetails?>(null)}
     var metadataLoading by remember(selectedComic.id){mutableStateOf(selectedComic.pageCount <= 0)}
@@ -229,7 +234,16 @@ fun CatalogSheetModal(
                 }
             },
             onCover = { draftComic = draftComic.copy(coverUrl = it) }, onLogin = onLogin,
-            onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) })
+            onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) },
+            recommendationContext = recommendationContext)
+    }
+    if (showWhyRecommendation && recommendationContext != null) {
+        val curationVm: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+        RecommendationExplanationSheet(
+            recommendation = recommendationContext,
+            controller = curationVm.curation,
+            onClose = { showWhyRecommendation = false }
+        )
     }
 
     fun buildFinalComicForSave(): ComicEntry {
@@ -479,6 +493,56 @@ fun CatalogSheetModal(
                                         translationFailed = translationFailed,
                                         onRetryTranslation = { translationRetryToken++ }
                                     )
+                                }
+                                if (recommendationContext != null) {
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 44.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { showWhyRecommendation = true }
+                                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                                            .testTag("open_why_recommendation"),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = s.accentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                                Text(
+                                                    text = "Por que esta HQ?",
+                                                    color = s.accentColor,
+                                                    fontSize = 13.5.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                if (recommendationContext.reasonLabel.isNotBlank()) {
+                                                    Text(
+                                                        text = recommendationContext.reasonLabel,
+                                                        color = s.textSecondary,
+                                                        fontSize = 11.5.sp,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                            tint = s.accentColor.copy(alpha = 0.75f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                                 HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                                 Row(
@@ -756,7 +820,9 @@ fun ComicInfoSynopsisSheetModal(
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
     onLogin: () -> Unit = {},
     onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> },
-    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },onDeleteRegistration:(String)->Unit = {}
+    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },
+    onDeleteRegistration:(String)->Unit = {},
+    recommendationContext: com.example.data.RecommendedComic? = null
 ) {
     var expanded by remember {mutableStateOf(false)}
     CatalogSheetModal(selectedComic=savedEntry ?: comic,isExistingInShelf=savedEntry!=null,isSheetExpanded=expanded,
@@ -766,7 +832,7 @@ fun ComicInfoSynopsisSheetModal(
         readerProfile=readerProfile,onLogin=onLogin,closeTag="synopsis_close_button",onRegisterFromPage={next->
             val saved=com.example.model.catalogEntryForEditing(next,allUserComics)
             if(saved!=null)onEditSavedComic(saved) else onOpenCatalogWithStatus(next,ReadingStatus.READ)
-        })
+        },recommendationContext=recommendationContext)
 }
 
 /**

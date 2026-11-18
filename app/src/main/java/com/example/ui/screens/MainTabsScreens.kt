@@ -156,31 +156,18 @@ fun TopFloatingToolbar(
     visible: Boolean = true
 ) {
     if (!visible) return
-    val mat = LocalAppleMaterials.current
     Row(
         modifier = Modifier.padding(bottom = 4.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .shadow(
-                    elevation = 8.dp,
-                    shape = CircleShape,
-                    spotColor = mat.scheme.accentColor.copy(alpha = if (mat.scheme.isLight) 0.14f else 0.28f)
-                )
-                .liquidGlass(shape = CircleShape, elevation = 8.dp)
-                .clickable { onOpenSidebar() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = LucideIcons.PanelLeft,
-                contentDescription = "Abrir Menu Lateral",
-                tint = mat.scheme.textPrimary,
-                modifier = Modifier.size(18.dp)
-            )
-        }
+        com.example.ui.components.LiquidMorphingIconButton(
+            icon = LucideIcons.PanelLeft,
+            contentDescription = "Abrir Menu Lateral",
+            onClick = onOpenSidebar,
+            size = 42.dp,
+            slotIndex = 0
+        )
     }
 }
 
