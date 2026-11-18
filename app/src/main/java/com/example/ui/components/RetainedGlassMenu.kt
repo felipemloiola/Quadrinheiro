@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -51,6 +52,7 @@ import com.kyant.shapes.ContinuousCapsule
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.tanh
@@ -227,25 +229,45 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                             val radiusDp = androidx.compose.ui.unit.lerp(anchorCornerDp, 26.dp, clamped)
                             ContinuousRoundedRectangle(radiusDp)
                         },
-                        highlight = { if (settings.reduceTransparency) null else Highlight.Default.copy(alpha = .54f) },
+                        highlight = {
+                            if (settings.reduceTransparency) null
+                            else adaptiveGlassHighlight(
+                                isLight = !dark,
+                                alpha = if (dark) 0.58f else 0.78f
+                            )
+                        },
                         shadow = { Shadow(radius = 20.dp, alpha = 0.24f) },
                         innerShadow = {
                             if (settings.reduceTransparency) null else InnerShadow(radius = 5.dp, alpha = if (dark) 0.26f else 0.16f)
                         },
                         effects = {
                             if (!settings.reduceTransparency) {
-                                vibrancy()
-                                blur((5.5f * settings.glassBlurIntensity).coerceIn(3f, 20f).dp.toPx())
+                                appleGlassColorControls(
+                                    isLight = !dark,
+                                    isFrosted = settings.glassVariant == "frosted",
+                                    reduceTransparency = settings.reduceTransparency
+                                )
+                                blur((8.5f * settings.glassBlurIntensity).coerceIn(4f, 22f).dp.toPx())
                             }
-                            if (!settings.reduceTransparency && settings.enableLensRefraction) {
+                            if (!settings.reduceTransparency &&
+                                settings.enableLensRefraction &&
+                                this.size.isSpecified &&
+                                this.size.width > 4f &&
+                                this.size.height > 4f
+                            ) {
                                 val clamped = ((x.value + y.value) * 0.5f).coerceIn(0f, 1f)
                                 val morphPulse = 1f + 0.28f * sin(clamped * Math.PI).toFloat()
-                                lens(
-                                    (24f * settings.glassIntensity).dp.toPx(),
-                                    (42f * settings.glassIntensity * morphPulse).dp.toPx(),
-                                    depthEffect = true,
-                                    chromaticAberration = settings.enableChromaticAberration
-                                )
+                                val maxH = min(this.size.width, this.size.height) * 0.46f
+                                val rHeight = (24f * settings.glassIntensity).dp.toPx().coerceAtMost(maxH)
+                                val rAmount = (42f * settings.glassIntensity * morphPulse).dp.toPx()
+                                if (rHeight >= 1f && rAmount >= 1f) {
+                                    lens(
+                                        refractionHeight = rHeight,
+                                        refractionAmount = rAmount,
+                                        depthEffect = true,
+                                        chromaticAberration = settings.enableChromaticAberration
+                                    )
+                                }
                             }
                         },
                         onDrawSurface = { drawRect((if (dark) Color(0xFF16161D) else Color.White).copy(alpha = surfaceAlpha)) }
@@ -293,7 +315,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                             .graphicsLayer { translationY = 7.dp.toPx() + highlightY }
                             .background(
                                 if (dark) Color.White.copy(alpha = .15f) else Color.Black.copy(alpha = .085f),
-                                ContinuousCapsule
+                                ContinuousRoundedRectangle(19.dp)
                             )
                     )
                 }
@@ -301,7 +323,7 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
                 Column(scrollModifier.padding(vertical = 7.dp)) {
                     request.items.forEachIndexed { index, item ->
                         Row(Modifier.fillMaxWidth().height(rowHeight).padding(horizontal = 7.dp)
-                            .clip(ContinuousRoundedRectangle(16.dp))
+                            .clip(ContinuousRoundedRectangle(19.dp))
                             .background(when {
                                 item.selected && hovered == null -> palette.accent.copy(alpha = .10f)
                                 else -> Color.Transparent

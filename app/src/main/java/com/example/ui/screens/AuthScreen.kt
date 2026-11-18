@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -326,8 +325,8 @@ private fun AuthGlassScreenShellContent(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(44.dp)
-                        .liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
+                        .size(48.dp)
+                        .liquidGlassNavSurface(shape = com.kyant.shapes.ContinuousCapsule, elevation = 4.dp)
                         .clickable(role = Role.Button) { onDismissModal() }
                         .semantics { contentDescription = closeCd }
                         .testTag("auth_close_modal_button"),

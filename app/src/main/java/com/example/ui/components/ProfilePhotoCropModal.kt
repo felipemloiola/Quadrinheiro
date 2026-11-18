@@ -28,31 +28,21 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.kyant.shapes.ContinuousCapsule
+import com.example.ui.theme.LocalIOS27Theme
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -78,12 +68,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.LocalAppleMaterials
 import com.example.ui.theme.SpaceGroteskTabularFamily
 import java.io.ByteArrayOutputStream
@@ -215,396 +202,289 @@ fun ProfilePhotoCropModal(
         Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        FullScreenDialogWindow(lightStatusBar=false)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xF20B0C10))
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            contentAlignment = Alignment.Center
+    val theme = LocalIOS27Theme.current
+    CurationSheet("Ajustar Foto de Perfil", onDismiss, glass = true) {
+        Column(
+            modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = 460.dp)
+                .fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
+            Text("Arraste e dê zoom para enquadrar no círculo", color = theme.textSecondary)
+            LiquidGlassPillButton(
+                "Centralizar",
+                icon = Icons.Default.Replay,
+                accessibilityLabel = "Centralizar foto",
+                modifier = Modifier.testTag("reset_crop_avatar_button"),
+                onClick = {
+                    settleJob?.cancel()
+                    userZoom = 1f
+                    panOffset = Offset.Zero
+                }
+            )
+            // Visor interativo com gestos de pinça/arraste + máscara circular de prévia
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Ajustar Foto de Perfil",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Arraste e dê zoom para enquadrar no círculo",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.68f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Color.White.copy(alpha = 0.12f))
-                            .border(0.8.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
-                            .clickable {
-                                userZoom = 1f
-                                panOffset = Offset.Zero
-                            }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .testTag("reset_crop_avatar_button"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Replay,
-                            contentDescription = "Centralizar foto",
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "Centralizar",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                // Visor interativo com gestos de pinça/arraste + máscara circular de prévia
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(Color(0xFF14161D))
-                        .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(28.dp))
-                        .onSizeChanged { viewportSize = it }
-                        .pointerInput(bitmap, viewportSidePx, motion.reduced) {
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                settleJob?.cancel()
-                                var totalPan = Offset.Zero
-                                var totalZoom = 1f
-                                var claimed = false
-                                try {
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        if (event.changes.none { it.pressed } || event.changes.any { it.isConsumed }) break
-                                        val zoom = event.calculateZoom()
-                                        val pan = event.calculatePan()
-                                        val centroid = event.calculateCentroid(useCurrent = false)
-                                        totalPan += pan
-                                        totalZoom *= zoom
-                                        if (!claimed) claimed = totalPan.getDistance() > viewConfiguration.touchSlop ||
-                                            kotlin.math.abs(1f - totalZoom) * viewportSidePx > viewConfiguration.touchSlop
-                                        if (claimed) {
-                                            val nextZoom = (userZoom * zoom).coerceIn(1f, 4f)
-                                            val center = Offset(viewportSidePx / 2f, viewportSidePx / 2f)
-                                            val candidate = zoomAroundCentroid(panOffset, centroid - center, pan, userZoom, nextZoom)
-                                            val clamped = clampOffset(candidate, nextZoom)
-                                            val excess = candidate - clamped
-                                            panOffset = clamped + Offset(
-                                                sheetResistance(-kotlin.math.abs(excess.x), viewportSidePx) * -kotlin.math.sign(excess.x),
-                                                sheetResistance(-kotlin.math.abs(excess.y), viewportSidePx) * -kotlin.math.sign(excess.y)
-                                            )
-                                            userZoom = nextZoom
-                                            event.changes.forEach { it.consume() }
-                                        }
+                    .aspectRatio(1f)
+                    .curationPickerCard()
+                    .onSizeChanged { viewportSize = it }
+                    .pointerInput(bitmap, viewportSidePx, motion.reduced) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            settleJob?.cancel()
+                            var totalPan = Offset.Zero
+                            var totalZoom = 1f
+                            var claimed = false
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.changes.none { it.pressed } || event.changes.any { it.isConsumed }) break
+                                    val zoom = event.calculateZoom()
+                                    val pan = event.calculatePan()
+                                    val centroid = event.calculateCentroid(useCurrent = false)
+                                    totalPan += pan
+                                    totalZoom *= zoom
+                                    if (!claimed) claimed = totalPan.getDistance() > viewConfiguration.touchSlop ||
+                                        kotlin.math.abs(1f - totalZoom) * viewportSidePx > viewConfiguration.touchSlop
+                                    if (claimed) {
+                                        val nextZoom = (userZoom * zoom).coerceIn(1f, 4f)
+                                        val center = Offset(viewportSidePx / 2f, viewportSidePx / 2f)
+                                        val candidate = zoomAroundCentroid(panOffset, centroid - center, pan, userZoom, nextZoom)
+                                        val clamped = clampOffset(candidate, nextZoom)
+                                        val excess = candidate - clamped
+                                        panOffset = clamped + Offset(
+                                            sheetResistance(-kotlin.math.abs(excess.x), viewportSidePx) * -kotlin.math.sign(excess.x),
+                                            sheetResistance(-kotlin.math.abs(excess.y), viewportSidePx) * -kotlin.math.sign(excess.y)
+                                        )
+                                        userZoom = nextZoom
+                                        event.changes.forEach { it.consume() }
                                     }
-                                } finally {
-                                    val target = clampOffset(panOffset, userZoom)
-                                    settleJob = scope.launch {
-                                        val animation = Animatable(panOffset, Offset.VectorConverter)
-                                        if (motion.reduced) panOffset = target
-                                        else animation.animateTo(target, motion.spring(dampingRatio = 1f, stiffness = 500f)) {
-                                            panOffset = value
-                                        }
+                                }
+                            } finally {
+                                val target = clampOffset(panOffset, userZoom)
+                                settleJob = scope.launch {
+                                    val animation = Animatable(panOffset, Offset.VectorConverter)
+                                    if (motion.reduced) panOffset = target
+                                    else animation.animateTo(target, motion.spring(dampingRatio = 1f, stiffness = 500f)) {
+                                        panOffset = value
                                     }
                                 }
                             }
                         }
-                        .testTag("avatar_crop_viewport"),
+                    }
+                    .testTag("avatar_crop_viewport"),
+                contentAlignment = Alignment.Center
+            ) {
+                val fitScale = min(viewportSidePx / srcW, viewportSidePx / srcH).coerceAtLeast(0.0001f)
+                val relativeScale = (baseScale * userZoom) / fitScale
+
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = "Foto selecionada para recorte",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = relativeScale
+                            scaleY = relativeScale
+                            translationX = panOffset.x
+                            translationY = panOffset.y
+                        }
+                )
+
+                // Máscara escura externa com recorte circular transparente (BlendMode.Clear) + anel de prévia
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
+                ) {
+                    val canvasCenter = Offset(size.width / 2f, size.height / 2f)
+                    val r = min(size.width, size.height) * 0.41f
+
+                    // Escurece a área fora do círculo mantendo contexto visual
+                    drawRect(color = Color.Black.copy(alpha = 0.62f))
+
+                    // Abre o círculo de prévia transparente
+                    drawCircle(
+                        color = Color.Transparent,
+                        radius = r,
+                        center = canvasCenter,
+                        blendMode = BlendMode.Clear
+                    )
+
+                    // Grades sutis de auxílio dentro do círculo
+                    val gridColor = Color.White.copy(alpha = 0.16f)
+                    val third = (r * 2f) / 3f
+                    val left = canvasCenter.x - r
+                    val top = canvasCenter.y - r
+                    for (i in 1..2) {
+                        val x = left + third * i
+                        val y = top + third * i
+                        drawLine(
+                            color = gridColor,
+                            start = Offset(x, canvasCenter.y - r * 0.86f),
+                            end = Offset(x, canvasCenter.y + r * 0.86f),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                        drawLine(
+                            color = gridColor,
+                            start = Offset(canvasCenter.x - r * 0.86f, y),
+                            end = Offset(canvasCenter.x + r * 0.86f, y),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
+
+                    // Anel principal do círculo de prévia
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.90f),
+                        radius = r,
+                        center = canvasCenter,
+                        style = Stroke(width = 2.2.dp.toPx())
+                    )
+
+                    // Anel tracejado interno sutil
+                    drawCircle(
+                        color = s.accentColor.copy(alpha = 0.55f),
+                        radius = r - 4.dp.toPx(),
+                        center = canvasCenter,
+                        style = Stroke(
+                            width = 1.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f), 0f)
+                        )
+                    )
+                }
+
+                // Selo informativo na base do visor
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                        .clip(ContinuousCapsule)
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .border(0.6.dp, Color.White.copy(alpha = 0.20f), ContinuousCapsule)
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "Círculo de prévia • ${(userZoom * 100).roundToInt()}%",
+                        fontSize = 11.sp,
+                        fontFamily = SpaceGroteskTabularFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.92f)
+                    )
+                }
+            }
+
+            // Controle deslizante de Zoom + Miniatura real da prévia circular
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .curationPickerCard()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Miniatura ao vivo do avatar circular final
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1A1B20))
+                        .border(1.5.dp, s.accentColor, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
+                    val miniSidePx = 52f
+                    val ratio = if (circleDiameterPx > 0f) miniSidePx / circleDiameterPx else 1f
                     val fitScale = min(viewportSidePx / srcW, viewportSidePx / srcH).coerceAtLeast(0.0001f)
                     val relativeScale = (baseScale * userZoom) / fitScale
+                    val viewportToCircleRatio = if (circleDiameterPx > 0f) viewportSidePx / circleDiameterPx else 1f
 
                     Image(
                         bitmap = imageBitmap,
-                        contentDescription = "Foto selecionada para recorte",
+                        contentDescription = "Mini prévia circular",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                scaleX = relativeScale
-                                scaleY = relativeScale
-                                translationX = panOffset.x
-                                translationY = panOffset.y
+                                scaleX = relativeScale * viewportToCircleRatio
+                                scaleY = relativeScale * viewportToCircleRatio
+                                translationX = panOffset.x * ratio * density
+                                translationY = panOffset.y * ratio * density
                             }
                     )
+                }
 
-                    // Máscara escura externa com recorte circular transparente (BlendMode.Clear) + anel de prévia
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                compositingStrategy = CompositingStrategy.Offscreen
-                            }
-                    ) {
-                        val canvasCenter = Offset(size.width / 2f, size.height / 2f)
-                        val r = min(size.width, size.height) * 0.41f
-
-                        // Escurece a área fora do círculo mantendo contexto visual
-                        drawRect(color = Color.Black.copy(alpha = 0.62f))
-
-                        // Abre o círculo de prévia transparente
-                        drawCircle(
-                            color = Color.Transparent,
-                            radius = r,
-                            center = canvasCenter,
-                            blendMode = BlendMode.Clear
-                        )
-
-                        // Grades sutis de auxílio dentro do círculo
-                        val gridColor = Color.White.copy(alpha = 0.16f)
-                        val third = (r * 2f) / 3f
-                        val left = canvasCenter.x - r
-                        val top = canvasCenter.y - r
-                        for (i in 1..2) {
-                            val x = left + third * i
-                            val y = top + third * i
-                            drawLine(
-                                color = gridColor,
-                                start = Offset(x, canvasCenter.y - r * 0.86f),
-                                end = Offset(x, canvasCenter.y + r * 0.86f),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                            drawLine(
-                                color = gridColor,
-                                start = Offset(canvasCenter.x - r * 0.86f, y),
-                                end = Offset(canvasCenter.x + r * 0.86f, y),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-
-                        // Anel principal do círculo de prévia
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.90f),
-                            radius = r,
-                            center = canvasCenter,
-                            style = Stroke(width = 2.2.dp.toPx())
-                        )
-
-                        // Anel tracejado interno sutil
-                        drawCircle(
-                            color = s.accentColor.copy(alpha = 0.55f),
-                            radius = r - 4.dp.toPx(),
-                            center = canvasCenter,
-                            style = Stroke(
-                                width = 1.dp.toPx(),
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f), 0f)
-                            )
-                        )
-                    }
-
-                    // Selo informativo na base do visor
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Color.Black.copy(alpha = 0.65f))
-                            .border(0.6.dp, Color.White.copy(alpha = 0.20f), RoundedCornerShape(999.dp))
-                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Círculo de prévia • ${(userZoom * 100).roundToInt()}%",
-                            fontSize = 11.sp,
+                            text = "Zoom da foto",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = theme.textPrimary
+                        )
+                        Text(
+                            text = String.format(java.util.Locale.US, "%.1fx", userZoom),
+                            fontSize = 12.sp,
                             fontFamily = SpaceGroteskTabularFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.92f)
-                        )
-                    }
-                }
-
-                // Controle deslizante de Zoom + Miniatura real da prévia circular
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .border(0.8.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // Miniatura ao vivo do avatar circular final
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1A1B20))
-                            .border(1.5.dp, s.accentColor, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val miniSidePx = 52f
-                        val ratio = if (circleDiameterPx > 0f) miniSidePx / circleDiameterPx else 1f
-                        val fitScale = min(viewportSidePx / srcW, viewportSidePx / srcH).coerceAtLeast(0.0001f)
-                        val relativeScale = (baseScale * userZoom) / fitScale
-                        val viewportToCircleRatio = if (circleDiameterPx > 0f) viewportSidePx / circleDiameterPx else 1f
-
-                        Image(
-                            bitmap = imageBitmap,
-                            contentDescription = "Mini prévia circular",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = relativeScale * viewportToCircleRatio
-                                    scaleY = relativeScale * viewportToCircleRatio
-                                    translationX = panOffset.x * ratio * density
-                                    translationY = panOffset.y * ratio * density
-                                }
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Zoom da foto",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = String.format(java.util.Locale.US, "%.1fx", userZoom),
-                                fontSize = 12.sp,
-                                fontFamily = SpaceGroteskTabularFamily,
-                                fontWeight = FontWeight.Bold,
-                                color = s.accentColor
-                            )
-                        }
-                        Slider(
-                            value = userZoom,
-                            onValueChange = { nextZoom ->
-                                settleJob?.cancel()
-                                val clampedZoom = nextZoom.coerceIn(1f, 4f)
-                                userZoom = clampedZoom
-                                panOffset = clampOffset(panOffset, clampedZoom)
-                            },
-                            valueRange = 1f..4f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = Color.White,
-                                activeTrackColor = s.accentColor,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.22f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics { contentDescription = "Zoom da foto" }
-                                .testTag("avatar_zoom_slider")
-                        )
-                    }
-                }
-
-                CropPositionControls(panOffset, positionLimit(userZoom), {
-                    settleJob?.cancel()
-                    panOffset = it
-                }, Color.White)
-
-                // Botões de Ação: Cancelar e Salvar Foto
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Color.White.copy(alpha = 0.10f))
-                            .border(0.8.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
-                            .clickable { onDismiss() }
-                            .testTag("cancel_crop_avatar_button"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Cancelar",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .weight(1.3f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(s.accentBg)
-                            .clickable {
-                                val croppedB64 = renderCroppedAvatarBase64(
-                                    source = bitmap,
-                                    viewportSizePx = viewportSidePx,
-                                    circleRadiusPx = circleRadiusPx,
-                                    userZoom = userZoom,
-                                    panOffset = panOffset,
-                                    outputSizePx = 240
-                                )
-                                onConfirmCrop(croppedB64)
-                            }
-                            .testTag("confirm_crop_avatar_button"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = s.accentText,
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Salvar Foto",
-                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = s.accentText,
-                            textAlign = TextAlign.Center
+                            color = s.accentColor
                         )
                     }
+                    Slider(
+                        value = userZoom,
+                        onValueChange = { nextZoom ->
+                            settleJob?.cancel()
+                            val clampedZoom = nextZoom.coerceIn(1f, 4f)
+                            userZoom = clampedZoom
+                            panOffset = clampOffset(panOffset, clampedZoom)
+                        },
+                        valueRange = 1f..4f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = theme.textPrimary,
+                            activeTrackColor = s.accentColor,
+                            inactiveTrackColor = theme.divider
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "Zoom da foto" }
+                            .testTag("avatar_zoom_slider")
+                    )
                 }
             }
+
+            CropPositionControls(panOffset, positionLimit(userZoom), {
+                settleJob?.cancel()
+                panOffset = it
+            }, theme.textPrimary)
+
+            LiquidGlassPillButton(
+                label = "Salvar Foto",
+                modifier = Modifier.fillMaxWidth().testTag("confirm_crop_avatar_button"),
+                enabled = viewportSize != IntSize.Zero,
+                prominent = true,
+                onClick = {
+                    val croppedB64 = renderCroppedAvatarBase64(
+                        source = bitmap,
+                        viewportSizePx = viewportSidePx,
+                        circleRadiusPx = circleRadiusPx,
+                        userZoom = userZoom,
+                        panOffset = panOffset,
+                        outputSizePx = 240
+                    )
+                    onConfirmCrop(croppedB64)
+                }
+            )
+            LiquidGlassPillButton(
+                label = "Cancelar",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().testTag("cancel_crop_avatar_button")
+            )
         }
     }
 }

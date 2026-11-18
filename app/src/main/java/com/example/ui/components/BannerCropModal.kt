@@ -6,7 +6,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.util.Base64
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +25,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -63,25 +60,45 @@ fun BannerCropModal(bitmap: Bitmap,onDismiss:()->Unit,onConfirm:(String)->Unit) 
     fun clamp(candidate: Offset, z: Float): Offset = positionLimit(z).let {
         Offset(candidate.x.coerceIn(-it.x, it.x), candidate.y.coerceIn(-it.y, it.y))
     }
-    Dialog(onDismissRequest=onDismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Column(Modifier.fillMaxWidth().background(t.bgPrimary).verticalScroll(rememberScrollState()).padding(20.dp).testTag("banner_crop"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Text("Ajustar banner",style=MaterialTheme.typography.titleLarge,color=t.textPrimary)
-            Box(Modifier.fillMaxWidth().aspectRatio(3f).onSizeChanged { viewport=it }.pointerInput(bitmap) {
+    CurationSheet("Ajustar banner", onDismiss, busy = busy, compact = true, glass = true) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).testTag("banner_crop"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.fillMaxWidth().aspectRatio(3f).curationPickerCard().onSizeChanged { viewport=it }.pointerInput(bitmap, busy) {
+                if (busy) return@pointerInput
                 detectTransformGestures { centroid,pan,change,_ ->
                     val next=(zoom*change).coerceIn(1f,4f)
                     offset=clamp(zoomAroundCentroid(offset,centroid-Offset(viewport.width/2f,viewport.height/2f),pan,zoom,next),next);zoom=next
                 }
-            }.then(Modifier.graphicsLayer { clip=true })) {
+            }) {
                 Image(bitmap.asImageBitmap(),"Prévia do banner",Modifier.fillMaxSize().graphicsLayer { scaleX=zoom;scaleY=zoom;translationX=offset.x;translationY=offset.y },contentScale=ContentScale.Crop)
             }
             Text("Arraste para enquadrar. Use dois dedos para ampliar.",style=MaterialTheme.typography.bodySmall,color=t.textSecondary)
             Slider(zoom,{zoom=it;offset=clamp(offset,it)}, valueRange=1f..4f, enabled = !busy,
                 modifier = Modifier.semantics { contentDescription = "Zoom do banner" })
             CropPositionControls(offset, positionLimit(zoom), { offset = it }, t.textPrimary, enabled = !busy)
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-                TextButton(onClick=onDismiss,enabled=!busy){Text("Cancelar",color=t.textSecondary)}
-                TextButton(onClick={zoom=1f;offset=Offset.Zero},enabled=!busy){Text("Repor",color=t.textSecondary)}
-                TextButton(onClick={busy=true;scope.launch { val result=withContext(Dispatchers.Default){renderBannerCrop(bitmap,viewport,zoom,offset)};onConfirm(result) }},enabled=!busy){Text(if(busy)"Salvando…" else "Concluir",color=t.accent)}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                LiquidGlassPillButton("Repor", onClick = { zoom = 1f; offset = Offset.Zero }, enabled = !busy, modifier = Modifier.weight(1f))
+                LiquidGlassPillButton(
+                    if (busy) "Salvando…" else "Concluir",
+                    enabled = !busy && viewport.width > 1,
+                    prominent = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        busy = true
+                        val cropViewport = viewport
+                        val cropZoom = zoom
+                        val cropOffset = offset
+                        scope.launch {
+                            try {
+                                val result = withContext(Dispatchers.Default) {
+                                    renderBannerCrop(bitmap, cropViewport, cropZoom, cropOffset)
+                                }
+                                onConfirm(result)
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }
+                )
             }
         }
     }

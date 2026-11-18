@@ -20,7 +20,6 @@ import androidx.compose.animation.AnimatedVisibility
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -30,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -47,6 +45,10 @@ import com.example.model.AuthFeedbackBanner
 import com.example.model.AuthFormState
 import com.example.model.AuthMode
 import com.example.ui.components.LucideIcons
+import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.contentMaterialSurface
+import com.example.ui.theme.LocalAppSettings
+import com.kyant.shapes.ContinuousRoundedRectangle
 import com.example.ui.components.QuadrinheiroLogo
 import com.example.ui.components.QuadrinheiroLogoVariant
 import com.example.ui.theme.LocalIOS27Theme
@@ -72,7 +74,9 @@ fun AuthBackdropLayer(backdrop: Backdrop, reduceTransparency: Boolean, isLight: 
 }
 
 fun Modifier.authGlassCardSurface(): Modifier = composed {
-    liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 0.dp)
+    val shape = ContinuousRoundedRectangle(26.dp)
+    if (LocalAppSettings.current.reduceTransparency) contentMaterialSurface(shape)
+    else liquidGlass(shape = shape, surfaceAlpha = .52f)
 }
 
 @Composable
@@ -140,7 +144,7 @@ fun AuthCredentialsFieldsSection(
     ) {
         if (registering) {
             OutlinedTextField(
-            shape = RoundedCornerShape(18.dp),
+            shape = ContinuousRoundedRectangle(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
                 unfocusedTextColor = theme.textPrimary,
@@ -159,7 +163,7 @@ fun AuthCredentialsFieldsSection(
         )
         }
         OutlinedTextField(
-            shape = RoundedCornerShape(18.dp),
+            shape = ContinuousRoundedRectangle(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
                 unfocusedTextColor = theme.textPrimary,
@@ -178,7 +182,7 @@ fun AuthCredentialsFieldsSection(
             keyboardActions = next
         )
         OutlinedTextField(
-            shape = RoundedCornerShape(18.dp),
+            shape = ContinuousRoundedRectangle(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
                 unfocusedTextColor = theme.textPrimary,
@@ -212,7 +216,7 @@ fun AuthCredentialsFieldsSection(
         )
         if (registering) {
             OutlinedTextField(
-            shape = RoundedCornerShape(18.dp),
+                shape = ContinuousRoundedRectangle(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = theme.textPrimary,
                 unfocusedTextColor = theme.textPrimary,
@@ -262,20 +266,17 @@ fun AuthPrimaryActionsSection(
     onLoginWithGoogle: () -> Unit,
     onContinueAsGuest: () -> Unit
 ) {
-    val theme = LocalIOS27Theme.current
-    val foreground = if (theme.accent.luminance() > 0.179f) Color.Black else Color.White
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
+        LiquidGlassPillButton(
+            label = when {
+                isLoading -> "Aguarde…"
+                authMode == AuthMode.LOGIN -> "Entrar na coleção"
+                else -> "Criar conta"
+            },
             onClick = onSubmitPrimary, enabled = !isLoading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("auth_primary_button"),
-            colors = ButtonDefaults.buttonColors(containerColor = theme.accent, contentColor = foreground)
-        ) {
-            if (isLoading) {
-                com.example.ui.components.IOSLoadingIndicator(Modifier.size(20.dp), color = theme.textPrimary)
-                Spacer(Modifier.width(8.dp))
-                Text("Aguarde…")
-            } else Text(if (authMode == AuthMode.LOGIN) "Entrar na coleção" else "Criar conta")
-        }
+            modifier = Modifier.fillMaxWidth().testTag("auth_primary_button"),
+            prominent = true
+        )
         Spacer(Modifier.height(6.dp))
         AuthAlternativeActions(
             enabled = !isLoading,

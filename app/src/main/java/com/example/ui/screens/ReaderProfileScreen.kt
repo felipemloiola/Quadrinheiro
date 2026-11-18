@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,6 +26,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,7 +37,6 @@ import com.example.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settings: AppSettings,
     listState: LazyListState, onSettings: () -> Unit, onLibrary: () -> Unit,
@@ -380,14 +387,13 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     }
     if (editSlot >= 0 && !slotMenu) {
         val close = { editSlot = -1; query = "" }
-        ModalBottomSheet(onDismissRequest = close, containerColor = theme.bgSecondary) {
-            Column(Modifier.fillMaxWidth().fillMaxHeight(.85f).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (characters) "Personagem favorito" else "HQ favorita", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
-                    TextButton(onClick = close) { Text("Fechar", color = theme.accent) }
-                }
-                AppleTextField(query, { query = it.take(100) }, "Buscar", leadingIcon = Icons.Default.Search)
-                fun select(value: String?, portrait: String? = null) {
+        val panel = rememberCurationPanelState()
+        CurationSheet(if (characters) "Personagem favorito" else "HQ favorita", onClose = close, panel = panel, glass = true) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val haptics = LocalHapticFeedback.current
+                AppleTextField(query, { query = it.take(100) }, "Buscar", capsuleSearch = true)
+                fun select(value: String?, portrait: String? = null, comic: ComicEntry? = null) {
+                    if (panel.request != 0) return
                     val old = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
                     val next = old.toMutableList()
                     if (value == null) { if (editSlot < next.size) next.removeAt(editSlot) }
@@ -398,13 +404,16 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                     val details = settings.profileShowcaseDetails.toMutableMap()
                     if (value != null) {
                         if (characters && portrait != null) details["character:$value"] = characterResults.firstOrNull { it.name.take(60) == value }?.let(com.example.data.ProfileShowcase::characterSnapshot) ?: portrait
-                        if (!characters) byId[value]?.let { details["comic:$value"] = com.example.data.ProfileShowcase.comicSnapshot(it) }
+                        if (comic != null) details["comic:$value"] = com.example.data.ProfileShowcase.comicSnapshot(comic)
                     }
                     val retained = details.filterKeys { key -> nextIds.any { key == "comic:$it" } || nextCharacters.any { key == "character:$it" } }
-                    onUpdateShowcase(nextIds, nextCharacters, retained); close()
+                    if (value != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    panel.close { onUpdateShowcase(nextIds, nextCharacters, retained) }
                 }
-                if (editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size) TextButton(onClick = { select(null) }) { Text("Remover dos favoritos", color = theme.accent) }
-                val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).filterIndexed { index, _ -> index != editSlot }.toSet()
+                val favorites = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
+                val selected = favorites.getOrNull(editSlot)
+                if (selected != null) LiquidGlassPillButton("Remover dos favoritos", onClick = { select(null) })
+                val excluded = favorites.filterIndexed { index, _ -> index != editSlot }.toSet()
                 val preferredLang = "PT"
                 val shownComics = remember(candidates, excluded, query, preferredLang) {
                     val available = candidates.filter { it.id !in excluded && com.example.data.PortugueseSearchPolicy.accepts(it) }
@@ -418,22 +427,30 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         ).take(80)
                     }
                 }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(136.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 20.dp)
+                ) {
                     if (characters) {
-                        if (characterLoading) item { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
-                        if (characterError) item { Text("Não foi possível carregar os personagens. Confira sua conexão e tente outra busca.", color = theme.textSecondary) }
-                        items(characterResults.filter { it.name.take(60) !in excluded }, key = { it.id }) { result ->
-                            Row(Modifier.fillMaxWidth().clickable { select(result.name.take(60), result.image) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ProfileImage(result.image, result.name, Modifier.size(62.dp).clip(RoundedCornerShape(14.dp)), face = true)
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(result.name, color = theme.textPrimary, fontSize = 15.sp)
-                                    if (!result.name.contains(result.originalName, true)) Text(result.originalName, color = theme.textSecondary, fontSize = 12.sp)
-                                }
+                        val shownCharacters = characterResults.filter { it.name.take(60) !in excluded }
+                        if (characterLoading) item(span = { GridItemSpan(maxLineSpan) }) { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
+                        if (characterError) item(span = { GridItemSpan(maxLineSpan) }) { Text("Não foi possível carregar os personagens. Confira sua conexão e tente outra busca.", color = theme.textSecondary) }
+                        items(shownCharacters, key = { it.id }) { result ->
+                            val name = result.name.take(60)
+                            FavoritePickerTile(
+                                title = result.name,
+                                subtitle = result.originalName.takeUnless { result.name.contains(it, true) }.orEmpty(),
+                                selected = name == selected,
+                                onSelect = { select(name, result.image) }
+                            ) {
+                                ProfileImage(result.image, result.name, Modifier.fillMaxWidth().aspectRatio(1f), face = true)
                             }
                         }
-                        if (!characterLoading && !characterError && characterResults.isEmpty()) item { Text("Nenhum personagem encontrado. Tente o nome em português ou inglês.", color = theme.textSecondary) }
+                        if (!characterLoading && !characterError && shownCharacters.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Nenhum personagem encontrado. Tente o nome em português ou inglês.", color = theme.textSecondary) }
                     } else {
-                        if (comicLoading) item { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
+                        if (comicLoading) item(span = { GridItemSpan(maxLineSpan) }) { LoadingLine(Modifier.fillMaxWidth(), color = theme.accent) }
                         items(shownComics, key = { it.id }) { comic ->
                             val metaLine = remember(comic.authors, comic.publisher, comic.releaseYear, comic.pageCount) {
                                 listOfNotNull(
@@ -443,19 +460,44 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                     comic.pageCount.takeIf { it > 0 }?.let { "$it págs" }
                                 ).joinToString(" • ")
                             }
-                            Row(Modifier.fillMaxWidth().clickable { select(comic.id) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.size(44.dp, 66.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(comic.displayTitle, color = theme.textPrimary, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-                                    if (metaLine.isNotEmpty()) {
-                                        Text(metaLine, color = theme.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
-                                    }
-                                }
+                            FavoritePickerTile(comic.displayTitle, metaLine, comic.id == selected, { select(comic.id, comic = comic) }) {
+                                BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                             }
                         }
-                        if (!comicLoading && shownComics.isEmpty()) item { Text("Nenhuma HQ encontrada. Tente outro título.", color = theme.textSecondary) }
+                        if (!comicLoading && shownComics.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("Nenhuma HQ encontrada. Tente outro título.", color = theme.textSecondary) }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun FavoritePickerTile(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    artwork: @Composable () -> Unit
+) {
+    val theme = LocalIOS27Theme.current
+    Column(
+        Modifier.fillMaxWidth().curationPickerCard()
+            .selectable(selected, role = Role.Button, onClick = onSelect)
+    ) {
+        Box {
+            artwork()
+            if (selected) {
+                Icon(Icons.Default.Check, null, Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    .background(theme.bgPrimary, CircleShape).padding(5.dp), tint = theme.accent)
+            }
+        }
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(title, color = theme.textPrimary, style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank()) {
+                Text(subtitle, color = theme.textSecondary, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

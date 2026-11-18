@@ -47,7 +47,7 @@ jobs:
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          gradle :app:assembleRelease -PreleaseVersionCode=1093 -PreleaseVersionName="1.0.91-revisao.${GITHUB_RUN_NUMBER}" --no-daemon --console=plain
+          gradle :app:assembleRelease --no-daemon --console=plain
       - name: Verify and stage the APK
         run: |
           set -euo pipefail

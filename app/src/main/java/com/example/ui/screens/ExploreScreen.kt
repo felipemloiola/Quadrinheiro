@@ -198,18 +198,27 @@ fun ExploreScreen(
             ) { destination ->
                 val selected = destination.settings
                 val expandedState = rememberLazyListState()
-                LazyColumn(
-                    state = if (selected == null) listState else expandedState,
-                    modifier = Modifier.fillMaxSize().testTag(if (selected == null) "explore_page" else "explore_collection"),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 208.dp),
-                    verticalArrangement = Arrangement.spacedBy(26.dp)
-                ) {
-                    if (selected != null) {
-                        item(key = "selected_header", contentType = "explore_header") {
-                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                SettingsBackButton({ collection = null }, label = "Explorar")
+                val backCollapsed by remember {
+                    derivedStateOf {
+                        expandedState.firstVisibleItemIndex > 0 || expandedState.firstVisibleItemScrollOffset > 24
+                    }
+                }
+                Box(Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = if (selected == null) listState else expandedState,
+                        modifier = Modifier.fillMaxSize().testTag(if (selected == null) "explore_page" else "explore_collection"),
+                        contentPadding = PaddingValues(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = if (selected == null) 16.dp else 56.dp,
+                            bottom = 208.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(26.dp)
+                    ) {
+                        if (selected != null) {
+                            item(key = "selected_header", contentType = "explore_header") {
                                 Row(
-                                    Modifier.fillMaxWidth(),
+                                    Modifier.fillMaxWidth().padding(top = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -221,87 +230,97 @@ fun ExploreScreen(
                                     }
                                 }
                             }
-                        }
-                        val personal = selected == "Para você"
-                        val entries = if (personal) recommendations.map { it.comic } else editorial[selected].orEmpty()
-                        val recommendationsById = if (personal) recommendations.associateBy { it.comic.id } else emptyMap()
-                        items(
-                            items = entries.chunked(3),
-                            key = { it.first().id },
-                            contentType = { "explore_grid_row" }
-                        ) { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                row.forEach { comic ->
-                                    val recommendation = recommendationsById[comic.id]
-                                    Column(Modifier.weight(1f)) {
-                                        ExplorePoster(
-                                            comic = comic,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            onComic = { selectedComic ->
-                                                if (recommendation != null) onRecommendedComic(recommendation)
-                                                else onComic(selectedComic)
-                                            },
-                                            reasonLabel = recommendation?.reasonLabel
-                                        )
+                            val personal = selected == "Para você"
+                            val entries = if (personal) recommendations.map { it.comic } else editorial[selected].orEmpty()
+                            val recommendationsById = if (personal) recommendations.associateBy { it.comic.id } else emptyMap()
+                            items(
+                                items = entries.chunked(3),
+                                key = { it.first().id },
+                                contentType = { "explore_grid_row" }
+                            ) { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    row.forEach { comic ->
+                                        val recommendation = recommendationsById[comic.id]
+                                        Column(Modifier.weight(1f)) {
+                                            ExplorePoster(
+                                                comic = comic,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                onComic = { selectedComic ->
+                                                    if (recommendation != null) onRecommendedComic(recommendation)
+                                                    else onComic(selectedComic)
+                                                },
+                                                reasonLabel = recommendation?.reasonLabel
+                                            )
+                                        }
                                     }
+                                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
-                                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                             }
-                        }
-                        if (entries.isEmpty()) {
-                            item(key = "selected_empty", contentType = "explore_empty") {
-                                if (personal) RecommendationEmptyState(exploreRecommendationState.isRefreshing)
-                                else EditorialEmptyState(editorialLoading) { retryEditorial(selected) }
-                            }
-                        } else if (!personal && entries.size < 48) {
-                            item(key = "selected_load_more", contentType = "explore_load_more") {
-                                val isLoadingMore = loadingMoreShelf == selected
-                                Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
-                                    TextButton(
-                                        enabled = !isLoadingMore,
-                                        onClick = {
-                                            if (loadingMoreShelf != null) return@TextButton
-                                            val nextPage = editorialExtraPages.getOrDefault(selected, 0)
-                                            loadingMoreShelf = selected
-                                            editorialScope.launch {
-                                                try {
-                                                    withContext(Dispatchers.IO) {
-                                                        EditorialDiscovery.loadMoreForShelf(appContext, selected, nextPage)
+                            if (entries.isEmpty()) {
+                                item(key = "selected_empty", contentType = "explore_empty") {
+                                    if (personal) RecommendationEmptyState(exploreRecommendationState.isRefreshing)
+                                    else EditorialEmptyState(editorialLoading) { retryEditorial(selected) }
+                                }
+                            } else if (!personal && entries.size < 48) {
+                                item(key = "selected_load_more", contentType = "explore_load_more") {
+                                    val isLoadingMore = loadingMoreShelf == selected
+                                    Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+                                        TextButton(
+                                            enabled = !isLoadingMore,
+                                            onClick = {
+                                                if (loadingMoreShelf != null) return@TextButton
+                                                val nextPage = editorialExtraPages.getOrDefault(selected, 0)
+                                                loadingMoreShelf = selected
+                                                editorialScope.launch {
+                                                    try {
+                                                        withContext(Dispatchers.IO) {
+                                                            EditorialDiscovery.loadMoreForShelf(appContext, selected, nextPage)
+                                                        }
+                                                        editorialExtraPages[selected] = nextPage + 1
+                                                    } finally {
+                                                        if (loadingMoreShelf == selected) loadingMoreShelf = null
                                                     }
-                                                    editorialExtraPages[selected] = nextPage + 1
-                                                } finally {
-                                                    if (loadingMoreShelf == selected) loadingMoreShelf = null
                                                 }
-                                            }
-                                        },
-                                        modifier = Modifier.heightIn(min = 48.dp)
-                                    ) {
-                                        Text(
-                                            if (isLoadingMore) "Buscando mais edições…" else "Carregar mais edições",
-                                            color = theme.accent,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp
-                                        )
+                                            },
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) {
+                                            Text(
+                                                if (isLoadingMore) "Buscando mais edições…" else "Carregar mais edições",
+                                                color = theme.accent,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
                                     }
                                 }
                             }
+                        } else {
+                            item(key = "Para você", contentType = "explore_for_you_section") {
+                                ExploreForYouSection(
+                                    recommendations = recommendations,
+                                    loading = exploreRecommendationState.isRefreshing,
+                                    onExpand = { collection = "Para você" },
+                                    onRecommendedComic = onRecommendedComic
+                                )
+                            }
+                            items(EditorialDiscovery.selections.keys.toList(), key = { it }, contentType = { "explore_shelf_section" }) { title ->
+                                ExploreCatalogSection(
+                                    title = title, entries = editorial[title].orEmpty(), loading = editorialLoading,
+                                    onExpand = { collection = title }, onRetry = { retryEditorial(title) },
+                                    onComic = onComic
+                                )
+                            }
                         }
-                    } else {
-                        item(key = "Para você", contentType = "explore_for_you_section") {
-                            ExploreForYouSection(
-                                recommendations = recommendations,
-                                loading = exploreRecommendationState.isRefreshing,
-                                onExpand = { collection = "Para você" },
-                                onRecommendedComic = onRecommendedComic
-                            )
-                        }
-                        items(EditorialDiscovery.selections.keys.toList(), key = { it }, contentType = { "explore_shelf_section" }) { title ->
-                            ExploreCatalogSection(
-                                title = title, entries = editorial[title].orEmpty(), loading = editorialLoading,
-                                onExpand = { collection = title }, onRetry = { retryEditorial(title) },
-                                onComic = onComic
-                            )
-                        }
+                    }
+                    if (selected != null) {
+                        SettingsBackButton(
+                            onBack = { collection = null },
+                            collapsed = backCollapsed,
+                            label = "Explorar",
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(start = 16.dp, top = 8.dp)
+                        )
                     }
                 }
             }

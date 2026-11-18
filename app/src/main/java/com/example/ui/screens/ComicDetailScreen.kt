@@ -89,15 +89,17 @@ private fun ComicDetailScreen(
     recommendationContext: RecommendedComic? = null,
     resolveDetails: suspend (ComicEntry) -> CatalogDetails?
 ) {
-    val libraryMatch = remember(initialComic.id, initialComic.externalId, initialComic.displayTitle, library) {
-        com.example.model.catalogEntryForEditing(initialComic, library)
+    val curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val liveLibrary by curationViewModel.comics.collectAsStateWithLifecycle()
+    val effectiveLibrary = if (liveLibrary.isNotEmpty()) liveLibrary else library
+    val libraryMatch = remember(initialComic.id, initialComic.externalId, initialComic.displayTitle, effectiveLibrary) {
+        com.example.model.catalogEntryForEditing(initialComic, effectiveLibrary)
     }
     var comic by remember(initialComic.id, libraryMatch?.id) { mutableStateOf(libraryMatch ?: initialComic) }
     LaunchedEffect(libraryMatch) {
         if (libraryMatch != null) comic = libraryMatch
     }
     val t = LocalIOS27Theme.current
-    val curationViewModel: com.example.viewmodel.QuadrinheiroViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val context = LocalContext.current
     var entity by remember { mutableStateOf<Pair<String, String>?>(null) }
     val history = remember { mutableStateListOf<Pair<ComicEntry, Pair<String, String>?>>() }
@@ -121,6 +123,7 @@ private fun ComicDetailScreen(
     var shareSheetOpen by remember(comic.id) { mutableStateOf(false) }
     var addToListOpen by remember(comic.id) { mutableStateOf(false) }
     var whySheetOpen by remember(comic.id) { mutableStateOf(false) }
+    var registrationSheetOpen by remember(comic.id) { mutableStateOf(false) }
     var shareNoticeText by remember(comic.id) { mutableStateOf<String?>(null) }
     val detailMenuHost = remember { LiquidGlassMenuHostState() }
     val moreMenuId = remember { "comic_detail_more_menu" }
@@ -136,7 +139,7 @@ private fun ComicDetailScreen(
     val repository = remember { CommunityRepository(context) }
     val listState = rememberLazyListState()
     LaunchedEffect(comic.id, comic.externalId, entity, tab) { listState.scrollToItem(0) }
-    BackHandler(enabled = !shareSheetOpen && !expandedCover && detailMenuHost.currentRequest == null) { goBack() }
+    BackHandler(enabled = !shareSheetOpen && !registrationSheetOpen && !expandedCover && detailMenuHost.currentRequest == null) { goBack() }
     LaunchedEffect(comic.id, comic.externalId, entity, retry) {
         loading = true; failed = false
         try {
@@ -191,14 +194,10 @@ private fun ComicDetailScreen(
             addedListNotice = null
         }
     }
-    val currentReading = com.example.model.catalogEntryForEditing(comic, library)
+    val currentReading = com.example.model.catalogEntryForEditing(comic, effectiveLibrary)
     val readingPresentation = ComicReadingPresentation.from(currentReading)
     fun registerCurrent() {
-        onRegister(currentReading ?: comic.copy(
-            coverUrl = comic.coverUrl.ifBlank { detail?.image.orEmpty() },
-            pageCount = detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount,
-            isbn = comic.isbn.ifBlank { detail?.isbn.orEmpty() }
-        ))
+        registrationSheetOpen = true
     }
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     FullScreenDialogWindow(
@@ -236,7 +235,7 @@ private fun ComicDetailScreen(
     val detailBackdrop=rememberLayerBackdrop()
     val activeRecommendation = if (history.isEmpty() && isComic) recommendationContext else null
     val freezeDetailBackdrop=expandedCover || editionPicker || listToOpen != null || listComic != null ||
-        shareSheetOpen || addToListOpen || whySheetOpen || detailMenuHost.currentRequest != null
+        shareSheetOpen || addToListOpen || whySheetOpen || registrationSheetOpen || detailMenuHost.currentRequest != null
     val fadeDistance=with(LocalDensity.current){180.dp.toPx()}
     val scrollFraction:()->Float={if(listState.firstVisibleItemIndex>0) 1f else (listState.firstVisibleItemScrollOffset/fadeDistance).coerceIn(0f,1f)}
     Box(Modifier.fillMaxSize()) {
@@ -399,10 +398,10 @@ private fun ComicDetailScreen(
                             slotIndex = 0
                         )
                         LiquidMorphingIconButton(
-                            icon = Icons.Default.MoreHoriz,
+                            icon = LucideIcons.MoreEllipsis,
                             contentDescription = "Mais opções",
                             menuId = moreMenuId,
-                            iconRotationWhenMenuOpen = 90f,
+                            iconRotationWhenMenuOpen = 0f,
                             size = 42.dp,
                             slotIndex = 1,
                             onAnchorBoundsChanged = {
@@ -454,7 +453,7 @@ private fun ComicDetailScreen(
                                             id = moreMenuId,
                                             anchorBounds = moreMenuBounds,
                                             triggerLabel = "Opções",
-                                            triggerIcon = Icons.Default.MoreHoriz,
+                                            triggerIcon = LucideIcons.MoreEllipsis,
                                             items = menuItems,
                                             onDismiss = {},
                                             selectionMenu = false
@@ -661,6 +660,42 @@ private fun ComicDetailScreen(
     if (editionPicker) EditionChooser(comic.displayTitle, onClose = { editionPicker = false }) { edition ->
         comic = comic.copy(externalId = edition.externalId, sourceLabel = edition.sourceLabel, publisher = edition.publisher.ifBlank { comic.publisher })
         editionPicker = false
+    }
+    if (registrationSheetOpen) {
+        val sheetTarget = currentReading ?: comic.copy(
+            coverUrl = comic.coverUrl.ifBlank { detail?.image.orEmpty() },
+            pageCount = detail?.pageCount?.takeIf { it > 0 } ?: comic.pageCount,
+            isbn = comic.isbn.ifBlank { detail?.isbn.orEmpty() }
+        )
+        CatalogSheetModal(
+            selectedComic = sheetTarget,
+            isExistingInShelf = currentReading != null,
+            isSheetExpanded = false,
+            appSettings = settings,
+            allUserComics = library,
+            onlineSequencePool = onlineSequence,
+            onSelectSequenceComic = { openComic(it) },
+            onUpdateComic = {},
+            onToggleExpand = {},
+            onSave = { updated ->
+                registrationSheetOpen = false
+                curationViewModel.saveComic(updated)
+                comic = updated
+                onRegister(updated)
+            },
+            onDelete = { id ->
+                registrationSheetOpen = false
+                curationViewModel.deleteComic(id)
+                goBack()
+            },
+            onDismiss = { registrationSheetOpen = false },
+            onShareComic = { c, type, mid ->
+                curationViewModel.openSocialShareSheet(SocialShareRequest(type, c, initialMomentId = mid))
+            },
+            readerProfile = profile,
+            onLogin = onLogin,
+            recommendationContext = activeRecommendation
+        )
     }
 }
 

@@ -17,8 +17,9 @@ android {
     applicationId = "com.aistudio.quadrinheiro.lqglas"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    // SIGNED_RELEASE_VERSION_V1: the device review is the local default; publishing CI supplies its own version.
+    versionCode = providers.gradleProperty("releaseVersionCode").orNull?.toInt() ?: 1094
+    versionName = providers.gradleProperty("releaseVersionName").orNull ?: "1.0.91-revisao.9"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -29,6 +30,7 @@ android {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
+      storeType = System.getenv("KEYSTORE_TYPE") ?: "JKS"
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")

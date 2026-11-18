@@ -1,12 +1,15 @@
 package com.example.ui.components
 
+import android.graphics.Bitmap
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.RenderEffect as AndroidRenderEffect
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.VisibilityThreshold
@@ -16,28 +19,65 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.RenderEffect
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.BackdropEffectScope
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.backdrops.emptyBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.drawPlainBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.runtimeShaderEffect
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.highlight.HighlightStyle
+import com.kyant.backdrop.isRenderEffectSupported
+import com.kyant.backdrop.isRuntimeShaderSupported
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
@@ -188,6 +228,26 @@ object SdfShader {
             refracted.rgb = clamp(refracted.rgb + half3(totalHighlight), half3(0.0), half3(1.0));
 
             return refracted;
+        }
+    """
+
+    const val AGSL_PROGRESSIVE_ALPHA_MASK_SOURCE = """
+        uniform shader content;
+        uniform float2 size;
+        uniform float direction;
+        uniform float fadeStart;
+        uniform float fadeEnd;
+        layout(color) uniform half4 tint;
+        uniform float tintAlpha;
+
+        half4 main(float2 coord) {
+            float safeH = max(size.y, 1.0);
+            float ny = clamp(coord.y / safeH, 0.0, 1.0);
+            float t = (direction < 0.5) ? (1.0 - ny) : ny;
+            float mask = smoothstep(fadeStart, fadeEnd, t);
+            half4 blurred = content.eval(coord);
+            half3 rgb = mix(blurred.rgb, tint.rgb * blurred.a, half(clamp(tintAlpha, 0.0, 0.85)));
+            return half4(rgb, blurred.a) * half(mask);
         }
     """
 
@@ -553,26 +613,515 @@ fun rememberInteractiveHighlight(
     }
 }
 
+enum class ProgressiveBlurDirection {
+    TopToBottom,
+    BottomToTop
+}
+
 /**
- * Camada de transição progressiva na borda inferior (`ProgressiveBlurContent.kt` do AndroidLiquidGlass-kmp por Kyant).
- * Suaviza a chegada das capas das HQs sob a Dock Bar flutuante sem custo de realocação por frame.
+ * Scroll Edge Effect progressivo real (iOS 26 / `ProgressiveBlurContent.kt` do Kyant0/AndroidLiquidGlass):
+ * - API 33+: `drawPlainBackdrop` -> `blur(Clamp)` -> AGSL `AlphaMask`
+ * - API 31–32: `drawPlainBackdrop` -> `blur(Clamp)` + `CompositingStrategy.Offscreen` + `BlendMode.DstIn`
+ * - API 24–30 / `reduceTransparency` / sem backdrop gravado: gradiente vertical limpo
+ */
+@Composable
+fun ProgressiveBlurContent(
+    backdrop: Backdrop = rememberCurrentBackdrop(),
+    direction: ProgressiveBlurDirection = ProgressiveBlurDirection.BottomToTop,
+    blurRadius: Dp = 18.dp,
+    tintColor: Color = Color.Transparent,
+    fadeStartFraction: Float = 0.0f,
+    fadeEndFraction: Float = 0.78f,
+    modifier: Modifier = Modifier
+) {
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val theme = com.example.ui.theme.LocalIOS27Theme.current
+    val safeStart = fadeStartFraction.coerceIn(0f, 0.95f)
+    val safeEnd = fadeEndFraction.coerceIn(safeStart + 0.05f, 1f)
+    val resolvedTint = if (tintColor == Color.Transparent && settings.reduceTransparency) {
+        theme.bgPrimary.copy(alpha = 0.82f)
+    } else {
+        tintColor
+    }
+    val unrecordedLayer = backdrop is LayerBackdrop && (backdrop.isRecording || !backdrop.hasRecorded || backdrop.graphicsLayer.isReleased)
+    val useFallbackGradient =
+        settings.reduceTransparency ||
+            backdrop === emptyBackdrop() ||
+            LiquidGlassBackdropScope.isRecordingAny() ||
+            unrecordedLayer ||
+            !isRenderEffectSupported() ||
+            blurRadius.value < 0.5f
+
+    if (useFallbackGradient) {
+        val baseTint = if (resolvedTint.alpha > 0.01f) resolvedTint else theme.bgPrimary.copy(alpha = 0.72f)
+        val gradientColors = if (direction == ProgressiveBlurDirection.TopToBottom) {
+            listOf(
+                baseTint.copy(alpha = baseTint.alpha.coerceIn(0f, 0.78f)),
+                baseTint.copy(alpha = (baseTint.alpha * 0.42f).coerceIn(0f, 0.38f)),
+                Color.Transparent
+            )
+        } else {
+            listOf(
+                Color.Transparent,
+                baseTint.copy(alpha = (baseTint.alpha * 0.45f).coerceIn(0f, 0.36f)),
+                baseTint.copy(alpha = baseTint.alpha.coerceIn(0f, 0.68f))
+            )
+        }
+        Box(modifier = modifier.background(Brush.verticalGradient(colors = gradientColors)))
+        return
+    }
+
+    val effectiveBlurDp = (blurRadius.value * settings.glassBlurIntensity).coerceIn(4f, 28f).dp
+    if (isRuntimeShaderSupported()) {
+        Box(
+            modifier = modifier.drawPlainBackdrop(
+                backdrop = backdrop,
+                shape = { RectangleShape },
+                effects = {
+                    val blurPx = effectiveBlurDp.toPx()
+                    if (blurPx >= 1f && !blurPx.isNaN()) {
+                        blur(blurPx, TileMode.Clamp)
+                    }
+                    if (size.isSpecified && size.width > 1f && size.height > 1f) {
+                        runtimeShaderEffect(
+                            key = "ProgressiveAlphaMask",
+                            shaderString = SdfShader.AGSL_PROGRESSIVE_ALPHA_MASK_SOURCE,
+                            uniformShaderName = "content"
+                        ) {
+                            setFloatUniform("size", size.width, size.height)
+                            setFloatUniform(
+                                "direction",
+                                if (direction == ProgressiveBlurDirection.TopToBottom) 0f else 1f
+                            )
+                            setFloatUniform("fadeStart", safeStart)
+                            setFloatUniform("fadeEnd", safeEnd)
+                            setColorUniform("tint", resolvedTint.copy(alpha = 1f))
+                            setFloatUniform("tintAlpha", resolvedTint.alpha.coerceIn(0f, 0.65f))
+                        }
+                    }
+                }
+            )
+        )
+    } else {
+        val maskBrush = remember(direction, safeStart, safeEnd) {
+            val stops = buildList {
+                fun smoothstepMask(t: Float): Float {
+                    val u = ((t - safeStart) / (safeEnd - safeStart)).coerceIn(0f, 1f)
+                    return u * u * (3f - 2f * u)
+                }
+                if (direction == ProgressiveBlurDirection.TopToBottom) {
+                    val nyStart = 1f - safeEnd
+                    val nyEnd = 1f - safeStart
+                    if (nyStart > 0.001f) {
+                        add(0f to Color.Black)
+                    }
+                    for (step in 0..4) {
+                        val ny = nyStart + (nyEnd - nyStart) * (step / 4f)
+                        val maskAlpha = smoothstepMask(1f - ny).coerceIn(0f, 1f)
+                        add(ny to Color.Black.copy(alpha = maskAlpha))
+                    }
+                    if (nyEnd < 0.999f) {
+                        add(1f to Color.Transparent)
+                    }
+                } else {
+                    val nyStart = safeStart
+                    val nyEnd = safeEnd
+                    if (nyStart > 0.001f) {
+                        add(0f to Color.Transparent)
+                    }
+                    for (step in 0..4) {
+                        val ny = nyStart + (nyEnd - nyStart) * (step / 4f)
+                        val maskAlpha = smoothstepMask(ny).coerceIn(0f, 1f)
+                        add(ny to Color.Black.copy(alpha = maskAlpha))
+                    }
+                    if (nyEnd < 0.999f) {
+                        add(1f to Color.Black)
+                    }
+                }
+            }
+            Brush.verticalGradient(*stops.toTypedArray())
+        }
+        Box(
+            modifier = modifier.drawPlainBackdrop(
+                backdrop = backdrop,
+                shape = { RectangleShape },
+                layerBlock = {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                },
+                effects = {
+                    val blurPx = effectiveBlurDp.toPx()
+                    if (blurPx >= 1f && !blurPx.isNaN()) {
+                        blur(blurPx, TileMode.Clamp)
+                    }
+                },
+                onDrawSurface = if (resolvedTint.alpha > 0.005f) {
+                    { drawRect(resolvedTint.copy(alpha = resolvedTint.alpha.coerceIn(0f, 0.65f))) }
+                } else {
+                    null
+                },
+                onDrawFront = {
+                    drawRect(brush = maskBrush, blendMode = BlendMode.DstIn)
+                }
+            )
+        )
+    }
+}
+
+/**
+ * Camada de transição progressiva na borda (`ProgressiveBlurContent.kt` do AndroidLiquidGlass-kmp por Kyant).
+ * Mantém assinatura compatível com chamadas legadas e delega para [ProgressiveBlurContent].
  */
 @Composable
 fun ProgressiveBlurBackdrop(
     blurRadius: Float = 20f,
     tintColor: Color = Color.Transparent,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backdrop: Backdrop = rememberCurrentBackdrop(),
+    direction: ProgressiveBlurDirection = ProgressiveBlurDirection.BottomToTop
 ) {
-    Box(
+    ProgressiveBlurContent(
+        backdrop = backdrop,
+        direction = direction,
+        blurRadius = blurRadius.coerceAtLeast(0f).dp,
+        tintColor = tintColor,
         modifier = modifier
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        tintColor.copy(alpha = (tintColor.alpha * 0.45f).coerceIn(0f, 0.28f)),
-                        tintColor.copy(alpha = tintColor.alpha.coerceIn(0f, 0.48f))
-                    )
-                )
-            )
     )
+}
+
+/**
+ * Color controls calibrados para Apple Liquid Glass (`ColorFilter.kt` -> `colorControls`).
+ * Em modo Claro aplica elevação sutil de brilho e saturação viva; em modo Escuro preserva contraste profundo.
+ */
+fun BackdropEffectScope.appleGlassColorControls(
+    isLight: Boolean,
+    isFrosted: Boolean = false,
+    reduceTransparency: Boolean = false
+) {
+    if (reduceTransparency || !isRenderEffectSupported()) return
+    val brightness = when {
+        isFrosted && isLight -> 0.18f
+        isFrosted -> -0.02f
+        isLight -> 0.12f
+        else -> -0.04f
+    }
+    val contrast = if (isLight) 1.02f else 1.06f
+    val saturation = if (isFrosted) 1.25f else 1.48f
+    colorControls(
+        brightness = brightness,
+        contrast = contrast,
+        saturation = saturation
+    )
+}
+
+/**
+ * Seleciona `HighlightStyle.Ambient` no modo Claro (API 33+, onde `BlendMode.Plus` branco sobre branco
+ * ficaria invisível), `Highlight.Default` no modo Escuro (API 33+) e `HighlightStyle.Plain` em API 24–32.
+ */
+fun adaptiveGlassHighlight(
+    isLight: Boolean,
+    alpha: Float = if (isLight) 0.72f else 0.64f,
+    ambientIntensity: Float = 0.42f,
+    width: Dp = 0.75.dp
+): Highlight {
+    return if (isRuntimeShaderSupported()) {
+        if (isLight) {
+            Highlight(
+                width = width,
+                alpha = alpha,
+                style = HighlightStyle.Ambient(intensity = ambientIntensity)
+            )
+        } else {
+            Highlight.Default.copy(width = width, alpha = alpha)
+        }
+    } else {
+        Highlight(
+            width = width,
+            alpha = if (isLight) alpha * 0.48f else alpha * 0.60f,
+            style = HighlightStyle.Plain(
+                color = if (isLight) Color.Black.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.38f),
+                blendMode = if (isLight) BlendMode.SrcOver else BlendMode.Plus
+            )
+        )
+    }
+}
+
+/**
+ * Combina múltiplos backdrops de forma segura (`CombinedBackdrop`), filtrando nulos, `emptyBackdrop()` e duplicatas.
+ */
+@Composable
+fun rememberSafeBackdropStack(
+    vararg backdrops: Backdrop?
+): Backdrop {
+    val empty = emptyBackdrop()
+    val filtered = remember(*backdrops) {
+        val unique = ArrayList<Backdrop>(backdrops.size)
+        for (b in backdrops) {
+            if (b != null && b !== empty && unique.none { it === b }) {
+                unique.add(b)
+            }
+        }
+        unique
+    }
+    return when (filtered.size) {
+        0 -> empty
+        1 -> filtered[0]
+        2 -> rememberCombinedBackdrop(filtered[0], filtered[1])
+        3 -> rememberCombinedBackdrop(filtered[0], filtered[1], filtered[2])
+        else -> rememberCombinedBackdrop(*filtered.toTypedArray())
+    }
+}
+
+@Immutable
+data class AdaptiveLiquidGlassInk(
+    val color: Color,
+    val isLightBackground: Boolean,
+    val luminance: Float? = null
+)
+
+@Stable
+class AdaptiveLiquidGlassInkState internal constructor(
+    colorState: State<Color>,
+    isLightState: State<Boolean>,
+    luminanceState: State<Float?>,
+    val samplingModifier: Modifier
+) {
+    val color: Color by colorState
+    val isLightBackground: Boolean by isLightState
+    val luminance: Float? by luminanceState
+}
+
+private data class AdaptiveSampleTriggerKey(
+    val pos: Offset,
+    val size: IntSize,
+    val layerReady: Boolean,
+    val scrollIndex: Int,
+    val scrollOffset: Int,
+    val scrollTick: Int
+)
+
+/**
+ * Amostragem de luminância ITU-R BT.709 (`0.2126R + 0.7152G + 0.0722B`) em camada `5x5` (`100` bytes),
+ * com throttle (`180ms`), leitura fora da UI thread (`Dispatchers.Default`), histerese (`0.44..0.56`),
+ * suporte seguro a `HARDWARE` bitmaps (API 26+) e fallback determinístico em `reduceTransparency`.
+ */
+@Composable
+fun rememberAdaptiveLiquidGlassInk(
+    backdrop: Backdrop = rememberCurrentBackdrop(),
+    enabled: Boolean = true,
+    fallbackColor: Color = com.example.ui.theme.LocalIOS27Theme.current.textPrimary,
+    fallbackIsLightBackground: Boolean = !com.example.ui.theme.LocalIsDarkTheme.current,
+    lightBackgroundInk: Color = Color(0xFF141418),
+    darkBackgroundInk: Color = Color(0xFFF5F5F7),
+    sampleIntervalMs: Long = 180L
+): AdaptiveLiquidGlassInkState {
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val motion = com.example.ui.theme.LocalAppMotion.current
+    val theme = com.example.ui.theme.LocalIOS27Theme.current
+    val isExtremeFling = LocalLiquidGlassExtremeFling.current
+    val scrollState = LocalLiquidGlassScrollState.current
+    val scrollTick = LocalLiquidGlassScrollTick.current
+
+    val sampleLayer = rememberGraphicsLayer()
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var sampleTrigger by remember { mutableIntStateOf(0) }
+    var pendingSample by remember { mutableStateOf(false) }
+    var sampleSeq by remember { mutableIntStateOf(0) }
+    var lastSampleTimeMs by remember { mutableStateOf(0L) }
+
+    val isLightState = remember { mutableStateOf(fallbackIsLightBackground) }
+    val luminanceState = remember { mutableStateOf<Float?>(null) }
+
+    val fallbackBgLuminance = remember(theme.bgPrimary) {
+        theme.bgPrimary.luminance().coerceIn(0f, 1f)
+    }
+
+    val empty = emptyBackdrop()
+    val backdropActive = enabled && !settings.reduceTransparency && backdrop !== empty
+
+    LaunchedEffect(backdropActive, fallbackIsLightBackground) {
+        if (!backdropActive) {
+            isLightState.value = fallbackIsLightBackground
+            luminanceState.value = null
+            pendingSample = false
+        } else if (luminanceState.value == null) {
+            isLightState.value = fallbackIsLightBackground
+        }
+    }
+
+    LaunchedEffect(backdropActive, isExtremeFling, backdrop, scrollState, scrollTick, sampleIntervalMs) {
+        if (!backdropActive || isExtremeFling) return@LaunchedEffect
+        snapshotFlow {
+            val c = coords
+            val pos = if (c != null && c.isAttached) c.positionInRoot() else Offset.Unspecified
+            val sz = if (c != null && c.isAttached) c.size else IntSize.Zero
+            val layerReady = if (backdrop is LayerBackdrop) {
+                backdrop.hasRecorded && !backdrop.graphicsLayer.isReleased
+            } else {
+                true
+            }
+            val idx = scrollState?.firstVisibleItemIndex ?: -1
+            val off = scrollState?.firstVisibleItemScrollOffset ?: -1
+            AdaptiveSampleTriggerKey(pos, sz, layerReady, idx, off, scrollTick)
+        }.collect { key ->
+            if (!key.layerReady || !key.pos.isSpecified || key.size.width <= 2 || key.size.height <= 2) {
+                return@collect
+            }
+            val now = SystemClock.uptimeMillis()
+            val elapsed = now - lastSampleTimeMs
+            if (lastSampleTimeMs > 0L && elapsed < sampleIntervalMs) {
+                delay(sampleIntervalMs - elapsed)
+            }
+            lastSampleTimeMs = SystemClock.uptimeMillis()
+            pendingSample = true
+            sampleTrigger++
+        }
+    }
+
+    LaunchedEffect(sampleSeq) {
+        if (sampleSeq == 0 || !backdropActive || sampleLayer.isReleased) return@LaunchedEffect
+        val img = try {
+            sampleLayer.toImageBitmap()
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (_: Throwable) {
+            null
+        } ?: return@LaunchedEffect
+
+        val avgLum = withContext(Dispatchers.Default) {
+            val src = img.asAndroidBitmap()
+            val swBitmap = if (
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && src.config == Bitmap.Config.HARDWARE) ||
+                src.config != Bitmap.Config.ARGB_8888
+            ) {
+                src.copy(Bitmap.Config.ARGB_8888, false)
+            } else {
+                src
+            } ?: return@withContext null
+
+            try {
+                val w = swBitmap.width
+                val h = swBitmap.height
+                if (w <= 0 || h <= 0) return@withContext null
+                val pixels = IntArray(w * h)
+                swBitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+                var sum = 0f
+                var count = 0
+                for (px in pixels) {
+                    val aInt = (px ushr 24) and 0xFF
+                    if (aInt > 8) {
+                        val a = aInt / 255f
+                        val r = ((px ushr 16) and 0xFF) / 255f
+                        val g = ((px ushr 8) and 0xFF) / 255f
+                        val b = (px and 0xFF) / 255f
+                        val lum = 0.2126f * r + 0.7152f * g + 0.0722f * b
+                        sum += lum * a + fallbackBgLuminance * (1f - a)
+                        count++
+                    }
+                }
+                if (count == 0) null else (sum / count).coerceIn(0f, 1f)
+            } finally {
+                if (swBitmap !== src) {
+                    swBitmap.recycle()
+                }
+            }
+        }
+
+        if (avgLum != null) {
+            luminanceState.value = avgLum
+            if (!isLightState.value && avgLum > 0.56f) {
+                isLightState.value = true
+            } else if (isLightState.value && avgLum < 0.44f) {
+                isLightState.value = false
+            }
+        }
+    }
+
+    val targetColor = when {
+        !backdropActive || luminanceState.value == null -> fallbackColor
+        isLightState.value -> lightBackgroundInk
+        else -> darkBackgroundInk
+    }
+
+    val colorState = animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = motion.tween(180),
+        label = "adaptiveLiquidGlassInk"
+    )
+
+    val samplingModifier = Modifier
+        .onGloballyPositioned { if (it.isAttached) coords = it }
+        .drawWithContent {
+            drawContent()
+            val trigger = sampleTrigger
+            val c = coords
+            val layerBlocked = backdrop is LayerBackdrop &&
+                (backdrop.isRecording || !backdrop.hasRecorded || backdrop.graphicsLayer.isReleased)
+            if (trigger > 0 &&
+                pendingSample &&
+                backdropActive &&
+                !isExtremeFling &&
+                !LiquidGlassBackdropScope.isRecordingAny() &&
+                !layerBlocked &&
+                !sampleLayer.isReleased &&
+                c != null &&
+                c.isAttached &&
+                size.width > 2f &&
+                size.height > 2f
+            ) {
+                val targetW = this@drawWithContent.size.width
+                val targetH = this@drawWithContent.size.height
+                pendingSample = false
+                LiquidGlassBackdropScope.beginRecording(sampleLayer)
+                try {
+                    sampleLayer.record(IntSize(5, 5)) {
+                        scale(
+                            scaleX = 5f / targetW,
+                            scaleY = 5f / targetH,
+                            pivot = Offset.Zero
+                        ) {
+                            with(backdrop) {
+                                drawBackdrop(
+                                    density = this@drawWithContent,
+                                    coordinates = c,
+                                    layerBlock = null
+                                )
+                            }
+                        }
+                    }
+                    sampleSeq++
+                } catch (_: Throwable) {
+                } finally {
+                    LiquidGlassBackdropScope.endRecording(sampleLayer)
+                }
+            }
+        }
+
+    return remember(colorState, isLightState, luminanceState, samplingModifier) {
+        AdaptiveLiquidGlassInkState(
+            colorState = colorState,
+            isLightState = isLightState,
+            luminanceState = luminanceState,
+            samplingModifier = samplingModifier
+        )
+    }
+}
+
+@Composable
+fun AdaptiveLuminanceGlassContent(
+    backdrop: Backdrop = rememberCurrentBackdrop(),
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    lightBackgroundInk: Color = Color(0xFF141418),
+    darkBackgroundInk: Color = Color(0xFFF5F5F7),
+    content: @Composable BoxScope.(contentColor: Color, isLightBackground: Boolean) -> Unit
+) {
+    val inkState = rememberAdaptiveLiquidGlassInk(
+        backdrop = backdrop,
+        enabled = enabled,
+        lightBackgroundInk = lightBackgroundInk,
+        darkBackgroundInk = darkBackgroundInk
+    )
+    Box(modifier = modifier.then(inkState.samplingModifier)) {
+        content(inkState.color, inkState.isLightBackground)
+    }
 }

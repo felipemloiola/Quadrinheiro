@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -19,11 +20,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.ui.theme.LocalAppMotion
-import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 @Immutable
 data class AppPage(val tab: String, val settings: String?, val parent: String?, val statistics: Boolean) {
@@ -71,6 +70,11 @@ fun AppPageTransition(
     val latestOnBack by rememberUpdatedState(onBack)
     val latestPage by rememberUpdatedState(page)
     val latestBackEnabled by rememberUpdatedState(backEnabled)
+    val backSpring = motion.spring<Float>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+        visibilityThreshold = .005f
+    )
     // Register before the content: sheets and nested navigation can override this handler.
     PredictiveBackHandler(enabled = backEnabled && backPage != null && !parentIsBackPreview) { events ->
         val startedPage = page
@@ -98,7 +102,7 @@ fun AppPageTransition(
             }
             // Button/keyboard Back may not emit progress events.
             preview = target
-            backProgress.animateTo(1f, motion.spring(dampingRatio = 0.96f, stiffness = 620f))
+            backProgress.animateTo(1f, backSpring)
             if (latestPage != startedPage || !latestBackEnabled) {
                 preview = null
                 backProgress.snapTo(0f)
@@ -108,7 +112,7 @@ fun AppPageTransition(
             commitBack()
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
-                backProgress.animateTo(0f, motion.spring(dampingRatio = 0.96f, stiffness = 680f))
+                backProgress.animateTo(0f, backSpring)
                 preview = null
             }
             throw cancelled
@@ -150,7 +154,7 @@ fun AppPageTransition(
         direction = nextDirection
         progress.snapTo(0f)
         if (motion.reduced) progress.snapTo(1f)
-        else progress.animateTo(1f, motion.spring(1f, if (slide) 650f else 1200f))
+        else progress.animateTo(1f, if (slide && direction < 0f) backSpring else motion.spring(1f, if (slide) 650f else 1200f))
         outgoing = null
     }
     val orderedPages = remember(preview, outgoing, current, slide, direction) {
@@ -182,7 +186,7 @@ fun AppPageTransition(
                                     val shadowW = minOf(18.dp.toPx(), splitX)
                                     drawRect(
                                         brush = Brush.horizontalGradient(
-                                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.16f * (1f - b * 0.5f))),
+                                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.12f * (1f - b))),
                                             startX = splitX - shadowW,
                                             endX = splitX
                                         ),
@@ -192,13 +196,6 @@ fun AppPageTransition(
                                 }
                             } else {
                                 drawContent()
-                                if (b > 0.005f && b < 0.995f) {
-                                    drawRect(
-                                        color = Color.White.copy(alpha = 0.08f * (1f - b)),
-                                        topLeft = Offset(splitX, 0f),
-                                        size = Size(1.dp.toPx(), size.height)
-                                    )
-                                }
                             }
                         } else if (outgoing != null && slide) {
                             val splitX = if (direction >= 0f) {
@@ -231,22 +228,22 @@ fun AppPageTransition(
                             translationX = if (destination == current) {
                                 size.width * b
                             } else {
-                                -size.width * 0.24f * (1f - b)
+                                -size.width * 0.18f * (1f - b)
                             }
-                            alpha = if (destination == current) 1f else (0.86f + 0.14f * b).coerceIn(0f, 1f)
+                            alpha = 1f
                         } else if (outgoing != null && slide) {
                             if (direction >= 0f) {
                                 if (destination == current) {
                                     translationX = size.width * (1f - p)
                                     alpha = 1f
                                 } else {
-                                    translationX = -size.width * 0.24f * p
-                                    alpha = (1f - 0.14f * p).coerceIn(0f, 1f)
+                                    translationX = -size.width * 0.18f * p
+                                    alpha = 1f
                                 }
                             } else {
                                 if (destination == current) {
-                                    translationX = -size.width * 0.24f * (1f - p)
-                                    alpha = (0.86f + 0.14f * p).coerceIn(0f, 1f)
+                                    translationX = -size.width * 0.18f * (1f - p)
+                                    alpha = 1f
                                 } else {
                                     translationX = size.width * p
                                     alpha = 1f

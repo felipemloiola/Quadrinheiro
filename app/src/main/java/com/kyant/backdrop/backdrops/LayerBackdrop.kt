@@ -41,6 +41,7 @@ class LayerBackdrop internal constructor(
     // SINGLE_PASS_BACKDROP_SOURCE_V16: custom capture callbacks retain legacy semantics.
     internal val recordsUnmodifiedContent: Boolean get() = onDraw === DefaultOnDraw
     internal var isRecording: Boolean = false
+    internal var hasRecorded: Boolean by mutableStateOf(false)
 
     override val isCoordinatesDependent: Boolean = true
 

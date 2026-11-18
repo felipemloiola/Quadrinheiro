@@ -182,6 +182,7 @@ private class DrawBackdropElement(
         node.layerBlock = layerBlock
         if (node.exportedBackdrop != exportedBackdrop) {
             node.exportedBackdrop?.layerCoordinates = null
+            node.exportedBackdrop?.hasRecorded = false
             node.exportedBackdrop = exportedBackdrop
         }
         node.onDrawBehind = onDrawBehind
@@ -286,6 +287,17 @@ private class DrawBackdropNode(
         }
     }
 
+    private val drawRecordedBackdropLayer: DrawScope.() -> Unit = {
+        val layer = graphicsLayer
+        if (layer != null && !layer.isReleased && size.width > 0f && size.height > 0f) {
+            val padding = padding
+            layer.topLeft =
+                if (padding != 0f) IntOffset(-padding.toInt(), -padding.toInt())
+                else IntOffset.Zero
+            drawLayer(layer)
+        }
+    }
+
     private val drawBackdropLayer: DrawScope.() -> Unit = {
         val layer = graphicsLayer
         if (layer != null && !layer.isReleased && size.width > 0f && size.height > 0f) {
@@ -300,10 +312,7 @@ private class DrawBackdropNode(
                 block = recordBackdropBlock
             )
 
-            layer.topLeft =
-                if (padding != 0f) IntOffset(-padding.toInt(), -padding.toInt())
-                else IntOffset.Zero
-            drawLayer(layer)
+            drawRecordedBackdropLayer()
         }
     }
 
@@ -334,13 +343,23 @@ private class DrawBackdropNode(
         onDrawFront?.invoke(this)
 
         if (effectsReady) {
-            exportedBackdrop?.graphicsLayer?.let { layer ->
-                if (layer.isReleased) return@let
-                recordLayer(layer) {
-                    onDrawBehind?.invoke(this)
-                    drawBackdropLayer()
-                    onDrawSurface?.invoke(this)
-                    onDrawFront?.invoke(this)
+            exportedBackdrop?.let { target ->
+                val layer = target.graphicsLayer
+                if (layer.isReleased || target.isRecording || layer === graphicsLayer) return@let
+                target.isRecording = true
+                com.example.ui.components.LiquidGlassBackdropScope.beginRecording(layer)
+                try {
+                    recordLayer(layer) {
+                        onDrawBehind?.invoke(this)
+                        drawRecordedBackdropLayer()
+                        onDrawSurface?.invoke(this)
+                        onDrawFront?.invoke(this)
+                    }
+                    target.hasRecorded = true
+                } catch (_: Throwable) {
+                } finally {
+                    com.example.ui.components.LiquidGlassBackdropScope.endRecording(layer)
+                    target.isRecording = false
                 }
             }
         }
@@ -396,5 +415,6 @@ private class DrawBackdropNode(
         effectScope.reset()
         layoutCoordinates = null
         exportedBackdrop?.layerCoordinates = null
+        exportedBackdrop?.hasRecorded = false
     }
 }

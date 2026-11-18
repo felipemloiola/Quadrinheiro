@@ -215,23 +215,18 @@ fun CatalogSheetModal(
         com.example.ui.screens.ComicDetailDialog(currentSnapshot, readerProfile, allUserComics,
             onClose = { fullPage = false },
             onRegister = { next ->
-                fullPage = false
-                if (onRegisterFromPage != null) {
-                    onRegisterFromPage(next)
-                } else {
-                    draftComic = next
-                    draftTitle = next.title
-                    draftAuthors = next.authors
-                    draftStatus = next.status
-                    draftCurrentPage = next.currentPage
-                    draftRating = next.rating
-                    draftFavorite = next.favorite
-                    draftReview = next.review
-                    draftReadDate = next.readDate
-                    draftRereadCount = next.rereadCount
-                    draftTags = next.tags
-                    draftMoments = next.moments
-                }
+                draftComic = next
+                draftTitle = next.title
+                draftAuthors = next.authors
+                draftStatus = next.status
+                draftCurrentPage = next.currentPage
+                draftRating = next.rating
+                draftFavorite = next.favorite
+                draftReview = next.review
+                draftReadDate = next.readDate
+                draftRereadCount = next.rereadCount
+                draftTags = next.tags
+                draftMoments = next.moments
             },
             onCover = { draftComic = draftComic.copy(coverUrl = it) }, onLogin = onLogin,
             onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) },
@@ -367,14 +362,15 @@ fun CatalogSheetModal(
     }
     val isSheetScrollingOrMoving = sheetScrollState.isScrollInProgress || sheet.isMoving
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
-            .imePadding()
-            .clickable { sheet.dismiss() },
-        contentAlignment = Alignment.BottomCenter
-    ) {
+    if (!fullPage) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
+                .imePadding()
+                .clickable { sheet.dismiss() },
+            contentAlignment = Alignment.BottomCenter
+        ) {
         Box(
             modifier = Modifier
                 .graphicsLayer {
@@ -796,6 +792,7 @@ fun CatalogSheetModal(
             }
         }
     }
+}
 }
 
 /**

@@ -173,7 +173,6 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CommunityComments(
     repo: CommunityRepository,
@@ -227,10 +226,10 @@ private fun CommunityComments(
         }
     }
     LaunchedEffect(post.id) { load(true) }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).imePadding().padding(20.dp),
+    CurationSheet("Comentários", onClose, glass = true) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            SectionHeading("Comentários", post.title)
+            Text(post.title, style = MaterialTheme.typography.titleSmall, color = t.textSecondary)
             key(uid, post.id) {
                 CommunityCommentComposer(enabled = !loading, onRefresh = { load(true) }) { text ->
                     if (repo.currentUid() != null) {
@@ -246,7 +245,7 @@ private fun CommunityComments(
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(comment.author, color = t.textSecondary, fontSize = 13.sp)
                         Text(comment.body, color = t.textPrimary)
-                        if (comment.ownerId == uid || post.ownerId == uid) TextButton(onClick = {
+                        if (comment.ownerId == uid || post.ownerId == uid) CurationGlassAction("Excluir", onClick = {
                             scope.launch {
                                 try {
                                     deleteFailed = false
@@ -266,7 +265,7 @@ private fun CommunityComments(
                                     deleteFailed = true
                                 }
                             }
-                        }) { Text("Excluir", color = t.textSecondary) }
+                        })
                         HorizontalDivider(color = t.divider)
                     }
                 }
@@ -275,8 +274,8 @@ private fun CommunityComments(
                     if (loading) LoadingSpinner(Modifier.size(24.dp), color = t.accent)
                     else if (commentLoadFailure != null) {
                         Text("Não foi possível carregar os comentários.", color = t.textSecondary)
-                        TextButton(onClick = { load(commentLoadFailure ?: false) }) { Text("Tentar novamente", color = t.accent) }
-                    } else if (more) TextButton(onClick = { load() }) { Text("Carregar comentários", color = t.accent) }
+                        LiquidGlassPillButton("Tentar novamente", onClick = { load(commentLoadFailure ?: false) })
+                    } else if (more) LiquidGlassPillButton("Carregar comentários", onClick = { load() })
                     else if (comments.isEmpty()) Text("Ainda não há comentários.", color = t.textSecondary)
                 }
             }
@@ -297,32 +296,35 @@ internal fun CommunityCommentComposer(enabled: Boolean, onRefresh: () -> Unit, o
             sendError = null
         }, "Adicione um comentário", usePlaceholderAsLabel = true)
         sendError?.let { Text(it, color = theme.textSecondary) }
-        TextButton(enabled = enabled && body.isNotBlank() && !sending, onClick = {
-            val submittedBody = body
-            sending = true
-            sendError = null
-            scope.launch {
-                try {
-                    onSend(submittedBody.trim())
-                    if (body == submittedBody) body = ""
-                    onRefresh()
-                } catch (_: TimeoutCancellationException) {
-                    sendError = "O envio não foi confirmado. Confira os comentários antes de tentar novamente."
-                    onRefresh()
-                } catch (cancel: CancellationException) {
-                    throw cancel
-                } catch (_: Exception) {
-                    sendError = "Não foi possível enviar. Seu texto foi mantido."
-                } finally {
-                    sending = false
-                }
-            }
-        }) {
-            Text(when {
+        LiquidGlassPillButton(
+            label = when {
                 sending -> "Enviando…"
                 sendError != null -> "Tentar enviar novamente"
                 else -> "Enviar"
-            }, color = theme.accent)
-        }
+            },
+            prominent = true,
+            enabled = enabled && body.isNotBlank() && !sending,
+            onClick = {
+                val submittedBody = body
+                sending = true
+                sendError = null
+                scope.launch {
+                    try {
+                        onSend(submittedBody.trim())
+                        if (body == submittedBody) body = ""
+                        onRefresh()
+                    } catch (_: TimeoutCancellationException) {
+                        sendError = "O envio não foi confirmado. Confira os comentários antes de tentar novamente."
+                        onRefresh()
+                    } catch (cancel: CancellationException) {
+                        throw cancel
+                    } catch (_: Exception) {
+                        sendError = "Não foi possível enviar. Seu texto foi mantido."
+                    } finally {
+                        sending = false
+                    }
+                }
+            }
+        )
     }
 }

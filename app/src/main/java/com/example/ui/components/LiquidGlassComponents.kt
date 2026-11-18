@@ -81,6 +81,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -110,9 +114,12 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.highlight.highlight
 import com.kyant.backdrop.shadow.Shadow
@@ -195,6 +202,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.util.lerp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -374,7 +382,10 @@ fun Modifier.liquidGlass(
         backdrop = backdrop,
         shape = { shape },
         highlight = {
-            Highlight.Default.copy(alpha = if (isLight) 0.82f else 0.64f)
+            adaptiveGlassHighlight(
+                isLight = isLight,
+                alpha = if (isLight) 0.82f else 0.64f
+            )
         },
         shadow = if (elevation > 0.dp) {
             {
@@ -394,9 +405,11 @@ fun Modifier.liquidGlass(
             )
         },
         effects = {
-            if (!settings.reduceTransparency) {
-                vibrancy()
-            }
+            appleGlassColorControls(
+                isLight = isLight,
+                isFrosted = settings.glassVariant == "frosted",
+                reduceTransparency = settings.reduceTransparency
+            )
             val blurPx = if (settings.reduceTransparency) {
                 24f.dp.toPx()
             } else {
@@ -581,6 +594,7 @@ fun Modifier.liquidGlassRegistrationSheet(
     edgeHighlight: Boolean = true
 ): Modifier {
     val mat = LocalAppleMaterials.current
+    val settings = com.example.ui.theme.LocalAppSettings.current
     val s = mat.scheme
     val isLight = s.isLight
     val sheetShape = remember(cornerRadiusDp) { RoundedRectangle(cornerRadiusDp.dp) }
@@ -590,23 +604,30 @@ fun Modifier.liquidGlassRegistrationSheet(
         .drawBackdrop(
             backdrop = backdrop,
             shape = { sheetShape },
-            highlight = { if (edgeHighlight) Highlight.Default else null },
+            highlight = { if (edgeHighlight) adaptiveGlassHighlight(isLight = isLight) else null },
             effects = {
-                vibrancy()
+                appleGlassColorControls(
+                    isLight = isLight,
+                    isFrosted = settings.glassVariant == "frosted",
+                    reduceTransparency = settings.reduceTransparency
+                )
                 with(density) {
                     val blurPx = 16f.dp.toPx()
-                    val rHeight = 12f.dp.toPx()
-                    val rAmount = 22f.dp.toPx()
-                    if (blurPx >= 1f) {
+                    if (blurPx >= 1f && !blurPx.isNaN()) {
                         blur(blurPx)
                     }
-                    if (rHeight >= 1f && rAmount >= 1f) {
-                        lens(
-                            refractionHeight = rHeight,
-                            refractionAmount = rAmount,
-                            depthEffect = true,
-                            chromaticAberration = mat.edgeRefraction
-                        )
+                    if (size.isSpecified && size.width > 4f && size.height > 4f) {
+                        val maxAllowedHeight = min(size.width, size.height) * 0.46f
+                        val rHeight = 12f.dp.toPx().coerceAtMost(maxAllowedHeight)
+                        val rAmount = 22f.dp.toPx()
+                        if (rHeight >= 1f && rAmount >= 1f) {
+                            lens(
+                                refractionHeight = rHeight,
+                                refractionAmount = rAmount,
+                                depthEffect = true,
+                                chromaticAberration = mat.edgeRefraction
+                            )
+                        }
                     }
                 }
             },
@@ -1892,11 +1913,14 @@ fun <T> AppleMenuPicker(
     val settings = com.example.ui.theme.LocalAppSettings.current
     val density = LocalDensity.current
     val backdrop = rememberCurrentBackdrop()
-    val menuHost = LocalLiquidGlassMenuHost.current
+    val externalMenuHost = LocalLiquidGlassMenuHost.current
+    val localFallbackHost = remember { LiquidGlassMenuHostState() }
+    val menuHost = externalMenuHost ?: localFallbackHost
     val menuId = remember { "apple_menu_${System.nanoTime()}" }
 
     var open by remember { mutableStateOf(false) }
     var anchorBounds by remember { mutableStateOf(IntRect.Zero) }
+    var popupAnchorBounds by remember { mutableStateOf(IntRect.Zero) }
     val currentOpt = options.firstOrNull { it.value == value } ?: options.first()
     val currentOnChange by rememberUpdatedState(onChange)
 
@@ -1916,7 +1940,7 @@ fun <T> AppleMenuPicker(
     }
 
     // Progresso contínuo (0f..1f) da gota do menu para cross-morph suave sem nunca piscar ou sumir o botão
-    val hostProgress = { menuHost?.progressForMenu(menuId) ?: 0f }
+    val hostProgress = { menuHost.progressForMenu(menuId) }
     fun triggerMorphAlpha() = (1f - (hostProgress() / 0.34f)).coerceIn(0f, 1f)
     fun triggerMorphScale() = lerp(1f, 0.94f, (hostProgress() / 0.45f).coerceIn(0f, 1f))
 
@@ -1935,29 +1959,29 @@ fun <T> AppleMenuPicker(
         }
     }
 
-    LaunchedEffect(open, anchorBounds, menuItems, currentOpt.label, menuHost) {
-        if (menuHost != null) {
-            if (open && anchorBounds.width > 0 && anchorBounds.height > 0 &&
-                (menuHost.currentRequest?.id != menuId || menuHost.currentRequest?.items !== menuItems)) {
-                menuHost.showMenu(
-                    LiquidGlassMenuRequest(
-                        id = menuId,
-                        anchorBounds = anchorBounds,
-                        triggerLabel = currentOpt.label,
-                        triggerIcon = Icons.Default.UnfoldMore,
-                        items = menuItems,
-                        onDismiss = { open = false }
-                    )
+    LaunchedEffect(open, anchorBounds, popupAnchorBounds, menuItems, currentOpt.label, externalMenuHost) {
+        val effectiveBounds = if (externalMenuHost == null) popupAnchorBounds else anchorBounds
+        if (open && effectiveBounds.width > 0 && effectiveBounds.height > 0 &&
+            (menuHost.currentRequest?.id != menuId || menuHost.currentRequest?.items !== menuItems)
+        ) {
+            menuHost.showMenu(
+                LiquidGlassMenuRequest(
+                    id = menuId,
+                    anchorBounds = effectiveBounds,
+                    triggerLabel = currentOpt.label,
+                    triggerIcon = Icons.Default.UnfoldMore,
+                    items = menuItems,
+                    onDismiss = { open = false }
                 )
-            } else if (!open && menuHost.currentRequest?.id == menuId) {
-                menuHost.dismissMenu(menuId)
-            }
+            )
+        } else if (!open && menuHost.currentRequest?.id == menuId) {
+            menuHost.dismissMenu(menuId)
         }
     }
 
     androidx.compose.runtime.DisposableEffect(menuId, menuHost) {
         onDispose {
-            menuHost?.dismissMenu(menuId)
+            menuHost.dismissMenu(menuId)
         }
     }
 
@@ -1991,7 +2015,7 @@ fun <T> AppleMenuPicker(
                 val newBounds = computeAnchorBounds()
                 if (anchorBounds != newBounds) {
                     anchorBounds = newBounds
-                    menuHost?.updateAnchorBounds(menuId, newBounds)
+                    externalMenuHost?.updateAnchorBounds(menuId, newBounds)
                 }
             }
         }
@@ -2008,7 +2032,8 @@ fun <T> AppleMenuPicker(
                     backdrop = backdrop,
                     shape = { ContinuousCapsule },
                     highlight = {
-                        Highlight.Default.copy(
+                        adaptiveGlassHighlight(
+                            isLight = isLight,
                             alpha = (if (isLight) 0.80f else 0.64f) * triggerMorphAlpha()
                         )
                     },
@@ -2026,9 +2051,11 @@ fun <T> AppleMenuPicker(
                         )
                     },
                     effects = {
-                        if (!settings.reduceTransparency) {
-                            vibrancy()
-                        }
+                        appleGlassColorControls(
+                            isLight = isLight,
+                            isFrosted = settings.glassVariant == "frosted",
+                            reduceTransparency = settings.reduceTransparency
+                        )
                         val blurPx = effectiveBlurDp.toPx()
                         if (blurPx >= 1f && !blurPx.isNaN()) {
                             blur(blurPx)
@@ -2097,11 +2124,11 @@ fun <T> AppleMenuPicker(
                         anchorBounds = computeAnchorBounds()
                     }
                     open = nextOpen
-                    if (menuHost != null) {
+                    if (externalMenuHost != null) {
                         val activeBounds = anchorBounds
                         if (nextOpen && activeBounds.width > 0 && activeBounds.height > 0) {
                             // Dispara no mesmo frame do clique para zero atraso na abertura!
-                            menuHost.showMenu(
+                            externalMenuHost.showMenu(
                                 LiquidGlassMenuRequest(
                                     id = menuId,
                                     anchorBounds = activeBounds,
@@ -2112,8 +2139,10 @@ fun <T> AppleMenuPicker(
                                 )
                             )
                         } else if (!nextOpen) {
-                            menuHost.dismissMenu(menuId)
+                            externalMenuHost.dismissMenu(menuId)
                         }
+                    } else if (!nextOpen) {
+                        localFallbackHost.dismissMenu(menuId)
                     }
                 }
                 .padding(horizontal = 13.dp, vertical = 7.dp),
@@ -2135,10 +2164,9 @@ fun <T> AppleMenuPicker(
             )
         }
 
-        // Fallback seguro caso LocalLiquidGlassMenuHost não esteja presente em um Preview isolado
-        if (open && menuHost == null) {
-            val popoverShape = remember { RoundedCornerShape(24.dp) }
-            val positionProvider = remember(density) {
+        // Self-hosted RetainedGlassMenu overlay inside a full-window transparent Popup when no ancestor host exists.
+        if (externalMenuHost == null && (open || localFallbackHost.currentRequest != null || localFallbackHost.morphingMenuId != null)) {
+            val fullWindowProvider = remember {
                 object : PopupPositionProvider {
                     override fun calculatePosition(
                         anchorBounds: IntRect,
@@ -2146,88 +2174,40 @@ fun <T> AppleMenuPicker(
                         layoutDirection: LayoutDirection,
                         popupContentSize: IntSize
                     ): IntOffset {
-                        val marginPx = with(density) { 8.dp.roundToPx() }
-                        val minEdgeMargin = with(density) { 12.dp.roundToPx() }
-                        val targetX = anchorBounds.right - popupContentSize.width
-                        val maxX = (windowSize.width - popupContentSize.width - minEdgeMargin).coerceAtLeast(minEdgeMargin)
-                        val x = targetX.coerceIn(minEdgeMargin, maxX)
-                        val y = anchorBounds.bottom + marginPx
-                        return IntOffset(x, y)
+                        if (popupAnchorBounds != anchorBounds) {
+                            popupAnchorBounds = anchorBounds
+                            localFallbackHost.updateAnchorBounds(menuId, anchorBounds)
+                        }
+                        return IntOffset.Zero
                     }
                 }
             }
-
+            val fallbackBackdrop = rememberCanvasBackdrop {
+                val wash = if (isLight) Color.White.copy(alpha = 0.14f) else Color(0xFF1E1E26).copy(alpha = 0.24f)
+                drawRect(wash)
+                drawRect(
+                    Brush.verticalGradient(
+                        listOf(
+                            s.accentColor.copy(alpha = if (isLight) 0.05f else 0.08f),
+                            Color.Transparent
+                        )
+                    )
+                )
+            }
             Popup(
-                popupPositionProvider = positionProvider,
-                onDismissRequest = { open = false },
-                properties = PopupProperties(focusable = true)
+                popupPositionProvider = fullWindowProvider,
+                onDismissRequest = {
+                    open = false
+                    localFallbackHost.dismissMenu(menuId)
+                },
+                properties = PopupProperties(focusable = true, clippingEnabled = false)
             ) {
-                Box(
-                    modifier = Modifier
-                        .shadow(
-                            shape = { popoverShape },
-                            shadow = {
-                                Shadow(
-                                    radius = 22.dp,
-                                    offset = DpOffset(0.dp, 8.dp),
-                                    color = Color.Black.copy(alpha = if (isLight) 0.18f else 0.40f)
-                                )
-                            }
-                        )
-                        .highlight(
-                            shape = { popoverShape },
-                            highlight = { Highlight.Default }
-                        )
-                        .clip(popoverShape)
-                        .background(baseSurfaceColor)
-                        .width(238.dp)
-                        .padding(vertical = 6.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        options.forEach { opt ->
-                            val active = opt.value == value
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        onChange(opt.value)
-                                        open = false
-                                    }
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.width(18.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (active) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = activeAccent,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = opt.label,
-                                    fontSize = 13.5.sp,
-                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                                    color = if (active) activeAccent else s.textPrimary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (opt.icon != null) {
-                                    Icon(
-                                        imageVector = opt.icon,
-                                        contentDescription = null,
-                                        tint = if (active) activeAccent else s.textSecondary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                Box(Modifier.fillMaxSize()) {
+                    LiquidGlassMenuOverlayHost(
+                        state = localFallbackHost,
+                        backdrop = fallbackBackdrop,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -2245,17 +2225,24 @@ fun AppleTextField(
     leadingIcon: ImageVector? = null,
     useContentMaterial: Boolean = false,
     modifier: Modifier = Modifier,
-    usePlaceholderAsLabel: Boolean = false
+    usePlaceholderAsLabel: Boolean = false,
+    capsuleSearch: Boolean = false
 ) {
     val mat = LocalAppleMaterials.current
+    val theme = LocalIOS27Theme.current
+    val opaque = com.example.ui.theme.LocalAppSettings.current.reduceTransparency
     var focused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(12.dp)
+    val shape = if (capsuleSearch) com.kyant.shapes.ContinuousCapsule else RoundedCornerShape(12.dp)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (useContentMaterial) Modifier.contentMaterialSurface(shape = shape, elevation = 4.dp)
+                if (capsuleSearch) Modifier.background(
+                    if (opaque) theme.bgSecondary else theme.textPrimary.copy(alpha = .09f),
+                    shape
+                )
+                else if (useContentMaterial) Modifier.contentMaterialSurface(shape = shape, elevation = 4.dp)
                 else Modifier.inputWellSurface(shape = shape)
             )
             .then(
@@ -2267,9 +2254,10 @@ fun AppleTextField(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (leadingIcon != null) {
+        val fieldIcon = if (capsuleSearch) LucideIcons.Search else leadingIcon
+        if (fieldIcon != null) {
             Icon(
-                imageVector = leadingIcon,
+                imageVector = fieldIcon,
                 contentDescription = null,
                 tint = if (focused) mat.scheme.accentColor else mat.scheme.textSecondary,
                 modifier = Modifier.size(16.dp)
@@ -2282,7 +2270,7 @@ fun AppleTextField(
                     text = placeholder,
                     modifier = if (usePlaceholderAsLabel) Modifier.clearAndSetSemantics {} else Modifier,
                     fontSize = 13.sp,
-                    color = mat.scheme.textTertiary,
+                    color = if (capsuleSearch) mat.scheme.textSecondary else mat.scheme.textTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2292,8 +2280,8 @@ fun AppleTextField(
                 onValueChange = onChange,
                 singleLine = true,
                 textStyle = TextStyle(
-                    fontFamily = PlusJakartaSansFamily,
-                    fontSize = 13.5.sp,
+                    fontFamily = if (capsuleSearch) androidx.compose.ui.text.font.FontFamily.SansSerif else PlusJakartaSansFamily,
+                    fontSize = if (capsuleSearch) 15.sp else 13.5.sp,
                     fontWeight = FontWeight.Medium,
                     color = mat.scheme.textPrimary
                 ),
@@ -2302,7 +2290,7 @@ fun AppleTextField(
                     .fillMaxWidth()
                     .padding(vertical = 10.dp)
                     .onFocusChanged { focused = it.isFocused }
-                    .then(if (usePlaceholderAsLabel) Modifier.semantics { contentDescription = placeholder } else Modifier)
+                    .then(if (usePlaceholderAsLabel || capsuleSearch) Modifier.semantics { contentDescription = placeholder } else Modifier)
             )
         }
 
@@ -2311,7 +2299,7 @@ fun AppleTextField(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .clickable { onChange("") }
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button) { onChange("") }
                     .padding(end = 12.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
@@ -2734,5 +2722,333 @@ fun AppleCapsuleButton(
             color = if (prominent) s.accentText else s.textPrimary,
             maxLines = 1
         )
+    }
+}
+
+/**
+ * Container de diálogo Apple Liquid Glass (`DialogContent` do Kyant0/AndroidLiquidGlass):
+ * - Cantos contínuos G2 (`ContinuousRoundedRectangle(cornerRadius)`)
+ * - Pipeline `appleGlassColorControls` -> `blur(Clamp)` -> `lens` + `Highlight.Plain`
+ * - Material Regular legível para texto de alerta (`0.78f`–`0.80f`, ou `0.96f` em `reduceTransparency`).
+ */
+@Composable
+fun LiquidGlassDialogContent(
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 32.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val theme = LocalIOS27Theme.current
+    val settings = com.example.ui.theme.LocalAppSettings.current
+    val motion = com.example.ui.theme.LocalAppMotion.current
+    val isLight = !LocalIsDarkTheme.current
+    val dialogShape = remember(cornerRadius) { ContinuousRoundedRectangle(cornerRadius) }
+    val surfaceColor = when {
+        settings.reduceTransparency -> theme.bgSecondary.copy(alpha = 0.96f)
+        isLight -> Color.White.copy(alpha = 0.78f)
+        else -> Color(0xFF18181E).copy(alpha = 0.80f)
+    }
+
+    Column(
+        modifier = modifier
+            .then(
+                if (settings.reduceTransparency) {
+                    Modifier
+                        .clip(dialogShape)
+                        .background(surfaceColor, dialogShape)
+                } else {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { dialogShape },
+                        highlight = {
+                            com.kyant.backdrop.highlight.Highlight(
+                                width = 0.75.dp,
+                                alpha = if (isLight) 0.55f else 0.42f,
+                                style = com.kyant.backdrop.highlight.HighlightStyle.Plain(
+                                    color = if (isLight) Color.Black.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.36f),
+                                    blendMode = if (isLight) BlendMode.SrcOver else BlendMode.Plus
+                                )
+                            )
+                        },
+                        shadow = {
+                            Shadow(
+                                radius = 28.dp,
+                                offset = DpOffset(0.dp, 12.dp),
+                                color = Color.Black.copy(alpha = if (isLight) 0.18f else 0.40f)
+                            )
+                        },
+                        innerShadow = {
+                            InnerShadow(
+                                radius = 6.dp,
+                                alpha = if (isLight) 0.12f else 0.22f
+                            )
+                        },
+                        effects = {
+                            appleGlassColorControls(
+                                isLight = isLight,
+                                isFrosted = settings.glassVariant == "frosted",
+                                reduceTransparency = settings.reduceTransparency
+                            )
+                            val blurPx = (14f * settings.glassBlurIntensity).coerceIn(8f, 24f).dp.toPx()
+                            if (blurPx >= 1f && !blurPx.isNaN()) {
+                                blur(blurPx, androidx.compose.ui.graphics.TileMode.Clamp)
+                            }
+                            if (settings.enableLensRefraction &&
+                                !motion.reduced &&
+                                size.isSpecified &&
+                                size.width > 4f &&
+                                size.height > 4f
+                            ) {
+                                val maxH = min(size.width, size.height) * 0.40f
+                                val rHeight = 16.dp.toPx().coerceAtMost(maxH)
+                                val rAmount = 28.dp.toPx()
+                                if (rHeight >= 1f && rAmount >= 1f) {
+                                    lens(
+                                        refractionHeight = rHeight,
+                                        refractionAmount = rAmount,
+                                        depthEffect = true,
+                                        chromaticAberration = settings.enableChromaticAberration
+                                    )
+                                }
+                            }
+                        },
+                        onDrawSurface = {
+                            drawRect(surfaceColor)
+                        }
+                    )
+                }
+            )
+            .padding(24.dp),
+        content = content
+    )
+}
+
+/**
+ * Botão de ação padrão HIG para [LiquidGlassDialog] (pílula `>= 44.dp`, destaque ou destrutivo vermelho iOS).
+ */
+@Composable
+fun LiquidGlassDialogAction(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false,
+    destructive: Boolean = false,
+    enabled: Boolean = true
+) {
+    val theme = LocalIOS27Theme.current
+    val isLight = !LocalIsDarkTheme.current
+    val destructiveRed = if (isLight) Color(0xFFFF3B30) else Color(0xFFFF453A)
+    val baseFill = when {
+        destructive -> destructiveRed.copy(alpha = 0.94f)
+        prominent -> theme.accent.copy(alpha = 0.94f)
+        isLight -> Color.Black.copy(alpha = 0.06f)
+        else -> Color.White.copy(alpha = 0.12f)
+    }
+    val fillColor = baseFill.copy(alpha = baseFill.alpha * (if (enabled) 1f else 0.45f))
+
+    val textColor = when {
+        destructive -> Color.White
+        prominent -> if (theme.accent.luminance() > 0.58f) Color(0xFF141418) else Color.White
+        else -> theme.textPrimary
+    }.copy(alpha = if (enabled) 1f else 0.50f)
+
+    Box(
+        modifier = modifier
+            .defaultMinSize(minWidth = 88.dp, minHeight = 44.dp)
+            .clip(ContinuousCapsule)
+            .background(fillColor, ContinuousCapsule)
+            .clickable(
+                enabled = enabled,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onClick
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = if (prominent || destructive) FontWeight.SemiBold else FontWeight.Medium,
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * Drop-in Apple Liquid Glass Dialog (`alerts.md` + `DialogContent` pattern):
+ * - Usa `rememberCanvasBackdrop` atmosférico em janelas `Dialog` separadas (já que `LayerBackdrop`
+ *   ignora raízes de janela distintas) e respeita `LocalDensity`, `ReduceTransparency` e `ReduceMotion`.
+ * - Ordem HIG de botões: cancelar à esquerda e confirmar à direita (ou empilhados em `fontScale > 1.25f`).
+ */
+@Composable
+fun LiquidGlassDialog(
+    onDismissRequest: () -> Unit,
+    title: @Composable () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+    backdrop: Backdrop? = LocalLiquidGlassBackdrop.current,
+    cornerRadius: Dp = 32.dp,
+    dismissOnBackPress: Boolean = true,
+    dismissOnClickOutside: Boolean = true,
+    content: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    val parentDensity = LocalDensity.current
+    val theme = LocalIOS27Theme.current
+    val isLight = !LocalIsDarkTheme.current
+    val motion = com.example.ui.theme.LocalAppMotion.current
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = dismissOnBackPress,
+            dismissOnClickOutside = dismissOnClickOutside
+        )
+    ) {
+        CompositionLocalProvider(LocalDensity provides parentDensity) {
+            FullScreenDialogWindow(lightStatusBar = isLight)
+            var appeared by remember { mutableStateOf(motion.reduced) }
+            LaunchedEffect(Unit) { appeared = true }
+            val progress by animateFloatAsState(
+                targetValue = if (appeared) 1f else 0f,
+                animationSpec = if (motion.reduced) motion.tween(0) else motion.spring(dampingRatio = 0.86f, stiffness = 520f),
+                label = "liquidGlassDialogEnter"
+            )
+            val ambientBackdrop = rememberCanvasBackdrop {
+                val topColor = if (isLight) theme.bgPrimary else theme.bgSecondary
+                val bottomColor = if (isLight) theme.bgSecondary else theme.bgPrimary
+                drawRect(Brush.verticalGradient(listOf(topColor, bottomColor)))
+                drawCircle(
+                    color = theme.accent.copy(alpha = if (isLight) 0.14f else 0.18f),
+                    radius = size.maxDimension * 0.55f,
+                    center = Offset(size.width * 0.28f, size.height * 0.22f)
+                )
+                drawCircle(
+                    color = theme.accentSecondary.copy(alpha = if (isLight) 0.10f else 0.14f),
+                    radius = size.maxDimension * 0.45f,
+                    center = Offset(size.width * 0.78f, size.height * 0.78f)
+                )
+            }
+            val effectiveBackdrop = if (backdrop == null || backdrop === emptyBackdrop() || backdrop.isCoordinatesDependent) {
+                ambientBackdrop
+            } else {
+                backdrop
+            }
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = (if (isLight) 0.28f else 0.44f) * progress))
+                        .then(
+                            if (dismissOnClickOutside) {
+                                Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onDismissRequest
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LiquidGlassDialogContent(
+                        backdrop = effectiveBackdrop,
+                        cornerRadius = cornerRadius,
+                        modifier = modifier
+                            .padding(horizontal = 24.dp)
+                            .widthIn(min = 280.dp, max = 420.dp)
+                            .graphicsLayer {
+                                val s = lerp(0.92f, 1f, progress)
+                                scaleX = s
+                                scaleY = s
+                                alpha = progress.coerceIn(0f, 1f)
+                            }
+                            .pointerInput(Unit) {
+                                detectTapGestures { }
+                            }
+                    ) {
+                    if (icon != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.runtime.CompositionLocalProvider(
+                                androidx.compose.material3.LocalContentColor provides theme.accent
+                            ) {
+                                icon()
+                            }
+                        }
+                    }
+                    androidx.compose.material3.ProvideTextStyle(
+                        value = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(
+                            color = theme.textPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            title()
+                        }
+                    }
+                    if (text != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.material3.ProvideTextStyle(
+                            value = androidx.compose.material3.MaterialTheme.typography.bodyMedium.copy(
+                                color = theme.textSecondary,
+                                fontSize = 14.5.sp
+                            )
+                        ) {
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                text()
+                            }
+                        }
+                    }
+                    if (content != null) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        content()
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    if (parentDensity.fontScale > 1.25f && dismissButton != null) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            confirmButton()
+                            dismissButton()
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            dismissButton?.invoke()
+                            confirmButton()
+                        }
+                    }
+                    }
+                }
+            }
+        }
     }
 }

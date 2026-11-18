@@ -187,7 +187,8 @@ internal fun LiquidGlassPillButton(
                         backdrop = backdrop,
                         shape = { ContinuousCapsule },
                         highlight = {
-                            Highlight.Default.copy(
+                            adaptiveGlassHighlight(
+                                isLight = !isDark,
                                 alpha = if (prominent) 0.38f else if (!isDark) 0.84f else 0.68f
                             )
                         },
@@ -205,7 +206,11 @@ internal fun LiquidGlassPillButton(
                             )
                         },
                         effects = {
-                            vibrancy()
+                            appleGlassColorControls(
+                                isLight = !isDark,
+                                isFrosted = settings.glassVariant == "frosted",
+                                reduceTransparency = settings.reduceTransparency
+                            )
                             val blurPx = ((5.5f * settings.glassBlurIntensity).coerceIn(2.5f, 16f)).dp.toPx()
                             if (blurPx >= 1f && !blurPx.isNaN()) {
                                 blur(blurPx)
@@ -309,7 +314,8 @@ internal fun LiquidMorphingIconButton(
     enabled: Boolean = true,
     slotIndex: Int = 1,
     menuId: String? = null,
-    iconRotationWhenMenuOpen: Float = 90f,
+    iconRotationWhenMenuOpen: Float = 0f,
+    adaptiveLuminance: Boolean = false,
     onAnchorBoundsChanged: ((IntRect) -> Unit)? = null
 ) {
     val backdrop = rememberCurrentBackdrop()
@@ -355,6 +361,15 @@ internal fun LiquidMorphingIconButton(
     fun morphScale() = lerp(1f, 0.86f, (hostProgress() / 0.45f).coerceIn(0f, 1f))
 
     val opaqueFallback = settings.reduceTransparency
+    val adaptiveInk = rememberAdaptiveLiquidGlassInk(
+        backdrop = backdrop,
+        enabled = adaptiveLuminance && !opaqueFallback,
+        fallbackColor = theme.textPrimary,
+        fallbackIsLightBackground = !isDark
+    )
+    val resolvedTint = (if (adaptiveLuminance) adaptiveInk.color else theme.textPrimary)
+        .copy(alpha = if (enabled) 1f else 0.42f)
+
     val glassAlpha = ((if (!isDark) 0.54f else 0.40f) * settings.glassOpacity).coerceIn(0.24f, 0.85f)
     val surfaceFill = if (opaqueFallback) {
         if (!isDark) Color(0xFFF2F2F7).copy(alpha = 0.94f) else Color(0xFF1C1C22).copy(alpha = 0.94f)
@@ -366,107 +381,8 @@ internal fun LiquidMorphingIconButton(
 
     Box(
         modifier = modifier
-            .size(size)
-            .onGloballyPositioned { coords ->
-                coordsRef = coords
-                if (onAnchorBoundsChanged != null && coords.isAttached) {
-                    val p = coords.positionInRoot()
-                    val sz = coords.size
-                    onAnchorBoundsChanged(
-                        IntRect(
-                            left = p.x.roundToInt(),
-                            top = p.y.roundToInt(),
-                            right = (p.x + sz.width).roundToInt(),
-                            bottom = (p.y + sz.height).roundToInt()
-                        )
-                    )
-                }
-            }
-            .graphicsLayer {
-                alpha = morphAlpha()
-            }
-            .then(
-                if (opaqueFallback) {
-                    Modifier
-                        .graphicsLayer {
-                            val s = lerp(1f, 1.08f, pressProgress) * morphScale()
-                            scaleX = s
-                            scaleY = s
-                        }
-                        .clip(ContinuousCapsule)
-                        .background(surfaceFill, ContinuousCapsule)
-                } else {
-                    Modifier.drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { ContinuousCapsule },
-                        highlight = {
-                            Highlight.Default.copy(
-                                alpha = (if (!isDark) 0.84f else 0.68f) * morphAlpha()
-                            )
-                        },
-                        shadow = {
-                            Shadow(
-                                radius = 10.dp,
-                                offset = DpOffset(0.dp, 3.dp),
-                                color = Color.Black.copy(alpha = (if (!isDark) 0.14f else 0.32f) * morphAlpha())
-                            )
-                        },
-                        innerShadow = {
-                            InnerShadow(
-                                radius = 4.5.dp,
-                                alpha = lerp(if (!isDark) 0.16f else 0.28f, 0.42f, pressProgress) * morphAlpha()
-                            )
-                        },
-                        effects = {
-                            vibrancy()
-                            val blurPx = ((5.5f * settings.glassBlurIntensity).coerceIn(2.5f, 16f)).dp.toPx()
-                            if (blurPx >= 1f && !blurPx.isNaN()) {
-                                blur(blurPx)
-                            }
-                            if (mat.edgeRefraction && settings.enableLensRefraction && this.size.isSpecified && this.size.width > 4f && this.size.height > 4f) {
-                                val mult = settings.glassIntensity.coerceIn(0.5f, 2.2f) * (1f + 0.28f * pressProgress)
-                                val maxH = min(this.size.width, this.size.height) * 0.46f
-                                val rHeight = ((14f * mult).dp.toPx()).coerceAtMost(maxH)
-                                val rAmount = (28f * mult).dp.toPx()
-                                if (rHeight >= 1f && rAmount >= 1f) {
-                                    lens(
-                                        refractionHeight = rHeight,
-                                        refractionAmount = rAmount,
-                                        depthEffect = true,
-                                        chromaticAberration = settings.enableChromaticAberration
-                                    )
-                                }
-                            }
-                        },
-                        layerBlock = if (!motion.reduced) {
-                            {
-                                if (this.size.isSpecified && this.size.width > 0f && this.size.height > 0f) {
-                                    val swell = lerp(1f, 1.13f, pressProgress) * morphScale()
-                                    val maxOffset = this.size.minDimension
-                                    val offset = interactiveHighlight.offset
-                                    val symNudge = if (coordinator != null && coordinator.activeIndex >= 0 && coordinator.activeIndex != slotIndex) {
-                                        val dir = if (slotIndex > coordinator.activeIndex) 1f else -1f
-                                        dir * 2.dp.toPx() * coordinator.activePressProgress
-                                    } else 0f
-
-                                    translationX = maxOffset * tanh(0.065f * offset.x / maxOffset) + symNudge
-                                    translationY = maxOffset * tanh(0.065f * offset.y / maxOffset)
-
-                                    val maxDragScale = 6.5f.dp.toPx() / this.size.height
-                                    val angle = atan2(offset.y, offset.x)
-                                    val stretchX = maxDragScale * abs(cos(angle) * offset.x / this.size.maxDimension)
-                                    val stretchY = maxDragScale * abs(sin(angle) * offset.y / this.size.maxDimension)
-                                    scaleX = swell + stretchX - stretchY * 0.32f
-                                    scaleY = swell + stretchY - stretchX * 0.32f
-                                }
-                            }
-                        } else null,
-                        onDrawSurface = {
-                            drawRect(surfaceFill)
-                        }
-                    )
-                }
-            )
+            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .then(if (adaptiveLuminance) adaptiveInk.samplingModifier else Modifier)
             .clickable(
                 interactionSource = interactionSource,
                 indication = if (opaqueFallback) LocalIndication.current else null,
@@ -493,28 +409,140 @@ internal fun LiquidMorphingIconButton(
             )
             .then(
                 if (!opaqueFallback && enabled) {
-                    Modifier
-                        .then(interactiveHighlight.modifier)
-                        .then(interactiveHighlight.gestureModifier)
+                    interactiveHighlight.gestureModifier
                 } else Modifier
             ),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = theme.textPrimary.copy(alpha = if (enabled) 1f else 0.42f),
+        Box(
             modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer {
-                    if (!motion.reduced) {
-                        val mp = hostProgress().coerceIn(0f, 1f)
-                        rotationZ = mp * iconRotationWhenMenuOpen + pressProgress * -8f
-                        val iconScale = lerp(1f, 0.72f, mp) * lerp(1f, 1.08f, pressProgress)
-                        scaleX = iconScale
-                        scaleY = iconScale
+                .size(size)
+                .onGloballyPositioned { coords ->
+                    coordsRef = coords
+                    if (onAnchorBoundsChanged != null && coords.isAttached) {
+                        val p = coords.positionInRoot()
+                        val sz = coords.size
+                        onAnchorBoundsChanged(
+                            IntRect(
+                                left = p.x.roundToInt(),
+                                top = p.y.roundToInt(),
+                                right = (p.x + sz.width).roundToInt(),
+                                bottom = (p.y + sz.height).roundToInt()
+                            )
+                        )
                     }
                 }
-        )
+                .graphicsLayer {
+                    alpha = morphAlpha()
+                }
+                .then(
+                    if (opaqueFallback) {
+                        Modifier
+                            .graphicsLayer {
+                                val s = lerp(1f, 1.08f, pressProgress) * morphScale()
+                                scaleX = s
+                                scaleY = s
+                            }
+                            .clip(ContinuousCapsule)
+                            .background(surfaceFill, ContinuousCapsule)
+                    } else {
+                        Modifier
+                            .drawBackdrop(
+                                backdrop = backdrop,
+                                shape = { ContinuousCapsule },
+                                highlight = {
+                                    adaptiveGlassHighlight(
+                                        isLight = !isDark,
+                                        alpha = (if (!isDark) 0.84f else 0.68f) * morphAlpha()
+                                    )
+                                },
+                                shadow = {
+                                    Shadow(
+                                        radius = 10.dp,
+                                        offset = DpOffset(0.dp, 3.dp),
+                                        color = Color.Black.copy(alpha = (if (!isDark) 0.14f else 0.32f) * morphAlpha())
+                                    )
+                                },
+                                innerShadow = {
+                                    InnerShadow(
+                                        radius = 4.5.dp,
+                                        alpha = lerp(if (!isDark) 0.16f else 0.28f, 0.42f, pressProgress) * morphAlpha()
+                                    )
+                                },
+                                effects = {
+                                    appleGlassColorControls(
+                                        isLight = !isDark,
+                                        isFrosted = settings.glassVariant == "frosted",
+                                        reduceTransparency = settings.reduceTransparency
+                                    )
+                                    val blurPx = ((5.5f * settings.glassBlurIntensity).coerceIn(2.5f, 16f)).dp.toPx()
+                                    if (blurPx >= 1f && !blurPx.isNaN()) {
+                                        blur(blurPx)
+                                    }
+                                    if (mat.edgeRefraction && settings.enableLensRefraction && this.size.isSpecified && this.size.width > 4f && this.size.height > 4f) {
+                                        val mult = settings.glassIntensity.coerceIn(0.5f, 2.2f) * (1f + 0.28f * pressProgress)
+                                        val maxH = min(this.size.width, this.size.height) * 0.46f
+                                        val rHeight = ((14f * mult).dp.toPx()).coerceAtMost(maxH)
+                                        val rAmount = (28f * mult).dp.toPx()
+                                        if (rHeight >= 1f && rAmount >= 1f) {
+                                            lens(
+                                                refractionHeight = rHeight,
+                                                refractionAmount = rAmount,
+                                                depthEffect = true,
+                                                chromaticAberration = settings.enableChromaticAberration
+                                            )
+                                        }
+                                    }
+                                },
+                                layerBlock = if (!motion.reduced) {
+                                    {
+                                        if (this.size.isSpecified && this.size.width > 0f && this.size.height > 0f) {
+                                            val swell = lerp(1f, 1.13f, pressProgress) * morphScale()
+                                            val maxOffset = this.size.minDimension
+                                            val offset = interactiveHighlight.offset
+                                            val symNudge = if (coordinator != null && coordinator.activeIndex >= 0 && coordinator.activeIndex != slotIndex) {
+                                                val dir = if (slotIndex > coordinator.activeIndex) 1f else -1f
+                                                dir * 2.dp.toPx() * coordinator.activePressProgress
+                                            } else 0f
+
+                                            translationX = maxOffset * tanh(0.065f * offset.x / maxOffset) + symNudge
+                                            translationY = maxOffset * tanh(0.065f * offset.y / maxOffset)
+
+                                            val maxDragScale = 6.5f.dp.toPx() / this.size.height
+                                            val angle = atan2(offset.y, offset.x)
+                                            val stretchX = maxDragScale * abs(cos(angle) * offset.x / this.size.maxDimension)
+                                            val stretchY = maxDragScale * abs(sin(angle) * offset.y / this.size.maxDimension)
+                                            scaleX = swell + stretchX - stretchY * 0.32f
+                                            scaleY = swell + stretchY - stretchX * 0.32f
+                                        }
+                                    }
+                                } else null,
+                                onDrawSurface = {
+                                    drawRect(surfaceFill)
+                                }
+                            )
+                            .clip(ContinuousCapsule)
+                            .then(if (enabled) interactiveHighlight.modifier else Modifier)
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = resolvedTint,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        if (!motion.reduced) {
+                            val mp = hostProgress().coerceIn(0f, 1f)
+                            rotationZ = mp * iconRotationWhenMenuOpen
+                            val iconScale = lerp(1f, 0.72f, mp) * lerp(1f, 1.08f, pressProgress)
+                            scaleX = iconScale
+                            scaleY = iconScale
+                        }
+                    }
+            )
+        }
     }
 }

@@ -30,6 +30,7 @@ private class LayerBackdropElement(
     override fun update(node: LayerBackdropNode) {
         if (node.backdrop != backdrop) {
             node.backdrop.layerCoordinates = null
+            node.backdrop.hasRecorded = false
             node.backdrop = backdrop
             node.hasRecordedAtLeastOnce = false
         }
@@ -82,19 +83,22 @@ private class LayerBackdropNode(
 
         if (!reuse) drawContent()
         var recorded = false
-        if (!(freezeSnapshot && hasRecordedAtLeastOnce)) {
+        if (!(freezeSnapshot && hasRecordedAtLeastOnce) && !backdrop.isRecording) {
             backdrop.isRecording = true
+            com.example.ui.components.LiquidGlassBackdropScope.beginRecording(backdrop.graphicsLayer)
             try {
                 recordLayer(backdrop.graphicsLayer) { backdrop.onDraw(this@draw) }
                 recorded = true
                 hasRecordedAtLeastOnce = true
+                backdrop.hasRecorded = true
             } catch (_: Throwable) {
                 // Retain legacy capture-failure tolerance; never blank the visible content.
             } finally {
+                com.example.ui.components.LiquidGlassBackdropScope.endRecording(backdrop.graphicsLayer)
                 backdrop.isRecording = false
             }
         } else {
-            recorded = true
+            recorded = hasRecordedAtLeastOnce
         }
         if (reuse) {
             if (recorded) drawLayer(backdrop.graphicsLayer) else drawContent()
@@ -107,6 +111,7 @@ private class LayerBackdropNode(
 
     override fun onDetach() {
         backdrop.layerCoordinates = null
+        backdrop.hasRecorded = false
         hasRecordedAtLeastOnce = false
     }
 }

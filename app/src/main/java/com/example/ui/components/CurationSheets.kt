@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.scrollBy
@@ -32,7 +33,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -97,20 +101,20 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
         host?.updateAnchorBounds(id,bounds)
     }
     val open = {
-        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,Icons.Default.MoreHoriz,latestItems,{},selectionMenu))
+        if(bounds.width>0 && bounds.height>0)host?.showMenu(LiquidGlassMenuRequest(id,bounds,label,LucideIcons.MoreEllipsis,latestItems,{},selectionMenu))
         Unit
     }
     val theme = LocalIOS27Theme.current
     if (valueLabel == null) {
         LiquidMorphingIconButton(
-            icon = Icons.Default.MoreHoriz,
+            icon = LucideIcons.MoreEllipsis,
             contentDescription = label,
             onClick = open,
             modifier = modifier,
             size = 40.dp,
             enabled = enabled,
             menuId = id,
-            iconRotationWhenMenuOpen = 90f,
+            iconRotationWhenMenuOpen = 0f,
             onAnchorBoundsChanged = {
                 bounds = it
                 host?.updateAnchorBounds(id, it)
@@ -132,6 +136,7 @@ internal val LocalCurationPageDepth=staticCompositionLocalOf {0}
 internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=false, error: String?=null, reopenKey: Int=0,
     actionLabel: String?=null, actionEnabled: Boolean=true, onAction: ()->Unit={}, headerActions:@Composable RowScope.()->Unit={},
     panel:CurationPanelState=rememberCurationPanelState(),compact:Boolean=false,onCloseRequest:(()->Unit)?=null,menus:Boolean=false,
+    glass: Boolean = false,
     content: @Composable ColumnScope.() -> Unit) {
     val requestClose=remember {mutableStateOf<()->Unit>({})}
     val contentDensity=LocalDensity.current
@@ -140,6 +145,10 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         CompositionLocalProvider(LocalDensity provides contentDensity) {
         val theme=LocalIOS27Theme.current
         val opaque=com.example.ui.theme.LocalAppSettings.current.reduceTransparency
+        val glassEnabled = glass && !opaque
+        val ambientBackdrop = if (glassEnabled) rememberLayerBackdrop() else null
+        val glassShape = ContinuousRoundedRectangle(16.dp)
+        val lightSurface = theme.bgPrimary.luminance() > .5f
         val childPage=LocalCurationPageDepth.current>0 && !compact
         val menuHost=remember {LiquidGlassMenuHostState()}
         val menuBackdrop=if(menus)rememberLayerBackdrop() else null
@@ -167,8 +176,28 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         CompositionLocalProvider(LocalLiquidGlassMenuHost provides menuHost) {
         Box(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().then(if(menuBackdrop!=null)Modifier.layerBackdrop(menuBackdrop,reuseRecordedContent=true,freezeSnapshot=menuHost.currentRequest!=null) else Modifier).statusBarsPadding().imePadding()) {
+            if (ambientBackdrop != null) {
+                // The dialog has its own window. Record one ambient source in the dialog's root.
+                Box(Modifier.matchParentSize().layerBackdrop(ambientBackdrop, reuseRecordedContent = true)
+                    .background(Brush.verticalGradient(listOf(
+                        Color.Transparent,
+                        lerp(theme.bgSecondary, theme.accent, if (lightSurface) .07f else .11f).copy(alpha = .42f),
+                        theme.bgPrimary.copy(alpha = .30f)
+                    ))))
+            }
             Box(Modifier.matchParentSize().graphicsLayer {alpha=if(childPage)0f else (sheet.scrimFraction/fraction).coerceIn(0f,1f)}.background(Color.Black.copy(alpha=.32f)).clickable(enabled=!busy,onClickLabel="Fechar painel") {requestClose.value()})
+            CompositionLocalProvider(LocalLiquidGlassBackdrop provides (ambientBackdrop ?: LocalLiquidGlassBackdrop.current)) {
+            val material = when {
+                glassEnabled -> Modifier.liquidGlass(radiusX = 85f, shape = glassShape,
+                    surfaceAlpha = if (lightSurface) .74f else .82f)
+                    .clip(glassShape)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, theme.bgPrimary.copy(alpha = .52f))))
+                glass -> Modifier.clip(glassShape).background(theme.bgPrimary)
+                else -> Modifier.background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
+                    .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f, edgeHighlight=false))
+            }
             Column((if(compact)Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max=maxHeight*.85f) else Modifier.fillMaxSize().padding(top=8.dp))
+                .then(if (glass) Modifier.padding(horizontal = 8.dp) else Modifier)
                 .onSizeChanged {panelHeight=it.height.toFloat()}
                 .graphicsLayer {
                     val displacement = sheet.offset - restOffset
@@ -179,10 +208,19 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                         else -> displacement.coerceAtLeast(0f)
                     }
                 }
-                .background(theme.bgPrimary,RoundedCornerShape(topStart=28.dp,topEnd=28.dp))
-                .then(if(opaque) Modifier else Modifier.liquidGlassRegistrationSheet(cornerRadiusDp=28f, edgeHighlight=false))
+                .then(material)
                 .pointerInput(Unit) {awaitEachGesture {awaitFirstDown(requireUnconsumed=false);waitForUpOrCancellation()}}.navigationBarsPadding().padding(bottom=16.dp)) {
-                Row(Modifier.fillMaxWidth().then(if(busy || childPage || panel.request>0)Modifier else sheet.dragModifier)
+                Box(Modifier.fillMaxWidth()) {
+                    if (ambientBackdrop != null) {
+                        ProgressiveBlurContent(
+                            backdrop = ambientBackdrop,
+                            direction = ProgressiveBlurDirection.TopToBottom,
+                            blurRadius = 12.dp,
+                            tintColor = theme.bgPrimary.copy(alpha = .30f),
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth().then(if(busy || childPage || panel.request>0)Modifier else sheet.dragModifier)
                     .padding(start=14.dp,end=24.dp,top=8.dp,bottom=6.dp),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(enabled=!busy && panel.request==0,onClick={requestClose.value()}) { Icon(Icons.Default.Close,"Fechar",tint=theme.textSecondary) }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -195,8 +233,10 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                                 style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.SemiBold)
                         }
                     }
+                    }
                 }
                 content()
+            }
             }
         }
         if(menuBackdrop!=null)LiquidGlassMenuOverlayHost(menuHost,menuBackdrop,Modifier.matchParentSize())
@@ -204,6 +244,23 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
         }
         }
     }
+}
+
+@Composable
+internal fun Modifier.curationPickerCard(): Modifier {
+    val theme = LocalIOS27Theme.current
+    val opaque = com.example.ui.theme.LocalAppSettings.current.reduceTransparency
+    val shape = ContinuousRoundedRectangle(16.dp)
+    return clip(shape)
+        .background(if (opaque) theme.bgSecondary else theme.bgSecondary.copy(alpha = .68f))
+        .border(
+            .75.dp,
+            Brush.verticalGradient(listOf(
+                if (opaque) theme.divider else Color.White.copy(alpha = .46f),
+                theme.divider
+            )),
+            shape
+        )
 }
 
 @Composable

@@ -32,7 +32,8 @@ object LiquidGlassShaderPrewarmer {
     private val sources get() = listOf(
         RoundedRectRefractionShaderString, RoundedRectRefractionWithDispersionShaderString,
         DefaultHighlightShaderString, AmbientHighlightShaderString, InteractiveHighlightSource,
-        SdfShader.AGSL_SDF_LIQUID_GLASS_SOURCE
+        SdfShader.AGSL_SDF_LIQUID_GLASS_SOURCE,
+        SdfShader.AGSL_PROGRESSIVE_ALPHA_MASK_SOURCE
     )
     val isReady: Boolean get() = ready.get()
 

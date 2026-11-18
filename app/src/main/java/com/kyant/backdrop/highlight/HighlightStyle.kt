@@ -116,24 +116,33 @@ interface HighlightStyle {
 private fun DrawScope.getCornerRadii(shape: Shape): FloatArray {
     val size = size
     val maxRadius = if (size != Size.Unspecified) size.minDimension / 2f else 0f
-    val shape = shape as? CornerBasedShape ?: return FloatArray(4) { maxRadius }
+    if (shape is com.kyant.shapes.RoundedRectangularShape) {
+        val corners = shape.corners(size, layoutDirection, this)
+        return floatArrayOf(
+            corners.topLeft.fastCoerceAtMost(maxRadius),
+            corners.topRight.fastCoerceAtMost(maxRadius),
+            corners.bottomRight.fastCoerceAtMost(maxRadius),
+            corners.bottomLeft.fastCoerceAtMost(maxRadius)
+        )
+    }
+    val cornerShape = shape as? CornerBasedShape ?: return FloatArray(4) { maxRadius }
     val isLtr = layoutDirection == LayoutDirection.Ltr
     val topLeft =
         if (size == Size.Unspecified) 0f
-        else if (isLtr) shape.topStart.toPx(size, this)
-        else shape.topEnd.toPx(size, this)
+        else if (isLtr) cornerShape.topStart.toPx(size, this)
+        else cornerShape.topEnd.toPx(size, this)
     val topRight =
         if (size == Size.Unspecified) 0f
-        else if (isLtr) shape.topEnd.toPx(size, this)
-        else shape.topStart.toPx(size, this)
+        else if (isLtr) cornerShape.topEnd.toPx(size, this)
+        else cornerShape.topStart.toPx(size, this)
     val bottomRight =
         if (size == Size.Unspecified) 0f
-        else if (isLtr) shape.bottomEnd.toPx(size, this)
-        else shape.bottomStart.toPx(size, this)
+        else if (isLtr) cornerShape.bottomEnd.toPx(size, this)
+        else cornerShape.bottomStart.toPx(size, this)
     val bottomLeft =
         if (size == Size.Unspecified) 0f
-        else if (isLtr) shape.bottomStart.toPx(size, this)
-        else shape.bottomEnd.toPx(size, this)
+        else if (isLtr) cornerShape.bottomStart.toPx(size, this)
+        else cornerShape.bottomEnd.toPx(size, this)
     return floatArrayOf(
         topLeft.fastCoerceAtMost(maxRadius),
         topRight.fastCoerceAtMost(maxRadius),

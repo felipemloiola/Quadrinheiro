@@ -204,6 +204,16 @@ object LucideIcons {
         sfIcon("PhotoCircle", 12.11f, 12.11f, "M6.05273 12.1055C2.71289 12.1055 0 9.39258 0 6.05273C0 2.71289 2.71289 0 6.05273 0C9.39258 0 12.1055 2.71289 12.1055 6.05273C12.1055 9.39258 9.39258 12.1055 6.05273 12.1055ZM3.58594 8.74805H8.51367C9.12891 8.74805 9.45117 8.42578 9.45117 7.81641V4.31836C9.45117 3.70312 9.12891 3.38672 8.51367 3.38672H3.58594C2.9707 3.38672 2.64258 3.70312 2.64258 4.31836V7.81641C2.64258 8.42578 2.9707 8.74805 3.58594 8.74805ZM4.875 6.12305C4.48242 6.12305 4.16016 5.80078 4.16016 5.4082C4.16016 5.01562 4.48242 4.69336 4.875 4.69336C5.27344 4.69336 5.58984 5.01562 5.58984 5.4082C5.58984 5.80078 5.27344 6.12305 4.875 6.12305ZM3.63281 8.12109C3.4043 8.12109 3.26953 7.98047 3.26953 7.75195V7.46484L4.01953 6.82617C4.14258 6.7207 4.27734 6.66211 4.40625 6.66211C4.54688 6.66211 4.6875 6.7207 4.81641 6.83203L5.36719 7.32422L6.7207 6.11719C6.86133 5.99414 7.01953 5.92969 7.18359 5.93555C7.33594 5.92969 7.50586 5.99414 7.63477 6.11719L8.82422 7.20117V7.75195C8.82422 7.98047 8.68359 8.12109 8.46094 8.12109H3.63281Z")
     }
 
+    // SF Symbol: ellipsis (iOS 26 3 horizontal dots) — 11.00 x 2.20
+    val MoreEllipsis: ImageVector by lazy {
+        sfIcon(
+            "MoreEllipsis",
+            11.00f,
+            2.20f,
+            "M1.1 0C1.70751 0 2.2 0.49249 2.2 1.1C2.2 1.70751 1.70751 2.2 1.1 2.2C0.49249 2.2 0 1.70751 0 1.1C0 0.49249 0.49249 0 1.1 0ZM5.5 0C6.10751 0 6.6 0.49249 6.6 1.1C6.6 1.70751 6.10751 2.2 5.5 2.2C4.89249 2.2 4.4 1.70751 4.4 1.1C4.4 0.49249 4.89249 0 5.5 0ZM9.9 0C10.50751 0 11 0.49249 11 1.1C11 1.70751 10.50751 2.2 9.9 2.2C9.29249 2.2 8.8 1.70751 8.8 1.1C8.8 0.49249 9.29249 0 9.9 0Z"
+        )
+    }
+
     // Aliases mapped accurately to their true SF Symbol shapes
     val Sliders: ImageVector get() = Icons.Default.Tune
     val SlidersHorizontal: ImageVector get() = Icons.Default.Tune
@@ -237,8 +247,11 @@ object LucideIcons {
     val GridFilled: ImageVector get() = Icons.Default.GridView
     val Grid3x2: ImageVector get() = Icons.Default.ViewModule
     val Maximize2: ImageVector get() = Icons.Default.OpenInFull
+    val MoreHorizontal: ImageVector get() = MoreEllipsis
 
     // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS)
+    // Geometric bbox: x in [3.0, 21.0], y in [2.586, 21.0].
+    // Optically lifted (-1.5f) so the heavy bottom tray aligns cleanly with the visual center of 42.dp circular buttons.
     val ShareIos: ImageVector by lazy {
         ImageVector.Builder(
             name = "ShareIos",
@@ -246,12 +259,14 @@ object LucideIcons {
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f
+        ).addGroup(
+            translationY = -1.5f
         ).addPath(
             pathData = PathParser().parsePathString(
-                "M12 2.586L7.707 6.879a1 1 0 0 0 1.414 1.414L11 6.414V15a1 1 0 1 0 2 0V6.414l1.879 1.879a1 1 0 0 0 1.414-1.414L12 2.586zM6 9a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3h-2a1 1 0 1 0 0 2h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h2a1 1 0 1 0 0-2H6z"
+                "M12 2.586L7.707 6.879a1 1 0 0 0 1.414 1.414L11 6.414V14a1 1 0 1 0 2 0V6.414l1.879 1.879a1 1 0 0 0 1.414-1.414L12 2.586zM6 9a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3h-2a1 1 0 1 0 0 2h2a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h2a1 1 0 1 0 0-2H6z"
             ).toNodes(),
             fill = SolidColor(Color.White)
-        ).build()
+        ).clearGroup().build()
     }
 
     // --- Authentication & Account Vector Icons (24x24 viewport) ---

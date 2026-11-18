@@ -2,18 +2,13 @@ package com.example.ui.screens
 
 import com.example.ui.components.LoadingLine
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -30,10 +25,12 @@ import com.example.data.BannerSearchException
 import com.example.data.CatalogBanners
 import com.example.ui.components.AppleSegmentedPicker
 import com.example.ui.components.AppleTextField
+import com.example.ui.components.CurationSheet
+import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.curationPickerCard
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.CancellationException
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BannerArtworkPicker(
     initialQuery: String,
@@ -99,18 +96,12 @@ internal fun BannerArtworkPicker(
             if (submitted == request && generation == token) loading = false
         }
     }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
+    CurationSheet("Escolher banner", onClose, glass = true) {
         LazyColumn(
-            Modifier.fillMaxWidth().heightIn(max = 650.dp).imePadding().testTag("banner_artwork_picker"),
+            Modifier.fillMaxWidth().testTag("banner_artwork_picker"),
             contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Escolher banner", color = t.textPrimary, style = MaterialTheme.typography.titleLarge)
-                    TextButton(onClick = onClose) { Text("Fechar", color = t.accent) }
-                }
-            }
             item {
                 AppleSegmentedPicker(listOf("HQs", "Personagens"), kind, { next ->
                     if (next != kind) { kind = next; submitted = null; errorMessage = null }
@@ -121,24 +112,23 @@ internal fun BannerArtworkPicker(
                     query,
                     { query = it.take(100) },
                     if (kind == 1) "Nome do personagem" else "Título da HQ",
-                    leadingIcon = Icons.Default.Search
+                    capsuleSearch = true
                 )
             }
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LiquidGlassPillButton(
+                        label = "Buscar artes",
                         onClick = { submit() },
                         enabled = query.trim().length >= 2 && !loading,
-                        modifier = Modifier.heightIn(min = 44.dp).testTag("search_banner_artwork")
-                    ) {
-                        Text("Buscar artes", color = t.accent)
-                    }
-                    TextButton(
+                        prominent = true,
+                        modifier = Modifier.fillMaxWidth().testTag("search_banner_artwork")
+                    )
+                    LiquidGlassPillButton(
+                        label = "Abrir galeria",
                         onClick = onGallery,
-                        modifier = Modifier.heightIn(min = 44.dp)
-                    ) {
-                        Text("Abrir galeria", color = t.accent)
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
             if (loading) item { LoadingLine(Modifier.fillMaxWidth(), color = t.accent) }
@@ -146,13 +136,12 @@ internal fun BannerArtworkPicker(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(errorMessage!!, color = t.textSecondary)
-                        TextButton(
+                        LiquidGlassPillButton(
+                            label = "Tentar novamente",
                             onClick = { submit() },
                             enabled = !loading && query.trim().length >= 2,
-                            modifier = Modifier.heightIn(min = 44.dp).testTag("retry_banner_artwork")
-                        ) {
-                            Text("Tentar novamente", color = t.accent)
-                        }
+                            modifier = Modifier.testTag("retry_banner_artwork")
+                        )
                     }
                 }
             } else if (!loading && submitted != null && items.isEmpty()) {
@@ -164,8 +153,7 @@ internal fun BannerArtworkPicker(
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(t.bgPrimary)
+                        .curationPickerCard()
                         .clickable(role = Role.Button) { onChoose(art) }
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -173,7 +161,7 @@ internal fun BannerArtworkPicker(
                     AsyncImage(
                         ImageRequest.Builder(context).data(art.url).size(600, 200).allowHardware(true).build(),
                         "Arte de ${art.title}",
-                        Modifier.fillMaxWidth().aspectRatio(3f).clip(RoundedCornerShape(10.dp)),
+                        Modifier.fillMaxWidth().aspectRatio(3f).clip(com.kyant.shapes.ContinuousRoundedRectangle(10.dp)),
                         contentScale = ContentScale.Crop
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
