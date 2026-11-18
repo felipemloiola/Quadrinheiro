@@ -21,6 +21,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.LaunchedEffect
@@ -366,11 +369,12 @@ fun CatalogSheetModal(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
-                .imePadding()
-                .clickable { sheet.dismiss() },
+                .imePadding(),
             contentAlignment = Alignment.BottomCenter
         ) {
+        Box(Modifier.matchParentSize()
+            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
+            .clickable(onClickLabel = "Fechar painel") { sheet.dismiss() })
         Box(
             modifier = Modifier
                 .graphicsLayer {
@@ -379,10 +383,12 @@ fun CatalogSheetModal(
                 .fillMaxWidth(if (isSheetExpanded) 1f else 0.96f)
                 .fillMaxHeight(0.96f)
                 .clip(sheetShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {}
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        waitForUpOrCancellation()
+                    }
+                }
         ) {
             // 1. Camada de fundo Liquid Glass fluida e otimizada (congelada durante rolagem/animação da folha)
             Box(
@@ -851,21 +857,24 @@ fun ManualEntrySheetModal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) 0.14f else 0.24f) * sheet.scrimFraction)) }
-            .imePadding()
-            .clickable { sheet.dismiss() },
+            .imePadding(),
         contentAlignment = Alignment.BottomCenter
     ) {
+        Box(Modifier.matchParentSize()
+            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
+            .clickable(onClickLabel = "Fechar painel") { sheet.dismiss() })
         Box(
             modifier = Modifier
                 .graphicsLayer { translationY = sheet.offset.coerceAtLeast(0f) }
                 .fillMaxWidth(0.96f)
                 .fillMaxHeight(0.96f)
                 .clip(shape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {}
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        waitForUpOrCancellation()
+                    }
+                }
         ) {
             Box(
                 modifier = Modifier.matchParentSize()
