@@ -1,7 +1,5 @@
 package com.example.ui.screens
 
-import com.example.ui.components.LoadingSpinner
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.CloudCacheRecovery
+import com.example.ui.components.CurationGlassAction
+import com.example.ui.components.LiquidGlassDialog
+import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.LoadingSpinner
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.launch
 
@@ -37,20 +39,47 @@ internal fun CloudCacheRecoveryScreen(onContinue: () -> Unit) {
         if(busy) {
             LoadingSpinner(color=theme.accent)
             Spacer(Modifier.height(12.dp));Text("Preservando os dados e preparando a sincronização…",color=theme.textSecondary)
-        } else if(repaired) Button(onClick=onContinue){Text("Continuar")}
+        } else if(repaired) LiquidGlassPillButton("Continuar", onContinue, prominent = true)
         else {
-            Button(onClick={confirm=true}){Text("Preparar recuperação")}
+            LiquidGlassPillButton("Preparar recuperação", onClick = { confirm = true }, prominent = true)
             TextButton(onClick={CloudCacheRecovery.continueWithoutRepair();onContinue()}){Text("Continuar sem reparar",color=theme.accent)}
         }
         if(failed)Text("Não foi possível concluir a recuperação. Os dados originais e qualquer cópia já criada foram preservados.",color=theme.textSecondary)
     }
-    if(confirm)AlertDialog(onDismissRequest={confirm=false},title={Text("Reconstruir a fila local?")},
-        text={Text("Primeiro será guardada uma cópia privada do estado local e do banco de sincronização. Depois, a fila antiga do Firestore será substituída e os registros salvos no app serão reenviados. Operações antigas que existam apenas nessa fila, como exclusões ainda não confirmadas, podem precisar de revisão. Sua conta não será desconectada.")},
-        dismissButton={TextButton(onClick={confirm=false}){Text("Cancelar")}},
-        confirmButton={TextButton(onClick={confirm=false;busy=true;failed=false;scope.launch {
-            try {CloudCacheRecovery.repair(context);repaired=true}
-            catch(cancel:kotlinx.coroutines.CancellationException){throw cancel}
-            catch(_:Exception){failed=true}
-            finally{busy=false}
-        }}){Text("Criar cópia e reconstruir")}})
+    if (confirm) {
+        LiquidGlassDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("Reconstruir a fila local?") },
+            text = {
+                Text("Primeiro será guardada uma cópia privada do estado local e do banco de sincronização. Depois, a fila antiga do Firestore será substituída e os registros salvos no app serão reenviados. Operações antigas que existam apenas nessa fila, como exclusões ainda não confirmadas, podem precisar de revisão. Sua conta não será desconectada.")
+            },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CurationGlassAction(
+                        label = "Criar cópia e reconstruir",
+                        modifier = Modifier.fillMaxWidth(),
+                        primary = true,
+                        onClick = {
+                            confirm = false
+                            busy = true
+                            failed = false
+                            scope.launch {
+                                try {
+                                    CloudCacheRecovery.repair(context)
+                                    repaired = true
+                                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                    throw cancel
+                                } catch (_: Exception) {
+                                    failed = true
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    )
+                    CurationGlassAction("Cancelar", { confirm = false }, Modifier.fillMaxWidth())
+                }
+            }
+        )
+    }
 }

@@ -1,5 +1,5 @@
 name: Sign Android device review APK
-run-name: Signed Quadrinheiro 1.0.91-revisao.9 for Galaxy S23
+run-name: Signed Quadrinheiro 1.0.91-revisao.9 for Galaxy S23 (${{ github.sha }})
 
 on:
   push:
