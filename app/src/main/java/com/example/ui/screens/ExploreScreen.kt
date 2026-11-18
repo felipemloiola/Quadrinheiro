@@ -189,8 +189,11 @@ fun ExploreScreen(
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("Explorar", Modifier.weight(1f), color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                        IconButton(onClick = { onSearch("") }) {
-                            Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
+                        IconButton(
+                            onClick = { onSearch("") },
+                            modifier = Modifier.size(48.dp).semantics { contentDescription = "Buscar quadrinhos" }
+                        ) {
+                            Icon(Icons.Default.Search, null, tint = theme.textPrimary)
                         }
                     }
                     AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
@@ -227,8 +230,11 @@ fun ExploreScreen(
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                         Text(selected, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
                                     }
-                                    IconButton(onClick = { onSearch("") }) {
-                                        Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
+                                    IconButton(
+                                        onClick = { onSearch("") },
+                                        modifier = Modifier.size(48.dp).semantics { contentDescription = "Buscar quadrinhos" }
+                                    ) {
+                                        Icon(Icons.Default.Search, null, tint = theme.textPrimary)
                                     }
                                 }
                             }

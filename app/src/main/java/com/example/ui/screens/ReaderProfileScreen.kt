@@ -428,7 +428,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                     }
                 }
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(136.dp),
+                    columns = GridCells.Adaptive(120.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 20.dp)

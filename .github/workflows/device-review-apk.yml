@@ -2,6 +2,7 @@ name: Sign Android device review APK
 run-name: Signed Quadrinheiro 1.0.91-revisao.9 for Galaxy S23 (${{ github.sha }})
 
 on:
+  workflow_dispatch:
   push:
     branches: [codex/revisao-ux-android-apk]
     paths: ['.github/workflows/device-review-apk.yml']

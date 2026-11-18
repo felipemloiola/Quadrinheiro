@@ -222,7 +222,13 @@ internal fun CurationSheet(title: String, onClose: () -> Unit, busy: Boolean=fal
                     }
                     Row(Modifier.fillMaxWidth().then(if(busy || childPage || panel.request>0)Modifier else sheet.dragModifier)
                     .padding(start=14.dp,end=24.dp,top=8.dp,bottom=6.dp),verticalAlignment=Alignment.CenterVertically) {
-                    IconButton(enabled=!busy && panel.request==0,onClick={requestClose.value()}) { Icon(Icons.Default.Close,"Fechar",tint=theme.textSecondary) }
+                    IconButton(
+                        enabled = !busy && panel.request == 0,
+                        onClick = { requestClose.value() },
+                        modifier = Modifier.size(48.dp).semantics { contentDescription = "Fechar" }
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = theme.textSecondary)
+                    }
                     Text(title,Modifier.weight(1f),color=theme.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=18.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     headerActions()
                     actionLabel?.let { label ->
