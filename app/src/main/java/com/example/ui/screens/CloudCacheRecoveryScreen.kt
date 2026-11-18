@@ -12,8 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.CloudCacheRecovery
 import com.example.ui.components.CurationGlassAction
-import com.example.ui.components.LiquidGlassDialog
-import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.CurationSheet
 import com.example.ui.components.LoadingSpinner
 import com.example.ui.theme.LocalIOS27Theme
 import kotlinx.coroutines.launch
@@ -39,47 +38,47 @@ internal fun CloudCacheRecoveryScreen(onContinue: () -> Unit) {
         if(busy) {
             LoadingSpinner(color=theme.accent)
             Spacer(Modifier.height(12.dp));Text("Preservando os dados e preparando a sincronização…",color=theme.textSecondary)
-        } else if(repaired) LiquidGlassPillButton("Continuar", onContinue, prominent = true)
+        } else if(repaired) CurationGlassAction("Continuar", onContinue, primary = true)
         else {
-            LiquidGlassPillButton("Preparar recuperação", onClick = { confirm = true }, prominent = true)
+            CurationGlassAction("Preparar recuperação", onClick = { confirm = true }, primary = true)
             TextButton(onClick={CloudCacheRecovery.continueWithoutRepair();onContinue()}){Text("Continuar sem reparar",color=theme.accent)}
         }
         if(failed)Text("Não foi possível concluir a recuperação. Os dados originais e qualquer cópia já criada foram preservados.",color=theme.textSecondary)
     }
     if (confirm) {
-        LiquidGlassDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text("Reconstruir a fila local?") },
-            text = {
-                Text("Primeiro será guardada uma cópia privada do estado local e do banco de sincronização. Depois, a fila antiga do Firestore será substituída e os registros salvos no app serão reenviados. Operações antigas que existam apenas nessa fila, como exclusões ainda não confirmadas, podem precisar de revisão. Sua conta não será desconectada.")
-            },
-            confirmButton = {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CurationGlassAction(
-                        label = "Criar cópia e reconstruir",
-                        modifier = Modifier.fillMaxWidth(),
-                        primary = true,
-                        onClick = {
-                            confirm = false
-                            busy = true
-                            failed = false
-                            scope.launch {
-                                try {
-                                    CloudCacheRecovery.repair(context)
-                                    repaired = true
-                                } catch (cancel: kotlinx.coroutines.CancellationException) {
-                                    throw cancel
-                                } catch (_: Exception) {
-                                    failed = true
-                                } finally {
-                                    busy = false
-                                }
+        CurationSheet("Reconstruir a fila local?", { confirm = false }, compact = true, glass = true) {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Primeiro será guardada uma cópia privada do estado local e do banco de sincronização. Depois, a fila antiga do Firestore será substituída e os registros salvos no app serão reenviados. Operações antigas que existam apenas nessa fila, como exclusões ainda não confirmadas, podem precisar de revisão. Sua conta não será desconectada.",
+                    color = theme.textSecondary
+                )
+                CurationGlassAction(
+                    label = "Criar cópia e reconstruir",
+                    modifier = Modifier.fillMaxWidth(),
+                    primary = true,
+                    onClick = {
+                        confirm = false
+                        busy = true
+                        failed = false
+                        scope.launch {
+                            try {
+                                CloudCacheRecovery.repair(context)
+                                repaired = true
+                            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                throw cancel
+                            } catch (_: Exception) {
+                                failed = true
+                            } finally {
+                                busy = false
                             }
                         }
-                    )
-                    CurationGlassAction("Cancelar", { confirm = false }, Modifier.fillMaxWidth())
-                }
+                    }
+                )
+                CurationGlassAction("Cancelar", { confirm = false }, Modifier.fillMaxWidth())
             }
-        )
+        }
     }
 }

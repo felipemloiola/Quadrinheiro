@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [codex/revisao-ux-android-apk]
-    paths: ['.github/workflows/device-review-apk.yml']
+    paths: ['.github/workflows/device-review-apk.yml', 'app/src/main/**']
 
 permissions:
   contents: read
