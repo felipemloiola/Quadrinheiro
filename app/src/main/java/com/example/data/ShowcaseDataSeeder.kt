@@ -7,6 +7,7 @@ import com.example.model.ComicMoment
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
 import com.example.model.UserProfile
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,6 +19,12 @@ object ShowcaseDataSeeder {
     fun seedIfNecessary(context: Context) {
         val storage = SafeStorage(context)
         if (storage.getItem(SEEDED_KEY) == "true") {
+            return
+        }
+        // Seed a new installation only. An update may already have a local or Firebase session.
+        if (storage.loadAuthSession() != null || storage.hasCompletedAuthOnboarding() ||
+            runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull() != null
+        ) {
             return
         }
 

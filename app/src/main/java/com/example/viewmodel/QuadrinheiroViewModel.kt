@@ -2320,6 +2320,14 @@ class QuadrinheiroViewModel(
     }
 
     fun saveComic(itemData: ComicEntry) {
+        saveComic(itemData, closeEditor = true)
+    }
+
+    fun saveComicInPlace(itemData: ComicEntry) {
+        saveComic(itemData, closeEditor = false)
+    }
+
+    private fun saveComic(itemData: ComicEntry, closeEditor: Boolean) {
         val uniqueId = itemData.id.ifBlank {
             itemData.externalId.ifBlank { "hq-${System.currentTimeMillis()}" }
         }
@@ -2431,13 +2439,15 @@ class QuadrinheiroViewModel(
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
-        val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
-        _selectedComic.value = null
-        if (!keepDetailUnderlying) {
-            _infoModalComic.value = null
+        if (closeEditor) {
+            val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
+            _selectedComic.value = null
+            if (!keepDetailUnderlying) {
+                _infoModalComic.value = null
+            }
+            _showManualModal.value = false
+            _isSheetExpanded.value = false
         }
-        _showManualModal.value = false
-        _isSheetExpanded.value = false
 
         if (isRead) {
             showNotice(
@@ -2471,6 +2481,14 @@ class QuadrinheiroViewModel(
     }
 
     fun deleteComic(id: String) {
+        deleteComic(id, closeEditor = true)
+    }
+
+    fun deleteComicInPlace(id: String) {
+        deleteComic(id, closeEditor = false)
+    }
+
+    private fun deleteComic(id: String, closeEditor: Boolean) {
         val updated = _comics.value.filterNot { it.id == id }
         _comics.value = updated
         persistAll()
@@ -2482,10 +2500,12 @@ class QuadrinheiroViewModel(
                 runCatching { repo.deleteComic(uid, id) }
             }
         }
-        val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
-        _selectedComic.value = null
-        if (!keepDetailUnderlying) {
-            _infoModalComic.value = null
+        if (closeEditor) {
+            val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
+            _selectedComic.value = null
+            if (!keepDetailUnderlying) {
+                _infoModalComic.value = null
+            }
         }
         showNotice("Edição removida da Biblioteca")
     }

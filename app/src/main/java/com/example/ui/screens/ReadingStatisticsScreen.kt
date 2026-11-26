@@ -897,11 +897,10 @@ fun ReadingStatisticsScreen(
         label = "statsChartProgress"
     )
 
-    val backCollapsed by remember(listState) {
-        androidx.compose.runtime.derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
-        }
-    }
+    val backCollapseProgress = backButtonScrollProgress(
+        firstVisibleItemIndex = { listState.firstVisibleItemIndex },
+        firstVisibleItemScrollOffset = { listState.firstVisibleItemScrollOffset }
+    )
 
     val haptics = rememberAppHaptics()
     val statsBackdrop = rememberLayerBackdrop()
@@ -1950,7 +1949,7 @@ fun ReadingStatisticsScreen(
     CompositionLocalProvider(LocalLiquidGlassBackdrop provides statsBackdrop) {
         SettingsBackButton(
             onBack = onBack,
-            collapsed = backCollapsed,
+            collapseProgress = backCollapseProgress,
             label = "Resumo",
             modifier = Modifier
                 .align(Alignment.TopStart)

@@ -62,11 +62,10 @@ internal fun CatalogBrowserDialog(universe: String, onClose: () -> Unit, onComic
                 }
             }
         }
-        val isScrolled by remember(state) {
-            androidx.compose.runtime.derivedStateOf {
-                state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 24
-            }
-        }
+        val collapseProgress = backButtonScrollProgress(
+            firstVisibleItemIndex = { state.firstVisibleItemIndex },
+            firstVisibleItemScrollOffset = { state.firstVisibleItemScrollOffset }
+        )
         PredictiveBackRootExitContainer(enabled = true, onExit = onClose) {
             Box(
                 Modifier
@@ -150,7 +149,7 @@ internal fun CatalogBrowserDialog(universe: String, onClose: () -> Unit, onComic
                 }
                 SettingsBackButton(
                     onBack = onClose,
-                    collapsed = isScrolled,
+                    collapseProgress = collapseProgress,
                     label = "Perfil",
                     modifier = Modifier.align(androidx.compose.ui.Alignment.TopStart).padding(start = 16.dp, top = 12.dp)
                 )

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.ProfileShowcase
 import com.example.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
@@ -46,7 +47,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
 ) {
     val theme = LocalIOS27Theme.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    var slotMenu by remember { mutableStateOf(false) }
+    var slotMenu by rememberSaveable { mutableStateOf(false) }
     var remoteComics by remember { mutableStateOf(emptyList<ComicEntry>()) }
     val remoteCatalog by com.example.data.ModernCatalog.entries.collectAsState()
     LaunchedEffect(Unit) { com.example.data.CharacterDirectory.preload(context) }
@@ -64,6 +65,24 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         )
     }
     val byId = remember(candidates) { candidates.associateBy { it.id } }
+    val favoriteValues = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
+    val currentFavorite = favoriteValues.getOrNull(editSlot)
+    val currentComic = if (characters) null else currentFavorite?.let(byId::get)
+    val editingArtwork = slotMenu && if (characters) currentFavorite != null else currentComic != null
+
+    fun openFavorite(isCharacter: Boolean, slot: Int) {
+        characters = isCharacter
+        editSlot = slot
+        slotMenu = if (isCharacter) {
+            settings.profileFavoriteCharacters.getOrNull(slot) != null
+        } else {
+            settings.profileFavoriteComicIds.getOrNull(slot)?.let(byId::containsKey) == true
+        }
+        query = ""
+        characterResults = emptyList()
+        remoteComics = emptyList()
+    }
+
     val readCount = remember(comics) { comics.count { it.status == ReadingStatus.READ } }
     val reviews = remember(comics) { comics.filter { it.review.isNotBlank() }.sortedByDescending { it.updatedAt }.take(3) }
     LaunchedEffect(settings.profileFavoriteCharacters, settings.profileShowcaseDetails) {
@@ -78,8 +97,8 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     }
     var comicLoading by remember { mutableStateOf(false) }
     val multiSearchEngine = remember { com.example.data.MultiApiSearchEngine() }
-    LaunchedEffect(editSlot, characters, query, slotMenu) {
-        if (editSlot < 0 || slotMenu) return@LaunchedEffect
+    LaunchedEffect(editSlot, characters, query, editingArtwork) {
+        if (editSlot < 0 || editingArtwork) return@LaunchedEffect
         if (!characters) {
             val trimmed = query.trim()
             if (trimmed.length >= 2) {
@@ -132,11 +151,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
         finally { characterLoading = false }
     }
     if (editorOpen) {
-        ProfileEditorScreen(profile, settings, { editorOpen = false }, onCommitProfile, onHandleChange, handleFeedback, { isCharacter, slot ->
-            characters = isCharacter; editSlot = slot
-            slotMenu = (if (isCharacter) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).getOrNull(slot) != null
-            query = ""
-        })
+        ProfileEditorScreen(profile, settings, { editorOpen = false }, onCommitProfile, onHandleChange, handleFeedback, ::openFavorite)
     } else LazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("reader_profile"),
         contentPadding = PaddingValues(bottom = 208.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         item(key = "profile_header") {
@@ -302,10 +317,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                         if (isGuest) {
                                             onLogin()
                                         } else {
-                                            characters = false
-                                            editSlot = slot
-                                            slotMenu = settings.profileFavoriteComicIds.getOrNull(slot) != null
-                                            query = ""
+                                            openFavorite(false, slot)
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -338,10 +350,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                     if (isGuest) {
                                         onLogin()
                                     } else {
-                                        characters = true
-                                        editSlot = slot
-                                        slotMenu = settings.profileFavoriteCharacters.getOrNull(slot) != null
-                                        query = ""
+                                        openFavorite(true, slot)
                                     }
                                 }
                                 .testTag("favorite-character-$slot"),
@@ -380,72 +389,97 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
     }
-    if (editSlot >= 0 && slotMenu) {
-        val name = settings.profileFavoriteCharacters.getOrNull(editSlot)
-        val selected = settings.profileFavoriteComicIds.getOrNull(editSlot)?.let(byId::get)
-        FavoriteArtworkSheet(if (characters) null else selected, if (characters) name else null, settings.profileShowcaseDetails["character:$name"].orEmpty(),
-            onClose = { editSlot = -1 }, onReplace = { slotMenu = false; query = "" }, onRemove = {
-                val ids = settings.profileFavoriteComicIds.toMutableList(); val chars = settings.profileFavoriteCharacters.toMutableList()
-                if (characters) chars.removeAt(editSlot) else ids.removeAt(editSlot)
-                onUpdateShowcase(ids, chars, settings.profileShowcaseDetails.filterKeys { k -> ids.any { k == "comic:$it" } || chars.any { k == "character:$it" } }); editSlot = -1
-            }, onChoose = { image ->
-                val details = settings.profileShowcaseDetails.toMutableMap()
-                if (characters && name != null) {
-                    val old = runCatching { org.json.JSONObject(details["character:$name"].orEmpty()) }.getOrDefault(org.json.JSONObject())
-                    old.put("image", image); details["character:$name"] = old.toString()
-                } else selected?.let { details["comic:${it.id}"] = com.example.data.ProfileShowcase.comicSnapshot(it.copy(coverUrl = image)) }
-                onUpdateShowcase(settings.profileFavoriteComicIds, settings.profileFavoriteCharacters, details); editSlot = -1
-            })
-    }
-    if (editSlot >= 0 && !slotMenu) {
-        val close = { editSlot = -1; query = "" }
-        fun select(value: String?, portrait: String? = null) {
-            val old = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
-            val next = old.toMutableList()
-            if (value == null) { if (editSlot < next.size) next.removeAt(editSlot) }
-            else { if (editSlot < next.size) next[editSlot] = value else next.add(value) }
+    if (editSlot >= 0) {
+        val slot = editSlot
+        val close = {
+            editSlot = -1
+            slotMenu = false
+            query = ""
+        }
+        fun commitFavorite(choice: FavoriteChoice?) {
+            val next = favoriteValues.toMutableList()
+            if (choice == null) {
+                if (slot in next.indices) next.removeAt(slot)
+            } else if (slot in next.indices) {
+                next[slot] = choice.value
+            } else {
+                next.add(choice.value)
+            }
             val clean = next.filter { it.isNotBlank() }.distinct().take(4)
             val nextIds = if (characters) settings.profileFavoriteComicIds else clean
             val nextCharacters = if (characters) clean else settings.profileFavoriteCharacters
             val details = settings.profileShowcaseDetails.toMutableMap()
-            if (value != null) {
-                if (characters && portrait != null) details["character:$value"] = characterResults.firstOrNull { it.name.take(60) == value }?.let(com.example.data.ProfileShowcase::characterSnapshot) ?: portrait
-                if (!characters) byId[value]?.let { details["comic:$value"] = com.example.data.ProfileShowcase.comicSnapshot(it) }
+            if (choice?.snapshot != null) {
+                val type = if (characters) "character" else "comic"
+                details["$type:${choice.value}"] = choice.snapshot
             }
-            val retained = details.filterKeys { key -> nextIds.any { key == "comic:$it" } || nextCharacters.any { key == "character:$it" } }
-            onUpdateShowcase(nextIds, nextCharacters, retained); close()
+            val retainedKeys = nextIds.map { "comic:$it" } + nextCharacters.map { "character:$it" }
+            onUpdateShowcase(nextIds, nextCharacters, details.filterKeys { it in retainedKeys })
+            close()
         }
-        val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds)
-            .filterIndexed { index, _ -> index != editSlot }.toSet()
-        val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
-        val shownComics = remember(candidates, excluded, query, preferredLang) {
-            val available = candidates.filter { it.id !in excluded }
-            if (query.isBlank()) {
-                available.take(80)
-            } else {
-                com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
-                    available,
-                    query,
-                    preferredLang
-                ).take(80)
+        if (editingArtwork) {
+            val character = currentFavorite.takeIf { characters }
+            val portrait = settings.profileShowcaseDetails["character:$character"].orEmpty()
+            FavoriteArtworkSheet(
+                comic = currentComic,
+                character = character,
+                portrait = portrait,
+                onClose = close,
+                onReplace = { slotMenu = false },
+                onRemove = { commitFavorite(null) },
+                onChoose = { image ->
+                    val details = settings.profileShowcaseDetails.toMutableMap()
+                    if (character != null) {
+                        val snapshot = runCatching { org.json.JSONObject(portrait) }.getOrDefault(org.json.JSONObject())
+                        details["character:$character"] = snapshot.put("image", image).toString()
+                    } else if (currentComic != null) {
+                        details["comic:${currentComic.id}"] = ProfileShowcase.comicSnapshot(currentComic.copy(coverUrl = image))
+                    }
+                    onUpdateShowcase(settings.profileFavoriteComicIds, settings.profileFavoriteCharacters, details)
+                    close()
+                }
+            )
+        } else {
+            val excluded = favoriteValues.filterIndexed { index, _ -> index != slot }.toSet()
+            val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
+            val shownComics = remember(candidates, excluded, query, preferredLang) {
+                val available = candidates.filter { it.id !in excluded }
+                if (query.isBlank()) {
+                    available.take(80)
+                } else {
+                    com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
+                        available,
+                        query,
+                        preferredLang
+                    ).take(80)
+                }
             }
+            val filteredCharacters = remember(characterResults, excluded) {
+                characterResults.filter { it.name.take(60) !in excluded }
+                    .distinctBy { it.name.take(60) }
+            }
+            val currentSelection = currentFavorite?.let { value ->
+                val title = if (characters) value else currentComic?.displayTitle ?: "HQ atual"
+                FavoriteChoice(value, title)
+            }
+            FavoriteSelectionSheet(
+                characters = characters,
+                query = query,
+                onQueryChange = {
+                    query = it
+                    characterResults = emptyList()
+                    remoteComics = emptyList()
+                },
+                currentSelection = currentSelection,
+                characterLoading = characterLoading,
+                characterError = characterError,
+                characterResults = filteredCharacters,
+                comicLoading = comicLoading,
+                shownComics = shownComics,
+                onConfirm = ::commitFavorite,
+                onClose = close
+            )
         }
-        val filteredCharacters = remember(characterResults, excluded) {
-            characterResults.filter { it.name.take(60) !in excluded }
-        }
-        FavoriteSelectionSheet(
-            characters = characters,
-            query = query,
-            onQueryChange = { query = it },
-            hasCurrentSelection = editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size,
-            characterLoading = characterLoading,
-            characterError = characterError,
-            characterResults = filteredCharacters,
-            comicLoading = comicLoading,
-            shownComics = shownComics,
-            onSelect = { value, portrait -> select(value, portrait) },
-            onClose = close
-        )
     }
 }
 

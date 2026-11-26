@@ -2,6 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
@@ -238,7 +240,6 @@ object LucideIcons {
     val Grid3x2: ImageVector get() = Icons.Default.ViewModule
     val Maximize2: ImageVector get() = Icons.Default.OpenInFull
 
-    // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS — centralizado opticamente em 24x24)
     val ShareIos: ImageVector by lazy {
         ImageVector.Builder(
             name = "ShareIos",
@@ -246,25 +247,32 @@ object LucideIcons {
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f
-        ).addPath(
+        // The lower tray has more visual weight than the arrow. Lift the entire glyph.
+        ).addGroup(translationY = -0.8f).addPath(
             pathData = PathParser().parsePathString(
-                "M12 1.75L7.75 6a0.9 0.9 0 0 0 1.27 1.27L11.1 5.19V13.75a0.9 0.9 0 1 0 1.8 0V5.19l2.08 2.08A0.9 0.9 0 0 0 16.25 6L12 1.75zM6.75 8A2.75 2.75 0 0 0 4 10.75v6.75A2.75 2.75 0 0 0 6.75 20.25h10.5A2.75 2.75 0 0 0 20 17.5v-6.75A2.75 2.75 0 0 0 17.25 8h-1.85a0.9 0.9 0 1 0 0 1.8h1.85a0.95 0.95 0 0 1 0.95 0.95v6.75a0.95 0.95 0 0 1-0.95 0.95H6.75a0.95 0.95 0 0 1-0.95-0.95v-6.75a0.95 0.95 0 0 1 0.95-0.95h1.85a0.9 0.9 0 1 0 0-1.8H6.75z"
+                "M12 3.25V14 M8.25 7L12 3.25L15.75 7 " +
+                    "M8.25 9.25H6.75Q4.5 9.25 4.5 11.5V18Q4.5 20.25 6.75 20.25" +
+                    "H17.25Q19.5 20.25 19.5 18V11.5Q19.5 9.25 17.25 9.25H15.75"
             ).toNodes(),
-            fill = SolidColor(Color.White)
-        ).build()
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ).clearGroup().build()
     }
 
-    // SF Symbol: ellipsis.circle (Ícone de menu compacto iOS 26 / LiquidGlassKMP)
-    val EllipsisCircle: ImageVector by lazy {
+    val OverflowDots: ImageVector by lazy {
         ImageVector.Builder(
-            name = "EllipsisCircle",
+            name = "OverflowDots",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f
         ).addPath(
             pathData = PathParser().parsePathString(
-                "M12 2.5A9.5 9.5 0 1 0 21.5 12 9.51 9.51 0 0 0 12 2.5zm0 17.3A7.8 7.8 0 1 1 19.8 12 7.81 7.81 0 0 1 12 19.8zM8.2 12a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 8.2 12zm5.05 0a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 13.25 12zm5.05 0a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 18.3 12z"
+                "M5.5 10.35a1.65 1.65 0 1 0 0 3.3a1.65 1.65 0 1 0 0-3.3z" +
+                    "M12 10.35a1.65 1.65 0 1 0 0 3.3a1.65 1.65 0 1 0 0-3.3z" +
+                    "M18.5 10.35a1.65 1.65 0 1 0 0 3.3a1.65 1.65 0 1 0 0-3.3z"
             ).toNodes(),
             fill = SolidColor(Color.White)
         ).build()

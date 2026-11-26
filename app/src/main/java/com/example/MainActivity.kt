@@ -111,6 +111,7 @@ import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.Coil
 import com.example.data.MultiApiSearchEngine
+import com.example.data.findActivity
 import com.example.model.AuthActions
 import com.example.model.AuthUiState
 import com.example.model.ComicEntry
@@ -503,6 +504,14 @@ fun QuadrinheiroApp(
     }
 
     QuadrinheiroTheme(settings = appSettings) {
+        val darkTheme = LocalIOS27Theme.current.isDark
+        val window = context.findActivity()?.window
+        LaunchedEffect(window, darkTheme) {
+            window?.let {
+                val insets = androidx.core.view.WindowCompat.getInsetsController(it, it.decorView)
+                insets.isAppearanceLightStatusBars = !darkTheme
+            }
+        }
         // APP_UPDATES_HOST_V1: identical updater host in local and release builds.
         com.example.updates.AppUpdatePrompt()
         if (isLoggingOut) {
@@ -1067,8 +1076,12 @@ fun QuadrinheiroApp(
                         com.example.model.catalogEntryForEditing(currentInfoComic, comics)
                     }
                     ComicInfoSynopsisSheetModal(
-                        onCoverSelected = viewModel::updateComicCover, onSaveRegistration=viewModel::saveComic,onDeleteRegistration=viewModel::deleteComic,
-                        readerProfile = profile, onLogin = { viewModel.openAuthModalForLinking() },
+                        onSaveRegistration = viewModel::saveComic,
+                        onDeleteRegistration = viewModel::deleteComic,
+                        onSaveFromPage = viewModel::saveComicInPlace,
+                        onDeleteFromPage = viewModel::deleteComicInPlace,
+                        readerProfile = profile,
+                        onLogin = { viewModel.openAuthModalForLinking() },
                         comic = currentInfoComic,
                         savedEntry = savedMatch,
                         appSettings = appSettings,
@@ -1077,13 +1090,7 @@ fun QuadrinheiroApp(
                         onSelectSequenceComic = { seqComic ->
                             viewModel.openInfoSynopsisModal(seqComic)
                         },
-                        onOpenCatalogWithStatus = { comic, status ->
-                            viewModel.openCatalogSheetForComic(comic, status, preserveInfoModal = true)
-                        },
-                        onEditSavedComic = { saved ->
-                            viewModel.selectComicForSheet(saved, preserveInfoModal = true)
-                        },
-                        isRegistrationOverlayOpen = selectedComic != null,
+                        isExternalOverlayOpen = selectedComic != null || socialShareRequest != null || showAuthModalFromSettings,
                         onDismiss = { viewModel.openInfoSynopsisModal(null) },
                         onShareComic = { shareComic, cardType, momentId ->
                             viewModel.openSocialShareSheet(
@@ -1128,6 +1135,10 @@ fun QuadrinheiroApp(
                         onSetExpanded = { expanded -> viewModel.setSheetExpanded(expanded) },
                         onSave = viewModel::saveComic,
                         onDelete = viewModel::deleteComic,
+                        onSaveFromPage = viewModel::saveComicInPlace,
+                        onDeleteFromPage = viewModel::deleteComicInPlace,
+                        isExternalOverlayOpen = socialShareRequest != null || showAuthModalFromSettings,
+                        sourceComicId = currentComic.id,
                         onDismiss = { viewModel.selectComicForSheet(null) },
                         onShareComic = { shareComic, cardType, momentId ->
                             viewModel.openSocialShareSheet(

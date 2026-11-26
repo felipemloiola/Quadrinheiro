@@ -4,16 +4,20 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,11 +26,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +74,7 @@ internal fun CurationSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     maxHeightFraction: Float = 0.88f,
-    content: @Composable ColumnScope.() -> Unit
+    content: @Composable ColumnScope.(dismissWith: (() -> Unit) -> Unit) -> Unit
 ) {
     val theme = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
@@ -83,7 +89,7 @@ internal fun CurationSheet(
     var sheetHeightPx by remember { mutableFloatStateOf(with(density) { 480.dp.toPx() }) }
     var isDismissing by remember { mutableStateOf(false) }
 
-    fun dismissAnimated(velocityY: Float = 0f) {
+    fun dismissAnimated(velocityY: Float = 0f, afterExit: () -> Unit = onDismiss) {
         if (isDismissing) return
         isDismissing = true
         scope.launch {
@@ -101,7 +107,7 @@ internal fun CurationSheet(
                     )
                 }
             }
-            onDismiss()
+            afterExit()
         }
     }
 
@@ -251,8 +257,8 @@ internal fun CurationSheet(
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .imePadding()
                     .padding(horizontal = 10.dp, vertical = 12.dp)
-                    .fillMaxWidth()
                     .widthIn(max = 560.dp)
+                    .fillMaxWidth()
                     .heightIn(max = 760.dp)
                     .then(
                         if (maxHeightFraction < 1f) {
@@ -297,7 +303,7 @@ internal fun CurationSheet(
                                     )
                             )
                         }
-                        content()
+                        content { afterExit -> dismissAnimated(afterExit = afterExit) }
                     }
                 }
             }
@@ -315,7 +321,8 @@ internal fun CurationSheetHeader(
     subtitle: String? = null,
     onClose: () -> Unit,
     closeTag: String = "curation_sheet_close",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    closeLabel: String = "Fechar"
 ) {
     val theme = LocalIOS27Theme.current
     val settings = LocalAppSettings.current
@@ -350,7 +357,7 @@ internal fun CurationSheetHeader(
         }
         SheetToolbarActionButton(
             icon = Icons.Default.Close,
-            label = "Fechar",
+            label = closeLabel,
             tint = closeTint,
             tag = closeTag,
             reduceTransparency = settings.reduceTransparency,
@@ -359,46 +366,47 @@ internal fun CurationSheetHeader(
     }
 }
 
-/**
- * Search-and-grid curation bottom sheet for selecting favorite comics or favorite characters.
- * Follows Apple iOS 26 HIG: real live-refraction sheet, translucent iOS capsule search,
- * clean edge-to-edge squircle artwork tiles (zero heavy dark nested boxes), jelly press feedback,
- * and full accessibility support.
- */
+internal data class FavoriteChoice(val value: String, val title: String, val snapshot: String? = null)
+
 @Composable
 internal fun FavoriteSelectionSheet(
     characters: Boolean,
     query: String,
     onQueryChange: (String) -> Unit,
-    hasCurrentSelection: Boolean,
+    currentSelection: FavoriteChoice?,
     characterLoading: Boolean,
     characterError: Boolean,
     characterResults: List<CharacterResult>,
     comicLoading: Boolean,
     shownComics: List<ComicEntry>,
-    onSelect: (value: String?, portrait: String?) -> Unit,
+    onConfirm: (FavoriteChoice?) -> Unit,
     onClose: () -> Unit
 ) {
     val theme = LocalIOS27Theme.current
-    val settings = LocalAppSettings.current
-    val isLight = !theme.isDark
     val innerArtShape = remember { ContinuousRoundedRectangle(18.dp) }
-    val subtleBorderColor = if (isLight) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.14f)
+    var draft by remember(currentSelection?.value) { mutableStateOf(currentSelection) }
+    val selectionChanged = draft?.value != currentSelection?.value
+    val removalPending = selectionChanged && draft == null
+    val selectedChoice = if (selectionChanged) draft else currentSelection
 
-    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.88f) {
+    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.88f) { dismissWith ->
+        val focusManager = LocalFocusManager.current
         Column(
             Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .padding(horizontal = 20.dp, vertical = 10.dp)
                 .testTag("favorite_selection_sheet"),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             CurationSheetHeader(
                 title = if (characters) "Personagem favorito" else "HQ favorita",
-                subtitle = if (characters) "Escolha um personagem para destacar no perfil." else "Busque no acervo ou catálogo para destacar no perfil.",
-                onClose = onClose,
-                closeTag = "favorite_selection_close"
+                onClose = {
+                    focusManager.clearFocus()
+                    dismissWith(onClose)
+                },
+                closeTag = "favorite_selection_close",
+                closeLabel = "Cancelar"
             )
             AppleTextField(
                 value = query,
@@ -408,50 +416,46 @@ internal fun FavoriteSelectionSheet(
                 leadingIcon = Icons.Default.Search,
                 useContentMaterial = false
             )
-            if (hasCurrentSelection) {
-                LiquidGlassPillButton(
-                    text = "Remover dos favoritos",
-                    onClick = { onSelect(null, null) },
-                    destructive = true,
-                    leadingIcon = Icons.Default.DeleteOutline,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("favorite_remove_button")
-                )
-            }
-            if ((characters && characterLoading) || (!characters && comicLoading)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .semantics(mergeDescendants = true) {
-                            contentDescription = if (characters) "Buscando personagens" else "Buscando quadrinhos"
-                            liveRegion = LiveRegionMode.Polite
-                        },
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IOSLoadingIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = theme.accent
-                    )
-                    Text(
-                        text = if (characters) "Buscando personagens…" else "Buscando quadrinhos…",
-                        color = theme.textSecondary,
-                        fontSize = 13.sp
-                    )
-                }
-            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 102.dp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .selectableGroup()
                     .testTag("favorite_selection_grid"),
                 contentPadding = PaddingValues(top = 2.dp, bottom = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (currentSelection != null && !removalPending) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LiquidGlassPillButton(
+                            text = "Remover dos favoritos",
+                            onClick = { draft = null },
+                            destructive = true,
+                            leadingIcon = Icons.Default.DeleteOutline,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("favorite_remove_button")
+                        )
+                    }
+                }
+                if (if (characters) characterLoading else comicLoading) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IOSLoadingIndicator(Modifier.size(18.dp), color = theme.accent)
+                            Text(
+                                text = if (characters) "Buscando personagens…" else "Buscando quadrinhos…",
+                                color = theme.textSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
                 if (characters) {
                     if (characterError) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -466,37 +470,33 @@ internal fun FavoriteSelectionSheet(
                         }
                     }
                     items(characterResults, key = { it.id }) { result ->
+                        val value = result.name.take(60)
+                        val selected = selectedChoice?.value == value
                         val interaction = remember { MutableInteractionSource() }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .tactileCardPress(interaction, targetScale = 0.97f)
-                                .focusable()
-                                .clickable(
+                                .selectable(
+                                    selected = selected,
                                     interactionSource = interaction,
                                     indication = null,
-                                    role = Role.Button,
-                                    onClickLabel = "Escolher ${result.name}"
-                                ) { onSelect(result.name.take(60), result.image) }
+                                    role = Role.RadioButton
+                                ) {
+                                    draft = FavoriteChoice(
+                                        value,
+                                        result.name,
+                                        com.example.data.ProfileShowcase.characterSnapshot(result)
+                                    )
+                                }
                                 .testTag("favorite_character_option_${result.id}"),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            ProfileImage(
-                                result.image,
-                                result.name,
-                                Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1f)
-                                    .clip(innerArtShape)
-                                    .border(
-                                        width = if (settings.reduceTransparency) 1.dp else 0.75.dp,
-                                        color = if (settings.reduceTransparency) theme.divider else subtleBorderColor,
-                                        shape = innerArtShape
-                                    ),
-                                face = true
-                            )
+                            FavoriteChoiceArt(Modifier.fillMaxWidth().aspectRatio(1f), innerArtShape, selected) {
+                                ProfileImage(result.image, null, Modifier.fillMaxSize(), face = true)
+                            }
                             Text(
                                 text = result.name,
                                 color = theme.textPrimary,
@@ -532,36 +532,36 @@ internal fun FavoriteSelectionSheet(
                     }
                 } else {
                     items(shownComics, key = { it.id }) { comic ->
+                        val selected = selectedChoice?.value == comic.id
                         val interaction = remember { MutableInteractionSource() }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .tactileCardPress(interaction, targetScale = 0.97f)
-                                .focusable()
-                                .clickable(
+                                .selectable(
+                                    selected = selected,
                                     interactionSource = interaction,
                                     indication = null,
-                                    role = Role.Button,
-                                    onClickLabel = "Escolher ${comic.displayTitle}"
-                                ) { onSelect(comic.id, null) }
+                                    role = Role.RadioButton
+                                ) {
+                                    draft = FavoriteChoice(
+                                        comic.id,
+                                        comic.displayTitle,
+                                        com.example.data.ProfileShowcase.comicSnapshot(comic)
+                                    )
+                                }
                                 .testTag("favorite_comic_option_${comic.id}"),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            BookCover(
-                                comic.coverUrl,
-                                comic.displayTitle,
-                                spine3d = false,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(2f / 3f)
-                                    .clip(innerArtShape)
-                                    .border(
-                                        width = if (settings.reduceTransparency) 1.dp else 0.75.dp,
-                                        color = if (settings.reduceTransparency) theme.divider else subtleBorderColor,
-                                        shape = innerArtShape
-                                    )
-                            )
+                            FavoriteChoiceArt(Modifier.fillMaxWidth().aspectRatio(2f / 3f), innerArtShape, selected) {
+                                BookCover(
+                                    comic.coverUrl,
+                                    comic.displayTitle,
+                                    spine3d = false,
+                                    modifier = Modifier.fillMaxSize().clearAndSetSemantics { }
+                                )
+                            }
                             Text(
                                 text = comic.displayTitle,
                                 color = theme.textPrimary,
@@ -595,6 +595,78 @@ internal fun FavoriteSelectionSheet(
                         }
                     }
                 }
+            }
+            val selectionStatus = when {
+                removalPending -> "Remover ${currentSelection?.title.orEmpty()}"
+                selectedChoice != null -> "Seleção: ${selectedChoice.title}"
+                else -> null
+            }
+            if (selectionStatus != null) {
+                Text(
+                    text = selectionStatus,
+                    color = theme.textPrimary,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { liveRegion = LiveRegionMode.Polite }
+                        .testTag("favorite_selection_status")
+                )
+            }
+            LiquidGlassPillButton(
+                text = if (removalPending) "Confirmar remoção" else "Confirmar",
+                onClick = {
+                    focusManager.clearFocus()
+                    dismissWith { onConfirm(selectedChoice) }
+                },
+                enabled = selectionChanged,
+                emphasized = !removalPending,
+                destructive = removalPending,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("favorite_selection_confirm")
+            )
+        }
+    }
+}
+
+@Composable
+internal fun FavoriteChoiceArt(
+    modifier: Modifier,
+    shape: Shape,
+    selected: Boolean,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val theme = LocalIOS27Theme.current
+    val reduceTransparency = LocalAppSettings.current.reduceTransparency
+    val border = when {
+        selected -> theme.accent
+        reduceTransparency -> theme.divider
+        theme.isDark -> Color.White.copy(alpha = 0.14f)
+        else -> Color.Black.copy(alpha = 0.08f)
+    }
+    Box(
+        modifier
+            .clip(shape)
+            .border(if (selected) 2.dp else 1.dp, border, shape)
+    ) {
+        content()
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(7.dp)
+                    .size(26.dp)
+                    .background(theme.accent, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = rememberAdaptiveLiquidGlassInk(Color.White, theme.accent),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
