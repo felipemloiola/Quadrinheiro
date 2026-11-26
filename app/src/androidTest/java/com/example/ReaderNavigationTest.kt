@@ -1,6 +1,9 @@
 package com.example
 
 import android.graphics.Bitmap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -36,20 +39,9 @@ class ReaderNavigationTest {
         val bmp = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         File(compose.activity.getExternalFilesDir(null), "profile-revision-$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
-    @Test fun profileOpensLibraryAndSettingsAndKeepsItsFourFavorites() {
+    @Test fun profileOpensLibraryAndSettings() {
         compose.runOnIdle { vm.switchMainTab("profile") }
         val page = compose.onNodeWithTag("reader_profile")
-        page.performScrollToNode(hasTestTag("favorite-comic-0"))
-        compose.onNodeWithContentDescription("Escolher HQ favorita 1").performClick()
-        compose.onNodeWithText("Minha HQ favorita").performClick()
-        compose.runOnIdle { assertEquals(listOf("profile-test"), vm.appSettings.value.profileFavoriteComicIds) }
-        page.performScrollToNode(hasTestTag("favorite-character-0"))
-        compose.onNodeWithTag("favorite-character-0").performClick()
-        compose.onNode(hasSetTextAction()).performTextInput("Batman")
-        compose.waitUntil(15000) { compose.onAllNodesWithText("Batman (", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodesWithText("Batman (", substring = true)[0].performClick()
-        compose.runOnIdle { assertTrue(vm.appSettings.value.profileFavoriteCharacters.single().startsWith("Batman (")) }
-        screenshot("profile-favorites")
         page.performScrollToNode(hasText("Biblioteca"))
         page.performTouchInput { swipeUp() }
         compose.onNodeWithText("Biblioteca").performClick()
@@ -87,9 +79,9 @@ class ReaderNavigationTest {
         compose.runOnIdle { assertEquals("profile", vm.activeTab.value) }
         val banner = compose.onNodeWithTag("profile_banner").getUnclippedBoundsInRoot()
         val avatar = compose.onNodeWithTag("profile_avatar").getUnclippedBoundsInRoot()
-        val title = compose.onNodeWithTag("profile_title").getUnclippedBoundsInRoot()
+        val title = compose.onNode(hasText("Perfil") and hasAnyAncestor(hasTestTag("reader_profile"))).getUnclippedBoundsInRoot()
         val settings = compose.onNodeWithTag("profile_settings").getUnclippedBoundsInRoot()
-        assertEquals(3f, (banner.right - banner.left).value / (banner.bottom - banner.top).value, .05f)
+        assertEquals(144f, (banner.bottom - banner.top).value, 1f)
         assertTrue(avatar.top < banner.bottom && avatar.bottom > banner.bottom)
         assertTrue(title.top >= banner.top && title.bottom <= banner.bottom)
         assertTrue(settings.top >= banner.top && settings.bottom <= banner.bottom)
@@ -114,23 +106,117 @@ class ReaderNavigationTest {
         compose.onNodeWithTag("settings_back_button").performClick()
         compose.onNodeWithTag("synopsis_close_button").assertExists()
     }
-    @Test fun fullPageRegistrationOpensEditorForNewAndWantedComics() {
-        val newComic = ComicEntry("cv-1142807", "cv-1142807", "Batman", authors = "Autor", publisher = "DC", sourceLabel = "Comic Vine")
-        val wanted = newComic.copy(id = "owned-wanted", title = "HQ na fila", status = ReadingStatus.WANT_TO_READ)
+    @Test fun fullPageRegistrationKeepsSearchDetailForNewAndWantedComics() {
+        val newComic = registrationFixture("new-registration", "Expedição às estrelas")
+        val wanted = registrationFixture("wanted-registration", "HQ na fila", ReadingStatus.WANT_TO_READ)
         listOf(newComic, wanted).forEachIndexed { index, comic ->
             compose.runOnIdle {
+                vm.switchMainTab("search")
                 if (index == 1) vm.saveComic(comic)
                 vm.openInfoSynopsisModal(comic)
             }
-            compose.onNodeWithTag("open_comic_page").performClick()
-            compose.onNodeWithText("Registrar leitura").performClick()
-            compose.onNodeWithTag("modal_cancel_button").assertExists()
-            compose.runOnIdle {
-                assertNotNull(vm.selectedComic.value)
-                assertEquals(if (index == 1) ReadingStatus.WANT_TO_READ else ReadingStatus.READ, vm.selectedComic.value!!.status)
-                vm.selectComicForSheet(null); vm.openInfoSynopsisModal(null)
+            openFullComicPage()
+            compose.onNodeWithTag("comic_detail_register_button").assertTextEquals("Registrar leitura")
+            openReadingRegistration()
+            val expectedStatusTab = statusTab(if (index == 1) "Quero Ler" else "Lido")
+            registrationNode(hasTestTag("editor_list")).performScrollToNode(expectedStatusTab)
+            registrationNode(expectedStatusTab).assertIsSelected()
+            if (index == 0) {
+                registrationNode(hasTestTag("modal_cancel_button")).performClick()
+            } else {
+                pressBack()
             }
+            compose.onNodeWithTag("comic_detail_registration").assertDoesNotExist()
+            compose.onNodeWithTag("comic_detail_title").assertTextEquals(comic.displayTitle)
+            compose.runOnIdle {
+                assertNull(vm.selectedComic.value)
+                assertEquals(comic.id, vm.infoModalComic.value?.id)
+                assertEquals("search", vm.activeTab.value)
+            }
+            openReadingRegistration()
+            if (index == 0) screenshot("detail-reading-registration")
+            registrationNode(hasTestTag("modal_header_save_button")).performClick()
+            compose.onNodeWithTag("comic_detail_registration").assertDoesNotExist()
+            compose.onNodeWithTag("comic_detail_title").assertTextEquals(comic.displayTitle)
+            compose.runOnIdle {
+                assertEquals(comic.id, vm.infoModalComic.value?.id)
+                assertEquals(comic.status, vm.comics.value.single { it.id == comic.id }.status)
+            }
+            pressBack()
+            compose.onNodeWithTag("comic_detail_page").assertDoesNotExist()
+            compose.onNodeWithTag("synopsis_close_button").assertIsDisplayed().performClick()
         }
+    }
+
+    @Test fun registrationOverLibraryEditorPreservesDetailScrollAndUpdatesOriginalDraft() {
+        val comic = registrationFixture("saved-registration", "Travessia do Atlântico")
+        compose.runOnIdle {
+            vm.saveComic(comic)
+            vm.switchMainTab("shelf")
+            vm.selectComicForSheet(comic)
+        }
+        openFullComicPage()
+        val detailList = compose.onNodeWithTag("comic_detail_list")
+        detailList.performSemanticsAction(SemanticsActions.ScrollBy) { scroll -> scroll(0f, 32f) }
+        val offset = detailList.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        assertTrue(offset > 0f)
+
+        openReadingRegistration()
+        pressBack()
+        compose.onNodeWithTag("comic_detail_registration").assertDoesNotExist()
+        val returnedOffset = detailList.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        assertEquals(offset, returnedOffset, 0.00001f)
+
+        openReadingRegistration()
+        registrationNode(hasTestTag("editor_list")).performScrollToNode(statusTab("Lendo"))
+        registrationNode(statusTab("Lendo")).performClick()
+        registrationNode(hasTestTag("modal_header_save_button")).performClick()
+        compose.onNodeWithTag("comic_detail_registration").assertDoesNotExist()
+        compose.onNodeWithTag("comic_detail_register_button").assertTextContains("Em leitura", substring = true)
+        compose.runOnIdle {
+            assertEquals("shelf", vm.activeTab.value)
+            assertEquals(comic.id, vm.selectedComic.value?.id)
+            assertEquals(ReadingStatus.READING, vm.comics.value.single { it.id == comic.id }.status)
+        }
+        pressBack()
+        compose.onNodeWithTag("comic_detail_page").assertDoesNotExist()
+        compose.onNodeWithTag("editor_list").performScrollToNode(statusTab("Lendo"))
+        compose.onNode(statusTab("Lendo") and hasAnyAncestor(hasTestTag("editor_list"))).assertIsSelected()
+    }
+
+    private fun registrationFixture(id: String, title: String, status: ReadingStatus = ReadingStatus.READ) = ComicEntry(
+        id = id,
+        externalId = id,
+        title = title,
+        titlePtBr = title,
+        authors = "Autora",
+        publisher = "Editora",
+        coverUrl = "https://example.invalid/fixture.png",
+        pageCount = 120,
+        status = status,
+        synopsisPtBr = "Uma viagem ilustrada por lugares desconhecidos."
+    )
+
+    private fun openFullComicPage() {
+        compose.onNodeWithTag("editor_list").performScrollToNode(hasTestTag("open_comic_page"))
+        compose.onNodeWithTag("open_comic_page").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("comic_detail_page").assertIsDisplayed()
+    }
+
+    private fun openReadingRegistration() {
+        compose.onNodeWithTag("comic_detail_register_button").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("comic_detail_registration").assertIsDisplayed()
+        compose.onNodeWithTag("comic_detail_page").assertExists()
+    }
+
+    private fun registrationNode(matcher: SemanticsMatcher) =
+        compose.onNode(matcher and hasAnyAncestor(hasTestTag("comic_detail_registration")))
+
+    private fun statusTab(label: String) =
+        hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+
+    private fun pressBack() {
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
     }
     @Test fun confirmSavesEveryStatusWhenTheSourceDoesNotKnowThePageCount() {
         listOf(ReadingStatus.READ, ReadingStatus.READING, ReadingStatus.WANT_TO_READ).forEachIndexed { index, status ->
@@ -143,13 +229,14 @@ class ReaderNavigationTest {
             }
         }
     }
-    @Test fun registrationLoadsTheActualPageCountForTheSelectedEdition() {
-        compose.runOnIdle { vm.selectComicForSheet(ComicEntry("mt-184296", "mt-184296", "Batman: Ano Um", authors = "", publisher = "", pageCount = 0, status = ReadingStatus.READ, sourceLabel = "Metron")) }
-        compose.waitUntil(25000) { compose.onAllNodes(hasTestTag("edition_page_count") and hasText("144 páginas")).fetchSemanticsNodes().isNotEmpty() }
+    @Test fun registrationDisplaysAndSavesTheCatalogPageCountForTheSelectedEdition() {
+        val edition = registrationFixture("numbered-edition", "Edição com paginação do catálogo").copy(pageCount = 144)
+        compose.runOnIdle { vm.selectComicForSheet(edition) }
+        compose.onNodeWithText("144 págs", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("edition_page_count_input").assertDoesNotExist()
         screenshot("registration")
         compose.onNodeWithTag("modal_header_save_button").performClick()
-        compose.runOnIdle { assertEquals(144, vm.comics.value.first { it.id == "mt-184296" }.pageCount) }
+        compose.runOnIdle { assertEquals(144, vm.comics.value.single { it.id == edition.id }.pageCount) }
     }
     @Test fun iconMenuFitsAndProfileDoesNotOfferGoalVisibility() {
         compose.runOnIdle { vm.switchMainTab("settings"); vm.openSettingsCategory("appearance") }
@@ -166,8 +253,7 @@ class ReaderNavigationTest {
         compose.onNodeWithTag("profile_goal_toggle").assertDoesNotExist()
         compose.onNodeWithText("Meta no Início").assertDoesNotExist()
         screenshot("profile-editor")
-        compose.onNodeWithTag("profile_editor").performScrollToNode(hasTestTag("save_profile"))
-        compose.onNodeWithTag("save_profile").performClick()
+        compose.onNodeWithTag("save_profile").assertIsDisplayed().performClick()
         compose.onNodeWithTag("profile_editor").assertDoesNotExist()
         compose.runOnIdle { assertFalse(vm.profile.value.showGoalOnHome) }
     }

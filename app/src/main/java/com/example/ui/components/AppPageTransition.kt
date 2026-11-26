@@ -5,6 +5,8 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.LocalAppMotion
@@ -25,6 +29,7 @@ import com.example.ui.theme.LocalIOS27Theme
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 /**
  * Shared depth coordinator for iOS 26 receding-background transitions.
@@ -93,7 +98,7 @@ internal fun computePredictiveBackTransform(
         )
     }
     val dir = if (swipeEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
-    val fgShift = widthPx * 0.88f * p * dir
+    val fgShift = widthPx * p * dir
     val bgParallax = -widthPx * 0.22f * (1f - p) * dir
     return PredictiveBackLayerTransform(
         foregroundTranslationX = fgShift,
@@ -149,15 +154,25 @@ internal fun PredictiveBackRouteContainer(
     onBackCommit: () -> Unit,
     previousContent: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
-    currentContent: @Composable () -> Unit
+    currentContent: @Composable (navigateBack: () -> Unit) -> Unit
 ) {
     val motion by rememberUpdatedState(LocalAppMotion.current)
     val settings = LocalAppSettings.current
     val theme = LocalIOS27Theme.current
     val currentOnCommit by rememberUpdatedState(onBackCommit)
+    val scope = rememberCoroutineScope()
     val gestureProgress = remember { Animatable(0f) }
     var swipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
     var gestureActive by remember { mutableStateOf(false) }
+    var committing by remember { mutableStateOf(false) }
+
+    suspend fun finishBack() {
+        if (!motion.reduced && gestureProgress.value < 1f) {
+            gestureProgress.animateTo(1f, motion.tween(150))
+        }
+        currentOnCommit()
+        gestureProgress.snapTo(0f)
+    }
 
     LaunchedEffect(canNavigateBack) {
         if (!canNavigateBack && (gestureActive || gestureProgress.value > 0f)) {
@@ -167,23 +182,15 @@ internal fun PredictiveBackRouteContainer(
     }
 
     PredictiveBackHandler(enabled = canNavigateBack && enabled) { backEvents: Flow<BackEventCompat> ->
+        if (committing) return@PredictiveBackHandler
         gestureActive = true
         try {
             backEvents.collect { event ->
                 swipeEdge = event.swipeEdge
                 gestureProgress.snapTo(event.progress.coerceIn(0f, 1f))
             }
-            if (!motion.reduced && gestureProgress.value in 0.02f..0.96f) {
-                gestureProgress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = motion.spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                )
-            }
-            currentOnCommit()
-            gestureProgress.snapTo(0f)
+            committing = true
+            finishBack()
         } catch (cancel: CancellationException) {
             if (motion.reduced) {
                 gestureProgress.snapTo(0f)
@@ -197,12 +204,13 @@ internal fun PredictiveBackRouteContainer(
                 )
             }
         } finally {
+            committing = false
             gestureActive = false
         }
     }
 
-    val p = gestureProgress.value
-    val showPreview = (gestureActive || p > 0.001f) && canNavigateBack && previousContent != null
+    val hasProgress by remember { derivedStateOf { gestureProgress.value > 0.001f } }
+    val showPreview = (gestureActive || committing || hasProgress) && canNavigateBack && previousContent != null
 
     Box(
         modifier
@@ -216,61 +224,82 @@ internal fun PredictiveBackRouteContainer(
                     .fillMaxSize()
                     .clearAndSetSemantics {}
                     .graphicsLayer {
-                        val t = computePredictiveBackTransform(p, size.width, motion.reduced, swipeEdge)
+                        val t = computePredictiveBackTransform(gestureProgress.value, size.width, motion.reduced, swipeEdge)
                         translationX = t.backgroundTranslationX
                     }
             ) {
                 previousContent()
-                val scrimAlpha = if (settings.reduceTransparency) {
-                    (0.10f * (1f - p)).coerceIn(0f, 0.10f)
-                } else {
-                    (0.16f * (1f - p)).coerceIn(0f, 0.16f)
-                }
-                if (scrimAlpha > 0.002f) {
-                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha)))
-                }
+                Box(Modifier.fillMaxSize().drawBehind {
+                    val maximum = if (settings.reduceTransparency || motion.reduced) 0.10f else 0.16f
+                    drawRect(Color.Black.copy(alpha = maximum * (1f - gestureProgress.value)))
+                })
             }
         }
 
-        val cornerDp = if (p > 0.001f && !motion.reduced) (22f * p.coerceIn(0f, 1f)).dp else 0.dp
         val isRightEdge = swipeEdge == BackEventCompat.EDGE_RIGHT
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val p = gestureProgress.value
+                    val cornerDp = if (!motion.reduced) (22f * p).dp else 0.dp
                     val t = computePredictiveBackTransform(p, size.width, motion.reduced, swipeEdge)
                     translationX = t.foregroundTranslationX
                     scaleX = t.foregroundScale
                     scaleY = t.foregroundScale
                     alpha = t.foregroundAlpha
-                    if (cornerDp > 0.dp) {
-                        shape = ContinuousRoundedRectangle(cornerDp)
-                        clip = true
-                        shadowElevation = 18.dp.toPx() * (1f - 0.35f * p)
-                    }
+                    clip = cornerDp > 0.dp
+                    shadowElevation = if (clip) 18.dp.toPx() * (1f - 0.35f * p) else 0f
+                    if (clip) shape = ContinuousRoundedRectangle(cornerDp)
                 }
         ) {
-            currentContent()
-            // Subtle iOS lateral edge shadow cast on the revealed page border during swipe
-            if (p > 0.005f && !motion.reduced) {
-                val shadowAlpha = (0.18f * (1f - p * 0.45f)).coerceIn(0f, 0.18f)
+            currentContent {
+                if (!enabled || committing || gestureActive) return@currentContent
+                if (!canNavigateBack || motion.reduced) {
+                    currentOnCommit()
+                } else {
+                    committing = true
+                    swipeEdge = BackEventCompat.EDGE_LEFT
+                    scope.launch {
+                        try {
+                            finishBack()
+                        } finally {
+                            committing = false
+                        }
+                    }
+                }
+            }
+            if (showPreview && !motion.reduced) {
                 Box(
                     modifier = Modifier
                         .align(if (isRightEdge) Alignment.CenterEnd else Alignment.CenterStart)
                         .offset(x = if (isRightEdge) 14.dp else (-14).dp)
                         .width(14.dp)
                         .fillMaxHeight()
-                        .background(
-                            Brush.horizontalGradient(
+                        .drawBehind {
+                            val p = gestureProgress.value
+                            val shadowAlpha = 0.18f * (1f - p * 0.45f)
+                            drawRect(Brush.horizontalGradient(
                                 colors = if (isRightEdge) {
                                     listOf(Color.Black.copy(alpha = shadowAlpha), Color.Transparent)
                                 } else {
                                     listOf(Color.Transparent, Color.Black.copy(alpha = shadowAlpha))
                                 }
-                            )
-                        )
+                            ))
+                        }
                 )
             }
+        }
+        if (showPreview) {
+            Box(Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false).consume()
+                    do {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { it.consume() }
+                    } while (event.changes.any { it.pressed })
+                }
+            })
         }
     }
 }
@@ -291,6 +320,7 @@ internal fun PredictiveBackRootExitContainer(
     val currentOnProgress by rememberUpdatedState(onProgressChanged)
     val gestureProgress = remember { Animatable(0f) }
     var swipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    var committed by remember { mutableStateOf(false) }
 
     LaunchedEffect(gestureProgress) {
         snapshotFlow { gestureProgress.value }.collect { progress ->
@@ -298,13 +328,22 @@ internal fun PredictiveBackRootExitContainer(
         }
     }
 
+    LaunchedEffect(enabled) {
+        if (!enabled) {
+            committed = false
+            gestureProgress.snapTo(0f)
+        }
+    }
+
     PredictiveBackHandler(enabled = enabled) { backEvents: Flow<BackEventCompat> ->
+        if (committed) return@PredictiveBackHandler
         try {
             backEvents.collect { event ->
                 swipeEdge = event.swipeEdge
                 gestureProgress.snapTo(event.progress.coerceIn(0f, 1f))
             }
-            gestureProgress.snapTo(0f)
+            // Keep the committed transform until the enclosing dismissal removes this route.
+            committed = true
             currentOnExit()
         } catch (cancel: CancellationException) {
             if (motion.reduced) {
@@ -321,22 +360,20 @@ internal fun PredictiveBackRootExitContainer(
         }
     }
 
-    val p = gestureProgress.value
-    val cornerDp = if (p > 0.001f && !motion.reduced) (26f * p.coerceIn(0f, 1f)).dp else 0.dp
     Box(
         modifier
             .fillMaxSize()
             .graphicsLayer {
+                val p = gestureProgress.value
+                val cornerDp = if (!motion.reduced) (26f * p).dp else 0.dp
                 val t = computePredictiveRootExitTransform(p, size.width, motion.reduced, swipeEdge)
                 translationX = t.foregroundTranslationX
                 scaleX = t.foregroundScale
                 scaleY = t.foregroundScale
                 alpha = t.foregroundAlpha
-                if (cornerDp > 0.dp) {
-                    shape = ContinuousRoundedRectangle(cornerDp)
-                    clip = true
-                    shadowElevation = 16.dp.toPx() * p
-                }
+                clip = cornerDp > 0.dp
+                shadowElevation = if (clip) 16.dp.toPx() * p else 0f
+                if (clip) shape = ContinuousRoundedRectangle(cornerDp)
             }
     ) {
         content()
@@ -403,7 +440,7 @@ fun AppPageTransition(page: AppPage, content: @Composable (AppPage) -> Unit) {
         } else if (nextSlide) {
             progress.animateTo(
                 targetValue = 1f,
-                animationSpec = motion.ios26DetailZoomSpring()
+                animationSpec = motion.tween(if (nextDirection < 0f) 160 else 220)
             )
         } else {
             progress.animateTo(
@@ -445,6 +482,8 @@ fun AppPageTransition(page: AppPage, content: @Composable (AppPage) -> Unit) {
                                 alpha = 1f
                                 if (isTopSlidingLayer && p > 0.002f && p < 0.998f) {
                                     shadowElevation = 16.dp.toPx()
+                                } else {
+                                    shadowElevation = 0f
                                 }
                             } else {
                                 translationX = 0f
@@ -455,15 +494,11 @@ fun AppPageTransition(page: AppPage, content: @Composable (AppPage) -> Unit) {
                 ) {
                     content(destination)
                     if (isUnderlayParallaxLayer) {
-                        val p = progress.value
-                        val scrim = if (direction > 0f) 0.14f * p else 0.14f * (1f - p)
-                        if (scrim > 0.002f) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = scrim.coerceIn(0f, 0.14f)))
-                            )
-                        }
+                        Box(Modifier.fillMaxSize().drawBehind {
+                            val p = progress.value
+                            val scrim = if (direction > 0f) 0.14f * p else 0.14f * (1f - p)
+                            drawRect(Color.Black.copy(alpha = scrim))
+                        })
                     }
                 }
             }

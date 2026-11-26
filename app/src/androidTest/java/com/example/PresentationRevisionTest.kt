@@ -1,9 +1,12 @@
 package com.example
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
@@ -15,6 +18,8 @@ import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
 import com.example.ui.screens.DiaryAnalyticsSummaryCard
+import com.example.ui.screens.SettingsBackButton
+import com.example.ui.screens.backButtonScrollProgress
 import com.example.ui.components.AppPage
 import com.example.ui.components.AppPageTransition
 import com.example.ui.screens.WelcomeIntroScreen
@@ -23,6 +28,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.launch
 
 @RunWith(AndroidJUnit4::class)
 class PresentationRevisionTest {
@@ -78,5 +84,53 @@ class PresentationRevisionTest {
         compose.runOnIdle { page.value = page.value.copy(settings = null) }
         compose.onNodeWithText("Ajustes raiz").assertIsDisplayed()
         compose.onNodeWithText("Aparência").assertDoesNotExist()
+    }
+
+    @Test fun glassBackButtonFollowsScrollAndKeepsOneTouchableTarget() {
+        lateinit var scrollTo: (Int) -> Unit
+        var backs = 0
+        compose.setContent {
+            QuadrinheiroTheme(AppSettings(reduceTransparency = true)) {
+                val list = rememberLazyListState()
+                val density = LocalDensity.current
+                val scope = rememberCoroutineScope()
+                SideEffect {
+                    scrollTo = { offsetDp ->
+                        scope.launch { list.scrollToItem(0, with(density) { offsetDp.dp.roundToPx() }) }
+                    }
+                }
+                val progress = backButtonScrollProgress(
+                    firstVisibleItemIndex = { list.firstVisibleItemIndex },
+                    firstVisibleItemScrollOffset = { list.firstVisibleItemScrollOffset }
+                )
+                Box(Modifier.fillMaxSize()) {
+                    LazyColumn(state = list) {
+                        items(20) { Spacer(Modifier.fillMaxWidth().height(96.dp)) }
+                    }
+                    SettingsBackButton(
+                        onBack = { backs++ },
+                        modifier = Modifier.align(Alignment.TopStart),
+                        label = "Explorar",
+                        collapseProgress = progress
+                    )
+                }
+            }
+        }
+        val back = compose.onNodeWithContentDescription("Voltar para Explorar")
+        val expanded = back.getUnclippedBoundsInRoot()
+        val expandedWidth = expanded.right - expanded.left
+        compose.runOnIdle { scrollTo(24) }
+        val intermediate = back.getUnclippedBoundsInRoot()
+        val intermediateWidth = intermediate.right - intermediate.left
+        assertTrue(intermediateWidth > 48.dp && intermediateWidth < expandedWidth)
+        compose.runOnIdle { scrollTo(60) }
+        val compact = back.getUnclippedBoundsInRoot()
+        assertEquals(48f, (compact.right - compact.left).value, 1f)
+        assertEquals(48f, (compact.bottom - compact.top).value, 1f)
+        assertEquals(expanded.left, compact.left)
+        back.performClick()
+        compose.runOnIdle { assertEquals(1, backs); scrollTo(0) }
+        val restored = back.getUnclippedBoundsInRoot()
+        assertEquals(expandedWidth, restored.right - restored.left)
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -65,10 +66,11 @@ fun ComicDetailDialog(
     profile: ReaderProfile,
     library: List<ComicEntry>,
     onClose: () -> Unit,
-    onRegister: (ComicEntry) -> Unit,
+    onSaveRegistration: (ComicEntry) -> Unit,
+    onDeleteRegistration: (String) -> Unit,
     onCover: (String) -> Unit,
     onLogin: () -> Unit,
-    onShare: () -> Unit,
+    onShare: (ComicEntry, SocialShareCardType, String?) -> Unit,
     useDialogWindow: Boolean = false,
     isExternalOverlayOpen: Boolean = false
 ) {
@@ -106,10 +108,10 @@ fun ComicDetailDialog(
         if (isClosing) return
         isClosing = true
         scope.launch {
-            if (!motion.reduced && predictiveExitProgress < 0.85f) {
+            if (!motion.reduced) {
                 presentationProgress.animateTo(
                     targetValue = 0f,
-                    animationSpec = motion.ios26ModalExitSpring()
+                    animationSpec = motion.tween(160)
                 )
             }
             onClose()
@@ -149,10 +151,11 @@ fun ComicDetailDialog(
                 profile = profile,
                 library = library,
                 onBack = { closeWithLiquidZoom() },
-                onRegister = onRegister,
+                onSaveRegistration = onSaveRegistration,
+                onDeleteRegistration = onDeleteRegistration,
                 onCover = onCover,
                 onLogin = { closeWithLiquidZoom(); onLogin() },
-                onShare = { closeWithLiquidZoom(); onShare() },
+                onShare = onShare,
                 isExternalOverlayOpen = isExternalOverlayOpen,
                 onRootPredictiveProgress = { predictiveExitProgress = it }
             )
@@ -183,16 +186,18 @@ fun ComicDetailDialog(
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun ComicDetailScreen(
     initialComic: ComicEntry,
     profile: ReaderProfile,
     library: List<ComicEntry>,
     onBack: () -> Unit,
-    onRegister: (ComicEntry) -> Unit,
+    onSaveRegistration: (ComicEntry) -> Unit,
+    onDeleteRegistration: (String) -> Unit = {},
     onCover: (String) -> Unit,
     onLogin: () -> Unit,
-    onShare: () -> Unit,
+    onShare: (ComicEntry, SocialShareCardType, String?) -> Unit,
     isExternalOverlayOpen: Boolean = false,
     initialDetailOverride: CatalogDetails? = null,
     detailLoader: (suspend (ComicEntry, Pair<String, String>?) -> CatalogDetails?)? = null,
@@ -216,6 +221,9 @@ internal fun ComicDetailScreen(
     var rating by remember { mutableStateOf<CommunityRating?>(null) }
     var pendingScrollTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var scrollRestoreToken by remember { mutableIntStateOf(0) }
+    var registrationComic by remember { mutableStateOf<ComicEntry?>(null) }
+    var registrationExpanded by remember { mutableStateOf(false) }
+    val settings = LocalAppSettings.current
 
     LaunchedEffect(libraryMatch, history.size) {
         if (history.isEmpty() && entity == null && libraryMatch != null) {
@@ -430,13 +438,14 @@ internal fun ComicDetailScreen(
     }
 
     val catalogEntries by com.example.data.ModernCatalog.entries.collectAsState()
-    val hasActiveOverlay = editionPicker || isExternalOverlayOpen || menuHost?.currentRequest != null
+    val hasActiveOverlay = editionPicker || registrationComic != null || isExternalOverlayOpen || menuHost?.currentRequest != null
     val previousRoute = history.lastOrNull()
     val detailOverlayBackdrop = rememberLayerBackdrop()
 
     PredictiveBackRootExitContainer(
         enabled = history.isEmpty() && !hasActiveOverlay,
         onExit = onBack,
+        modifier = if (registrationComic != null) Modifier.semantics { invisibleToUser() } else Modifier,
         onProgressChanged = onRootPredictiveProgress
     ) {
         PredictiveBackRouteContainer(
@@ -473,12 +482,12 @@ internal fun ComicDetailScreen(
                         onOpenEntity = { _, _ -> },
                         onRegister = {},
                         onLogin = {},
-                        onShare = {},
+                        onShare = { _, _, _ -> },
                         onBack = {}
                     )
                 }
             }
-        ) {
+        ) { navigateBack ->
             ComicDetailRouteBody(
                 comic = comic,
                 entity = entity,
@@ -502,10 +511,56 @@ internal fun ComicDetailScreen(
                 onOpenEditionPicker = { editionPicker = true },
                 onOpenComic = { openComic(it) },
                 onOpenEntity = { type, id -> openEntity(type, id) },
-                onRegister = onRegister,
+                onRegister = { target ->
+                    if (registrationComic == null) {
+                        registrationExpanded = false
+                        val saved = catalogEntryForEditing(target, library)
+                        registrationComic = saved ?: target.copy(
+                            status = ReadingStatus.READ,
+                            format = target.format.ifBlank { settings.defaultFormat },
+                            readDate = target.readDate.ifBlank {
+                                if (settings.autoFillReadDate) java.time.LocalDate.now().toString() else ""
+                            }
+                        )
+                    }
+                },
                 onLogin = onLogin,
                 onShare = onShare,
-                onBack = { goBack() }
+                onBack = navigateBack
+            )
+        }
+    }
+
+    registrationComic?.let { target ->
+        CompositionLocalProvider(LocalLiquidGlassBackdrop provides detailOverlayBackdrop) {
+            CatalogSheetModal(
+                selectedComic = target,
+                isExistingInShelf = catalogEntryForEditing(target, library) != null,
+                isSheetExpanded = registrationExpanded,
+                appSettings = settings,
+                allUserComics = library,
+                onUpdateComic = {},
+                onToggleExpand = { registrationExpanded = !registrationExpanded },
+                onSetExpanded = { registrationExpanded = it },
+                onSave = { edited ->
+                    if (registrationComic != null) {
+                        registrationComic = null
+                        onSaveRegistration(edited)
+                    }
+                },
+                onDelete = { id ->
+                    if (registrationComic != null) {
+                        registrationComic = null
+                        onDeleteRegistration(id)
+                    }
+                },
+                onDismiss = { registrationComic = null },
+                onShareComic = onShare,
+                readerProfile = profile,
+                allowFullPage = false,
+                modifier = Modifier
+                    .testTag("comic_detail_registration")
+                    .semantics { paneTitle = "Registro de leitura" }
             )
         }
     }
@@ -551,7 +606,7 @@ private fun ComicDetailRouteBody(
     onOpenEntity: (String, String) -> Unit,
     onRegister: (ComicEntry) -> Unit,
     onLogin: () -> Unit,
-    onShare: () -> Unit,
+    onShare: (ComicEntry, SocialShareCardType, String?) -> Unit,
     onBack: () -> Unit
 ) {
     val t = LocalIOS27Theme.current
@@ -559,9 +614,10 @@ private fun ComicDetailRouteBody(
     val isComic = entity == null
     val effectiveCover = comic.coverUrl.ifBlank { detail?.image.orEmpty() }
     val detailBackdrop = captureBackdrop ?: rememberLayerBackdrop()
-    val collapsed by remember(listState) {
-        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24 }
-    }
+    val backCollapseProgress = backButtonScrollProgress(
+        firstVisibleItemIndex = { listState.firstVisibleItemIndex },
+        firstVisibleItemScrollOffset = { listState.firstVisibleItemScrollOffset }
+    )
     val related = remember(comic.id, comic.externalId, detail?.issues, detail?.characters, detail?.creators, library, catalogEntries) {
         val pool = library + catalogEntries + CuratedCatalog.curatedComicsCatalog
         ComicDetailPresentation.relatedEditionsWithReasons(comic, detail, pool)
@@ -897,7 +953,7 @@ private fun ComicDetailRouteBody(
             ) {
                 SettingsBackButton(
                     onBack = onBack,
-                    collapsed = collapsed,
+                    collapseProgress = backCollapseProgress,
                     label = if (isComic) "Voltar" else "HQ",
                     testTag = if (isPreview) "comic_detail_preview_back" else "settings_back_button"
                 )
@@ -906,7 +962,7 @@ private fun ComicDetailRouteBody(
                     LiquidGlassCircleButton(
                         icon = LucideIcons.ShareIos,
                         contentDescription = "Compartilhar",
-                        onClick = onShare,
+                        onClick = { onShare(comic, SocialShareCardType.COMPLETED_READING, null) },
                         size = 48.dp,
                         iconSize = 20.dp,
                         tint = t.accent,

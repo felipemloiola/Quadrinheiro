@@ -1,27 +1,22 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
@@ -29,18 +24,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.model.ComicEntry
 import com.example.ui.components.*
-import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
-import com.example.ui.theme.contrastRatio
 import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 
-/**
- * Apple iOS 26 HIG sheet for choosing a favorite character portrait or favorite comic cover.
- * Uses clean edge-to-edge squircle artwork tiles with floating iOS selection checkmarks
- * (no clunky nested gray cards or repetitive flat pills) and full-width non-truncating
- * Liquid Glass action capsules.
- */
 @Composable
 internal fun FavoriteArtworkSheet(
     comic: ComicEntry?,
@@ -52,9 +39,9 @@ internal fun FavoriteArtworkSheet(
     onRemove: () -> Unit
 ) {
     val t = LocalIOS27Theme.current
-    val settings = LocalAppSettings.current
-    val isLight = !t.isDark
     val current = comic?.coverUrl ?: ProfileShowcase.characterImage(portrait)
+    var draft by remember(current) { mutableStateOf(current) }
+    var removalPending by remember(current) { mutableStateOf(false) }
     var images by remember(current) { mutableStateOf(listOf(current).filter { it.isNotBlank() }) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
@@ -92,14 +79,11 @@ internal fun FavoriteArtworkSheet(
         }
     }
 
-    val checkInk = remember(t.accent) {
-        if (contrastRatio(Color.White, t.accent) >= contrastRatio(Color.Black, t.accent)) Color.White else Color.Black
-    }
-
-    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.84f) {
+    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.84f) { dismissWith ->
         Column(
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
                 .testTag("favorite_artwork_sheet"),
             verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -108,9 +92,9 @@ internal fun FavoriteArtworkSheet(
                 title = if (comic?.let { it.externalId.ifBlank { it.id }.startsWith("cv-volume-") } == true) "Capas da coleção"
                 else if (comic != null) "Capa em destaque"
                 else "Imagem do personagem",
-                subtitle = if (comic != null) "Toque na capa que deseja exibir no perfil." else "Toque no retrato que deseja exibir no perfil.",
-                onClose = onClose,
-                closeTag = "favorite_artwork_close"
+                onClose = { dismissWith(onClose) },
+                closeTag = "favorite_artwork_close",
+                closeLabel = "Cancelar"
             )
             if (loading) {
                 Row(
@@ -135,85 +119,48 @@ internal fun FavoriteArtworkSheet(
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .semantics { selectableGroup() },
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 2.dp)
                 ) {
-                    items(images, key = { it }) { image ->
-                        val isSelected = image == current
+                    itemsIndexed(images, key = { _, image -> image }) { index, image ->
+                        val isSelected = !removalPending && image == draft
                         val interaction = remember { MutableInteractionSource() }
-                        val borderColor = when {
-                            isSelected -> t.accent
-                            settings.reduceTransparency -> t.divider
-                            isLight -> Color.Black.copy(alpha = 0.10f)
-                            else -> Color.White.copy(alpha = 0.18f)
-                        }
-                        Box(
+                        FavoriteChoiceArt(
                             modifier = Modifier
                                 .width(if (comic != null) 118.dp else 132.dp)
                                 .aspectRatio(if (comic != null) 2f / 3f else 1f)
                                 .pressScaleFeedback(interaction, targetScale = 0.94f)
-                                .clip(artShape)
-                                .border(
-                                    width = if (isSelected) 2.5.dp else 0.75.dp,
-                                    color = borderColor,
-                                    shape = artShape
-                                )
-                                .focusable()
-                                .semantics(mergeDescendants = true) {
-                                    selected = isSelected
-                                    role = Role.RadioButton
-                                    contentDescription = if (isSelected) "Imagem selecionada" else "Escolher esta imagem"
-                                }
-                                .clickable(
+                                .selectable(
+                                    selected = isSelected,
                                     interactionSource = interaction,
                                     indication = null,
-                                    role = Role.Button,
-                                    onClickLabel = if (isSelected) "Imagem atual selecionada" else "Escolher esta imagem"
-                                ) { onChoose(image) }
+                                    role = Role.RadioButton
+                                ) {
+                                    draft = image
+                                    removalPending = false
+                                }
+                                .semantics {
+                                    val item = if (comic != null) "Capa" else "Retrato"
+                                    contentDescription = if (image == current) "$item em uso" else "$item ${index + 1}"
+                                },
+                            shape = artShape,
+                            selected = isSelected
                         ) {
                             if (comic != null) {
                                 BookCover(
                                     image,
                                     comic.displayTitle,
                                     spine3d = false,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize().clearAndSetSemantics { }
                                 )
                             } else {
                                 ProfileImage(
                                     image,
-                                    character,
+                                    null,
                                     Modifier.fillMaxSize(),
                                     face = true
                                 )
-                            }
-
-                            // Native iOS Photos / Contact Poster selection badge in top-right corner
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isSelected) t.accent
-                                        else Color.Black.copy(alpha = 0.34f)
-                                    )
-                                    .border(
-                                        width = 1.25.dp,
-                                        color = Color.White.copy(alpha = if (isSelected) 0.92f else 0.65f),
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = checkInk,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
                             }
                         }
                     }
@@ -245,16 +192,28 @@ internal fun FavoriteArtworkSheet(
                 }
             }
 
-            // Stacked full-width iOS 26 Liquid Glass action capsules — zero text truncation
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 2.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (removalPending || (draft.isNotBlank() && draft != current)) {
+                    LiquidGlassPillButton(
+                        text = if (removalPending) "Confirmar remoção" else "Confirmar imagem",
+                        onClick = {
+                            val selectedImage = draft
+                            if (removalPending) dismissWith(onRemove)
+                            else dismissWith { onChoose(selectedImage) }
+                        },
+                        emphasized = !removalPending,
+                        destructive = removalPending,
+                        modifier = Modifier.fillMaxWidth().testTag("favorite_artwork_confirm")
+                    )
+                }
                 LiquidGlassPillButton(
                     text = if (comic != null) "Trocar HQ" else "Trocar personagem",
-                    onClick = onReplace,
+                    onClick = { dismissWith(onReplace) },
                     emphasized = true,
                     leadingIcon = Icons.Default.SwapHoriz,
                     modifier = Modifier
@@ -262,10 +221,10 @@ internal fun FavoriteArtworkSheet(
                         .testTag("favorite_artwork_replace")
                 )
                 LiquidGlassPillButton(
-                    text = "Remover dos favoritos",
-                    onClick = onRemove,
-                    destructive = true,
-                    leadingIcon = Icons.Default.DeleteOutline,
+                    text = if (removalPending) "Manter favorito" else "Remover dos favoritos",
+                    onClick = { removalPending = !removalPending },
+                    destructive = !removalPending,
+                    leadingIcon = if (removalPending) null else Icons.Default.DeleteOutline,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("favorite_artwork_remove")

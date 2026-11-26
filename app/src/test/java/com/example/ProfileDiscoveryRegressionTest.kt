@@ -76,6 +76,17 @@ class ProfileDiscoveryRegressionTest {
         assertEquals(owned.currentPage, editable.currentPage); assertEquals(owned.tags, editable.tags)
         assertEquals(catalog.coverUrl, editable.coverUrl)
     }
+
+    @Test fun editingPrefersExactEditionOverEarlierSameTitleEntry() {
+        val other = ComicEntry("local-first", "edition-first", "Mesmo título", authors = "Autora", publisher = "Editora", rating = 2f)
+        val target = other.copy(id = "local-second", externalId = "edition-second", rating = 5f)
+        val catalog = target.copy(id = "catalog-second", rating = 0f)
+
+        val editable = catalogEntryForEditing(catalog, listOf(other, target))!!
+
+        assertEquals(target.id, editable.id)
+        assertEquals(target.rating, editable.rating)
+    }
     @Test fun paginatedCatalogDeduplicatesAcrossProvidersAndBoundsVisibleWindow() {
         val window = CatalogWindow()
         val first = ComicEntry("a", "", "Batman: Ano Um", authors = "Frank Miller", publisher = "DC", isbn = "9781234567890")

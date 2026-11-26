@@ -1,8 +1,10 @@
 package com.example
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.SafeStorage
+import com.example.data.ShowcaseDataSeeder
 import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
@@ -50,6 +52,19 @@ class AccountPersistenceRegressionTest {
 
     private fun comic(title: String) = ComicEntry(id = "shared-id", externalId = "shared-external-id", title = title,
         authors = "Author", publisher = "Publisher", updatedAt = 100L, isDirty = true)
+
+    @Config(application = Application::class)
+    @Test
+    fun showcaseStartupPreservesAnExistingAccountSession() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        login(alice)
+        storage.saveState(listOf(comic("Alice")), ReaderProfile(name = "Alice"), settings)
+
+        ShowcaseDataSeeder.seedIfNecessary(context)
+
+        assertEquals(alice, storage.loadAuthSession()?.uid)
+        assertEquals("Alice", storage.loadState().comics.single().title)
+    }
 
     @Test
     fun saveWithoutSessionPersistsInsteadOfSilentlyDroppingData() {

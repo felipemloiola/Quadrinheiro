@@ -5,31 +5,49 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.*
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
@@ -37,37 +55,38 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.example.ui.theme.*
+import com.example.ui.theme.LocalAppMotion
+import com.example.ui.theme.LocalAppSettings
+import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.readableForeground
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.*
-import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.ContinuousRoundedRectangle
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.tanh
 
-/**
- * Floating iOS 26 / LiquidGlassKMP-inspired retained glass menu.
- * Measures once at final size; balanced jelly spring physics animate only the GPU render layer
- * while refracting the live backdrop behind the menu (`vibrancy -> blur -> lens`).
- */
+/** A retained, anchored glass surface with separately drawn, undistorted labels. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdrop, modifier: Modifier) {
-    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val menuTextStyle = androidx.compose.material3.LocalTextStyle.current.copy(
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Medium
-    )
-    val motion by rememberUpdatedState(LocalAppMotion.current)
+    val motion = LocalAppMotion.current
+    val settings = LocalAppSettings.current
+    val palette = LocalIOS27Theme.current
+    val dark = palette.isDark
     val haptics = rememberAppHaptics()
     val active = state.currentRequest
-    var retained by remember { mutableStateOf<LiquidGlassMenuRequest?>(null) }
-    val x = remember { Animatable(0f) }
-    val y = remember { Animatable(0f) }
+    var retained by remember(state) { mutableStateOf<LiquidGlassMenuRequest?>(null) }
+    val x = remember(state) { Animatable(0f, visibilityThreshold = 0.015f) }
+    val y = remember(state) { Animatable(0f, visibilityThreshold = 0.015f) }
     var hovered by remember { mutableStateOf<Int?>(null) }
     var drag by remember { mutableStateOf(Offset.Zero) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -78,71 +97,98 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
     }
     SideEffect { if (active != null) retained = active }
 
-    LaunchedEffect(active?.id, active?.openNonce) {
+    LaunchedEffect(state, active?.id, active?.openNonce, motion.reduced) {
         hovered = null
         drag = Offset.Zero
         if (active != null) {
-            retained = active
-            state.morphingMenuId = active.id
-            if (motion.reduced) {
-                x.snapTo(1f)
-                y.snapTo(1f)
-            } else {
-                // Global iOS 26 floating menu morph: subtle X/Y phase offset for organic liquid expansion
-                launch { x.animateTo(1f, motion.ios26FloatingMenuSpring(axis = 0)) }
-                y.animateTo(1f, motion.ios26FloatingMenuSpring(axis = 1))
-            }
-        } else if (retained != null) {
-            if (motion.reduced) {
+            // A different trigger starts at its own bounds. A reopen at the same trigger
+            // reverses the collapse from the frame that is already on screen.
+            if (state.morphingMenuId != active.id) {
                 x.snapTo(0f)
                 y.snapTo(0f)
-            } else {
-                launch { x.animateTo(0f, motion.ios26FloatingMenuCollapseSpring()) }
-                y.animateTo(0f, motion.ios26FloatingMenuCollapseSpring())
+            }
+            state.morphingMenuId = active.id
+            coroutineScope {
+                launch { x.animateTo(1f, motion.spring(dampingRatio = 0.81f, stiffness = 760f)) }
+                y.animateTo(1f, motion.spring(dampingRatio = 0.78f, stiffness = 690f))
+            }
+        } else {
+            val closing = retained ?: return@LaunchedEffect
+            coroutineScope {
+                launch { x.animateTo(0f, motion.tween(150)) }
+                y.animateTo(0f, motion.tween(150))
             }
             if (state.currentRequest == null) {
                 retained = null
                 state.morphingMenuId = null
+                state.completeMenuCollapse(closing)
             }
         }
     }
 
     val request = active ?: retained ?: return
     if (request.items.isEmpty()) return
-    val currentRequest by rememberUpdatedState(request)
+    val interactive by remember {
+        derivedStateOf { minOf(x.value, y.value) >= 0.82f }
+    }
+    val acceptsInput = active != null && (
+        motion.reduced || (state.morphingMenuId == active.id && interactive)
+    )
     val density = LocalDensity.current
-    val palette = LocalIOS27Theme.current
-    val settings = LocalAppSettings.current
-    val dark = LocalIsDarkTheme.current
-    val isLight = !dark
-    val hasAnyIcon = remember(request.items) { request.items.any { it.icon != null } }
+    val layoutDirection = LocalLayoutDirection.current
+    val insets = WindowInsets.safeDrawing
+    val textMeasurer = rememberTextMeasurer()
+    val menuTextStyle = LocalTextStyle.current.copy(fontSize = 15.sp, lineHeight = 20.sp)
+    val rowHeight = with(density) { maxOf(48.dp, 40.sp.toDp() + 8.dp) }
+    val rowPx = with(density) { rowHeight.roundToPx() }
+    val dividerPx = with(density) { 0.5.dp.roundToPx() }
+    val rowPaddingPx = with(density) { 7.dp.roundToPx() }
     val menuShape = remember { ContinuousRoundedRectangle(26.dp) }
-    val hoverPillShape = remember { ContinuousRoundedRectangle(16.dp) }
+    val rowShape = remember { ContinuousRoundedRectangle(16.dp) }
+    val hasIcons = request.items.any { it.icon != null }
+    val hasSelection = request.items.any { it.selected }
+    val focusIndex = request.items.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val rowFocus = remember(request.id, request.openNonce) { FocusRequester() }
+    val inputMode = LocalInputModeManager.current
+    val windowInfo = LocalWindowInfo.current
 
-    val rowHeight = if (density.fontScale > 1.2f) (34f * density.fontScale + 16f).dp else 48.dp
-    val hoverOffset by animateFloatAsState(
-        targetValue = with(density) { (rowHeight + 0.5.dp).toPx() } * (hovered ?: 0),
-        animationSpec = motion.spring(dampingRatio = 0.62f, stiffness = 480f),
+    val hoverOffset = animateFloatAsState(
+        targetValue = ((rowPx + dividerPx) * (hovered ?: 0)).toFloat(),
+        animationSpec = motion.spring(dampingRatio = 0.75f, stiffness = 550f),
         label = "menuHoverPosition"
     )
-    val hoverAlpha by animateFloatAsState(
+    val hoverAlpha = animateFloatAsState(
         targetValue = if (hovered == null) 0f else 1f,
-        animationSpec = motion.tween(110),
+        animationSpec = motion.tween(90),
         label = "menuHoverAlpha"
     )
-    val hoverScale by animateFloatAsState(
-        targetValue = if (hovered != null && !motion.reduced) 1.018f else 1f,
-        animationSpec = motion.spring(dampingRatio = 0.58f, stiffness = 440f),
-        label = "menuHoverScale"
-    )
+    val hoverColor = if (dark) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.07f)
+    val selectedColor = if (dark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.045f)
+    val surfaceBase = if (dark) Color(0xFF171820) else Color.White
+    val surfaceAlpha = when {
+        settings.reduceTransparency -> 1f
+        settings.increaseContrast -> 0.90f
+        else -> (0.76f + 0.10f * (settings.glassOpacity - 1f)).coerceIn(0.74f, 0.94f)
+    }
+    val surface = surfaceBase.copy(alpha = surfaceAlpha)
+    val contrastBackground = hoverColor.compositeOver(surface.compositeOver(if (dark) Color.White else Color.Black))
+    val minContrast = if (settings.increaseContrast) 7f else 4.5f
+    val ink = remember(palette.textPrimary, contrastBackground, minContrast) {
+        readableForeground(palette.textPrimary, contrastBackground, minContrast)
+    }
+    val accent = remember(palette.accent, contrastBackground, minContrast) {
+        readableForeground(palette.accent, contrastBackground, minContrast)
+    }
 
-    BackHandler(active != null) { state.dismissMenu() }
+    // Keep back and outside taps in this layer until the collapse finishes.
+    BackHandler {
+        if (state.currentRequest != null) state.dismissMenu(request.id)
+    }
 
-    fun choose(index: Int) {
-        val item = currentRequest.items.getOrNull(index) ?: return
-        haptics.impactLight()
-        item.onClick()
-        state.dismissMenu(currentRequest.id)
+    fun choose(displayed: LiquidGlassMenuRequest, index: Int) {
+        if (state.selectMenuItem(displayed, index, waitForCollapse = !motion.reduced)) {
+            haptics.impactLight()
+        }
     }
 
     BoxWithConstraints(
@@ -151,294 +197,275 @@ internal fun RetainedGlassMenu(state: LiquidGlassMenuHostState, backdrop: Backdr
             .zIndex(44f)
             .onGloballyPositioned { hostOrigin = it.positionInRoot() }
     ) {
-        val widest = remember(request.items.map { it.label }, density.fontScale, menuTextStyle) {
-            request.items.maxOfOrNull {
-                textMeasurer.measure(androidx.compose.ui.text.AnnotatedString(it.label), menuTextStyle).size.width
-            } ?: 0
-        }
-        val extraWidth = if (hasAnyIcon) 98.dp else 82.dp
-        val menuWidth = minOf(
-            maxOf(
-                with(density) { widest.toDp() } + extraWidth,
-                with(density) { request.anchorBounds.width.toDp() },
-                192.dp
-            ),
-            maxWidth - 28.dp
-        )
-        val menuHeight = minOf(
-            rowHeight * request.items.size + 0.5.dp * (request.items.size - 1) + 14.dp,
-            maxHeight - 28.dp
-        )
-        val width = with(density) { menuWidth.roundToPx() }
-        val height = with(density) { menuHeight.roundToPx() }
         val margin = with(density) { 14.dp.roundToPx() }
-        val source = request.anchorBounds
-        val anchor = IntRect(
-            source.left - hostOrigin.x.roundToInt(),
-            source.top - hostOrigin.y.roundToInt(),
-            source.right - hostOrigin.x.roundToInt(),
-            source.bottom - hostOrigin.y.roundToInt()
-        )
-        val right = anchor.center.x > constraints.maxWidth / 2
-        val down = constraints.maxHeight - anchor.top - with(density) { 92.dp.roundToPx() } >= height || anchor.top < height
-        val left = (if (right) anchor.right - width else anchor.left)
-            .coerceIn(margin, (constraints.maxWidth - width - margin).coerceAtLeast(margin))
-        val top = (if (down) anchor.top else anchor.bottom - height)
-            .coerceIn(margin, (constraints.maxHeight - height - margin).coerceAtLeast(margin))
+        val leftLimit = margin + insets.getLeft(density, layoutDirection)
+        val rightLimit = constraints.maxWidth - margin - insets.getRight(density, layoutDirection)
+        val topLimit = margin + insets.getTop(density)
+        val bottomLimit = constraints.maxHeight - margin - insets.getBottom(density)
+        if (rightLimit <= leftLimit || bottomLimit <= topLimit) return@BoxWithConstraints
 
-        if (active != null) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .testTag("retained_glass_menu_scrim")
-                    .pointerInput(request.id, request.openNonce) {
-                        awaitEachGesture {
-                            val downEvent = awaitFirstDown(false)
-                            downEvent.consume()
+        Box(
+            Modifier
+                .fillMaxSize()
+                .testTag("retained_glass_menu_scrim")
+                .pointerInput(state, request.id, request.openNonce) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        down.consume()
+                        val live = state.currentRequest
+                        if (live?.id == request.id && live.openNonce == request.openNonce) {
                             state.dismissMenu(request.id)
                         }
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.forEach { it.consume() }
+                        } while (event.changes.any { it.pressed })
                     }
-            )
-        }
+                }
+        )
 
-        val edgeRefraction = !settings.reduceTransparency && settings.enableLensRefraction
-        val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
-        val refractionMult = settings.glassIntensity.coerceIn(0.6f, 2.2f)
+        val widestLabel = remember(request.items, textMeasurer, menuTextStyle) {
+            request.items.maxOf { item ->
+                textMeasurer.measure(
+                    AnnotatedString(item.label),
+                    menuTextStyle.copy(fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Medium)
+                ).size.width
+            }
+        }
+        val rowChrome = 42.dp + (if (hasIcons) 30.dp else 0.dp) + (if (hasSelection) 28.dp else 0.dp)
+        val source = request.anchorBounds
+        val origin = IntOffset(hostOrigin.x.roundToInt(), hostOrigin.y.roundToInt())
+        val anchor = IntRect(source.left - origin.x, source.top - origin.y, source.right - origin.x, source.bottom - origin.y)
+        val width = with(density) {
+            maxOf(widestLabel + rowChrome.roundToPx(), anchor.width, 158.dp.roundToPx())
+        }.coerceAtMost(rightLimit - leftLimit)
+        val desiredHeight = rowPx * request.items.size +
+            dividerPx * (request.items.size - 1) + 2 * rowPaddingPx
+        val above = anchor.bottom - topLimit
+        val below = bottomLimit - anchor.top
+        val down = desiredHeight <= below || (desiredHeight > above && below >= above)
+        val minHeight = (rowPx + 2 * rowPaddingPx).coerceAtMost(bottomLimit - topLimit)
+        val availableHeight = (if (down) below else above).coerceIn(minHeight, bottomLimit - topLimit)
+        val height = desiredHeight.coerceAtMost(availableHeight)
+        val scrollable = height < desiredHeight
+        val right = anchor.center.x > (leftLimit + rightLimit) / 2
+        val left = (if (right) anchor.right - width else anchor.left).coerceIn(leftLimit, rightLimit - width)
+        val top = (if (down) anchor.top else anchor.bottom - height).coerceIn(topLimit, bottomLimit - height)
+        val pivot = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
+        val sourceOffsetX = if (right) anchor.right - left - width else anchor.left - left
+        val sourceOffsetY = if (down) anchor.top - top else anchor.bottom - top - height
+
+        fun reveal() = when {
+            motion.reduced -> if (active == null) 0f else 1f
+            state.morphingMenuId != request.id -> 0f
+            else -> minOf(x.value, y.value).coerceIn(0f, 1f)
+        }
 
         Box(
             Modifier
                 .offset { IntOffset(left, top) }
-                .size(menuWidth, menuHeight)
+                .size(with(density) { width.toDp() }, with(density) { height.toDp() })
                 .testTag("retained_glass_menu")
-                .graphicsLayer {
-                    transformOrigin = TransformOrigin(if (right) 1f else 0f, if (down) 0f else 1f)
-                    val dragLimitX = 14f
-                    val dragLimitY = 14f
-                    val jellyDragX = if (motion.reduced) 0f else dragLimitX * tanh(drag.x / 220f)
-                    val jellyDragY = if (motion.reduced) 0f else dragLimitY * tanh(drag.y / 220f)
-                    val startScaleX = (anchor.width.toFloat() / width.coerceAtLeast(1)).coerceIn(0.18f, 1f)
-                    val startScaleY = (anchor.height.toFloat() / height.coerceAtLeast(1)).coerceIn(0.18f, 1f)
-                    scaleX = (startScaleX + (1f - startScaleX) * x.value).coerceAtLeast(0.05f)
-                    scaleY = (startScaleY + (1f - startScaleY) * y.value).coerceAtLeast(0.05f)
-                    translationX = ((if (right) anchor.right - left - width else anchor.left - left) * (1f - x.value)) + jellyDragX
-                    translationY = ((if (down) anchor.top - top else anchor.bottom - top - height) * (1f - y.value)) + jellyDragY
-                    alpha = (minOf(x.value, y.value) * 4.5f).coerceIn(0f, 1f)
+                .semantics {
+                    if (acceptsInput) {
+                        isTraversalGroup = true
+                        paneTitle = request.triggerLabel.ifBlank { "Opções" }
+                    } else {
+                        invisibleToUser()
+                    }
                 }
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { menuShape },
-                    highlight = {
-                        Highlight.Default.copy(alpha = if (isLight) 0.84f else 0.58f)
-                    },
-                    shadow = {
-                        Shadow(
-                            radius = 22.dp,
-                            offset = DpOffset(0.dp, 8.dp),
-                            color = Color.Black.copy(alpha = if (isLight) 0.16f else 0.36f)
-                        )
-                    },
-                    innerShadow = {
-                        InnerShadow(
-                            radius = 6.dp,
-                            alpha = if (isLight) 0.14f else 0.26f
-                        )
-                    },
-                    effects = {
-                        if (!settings.reduceTransparency) {
-                            vibrancy()
-                            val blurPx = (10f * settings.glassBlurIntensity).coerceIn(5f, 22f).dp.toPx()
-                            if (blurPx >= 1f) blur(blurPx)
-                        }
-                        if (edgeRefraction && size.isSpecified && size.width > 4f && size.height > 4f) {
-                            val rHeight = ((20f * refractionMult).dp.toPx())
-                                .coerceAtMost(min(size.width, size.height) * 0.36f)
-                            val rAmount = (36f * refractionMult).dp.toPx()
-                            if (rHeight >= 1f && rAmount >= 1f) {
-                                lens(
-                                    refractionHeight = rHeight,
-                                    refractionAmount = rAmount,
-                                    depthEffect = true,
-                                    chromaticAberration = chromaticAberration
-                                )
-                            }
-                        }
-                    },
-                    onDrawSurface = {
-                        val baseColor = if (dark) Color(0xFF171820) else Color.White
-                        val surfaceAlpha = if (settings.reduceTransparency) {
-                            1f
-                        } else {
-                            ((if (dark) 0.36f else 0.38f) * settings.glassOpacity).coerceIn(0.20f, 0.84f)
-                        }
-                        drawRect(baseColor.copy(alpha = surfaceAlpha))
-                        if (!settings.reduceTransparency) {
-                            drawOpticalGlassMeniscus(
-                                cornerRadiusPx = 26.dp.toPx(),
-                                isLight = isLight,
-                                edgeRefraction = edgeRefraction,
-                                cyanDispersionStrength = 0.28f
-                            )
+                .then(if (scrollable || !acceptsInput) Modifier else Modifier.pointerInput(
+                    request.id, request.openNonce, request.items.size, rowPx, dividerPx, rowPaddingPx
+                ) {
+                    val stride = rowPx + dividerPx
+                    fun rowAt(point: Offset): Int? {
+                        val yFromFirstRow = point.y - rowPaddingPx
+                        if (point.x < rowPaddingPx || point.x >= size.width - rowPaddingPx || yFromFirstRow < 0f) return null
+                        val index = (yFromFirstRow / stride).toInt()
+                        return index.takeIf {
+                            it in request.items.indices && yFromFirstRow - it * stride < rowPx
                         }
                     }
-                )
-                .clip(menuShape)
-                .pointerInput(request.id) {
                     awaitEachGesture {
-                        val first = awaitFirstDown(false)
-                        fun row(position: Offset): Int? =
-                            if (position.x in 0f..size.width.toFloat() && position.y in 0f..size.height.toFloat()) {
-                                ((position.y - 7.dp.toPx()) / (rowHeight + 0.5.dp).toPx())
-                                    .toInt()
-                                    .coerceIn(0, currentRequest.items.lastIndex)
-                            } else null
-                        hovered = row(first.position)
+                        val first = awaitFirstDown(requireUnconsumed = true, pass = PointerEventPass.Initial)
+                        first.consume()
+                        hovered = rowAt(first.position)
                         if (hovered != null) haptics.selection()
-                        var released = false
                         try {
                             while (true) {
-                                val change = awaitPointerEvent().changes.firstOrNull { it.id == first.id } ?: break
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == first.id } ?: break
+                                if (change.isConsumed || event.changes.any { it.id != first.id && it.pressed }) break
+                                val row = rowAt(change.position)
+                                if (row != null && hovered != row) {
+                                    hovered = row
+                                    haptics.selection()
+                                }
+                                change.consume()
                                 if (!change.pressed) {
-                                    released = true
+                                    // Sliding outside retains the last valid row from the same gesture.
+                                    hovered?.let { choose(request, it) }
                                     break
                                 }
-                                row(change.position)?.let { nextRow ->
-                                    if (nextRow != hovered) {
-                                        hovered = nextRow
-                                        haptics.selection()
-                                    }
-                                }
                                 drag = change.position - first.position
-                                change.consume()
                             }
-                            if (released) hovered?.let { choose(it) }
                         } finally {
                             hovered = null
                             drag = Offset.Zero
                         }
                     }
-                }
-                .padding(vertical = 7.dp)
+                })
         ) {
-            // Sliding liquid glass hover capsule (tracks touch/drag smoothly like iOS 26 / LiquidGlassKMP)
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .height(rowHeight)
-                    .padding(horizontal = 7.dp)
+                    .matchParentSize()
                     .graphicsLayer {
-                        translationY = hoverOffset
-                        alpha = hoverAlpha
-                        scaleX = hoverScale
-                        scaleY = hoverScale
+                        val progress = reveal()
+                        val startX = (anchor.width.toFloat() / width).coerceIn(0.15f, 1f)
+                        val startY = (anchor.height.toFloat() / height).coerceIn(0.15f, 1f)
+                        val xProgress = if (motion.reduced) progress else x.value.coerceIn(0f, 1.025f)
+                        val yProgress = if (motion.reduced) progress else y.value.coerceIn(0f, 1.025f)
+                        transformOrigin = pivot
+                        scaleX = startX + (1f - startX) * xProgress
+                        scaleY = startY + (1f - startY) * yProgress
+                        translationX = sourceOffsetX * (1f - progress)
+                        translationY = sourceOffsetY * (1f - progress)
+                        if (!motion.reduced) {
+                            translationX += 6.dp.toPx() * tanh(drag.x / 86.dp.toPx())
+                            translationY += 6.dp.toPx() * tanh(drag.y / 86.dp.toPx())
+                        }
+                        alpha = (progress / 0.4f).coerceIn(0f, 1f)
                     }
-                    .clip(hoverPillShape)
-                    .background(
-                        if (dark) Color.White.copy(alpha = 0.14f)
-                        else Color.Black.copy(alpha = 0.065f)
-                    )
-                    .border(
-                        width = 0.75.dp,
-                        color = if (dark) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.55f),
-                        shape = hoverPillShape
-                    )
+                    .then(if (settings.reduceTransparency) {
+                        Modifier.background(surface, menuShape).border(0.8.dp, palette.divider, menuShape)
+                    } else {
+                        Modifier.drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { menuShape },
+                            highlight = { adaptiveGlassHighlight(isLight = !dark) },
+                            shadow = {
+                                Shadow(
+                                    radius = 20.dp,
+                                    offset = DpOffset(0.dp, 7.dp),
+                                    color = Color.Black.copy(alpha = if (dark) 0.36f else 0.16f)
+                                )
+                            },
+                            innerShadow = { InnerShadow(radius = 5.dp, alpha = if (dark) 0.23f else 0.14f) },
+                            effects = {
+                                vibrancy()
+                                blur((10f * settings.glassBlurIntensity).coerceIn(5f, 20f).dp.toPx())
+                                if (settings.enableLensRefraction && size.isSpecified && size.minDimension > 4f) {
+                                    val intensity = settings.glassIntensity.coerceIn(0.6f, 2.2f)
+                                    lens(
+                                        refractionHeight = min((20f * intensity).dp.toPx(), size.minDimension * 0.36f),
+                                        refractionAmount = (36f * intensity).dp.toPx(),
+                                        depthEffect = true,
+                                        chromaticAberration = settings.enableChromaticAberration
+                                    )
+                                }
+                            },
+                            onDrawSurface = { drawRect(surface) }
+                        )
+                    })
             )
 
-            Column {
-                request.items.forEachIndexed { index, item ->
-                    val isRowHovered = hovered == index
-                    val contentColor = if (item.selected) palette.accent else palette.textPrimary
-                    Row(
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        val progress = ((reveal() - 0.63f) / 0.37f).coerceIn(0f, 1f)
+                        transformOrigin = pivot
+                        scaleX = 0.96f + 0.04f * progress
+                        scaleY = scaleX
+                        alpha = progress
+                        if (!motion.reduced) {
+                            translationX = 6.dp.toPx() * tanh(drag.x / 86.dp.toPx())
+                            translationY = 6.dp.toPx() * tanh(drag.y / 86.dp.toPx())
+                        }
+                    }
+                    .clip(menuShape)
+            ) {
+                if (!scrollable) {
+                    Box(
                         Modifier
                             .fillMaxWidth()
                             .height(rowHeight)
                             .padding(horizontal = 7.dp)
-                            .clip(hoverPillShape)
-                            .background(
-                                if (item.selected && hovered == null) palette.accent.copy(alpha = if (dark) 0.12f else 0.08f)
-                                else Color.Transparent
-                            )
-                            .semantics(mergeDescendants = true) {
-                                selected = item.selected
-                                role = Role.RadioButton
-                                onClick("Selecionar ${item.label}") { choose(index); true }
+                            .graphicsLayer {
+                                translationY = rowPaddingPx + hoverOffset.value
+                                alpha = hoverAlpha.value
                             }
-                            .focusable()
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (hasAnyIcon) {
-                            // iOS 26 / LiquidGlassKMP layout: crisp leading icon on the left, trailing checkmark on the right
-                            Box(
-                                modifier = Modifier.width(20.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                item.icon?.let { iconVector ->
-                                    Icon(
-                                        imageVector = iconVector,
-                                        contentDescription = null,
-                                        tint = if (item.selected || isRowHovered) contentColor else palette.textPrimary.copy(alpha = 0.82f),
-                                        modifier = Modifier.size(19.dp)
-                                    )
+                            .background(hoverColor, rowShape)
+                    )
+                }
+
+                val scroll = if (scrollable) {
+                    val scrollState = key(request.id, request.openNonce) { rememberScrollState() }
+                    Modifier.verticalScroll(scrollState, enabled = acceptsInput)
+                } else {
+                    Modifier
+                }
+                Column(scroll.padding(vertical = 7.dp)) {
+                    request.items.forEachIndexed { index, item ->
+                        if (index == focusIndex) {
+                            LaunchedEffect(request.id, request.openNonce, acceptsInput) {
+                                if (acceptsInput && inputMode.inputMode == InputMode.Keyboard) {
+                                    snapshotFlow { windowInfo.isWindowFocused }.first { it }
+                                    withFrameNanos { }
+                                    rowFocus.requestFocus()
                                 }
                             }
-                            Text(
-                                text = item.label,
-                                modifier = Modifier.weight(1f),
-                                fontSize = 15.sp,
-                                lineHeight = 20.sp,
-                                fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Medium,
-                                color = contentColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (item.selected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = palette.accent,
-                                    modifier = Modifier.size(17.dp)
+                        }
+                        val contentColor = if (item.selected) accent else ink
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(rowHeight)
+                                .padding(horizontal = 7.dp)
+                                .clip(rowShape)
+                                .background(if (item.selected) selectedColor else Color.Transparent)
+                                .then(if (index == focusIndex) Modifier.focusRequester(rowFocus) else Modifier)
+                                .semantics { if (hasSelection) selected = item.selected }
+                                .clickable(
+                                    enabled = acceptsInput,
+                                    role = if (hasSelection) Role.RadioButton else Role.Button,
+                                    onClickLabel = if (hasSelection) "Selecionar ${item.label}" else item.label,
+                                    onClick = { choose(request, index) }
                                 )
-                            }
-                        } else {
-                            // Compact text-only picker layout: aligned leading checkmark slot
-                            Box(
-                                modifier = Modifier.width(18.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (item.selected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = palette.accent,
-                                        modifier = Modifier.size(17.dp)
-                                    )
+                                .padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (hasIcons) {
+                                Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                                    item.icon?.let { Icon(it, null, tint = contentColor, modifier = Modifier.size(19.dp)) }
                                 }
                             }
                             Text(
                                 text = item.label,
                                 modifier = Modifier.weight(1f),
-                                fontSize = 15.sp,
-                                lineHeight = 20.sp,
+                                style = menuTextStyle,
                                 fontWeight = if (item.selected) FontWeight.SemiBold else FontWeight.Medium,
                                 color = contentColor,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            if (hasSelection) {
+                                Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                                    if (item.selected) Icon(Icons.Default.Check, null, tint = accent)
+                                }
+                            }
                         }
-                    }
-                    if (index < request.items.lastIndex) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .height(0.5.dp)
-                                .testTag("menu-divider-$index")
-                                .background(
-                                    if (dark) Color.White.copy(alpha = 0.10f)
-                                    else Color.Black.copy(alpha = 0.08f)
-                                )
-                        )
+                        if (index < request.items.lastIndex) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(0.5.dp)
+                                    .testTag("menu-divider-$index")
+                                    .background(ink.copy(alpha = 0.10f))
+                            )
+                        }
                     }
                 }
             }

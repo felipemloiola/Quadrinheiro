@@ -21,6 +21,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -75,6 +79,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -96,6 +101,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.semantics
 import kotlin.math.min
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -137,7 +144,7 @@ import kotlin.math.roundToInt
  * - Seleção de estrelas clicável e arrastável continuamente
  * - Mini calendário interativo ao tocar em "Data da leitura".
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun CatalogSheetModal(
     selectedComic: ComicEntry,
@@ -155,7 +162,14 @@ fun CatalogSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
-    onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null,isRegistrationOverlayOpen:Boolean=false
+    onLogin: () -> Unit = {},
+    closeTag: String = "modal_cancel_button",
+    allowFullPage: Boolean = true,
+    onSaveFromPage: (ComicEntry) -> Unit = onSave,
+    onDeleteFromPage: (String) -> Unit = onDelete,
+    isExternalOverlayOpen: Boolean = false,
+    modifier: Modifier = Modifier,
+    sourceComicId: String = selectedComic.id
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
@@ -174,7 +188,7 @@ fun CatalogSheetModal(
     var draftTags by remember(selectedComic.id) { mutableStateOf(selectedComic.tags) }
     var draftMoments by remember(selectedComic.id) { mutableStateOf(selectedComic.moments) }
 
-    var fullPage by remember(selectedComic.id) { mutableStateOf(false) }
+    var fullPageComic by remember(sourceComicId) { mutableStateOf<ComicEntry?>(null) }
     var totalPagesInput by remember(selectedComic.id) { mutableStateOf(if (selectedComic.pageCount <= 1) "" else selectedComic.pageCount.toString()) }
     val editorScope=androidx.compose.runtime.rememberCoroutineScope()
     var pagesEdited by remember(selectedComic.id){mutableStateOf(false)}
@@ -207,33 +221,6 @@ fun CatalogSheetModal(
         tags = draftTags,
         moments = draftMoments
     )
-
-    if (false && fullPage) {
-        val currentSnapshot = snapshotDraftComic()
-        com.example.ui.screens.ComicDetailDialog(currentSnapshot, readerProfile, allUserComics,
-            onClose = { fullPage = false },
-            onRegister = { next ->
-                fullPage = false
-                if (onRegisterFromPage != null) {
-                    onRegisterFromPage(next)
-                } else {
-                    draftComic = next
-                    draftTitle = next.title
-                    draftAuthors = next.authors
-                    draftStatus = next.status
-                    draftCurrentPage = next.currentPage
-                    draftRating = next.rating
-                    draftFavorite = next.favorite
-                    draftReview = next.review
-                    draftReadDate = next.readDate
-                    draftRereadCount = next.rereadCount
-                    draftTags = next.tags
-                    draftMoments = next.moments
-                }
-            },
-            onCover = { draftComic = draftComic.copy(coverUrl = it) }, onLogin = onLogin,
-            onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) })
-    }
 
     fun buildFinalComicForSave(): ComicEntry {
         val count = CatalogPagePolicy.count(totalPagesInput) ?: 0
@@ -360,12 +347,17 @@ fun CatalogSheetModal(
     val isSheetScrollingOrMoving = sheetScrollState.isScrollInProgress || sheet.isMoving
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
-            .clickable { sheet.dismiss() },
+            .imePadding()
+            .then(if (fullPageComic != null) Modifier.semantics { invisibleToUser() } else Modifier),
         contentAlignment = Alignment.BottomCenter
     ) {
+        Box(
+            Modifier.matchParentSize()
+                .drawBehind { drawRect(Color.Black.copy(alpha = (if (s.isLight) .14f else .24f) * sheet.scrimFraction)) }
+                .clickable(onClickLabel = "Fechar painel") { sheet.dismiss() }
+        )
         Box(
             modifier = Modifier
                 .graphicsLayer {
@@ -374,10 +366,12 @@ fun CatalogSheetModal(
                 .fillMaxWidth(sheetWidthFraction)
                 .fillMaxHeight(0.96f)
                 .clip(sheetShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {}
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        waitForUpOrCancellation()
+                    }
+                }
         ) {
             // 1. Camada de fundo Liquid Glass fluida e otimizada (congelada durante rolagem/animação da folha)
             Box(
@@ -483,41 +477,43 @@ fun CatalogSheetModal(
                                         onRetryTranslation = { translationRetryToken++ }
                                     )
                                 }
-                                HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 44.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable { fullPage = true }
-                                        .padding(horizontal = 4.dp, vertical = 6.dp)
-                                        .testTag("open_comic_page"),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                if (allowFullPage) {
+                                    HorizontalDivider(color = mat.dividerColor, thickness = 0.5.dp)
                                     Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { fullPageComic = snapshotDraftComic() }
+                                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                                            .testTag("open_comic_page"),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                                contentDescription = null,
+                                                tint = s.accentColor,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "Ver página da HQ",
+                                                color = s.accentColor,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                             contentDescription = null,
-                                            tint = s.accentColor,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Ver página da HQ",
-                                            color = s.accentColor,
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.SemiBold
+                                            tint = s.accentColor.copy(alpha = 0.75f),
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                        contentDescription = null,
-                                        tint = s.accentColor.copy(alpha = 0.75f),
-                                        modifier = Modifier.size(18.dp)
-                                    )
                                 }
                             }
                         }
@@ -727,18 +723,17 @@ fun CatalogSheetModal(
             }
         }
     }
-    if (fullPage) {
-        val currentSnapshot = snapshotDraftComic()
+    fullPageComic?.let { pageComic ->
         com.example.ui.screens.ComicDetailDialog(
-            comic = currentSnapshot,
+            comic = pageComic,
             profile = readerProfile,
             library = allUserComics,
-            onClose = { fullPage = false },
-            onRegister = { next ->
-                if (onRegisterFromPage != null) {
-                    onRegisterFromPage(next)
-                } else {
-                    fullPage = false
+            onClose = { fullPageComic = null },
+            onSaveRegistration = { next ->
+                onSaveFromPage(next)
+                if ((next.id.isNotBlank() && next.id == draftComic.id) ||
+                    (next.externalId.isNotBlank() && next.externalId == draftComic.externalId)
+                ) {
                     draftComic = next
                     draftTitle = next.title
                     draftAuthors = next.authors
@@ -751,13 +746,15 @@ fun CatalogSheetModal(
                     draftRereadCount = next.rereadCount
                     draftTags = next.tags
                     draftMoments = next.moments
+                    totalPagesInput = next.pageCount.takeIf { it > 0 }?.toString().orEmpty()
                 }
             },
+            onDeleteRegistration = onDeleteFromPage,
             onCover = { draftComic = draftComic.copy(coverUrl = it) },
             onLogin = onLogin,
-            onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) },
+            onShare = onShareComic,
             useDialogWindow = false,
-            isExternalOverlayOpen = isRegistrationOverlayOpen
+            isExternalOverlayOpen = isExternalOverlayOpen
         )
     }
 }
@@ -777,24 +774,40 @@ fun ComicInfoSynopsisSheetModal(
     allUserComics: List<ComicEntry> = emptyList(),
     onlineSequencePool: List<ComicEntry> = emptyList(),
     onSelectSequenceComic: (ComicEntry) -> Unit = {},
-    onOpenCatalogWithStatus: (ComicEntry, ReadingStatus) -> Unit,
-    onEditSavedComic: (ComicEntry) -> Unit,
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
     onLogin: () -> Unit = {},
-    onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> },
-    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },onDeleteRegistration:(String)->Unit = {},isRegistrationOverlayOpen:Boolean = false
+    onSaveRegistration: (ComicEntry) -> Unit,
+    onDeleteRegistration: (String) -> Unit,
+    onSaveFromPage: (ComicEntry) -> Unit,
+    onDeleteFromPage: (String) -> Unit,
+    isExternalOverlayOpen: Boolean = false
 ) {
-    var expanded by remember {mutableStateOf(false)}
-    CatalogSheetModal(selectedComic=savedEntry ?: comic,isExistingInShelf=savedEntry!=null,isSheetExpanded=expanded,
-        appSettings=appSettings,allUserComics=allUserComics,onlineSequencePool=onlineSequencePool,
-        onSelectSequenceComic=onSelectSequenceComic,onUpdateComic={},onToggleExpand={expanded=!expanded},onSetExpanded={expanded=it},
-        onSave=onSaveRegistration,onDelete=onDeleteRegistration,onDismiss=onDismiss,onShareComic=onShareComic,
-        readerProfile=readerProfile,onLogin=onLogin,closeTag="synopsis_close_button",isRegistrationOverlayOpen=isRegistrationOverlayOpen,onRegisterFromPage={next->
-            val saved=com.example.model.catalogEntryForEditing(next,allUserComics)
-            if(saved!=null)onEditSavedComic(saved) else onOpenCatalogWithStatus(next,ReadingStatus.READ)
-        })
+    var expanded by remember { mutableStateOf(false) }
+    CatalogSheetModal(
+        selectedComic = savedEntry ?: comic,
+        isExistingInShelf = savedEntry != null,
+        isSheetExpanded = expanded,
+        appSettings = appSettings,
+        allUserComics = allUserComics,
+        onlineSequencePool = onlineSequencePool,
+        onSelectSequenceComic = onSelectSequenceComic,
+        onUpdateComic = {},
+        onToggleExpand = { expanded = !expanded },
+        onSetExpanded = { expanded = it },
+        onSave = onSaveRegistration,
+        onDelete = onDeleteRegistration,
+        onDismiss = onDismiss,
+        onShareComic = onShareComic,
+        readerProfile = readerProfile,
+        onLogin = onLogin,
+        closeTag = "synopsis_close_button",
+        onSaveFromPage = onSaveFromPage,
+        onDeleteFromPage = onDeleteFromPage,
+        isExternalOverlayOpen = isExternalOverlayOpen,
+        sourceComicId = comic.id
+    )
 }
 
 /**

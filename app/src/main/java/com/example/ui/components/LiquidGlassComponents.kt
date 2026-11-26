@@ -6,6 +6,7 @@ import com.kyant.backdrop.catalog.components.LiquidBottomTab
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import com.kyant.backdrop.catalog.utils.inspectDragGestures
@@ -1625,7 +1626,7 @@ fun LiquidGlassSegmentedControl(
             tabs.forEachIndexed { index, title ->
                 LiquidBottomTab(
                     onClick = { onTabSelected(index) },
-                    modifier = Modifier.semantics { stateDescription = if (index == selectedIndex) "Selecionado" else "Não selecionado" }
+                    modifier = Modifier.semantics { selected = index == selectedIndex }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         tabIcons?.getOrNull(index)?.let { Icon(it, null, modifier = Modifier.size(16.dp), tint = if (isLightTheme) Color.Black else Color.White) }
@@ -2042,7 +2043,10 @@ class LiquidGlassMenuRequest(
 
 @androidx.compose.runtime.Stable
 class LiquidGlassMenuHostState {
+    private data class PendingMenuAction(val id: String, val openNonce: Long, val run: () -> Unit)
+
     private var nextNonce = 0L
+    private var pendingAction: PendingMenuAction? = null
     var currentRequest by mutableStateOf<LiquidGlassMenuRequest?>(null)
         private set
     var morphingMenuId by mutableStateOf<String?>(null)
@@ -2057,16 +2061,19 @@ class LiquidGlassMenuHostState {
     internal var menuProgressProvider: (() -> Float)? = null
 
     fun progressForMenu(id: String): Float {
-        return if (isMenuVisibleOrMorphing(id)) menuProgressProvider?.invoke() ?: activeMenuProgress else 0f
+        return if (morphingMenuId == id && (currentRequest?.id ?: id) == id) {
+            menuProgressProvider?.invoke() ?: activeMenuProgress
+        } else {
+            0f
+        }
     }
 
     fun showMenu(request: LiquidGlassMenuRequest) {
+        pendingAction = null
         val previous = currentRequest
         if (previous != null && previous.id != request.id) { previous.onDismiss() }
         nextNonce += 1L
-        morphingMenuId = request.id
         currentRequest = LiquidGlassMenuRequest(request.id, request.anchorBounds, request.triggerLabel, request.triggerIcon, request.items, request.onDismiss, if (request.openNonce != 0L) request.openNonce else nextNonce)
-        // updated above with openNonce
     }
 
     fun updateTriggerLabel(id: String, newLabel: String) {
@@ -2097,12 +2104,37 @@ class LiquidGlassMenuHostState {
         }
     }
 
+    internal fun selectMenuItem(request: LiquidGlassMenuRequest, index: Int, waitForCollapse: Boolean): Boolean {
+        val current = currentRequest ?: return false
+        if (current.id != request.id || current.openNonce != request.openNonce) return false
+        val item = current.items.getOrNull(index) ?: return false
+        if (waitForCollapse) {
+            pendingAction = PendingMenuAction(current.id, current.openNonce, item.onClick)
+        }
+        dismissCurrent(current)
+        if (!waitForCollapse) item.onClick()
+        return true
+    }
+
+    internal fun completeMenuCollapse(request: LiquidGlassMenuRequest) {
+        val pending = pendingAction ?: return
+        if (currentRequest == null && pending.id == request.id && pending.openNonce == request.openNonce) {
+            pendingAction = null
+            pending.run()
+        }
+    }
+
     fun dismissMenu(id: String? = null) {
+        if (id == null || pendingAction?.id == id) pendingAction = null
         val current = currentRequest
         if (current != null && (id == null || current.id == id)) {
-            currentRequest = null
-            current.onDismiss()
+            dismissCurrent(current)
         }
+    }
+
+    private fun dismissCurrent(current: LiquidGlassMenuRequest) {
+        currentRequest = null
+        current.onDismiss()
     }
 }
 
@@ -2156,7 +2188,11 @@ fun <T> AppleMenuPicker(
 
     // Progresso contínuo (0f..1f) da gota do menu para cross-morph suave sem nunca piscar ou sumir o botão
     val hostProgress = { menuHost?.progressForMenu(menuId) ?: 0f }
-    fun triggerMorphAlpha() = (1f - (hostProgress() / 0.34f)).coerceIn(0f, 1f)
+    fun triggerMorphAlpha() = if (motion.reduced) {
+        if (menuHost?.currentRequest?.id == menuId) 0f else 1f
+    } else {
+        (1f - hostProgress() / 0.4f).coerceIn(0f, 1f)
+    }
     fun triggerMorphScale() = lerp(1f, 0.94f, (hostProgress() / 0.45f).coerceIn(0f, 1f))
 
     val menuItems = remember(options, value) {
@@ -2200,10 +2236,11 @@ fun <T> AppleMenuPicker(
         }
     }
 
-    val effectiveBlurDp = if (settings.reduceTransparency) 20.dp else (4.5f * settings.glassBlurIntensity).coerceIn(2f, 14f).dp
+    val effectiveBlurDp = (4.5f * settings.glassBlurIntensity).coerceIn(2f, 14f).dp
     val refractionMult = if (!settings.reduceTransparency && settings.enableLensRefraction) settings.glassIntensity.coerceIn(0.7f, 2.2f) else 0f
     val chromaticAberration = !settings.reduceTransparency && settings.enableChromaticAberration
-    val glassAlpha = ((if (isLight) 0.24f else 0.28f) * settings.glassOpacity).coerceIn(0.10f, 0.65f)
+    val glassAlpha = if (settings.reduceTransparency) 1f else
+        ((if (isLight) 0.24f else 0.28f) * settings.glassOpacity).coerceIn(0.10f, 0.65f)
     val baseSurfaceColor = if (isLight) Color.White.copy(alpha = glassAlpha) else Color(0xFF16161C).copy(alpha = glassAlpha)
     val activeAccent = if (isLight && s.accentColor == Color.White) s.textPrimary else s.accentColor
 
@@ -2269,7 +2306,7 @@ fun <T> AppleMenuPicker(
                             vibrancy()
                         }
                         val blurPx = effectiveBlurDp.toPx()
-                        if (blurPx >= 1f && !blurPx.isNaN()) {
+                        if (!settings.reduceTransparency && blurPx >= 1f && !blurPx.isNaN()) {
                             blur(blurPx)
                         }
                         if (refractionMult > 0f && size.isSpecified && size.width > 4f && size.height > 4f) {

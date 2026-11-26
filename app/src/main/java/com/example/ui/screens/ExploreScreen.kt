@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,9 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -156,7 +159,7 @@ fun ExploreScreen(
     val appContext = LocalContext.current.applicationContext
     // Same Activity-scoped owner as the app host; its existing settings flow is isolated by account.
     val settings by viewModel.appSettings.collectAsStateWithLifecycle()
-    var collection by remember { mutableStateOf<String?>(null) }
+    var collection by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(viewModel) {
         viewModel.exploreReselectEvents.collect { collection=null;tab=0 }
@@ -274,15 +277,17 @@ fun ExploreScreen(
                 ExploreDiscoverContent(isPreview = true)
             }
         }
-    ) {
+    ) { navigateBack ->
         if (activeCollection == null) {
             ExploreDiscoverContent(isPreview = false)
         } else {
             val expandedState = rememberLazyListState()
-            val isCollectionScrolled by remember(expandedState) {
-                androidx.compose.runtime.derivedStateOf {
-                    expandedState.firstVisibleItemIndex > 0 || expandedState.firstVisibleItemScrollOffset > 24
-                }
+            val collapseProgress = backButtonScrollProgress(
+                firstVisibleItemIndex = { expandedState.firstVisibleItemIndex },
+                firstVisibleItemScrollOffset = { expandedState.firstVisibleItemScrollOffset }
+            )
+            val showCompactTitle by remember(collapseProgress) {
+                derivedStateOf { collapseProgress() >= 1f }
             }
             Box(Modifier.fillMaxSize().background(theme.bgPrimary)) {
                 LazyColumn(
@@ -298,7 +303,13 @@ fun ExploreScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(activeCollection, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+                                Text(
+                                    activeCollection,
+                                    color = theme.textPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 32.sp,
+                                    modifier = Modifier.semantics { heading() }
+                                )
                             }
                             IconButton(onClick = { onSearch("") }) {
                                 Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
@@ -363,9 +374,37 @@ fun ExploreScreen(
                         }
                     }
                 }
+                Box(
+                    Modifier.fillMaxWidth().height(72.dp).drawBehind {
+                        val progress = collapseProgress()
+                        val edge = if (settings.reduceTransparency) {
+                            if (progress > 0f) 1f else 0f
+                        } else progress
+                        if (edge > 0f) {
+                            drawRect(Brush.verticalGradient(
+                                0f to theme.bgPrimary.copy(alpha = edge),
+                                0.68f to theme.bgPrimary.copy(alpha = 0.85f * edge),
+                                1f to theme.bgPrimary.copy(alpha = 0f),
+                                endY = size.height
+                            ))
+                        }
+                    }
+                )
+                if (showCompactTitle) {
+                    Text(
+                        activeCollection,
+                        Modifier.align(Alignment.TopCenter).padding(start = 78.dp, end = 78.dp, top = 24.dp)
+                            .clearAndSetSemantics {},
+                        color = theme.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 SettingsBackButton(
-                    onBack = { collection = null },
-                    collapsed = isCollectionScrolled,
+                    onBack = navigateBack,
+                    collapseProgress = collapseProgress,
                     label = "Explorar",
                     modifier = Modifier
                         .align(Alignment.TopStart)

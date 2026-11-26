@@ -889,11 +889,10 @@ fun ShelfLibraryTab(
         }
     }
 
-    val backCollapsed by remember(listState) {
-        androidx.compose.runtime.derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
-        }
-    }
+    val backCollapseProgress = backButtonScrollProgress(
+        firstVisibleItemIndex = { listState.firstVisibleItemIndex },
+        firstVisibleItemScrollOffset = { listState.firstVisibleItemScrollOffset }
+    )
 
     TabScrollBackdropContainer(
         listState = listState,
@@ -960,10 +959,7 @@ fun ShelfLibraryTab(
                             com.example.ui.components.AppleIconMenuButton(
                                 value = shelfSort,
                                 onChange = onChangeShelfSort,
-                                icon = LucideIcons.EllipsisCircle,
                                 contentDescription = "Ordenar biblioteca",
-                                buttonSize = 44.dp,
-                                iconSize = 22.dp,
                                 options = listOf(
                                     SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
                                     SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
@@ -1522,7 +1518,7 @@ fun ShelfLibraryTab(
         }
         SettingsBackButton(
             onBack = onBackToProfile,
-            collapsed = backCollapsed,
+            collapseProgress = backCollapseProgress,
             label = "Perfil",
             modifier = Modifier
                 .align(Alignment.TopStart)

@@ -7,12 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -28,15 +27,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.ProfileShowcase
 import com.example.model.ReaderProfile
 import com.example.model.AppSettings
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -89,10 +94,13 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
     }
     BackHandler(onBack = onBack)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val isScrolled by remember(listState) {
-        androidx.compose.runtime.derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
-        }
+    val motion = com.example.ui.theme.LocalAppMotion.current
+    val collapseProgress = backButtonScrollProgress(
+        firstVisibleItemIndex = { listState.firstVisibleItemIndex },
+        firstVisibleItemScrollOffset = { listState.firstVisibleItemScrollOffset }
+    )
+    val compactTitle by remember(collapseProgress) {
+        derivedStateOf { collapseProgress() >= 1f }
     }
 
     val editorBackdrop = rememberLayerBackdrop()
@@ -317,18 +325,57 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             }
         }
         item {
+            val slotShape = remember { ContinuousRoundedRectangle(14.dp) }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Favoritos")
                 listOf(false to "HQs favoritas", true to "Personagens favoritos").forEach { (characters, label) ->
                     Text(label, color = theme.textPrimary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { repeat(4) { slot ->
-                        val name = if (characters) settings.profileFavoriteCharacters.getOrNull(slot) else settings.profileFavoriteComicIds.getOrNull(slot)
-                        val source = if (characters) settings.profileShowcaseDetails["character:$name"].orEmpty() else settings.profileShowcaseDetails["comic:$name"]?.let(com.example.data.ProfileShowcase::restoreComic)?.coverUrl.orEmpty()
-                        Box(Modifier.weight(1f).aspectRatio(if (characters) 1f else 2f / 3f).clip(RoundedCornerShape(12.dp)).background(theme.bgSecondary).clickable { onEditFavorite(characters, slot) }, contentAlignment = Alignment.Center) {
-                            if (source.isNotBlank()) ProfileImage(source, name, Modifier.fillMaxSize(), face = characters)
-                            else Icon(Icons.Default.Add, "Escolher ${slot + 1}", tint = theme.textSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(4) { slot ->
+                            val favorites = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
+                            val value = favorites.getOrNull(slot)
+                            val type = if (characters) "character" else "comic"
+                            val details = settings.profileShowcaseDetails["$type:$value"].orEmpty()
+                            val comic = remember(characters, details) {
+                                if (!characters && details.isNotBlank()) ProfileShowcase.restoreComic(details) else null
+                            }
+                            val name = if (characters) value else comic?.displayTitle
+                            val kind = if (characters) "personagem favorito" else "HQ favorita"
+                            val action = if (value == null) "Escolher" else "Editar"
+                            val label = "$action $kind ${slot + 1}" + (name?.let { ", $it" } ?: "")
+                            val interaction = remember { MutableInteractionSource() }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .aspectRatio(if (characters) 1f else 2f / 3f)
+                                    .pressScaleFeedback(interaction, targetScale = 0.96f)
+                                    .contentMaterialSurface(slotShape)
+                                    .clip(slotShape)
+                                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) {
+                                        onEditFavorite(characters, slot)
+                                    }
+                                    .semantics { contentDescription = label }
+                                    .testTag("profile_editor_favorite_${type}_$slot"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                when {
+                                    characters && details.isNotBlank() -> ProfileImage(details, null, Modifier.fillMaxSize(), face = true)
+                                    comic != null -> BookCover(
+                                        comic.coverUrl,
+                                        comic.displayTitle,
+                                        spine3d = false,
+                                        modifier = Modifier.fillMaxSize().clearAndSetSemantics { }
+                                    )
+                                    else -> Icon(
+                                        if (value == null) Icons.Default.Add else Icons.Default.StarOutline,
+                                        contentDescription = null,
+                                        tint = theme.textSecondary
+                                    )
+                                }
+                            }
                         }
-                    } }
+                    }
                 }
             }
         }
@@ -358,11 +405,11 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SettingsBackButton(onBack, label = "Perfil", collapsed = isScrolled)
+                SettingsBackButton(onBack, label = "Perfil", collapseProgress = collapseProgress)
                 AnimatedVisibility(
-                    visible = isScrolled,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    visible = compactTitle,
+                    enter = fadeIn(motion.tween(150)),
+                    exit = fadeOut(motion.tween(120))
                 ) {
                     Text(
                         "Editar perfil",

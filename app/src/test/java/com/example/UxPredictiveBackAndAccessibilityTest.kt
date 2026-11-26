@@ -85,6 +85,12 @@ class UxPredictiveBackAndAccessibilityTest {
         assertEquals(1f, reduced.foregroundScale, 0.001f)
         assertTrue("Reduced motion should fade gently without spatial movement", reduced.foregroundAlpha < 1f)
 
+        val completedLeft = computePredictiveBackTransform(1f, 1000f, false)
+        val completedRight = computePredictiveBackTransform(1f, 1000f, false, androidx.activity.BackEventCompat.EDGE_RIGHT)
+        assertEquals(1000f, completedLeft.foregroundTranslationX, 0.001f)
+        assertEquals(-1000f, completedRight.foregroundTranslationX, 0.001f)
+        assertEquals(0f, completedRight.backgroundTranslationX, 0.001f)
+
         val rootNormal = computePredictiveRootExitTransform(progress = 0.5f, widthPx = 1000f, reducedMotion = false)
         val rootReduced = computePredictiveRootExitTransform(progress = 0.5f, widthPx = 1000f, reducedMotion = true)
         assertTrue(rootNormal.foregroundScale < 1f)
@@ -152,10 +158,10 @@ class UxPredictiveBackAndAccessibilityTest {
                     profile = ReaderProfile(name = "Leitor Teste"),
                     library = emptyList(),
                     onBack = { exitedRoot = true },
-                    onRegister = {},
+                    onSaveRegistration = {},
                     onCover = {},
                     onLogin = {},
-                    onShare = {},
+                    onShare = { _, _, _ -> },
                     initialDetailOverride = rootDetails,
                     detailLoader = { _, entity ->
                         if (entity?.first == "character" && entity.second == "char-batman") batmanDetails

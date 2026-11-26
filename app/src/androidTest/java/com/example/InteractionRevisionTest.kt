@@ -53,10 +53,14 @@ class InteractionRevisionTest {
         compose.setContent { QuadrinheiroTheme(settings) {
             CatalogSheetModal(comic, true, false, settings, onUpdateComic = {}, onToggleExpand = {}, onSave = {}, onDelete = {}, onDismiss = {})
         } }
-        compose.onNodeWithTag("editor_list", useUnmergedTree = true).performScrollToIndex(5)
-        val save = compose.onNodeWithText("Salvar Registro").getUnclippedBoundsInRoot()
-        val delete = compose.onNodeWithText("Excluir Quadrinho da Estante").getUnclippedBoundsInRoot()
-        assertTrue(delete.top - save.bottom <= 12.dp)
+        val headerSave = compose.onNodeWithTag("modal_header_save_button")
+        val headerBefore = headerSave.assertIsDisplayed().getUnclippedBoundsInRoot()
+        compose.onNodeWithTag("editor_list", useUnmergedTree = true)
+            .performScrollToNode(hasText("Excluir da biblioteca"))
+        val save = compose.onNodeWithText("Salvar").assertIsDisplayed().getUnclippedBoundsInRoot()
+        val delete = compose.onNodeWithText("Excluir da biblioteca").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(delete.top - save.bottom in 0.dp..24.dp)
+        assertEquals(headerBefore.top, headerSave.assertIsDisplayed().getUnclippedBoundsInRoot().top)
         snapshot("revision45-editor.png")
     }
 

@@ -247,9 +247,10 @@ fun SettingsTabScreen(
     }
 
     val isSliderActive = com.kyant.backdrop.catalog.components.SliderTouchLock.isAnySliderActive
-    val backCollapsed by remember(listState) { androidx.compose.runtime.derivedStateOf {
-        listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
-    } }
+    val backCollapseProgress = backButtonScrollProgress(
+        firstVisibleItemIndex = { listState.firstVisibleItemIndex },
+        firstVisibleItemScrollOffset = { listState.firstVisibleItemScrollOffset }
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -2163,12 +2164,12 @@ fun SettingsTabScreen(
 
         if (settingsSubPage == null) {
             SettingsBackButton(onBack = { viewModel.switchMainTab("profile") }, label = "Perfil",
-                collapsed = backCollapsed,
+                collapseProgress = backCollapseProgress,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp))
         }
         if (settingsSubPage != null) {
             SettingsBackButton(onBack = viewModel::goBackSettings,
-                collapsed = backCollapsed,
+                collapseProgress = backCollapseProgress,
                 label = if (settingsParentPage == "appearance") "Aparência" else "Ajustes",
                 modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp))
         }

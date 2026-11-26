@@ -1,6 +1,6 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,8 +14,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +33,21 @@ import com.example.ui.theme.LocalAppMotion
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.readableForeground
 import com.kyant.shapes.ContinuousCapsule
+import kotlin.math.roundToInt
+
+@Composable
+internal fun backButtonScrollProgress(
+    firstVisibleItemIndex: () -> Int,
+    firstVisibleItemScrollOffset: () -> Int
+): () -> Float {
+    val collapseDistance = with(LocalDensity.current) { 48.dp.toPx() }
+    return remember(firstVisibleItemIndex, firstVisibleItemScrollOffset, collapseDistance) {
+        {
+            if (firstVisibleItemIndex() > 0) 1f
+            else (firstVisibleItemScrollOffset() / collapseDistance).coerceIn(0f, 1f)
+        }
+    }
+}
 
 /**
  * Standardized iOS 26 Liquid Glass back button with Tab-Bar optical refraction,
@@ -39,7 +59,8 @@ internal fun SettingsBackButton(
     modifier: Modifier = Modifier,
     collapsed: Boolean = false,
     label: String = "Voltar",
-    testTag: String = "settings_back_button"
+    testTag: String = "settings_back_button",
+    collapseProgress: (() -> Float)? = null
 ) {
     val motion = LocalAppMotion.current
     val theme = LocalIOS27Theme.current
@@ -48,6 +69,19 @@ internal fun SettingsBackButton(
     val accessibleLabel = if (label.equals("Voltar", ignoreCase = true)) "Voltar" else "Voltar para $label"
     val fg = readableForeground(theme.textPrimary, theme.bgSecondary, 4.5f)
     val shape = ContinuousCapsule
+    val animatedCollapse = animateFloatAsState(
+        targetValue = if (collapsed) 1f else 0f,
+        animationSpec = motion.tween(if (collapsed) 150 else 200),
+        label = "backButtonCollapse"
+    )
+    val expansion = {
+        val progress = collapseProgress?.invoke() ?: animatedCollapse.value
+        if (motion.reduced) {
+            if (progress >= 0.5f) 0f else 1f
+        } else {
+            1f - progress
+        }
+    }
 
     Row(
         modifier
@@ -74,31 +108,37 @@ internal fun SettingsBackButton(
                     haptics.impactLight()
                     onBack()
                 }
-            )
-            .padding(horizontal = 12.dp),
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-            contentDescription = null,
-            tint = fg,
-            modifier = Modifier.size(23.dp)
-        )
-        AnimatedVisibility(
-            visible = !collapsed,
-            enter = expandHorizontally(motion.spring(0.82f, 520f)) + fadeIn(motion.tween(180)),
-            exit = shrinkHorizontally(motion.spring(0.88f, 560f)) + fadeOut(motion.tween(120))
-        ) {
-            Text(
-                text = label,
-                color = fg,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = 6.dp)
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = null,
+                tint = fg,
+                modifier = Modifier.size(23.dp)
             )
         }
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .clipToBounds()
+                .layout { measurable, constraints ->
+                    val text = measurable.measure(constraints.copy(minWidth = 0))
+                    // Only the label's reserved width changes. The arrow and touch target stay fixed.
+                    layout((text.width * expansion()).roundToInt(), text.height) {
+                        text.placeRelative(0, 0)
+                    }
+                }
+                .graphicsLayer { alpha = expansion() }
+                .clearAndSetSemantics {}
+                .padding(end = 14.dp)
+        )
     }
 }

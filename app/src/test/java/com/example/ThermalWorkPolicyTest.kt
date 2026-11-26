@@ -1,5 +1,6 @@
 package com.example
 
+import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.CacheMaintenance
@@ -23,6 +24,7 @@ class ThermalWorkPolicyTest {
         assertTrue(ImageMemoryPolicy.budgetBytes(32*mib,true)<=32*mib/10)
     }
 
+    @Config(application = Application::class)
     @Test fun legacyCacheMigrationRunsOnceAndNeverTouchesAccountData() {
         val context=ApplicationProvider.getApplicationContext<Context>()
         val storage=SafeStorage(context)
