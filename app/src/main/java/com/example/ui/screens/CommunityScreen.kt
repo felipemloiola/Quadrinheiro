@@ -1,13 +1,15 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,6 +22,8 @@ import com.example.data.*
 import com.example.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
+import com.kyant.shapes.ContinuousCapsule
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -30,7 +34,6 @@ private object CommunityMemory {
     @Synchronized fun put(key:String,page:CommunityPage<CommunityReview>,revision:Long){pages[key]=Snapshot(page,revision)}
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, onLogin: () -> Unit, comic: ComicEntry? = null) {
     val context = LocalContext.current
@@ -38,10 +41,17 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
     val repo = remember { runCatching { CommunityRepository(context) }.getOrNull() }
     val uid = repo?.activeAccountUid()
     val t = LocalIOS27Theme.current
+    val cardShape = remember { ContinuousRoundedRectangle(22.dp) }
+    val skeletonBlockShape = remember { ContinuousRoundedRectangle(8.dp) }
+
     if (repo == null || uid == null) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             SectionHeading("Histórias para conversar", "Entre para ver avaliações, publicar resenhas e conversar com outros leitores.")
-            TextButton(onClick = onLogin) { Text("Entrar", color = t.accent) }
+            LiquidGlassPillButton(
+                text = "Entrar",
+                onClick = onLogin,
+                emphasized = true
+            )
         }; return
     }
     key(uid) {
@@ -117,19 +127,19 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                 }
             }
             if (posts.isEmpty() && (!attempted || busy)) items(3) {
-                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(cardShape).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(56.dp, 84.dp).background(t.textTertiary.copy(alpha = .10f), RoundedCornerShape(8.dp)))
+                        Box(Modifier.size(56.dp, 84.dp).background(t.textTertiary.copy(alpha = .10f), skeletonBlockShape))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(Modifier.fillMaxWidth(.5f).height(12.dp).background(t.textTertiary.copy(alpha = .12f), RoundedCornerShape(6.dp)))
-                            Box(Modifier.fillMaxWidth(.85f).height(18.dp).background(t.textTertiary.copy(alpha = .12f), RoundedCornerShape(6.dp)))
+                            Box(Modifier.fillMaxWidth(.5f).height(12.dp).background(t.textTertiary.copy(alpha = .12f), ContinuousCapsule))
+                            Box(Modifier.fillMaxWidth(.85f).height(18.dp).background(t.textTertiary.copy(alpha = .12f), ContinuousCapsule))
                         }
                     }
-                    Box(Modifier.fillMaxWidth().height(12.dp).background(t.textTertiary.copy(alpha = .10f), RoundedCornerShape(6.dp)))
+                    Box(Modifier.fillMaxWidth().height(12.dp).background(t.textTertiary.copy(alpha = .10f), ContinuousCapsule))
                 }
             }
             items(posts, key = { it.id }) { post ->
-                Column(Modifier.fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().contentMaterialSurface(cardShape).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         BookCover(post.cover, post.title, spine3d = false, modifier = Modifier.width(56.dp).height(84.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -140,19 +150,25 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
                         }
                     }
                     if (post.body.isNotBlank()) Text(post.body, color = t.textPrimary, lineHeight = 23.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = { discussion = post }) {
-                            Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp), tint = t.accent)
-                            Spacer(Modifier.width(8.dp)); Text("Comentários", color = t.accent)
-                        }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        LiquidGlassPillButton(
+                            text = "Comentários",
+                            onClick = { discussion = post },
+                            leadingIcon = Icons.Default.ChatBubbleOutline
+                        )
                     }
                 }
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    error?.let { Text(it, color = t.textSecondary) }
-                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = t.accent, strokeWidth = 2.dp) }
-                    else if (!busy && (more || error != null)) TextButton(onClick = { load() }) { Text(if (error == null) "Ver mais" else "Tentar novamente", color = t.accent) }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    error?.let { Text(it, color = t.textSecondary, fontSize = 13.sp) }
+                    if (busy && posts.isNotEmpty()) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { IOSLoadingIndicator(Modifier.size(22.dp), color = t.accent) }
+                    else if (!busy && (more || error != null)) {
+                        LiquidGlassPillButton(
+                            text = if (error == null) "Ver mais" else "Tentar novamente",
+                            onClick = { load() }
+                        )
+                    }
                 }
             }
         }
@@ -160,7 +176,6 @@ internal fun CommunityScreen(comics: List<ComicEntry>, profile: ReaderProfile, o
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CommunityComments(
     repo: CommunityRepository,
@@ -178,6 +193,8 @@ private fun CommunityComments(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var body by remember { mutableStateOf("") }
+    val commentCardShape = remember { ContinuousRoundedRectangle(18.dp) }
+
     fun load(refresh: Boolean = false) {
         val localList = CommunityAutoSync.localComments(storage, post.id)
         if (repo.currentUid() == null) {
@@ -207,66 +224,126 @@ private fun CommunityComments(
         }
     }
     LaunchedEffect(post.id) { load(true) }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 600.dp).imePadding(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item { SectionHeading("Comentários", post.title) }
+
+    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.86f) {
+        LazyColumn(
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .testTag("community_comments_sheet"),
+            contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             item {
-                Column {
-                    AppleTextField(body, { body = it.take(1200) }, "Adicione um comentário")
-                    TextButton(enabled = body.isNotBlank() && !busy, onClick = {
-                        val commentText = body.trim()
-                        if (commentText.isEmpty()) return@TextButton
-                        busy = true
-                        scope.launch {
-                            try {
-                                val fbUid = repo.currentUid()
-                                if (fbUid != null) {
-                                    runCatching { repo.comment(fbUid, post.id, profile, commentText) }
-                                        .onFailure { CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText) }
-                                } else {
-                                    CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText)
+                CurationSheetHeader(
+                    title = "Comentários",
+                    subtitle = post.title,
+                    onClose = onClose,
+                    closeTag = "community_comments_close"
+                )
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AppleTextField(
+                        value = body,
+                        onChange = { body = it.take(1200) },
+                        placeholder = "Adicione um comentário",
+                        shape = ContinuousCapsule,
+                        useContentMaterial = false
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        LiquidGlassPillButton(
+                            text = "Enviar",
+                            onClick = {
+                                val commentText = body.trim()
+                                if (commentText.isEmpty()) return@LiquidGlassPillButton
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        val fbUid = repo.currentUid()
+                                        if (fbUid != null) {
+                                            runCatching { repo.comment(fbUid, post.id, profile, commentText) }
+                                                .onFailure { CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText) }
+                                        } else {
+                                            CommunityAutoSync.addLocalComment(storage, uid, post.id, profile, commentText)
+                                        }
+                                        body = ""
+                                        busy = false
+                                        load(true)
+                                    } catch (cancel: CancellationException) {
+                                        throw cancel
+                                    } catch (_: Exception) {
+                                        error = true
+                                        busy = false
+                                    }
                                 }
-                                body = ""
-                                busy = false
-                                load(true)
-                            } catch (cancel: CancellationException) {
-                                throw cancel
-                            } catch (_: Exception) {
-                                error = true
-                                busy = false
-                            }
-                        }
-                    }) { Text("Enviar", color = t.accent) }
+                            },
+                            enabled = body.isNotBlank() && !busy,
+                            emphasized = true,
+                            leadingIcon = Icons.AutoMirrored.Filled.Send
+                        )
+                    }
                 }
             }
             items(comments, key = { it.id }) { comment ->
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(comment.author, color = t.textSecondary, fontSize = 13.sp)
-                    Text(comment.body, color = t.textPrimary)
-                    if (comment.ownerId == uid || post.ownerId == uid) TextButton(onClick = {
-                        scope.launch {
-                            try {
-                                CommunityAutoSync.deleteLocalComment(storage, post.id, comment.id)
-                                val fbUid = repo.currentUid()
-                                if (fbUid != null && !comment.id.startsWith("local_c_")) {
-                                    runCatching { repo.deleteComment(fbUid, post.id, comment.id) }
-                                }
-                                comments = comments.filterNot { it.id == comment.id }
-                            } catch (cancel: CancellationException) {
-                                throw cancel
-                            } catch (_: Exception) {
-                                error = true
-                            }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .contentMaterialSurface(commentCardShape)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(comment.author, color = t.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text(comment.body, color = t.textPrimary, fontSize = 14.sp, lineHeight = 20.sp)
+                    if (comment.ownerId == uid || post.ownerId == uid) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            LiquidGlassPillButton(
+                                text = "Excluir",
+                                onClick = {
+                                    scope.launch {
+                                        try {
+                                            CommunityAutoSync.deleteLocalComment(storage, post.id, comment.id)
+                                            val fbUid = repo.currentUid()
+                                            if (fbUid != null && !comment.id.startsWith("local_c_")) {
+                                                runCatching { repo.deleteComment(fbUid, post.id, comment.id) }
+                                            }
+                                            comments = comments.filterNot { it.id == comment.id }
+                                        } catch (cancel: CancellationException) {
+                                            throw cancel
+                                        } catch (_: Exception) {
+                                            error = true
+                                        }
+                                    }
+                                },
+                                destructive = true,
+                                leadingIcon = Icons.Default.DeleteOutline
+                            )
                         }
-                    }) { Text("Excluir", color = t.textSecondary) }
-                    HorizontalDivider(color = t.divider)
+                    }
                 }
             }
             item {
-                if (error) Text("Não foi possível concluir. Tente novamente.", color = t.textSecondary)
-                if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = t.accent)
-                else if (more) TextButton(onClick = { load() }) { Text("Carregar comentários", color = t.accent) }
-                else if (comments.isEmpty()) Text("Ainda não há comentários.", color = t.textSecondary)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (error) Text("Não foi possível concluir. Tente novamente.", color = t.textSecondary, fontSize = 13.sp)
+                    if (busy) IOSLoadingIndicator(Modifier.size(22.dp), color = t.accent)
+                    else if (more) {
+                        LiquidGlassPillButton(
+                            text = "Carregar comentários",
+                            onClick = { load() }
+                        )
+                    } else if (comments.isEmpty()) {
+                        HorizontalDivider(color = t.divider)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Ainda não há comentários.", color = t.textSecondary, fontSize = 13.sp)
+                    }
+                }
             }
         }
     }

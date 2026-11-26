@@ -1657,116 +1657,74 @@ fun SocialShareCardSheetModal(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Botão Secundário: Salvar na Galeria
-                Row(
-                    modifier = Modifier
-                        .testTag("social_share_save_gallery_button")
-                        .height(48.dp)
-                        .inputWellSurface(RoundedCornerShape(999.dp))
-                        .clickable(enabled = !isExporting) {
-                            scope.launch {
-                                isExporting = true
-                                val bmp = generateFinalShareBitmap()
-                                val saved = withContext(Dispatchers.IO) {
-                                    SocialCardExporter.saveBitmapToDeviceGallery(
-                                        context = context,
-                                        bitmap = bmp,
-                                        displayTitle = targetComic?.displayTitle ?: "Metas_Quadrinheiro"
-                                    )
-                                }
-                                isExporting = false
-                                if (saved) {
-                                    onShowToast("Card salvo em alta resolução na Galeria!")
-                                } else {
-                                    onShowToast("Não foi possível salvar o card na galeria.")
-                                }
-                            }
-                        }
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Salvar na Galeria",
-                        tint = s.textPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Salvar",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = s.textPrimary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-
-                // Botão Principal: Compartilhar (Instagram Stories, Twitter/X, WhatsApp via Intent.ACTION_SEND)
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                        .testTag("social_share_dispatch_button")
-                        .shadow(10.dp, RoundedCornerShape(999.dp), spotColor = auraColor.copy(alpha = 0.40f))
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(s.accentBg)
-                        .clickable(enabled = !isExporting) {
-                            scope.launch {
-                                isExporting = true
-                                val bmp = generateFinalShareBitmap()
-                                val caption = when (selectedCardType) {
-                                    SocialShareCardType.COMPLETED_READING -> {
-                                        val t = targetComic?.displayTitle ?: "Quadrinho"
-                                        "Acabei de concluir \"$t\" no Quadrinheiro! ★ ${String.format(Locale.US, "%.1f", targetComic?.rating?.takeIf { it > 0f } ?: 5.0f)}"
-                                    }
-                                    SocialShareCardType.EPIC_MOMENT -> {
-                                        val t = targetComic?.displayTitle ?: "Quadrinho"
-                                        "“$customMomentQuote” — $t (Pág. $customMomentPage) via Quadrinheiro"
-                                    }
-                                    SocialShareCardType.GOAL_SUMMARY -> {
-                                        "Meu ritmo de leitura de quadrinhos em 2026 no Quadrinheiro!"
-                                    }
-                                }
-                                val launched = SocialCardExporter.shareBitmapWithAndroidSheet(
+                // Botão Secundário: Salvar na Galeria (Clear Liquid Glass)
+                LiquidGlassPillButton(
+                    text = "Salvar",
+                    onClick = {
+                        scope.launch {
+                            isExporting = true
+                            val bmp = generateFinalShareBitmap()
+                            val saved = withContext(Dispatchers.IO) {
+                                SocialCardExporter.saveBitmapToDeviceGallery(
                                     context = context,
                                     bitmap = bmp,
-                                    shareCaption = caption
+                                    displayTitle = targetComic?.displayTitle ?: "Metas_Quadrinheiro"
                                 )
-                                isExporting = false
-                                if (!launched) {
-                                    onShowToast("Card preparado no cache para compartilhamento.")
-                                }
+                            }
+                            isExporting = false
+                            if (saved) {
+                                onShowToast("Card salvo em alta resolução na Galeria!")
+                            } else {
+                                onShowToast("Não foi possível salvar o card na galeria.")
                             }
                         }
-                        .padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    if (isExporting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = s.accentText,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = LucideIcons.ShareIos,
-                            contentDescription = "Compartilhar",
-                            tint = s.accentText,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isExporting) "Renderizando Card HD…" else "Compartilhar",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = s.accentText,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
+                    },
+                    modifier = Modifier.testTag("social_share_save_gallery_button"),
+                    enabled = !isExporting,
+                    leadingIcon = Icons.Default.Download,
+                    horizontalPadding = 16.dp
+                )
+
+                // Botão Principal: Compartilhar (Tinted Liquid Glass estilo iOS 26)
+                LiquidGlassPillButton(
+                    text = if (isExporting) "Renderizando Card HD…" else "Compartilhar",
+                    onClick = {
+                        scope.launch {
+                            isExporting = true
+                            val bmp = generateFinalShareBitmap()
+                            val caption = when (selectedCardType) {
+                                SocialShareCardType.COMPLETED_READING -> {
+                                    val t = targetComic?.displayTitle ?: "Quadrinho"
+                                    "Acabei de concluir \"$t\" no Quadrinheiro! ★ ${String.format(Locale.US, "%.1f", targetComic?.rating?.takeIf { it > 0f } ?: 5.0f)}"
+                                }
+                                SocialShareCardType.EPIC_MOMENT -> {
+                                    val t = targetComic?.displayTitle ?: "Quadrinho"
+                                    "“$customMomentQuote” — $t (Pág. $customMomentPage) via Quadrinheiro"
+                                }
+                                SocialShareCardType.GOAL_SUMMARY -> {
+                                    "Meu ritmo de leitura de quadrinhos em 2026 no Quadrinheiro!"
+                                }
+                            }
+                            val launched = SocialCardExporter.shareBitmapWithAndroidSheet(
+                                context = context,
+                                bitmap = bmp,
+                                shareCaption = caption
+                            )
+                            isExporting = false
+                            if (!launched) {
+                                onShowToast("Card preparado no cache para compartilhamento.")
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("social_share_dispatch_button"),
+                    enabled = !isExporting,
+                    emphasized = true,
+                    loading = isExporting,
+                    leadingIcon = LucideIcons.ShareIos,
+                    horizontalPadding = 20.dp
+                )
             }
             }
         }

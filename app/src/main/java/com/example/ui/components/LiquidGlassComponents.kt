@@ -2036,11 +2036,13 @@ class LiquidGlassMenuRequest(
     val triggerLabel: String = "",
     val triggerIcon: ImageVector? = Icons.Default.UnfoldMore,
     val items: List<LiquidGlassMenuItemData>,
-    val onDismiss: () -> Unit
+    val onDismiss: () -> Unit,
+    val openNonce: Long = 0L
 )
 
 @androidx.compose.runtime.Stable
 class LiquidGlassMenuHostState {
+    private var nextNonce = 0L
     var currentRequest by mutableStateOf<LiquidGlassMenuRequest?>(null)
         private set
     var morphingMenuId by mutableStateOf<String?>(null)
@@ -2059,8 +2061,12 @@ class LiquidGlassMenuHostState {
     }
 
     fun showMenu(request: LiquidGlassMenuRequest) {
+        val previous = currentRequest
+        if (previous != null && previous.id != request.id) { previous.onDismiss() }
+        nextNonce += 1L
         morphingMenuId = request.id
-        currentRequest = request
+        currentRequest = LiquidGlassMenuRequest(request.id, request.anchorBounds, request.triggerLabel, request.triggerIcon, request.items, request.onDismiss, if (request.openNonce != 0L) request.openNonce else nextNonce)
+        // updated above with openNonce
     }
 
     fun updateTriggerLabel(id: String, newLabel: String) {
@@ -2072,7 +2078,7 @@ class LiquidGlassMenuHostState {
                 triggerLabel = newLabel,
                 triggerIcon = current.triggerIcon,
                 items = current.items,
-                onDismiss = current.onDismiss
+                onDismiss = current.onDismiss, openNonce = current.openNonce
             )
         }
     }
@@ -2086,7 +2092,7 @@ class LiquidGlassMenuHostState {
                 triggerLabel = current.triggerLabel,
                 triggerIcon = current.triggerIcon,
                 items = current.items,
-                onDismiss = current.onDismiss
+                onDismiss = current.onDismiss, openNonce = current.openNonce
             )
         }
     }
@@ -2325,7 +2331,7 @@ fun <T> AppleMenuPicker(
                     interactionSource = pickerInteractions,
                     indication = null
                 ) {
-                    val nextOpen = !open
+                    val nextOpen = !(if (menuHost != null) menuHost.currentRequest?.id == menuId else open)
                     if (nextOpen) {
                         anchorBounds = computeAnchorBounds()
                     }

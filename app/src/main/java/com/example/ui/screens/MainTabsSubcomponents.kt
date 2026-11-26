@@ -51,6 +51,7 @@ import com.example.data.SeriesSequenceEngine
 import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReadingStatus
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.example.ui.components.AppleCapsuleButton
 import com.example.ui.components.AppleStepper
 import com.example.ui.components.BookCover
@@ -58,6 +59,9 @@ import com.example.ui.components.LucideIcons
 import com.example.ui.components.StarRating
 import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.inputWellSurface
+import com.example.ui.components.liquidGlassPanelSurface
+import com.example.ui.components.tactileCardPress
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.ui.theme.LocalAppleMaterials
@@ -199,10 +203,13 @@ fun HomeReadingNowComicCard(
             .coerceIn(0, 100)
     }
 
+    val cardInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .contentMaterialSurface(RoundedCornerShape(26.dp))
+            .tactileCardPress(cardInteraction, targetScale = 0.97f)
+            .liquidGlassPanelSurface(ContinuousRoundedRectangle(26.dp))
+            .clickable(interactionSource = cardInteraction, indication = null) { onSelectComic(item) }
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically

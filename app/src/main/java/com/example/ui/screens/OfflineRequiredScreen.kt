@@ -1,50 +1,37 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.pressScaleFeedback
 import com.example.ui.components.tintedLiquidBlueButton
+import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.contrastRatio
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -54,6 +41,7 @@ fun OfflineRequiredScreen(
     modifier: Modifier = Modifier
 ) {
     val theme = LocalIOS27Theme.current
+    val settings = LocalAppSettings.current
     val scope = rememberCoroutineScope()
     var isChecking by remember { mutableStateOf(false) }
 
@@ -69,31 +57,38 @@ fun OfflineRequiredScreen(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 460.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // Optical Glass Badge
             Box(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
                     .background(
-                        Brush.radialGradient(
-                            listOf(
-                                theme.accent.copy(alpha = 0.22f),
-                                theme.accent.copy(alpha = 0.04f),
-                                Color.Transparent
+                        if (settings.reduceTransparency) {
+                            Brush.linearGradient(listOf(theme.bgSecondary, theme.bgSecondary))
+                        } else {
+                            Brush.radialGradient(
+                                listOf(
+                                    theme.accent.copy(alpha = 0.22f),
+                                    theme.accent.copy(alpha = 0.04f),
+                                    Color.Transparent
+                                )
                             )
-                        )
+                        }
                     )
                     .padding(8.dp)
                     .clip(CircleShape)
                     .background(theme.bgSecondary)
+                    .border(1.dp, theme.divider, CircleShape)
                     .padding(18.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.CloudOff,
-                    contentDescription = "Sem conexão",
+                    contentDescription = null,
                     tint = theme.accent,
                     modifier = Modifier.size(40.dp)
                 )
@@ -106,7 +101,11 @@ fun OfflineRequiredScreen(
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = theme.textPrimary,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics {
+                    heading()
+                    liveRegion = LiveRegionMode.Polite
+                }
             )
 
             Spacer(Modifier.height(12.dp))
@@ -123,16 +122,35 @@ fun OfflineRequiredScreen(
             Spacer(Modifier.height(36.dp))
 
             val retryInteraction = remember { MutableInteractionSource() }
+            val solidBtnColor = theme.accent
+            val solidBtnFg = if (contrastRatio(Color.White, solidBtnColor) >= contrastRatio(Color.Black, solidBtnColor)) Color.White else Color.Black
+            val buttonSurface = if (settings.reduceTransparency) {
+                Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(solidBtnColor)
+            } else {
+                Modifier.tintedLiquidBlueButton()
+            }
+            val buttonFg = if (settings.reduceTransparency) solidBtnFg else Color.White
+
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.68f)
-                    .height(50.dp)
+                    .fillMaxWidth(0.72f)
+                    .heightIn(min = 50.dp)
                     .pressScaleFeedback(retryInteraction, targetScale = 0.96f)
-                    .tintedLiquidBlueButton()
+                    .then(buttonSurface)
+                    .focusable(enabled = !isChecking)
+                    .semantics(mergeDescendants = true) {
+                        if (isChecking) {
+                            contentDescription = "Verificando conexão"
+                            liveRegion = LiveRegionMode.Polite
+                        }
+                    }
                     .clickable(
                         interactionSource = retryInteraction,
                         indication = null,
                         role = Role.Button,
+                        onClickLabel = "Tentar conectar novamente",
                         enabled = !isChecking
                     ) {
                         scope.launch {
@@ -142,12 +160,13 @@ fun OfflineRequiredScreen(
                             isChecking = false
                         }
                     }
+                    .padding(horizontal = 18.dp, vertical = 12.dp)
                     .testTag("retry_connection_button"),
                 contentAlignment = Alignment.Center
             ) {
                 if (isChecking) {
                     CircularProgressIndicator(
-                        color = Color.White,
+                        color = buttonFg,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(20.dp)
                     )
@@ -156,7 +175,7 @@ fun OfflineRequiredScreen(
                         text = "Tentar novamente",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        color = buttonFg
                     )
                 }
             }

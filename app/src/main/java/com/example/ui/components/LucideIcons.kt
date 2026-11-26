@@ -238,7 +238,7 @@ object LucideIcons {
     val Grid3x2: ImageVector get() = Icons.Default.ViewModule
     val Maximize2: ImageVector get() = Icons.Default.OpenInFull
 
-    // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS)
+    // SF Symbol: square.and.arrow.up (Ícone de Compartilhar do iOS — centralizado opticamente em 24x24)
     val ShareIos: ImageVector by lazy {
         ImageVector.Builder(
             name = "ShareIos",
@@ -248,7 +248,23 @@ object LucideIcons {
             viewportHeight = 24f
         ).addPath(
             pathData = PathParser().parsePathString(
-                "M12 2.586L7.707 6.879a1 1 0 0 0 1.414 1.414L11 6.414V15a1 1 0 1 0 2 0V6.414l1.879 1.879a1 1 0 0 0 1.414-1.414L12 2.586zM6 9a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3h-2a1 1 0 1 0 0 2h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h2a1 1 0 1 0 0-2H6z"
+                "M12 1.75L7.75 6a0.9 0.9 0 0 0 1.27 1.27L11.1 5.19V13.75a0.9 0.9 0 1 0 1.8 0V5.19l2.08 2.08A0.9 0.9 0 0 0 16.25 6L12 1.75zM6.75 8A2.75 2.75 0 0 0 4 10.75v6.75A2.75 2.75 0 0 0 6.75 20.25h10.5A2.75 2.75 0 0 0 20 17.5v-6.75A2.75 2.75 0 0 0 17.25 8h-1.85a0.9 0.9 0 1 0 0 1.8h1.85a0.95 0.95 0 0 1 0.95 0.95v6.75a0.95 0.95 0 0 1-0.95 0.95H6.75a0.95 0.95 0 0 1-0.95-0.95v-6.75a0.95 0.95 0 0 1 0.95-0.95h1.85a0.9 0.9 0 1 0 0-1.8H6.75z"
+            ).toNodes(),
+            fill = SolidColor(Color.White)
+        ).build()
+    }
+
+    // SF Symbol: ellipsis.circle (Ícone de menu compacto iOS 26 / LiquidGlassKMP)
+    val EllipsisCircle: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "EllipsisCircle",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).addPath(
+            pathData = PathParser().parsePathString(
+                "M12 2.5A9.5 9.5 0 1 0 21.5 12 9.51 9.51 0 0 0 12 2.5zm0 17.3A7.8 7.8 0 1 1 19.8 12 7.81 7.81 0 0 1 12 19.8zM8.2 12a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 8.2 12zm5.05 0a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 13.25 12zm5.05 0a1.25 1.25 0 1 1-1.25-1.25A1.25 1.25 0 0 1 18.3 12z"
             ).toNodes(),
             fill = SolidColor(Color.White)
         ).build()

@@ -608,6 +608,7 @@ fun QuadrinheiroApp(
             } else raw
         }
         val menuHostState = remember { com.example.ui.components.LiquidGlassMenuHostState() }
+        val overlayHostState = remember { com.example.ui.components.LiquidGlassOverlayHostState() }
         LaunchedEffect(activeTab, settingsSubPage, shelfSection) {
             menuHostState.dismissMenu()
         }
@@ -622,7 +623,8 @@ fun QuadrinheiroApp(
             LocalLiquidGlassBackdrop provides backgroundBackdrop,
             LocalLiquidGlassScrollState provides activeListState,
             com.example.ui.components.LocalLiquidGlassExtremeFling provides (isExtremeFling || activeListState.isScrollInProgress),
-            com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState
+            com.example.ui.components.LocalLiquidGlassMenuHost provides menuHostState,
+            com.example.ui.components.LocalLiquidGlassOverlayHost provides overlayHostState
         ) {
             Box(
                 modifier = Modifier
@@ -634,7 +636,6 @@ fun QuadrinheiroApp(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(themeColors.bgPrimary)
                         .layerBackdrop(
                             backdrop = mainContentBackdrop,
                             reuseRecordedContent = true,
@@ -1077,11 +1078,12 @@ fun QuadrinheiroApp(
                             viewModel.openInfoSynopsisModal(seqComic)
                         },
                         onOpenCatalogWithStatus = { comic, status ->
-                            viewModel.openCatalogSheetForComic(comic, status)
+                            viewModel.openCatalogSheetForComic(comic, status, preserveInfoModal = true)
                         },
                         onEditSavedComic = { saved ->
-                            viewModel.selectComicForSheet(saved)
+                            viewModel.selectComicForSheet(saved, preserveInfoModal = true)
                         },
+                        isRegistrationOverlayOpen = selectedComic != null,
                         onDismiss = { viewModel.openInfoSynopsisModal(null) },
                         onShareComic = { shareComic, cardType, momentId ->
                             viewModel.openSocialShareSheet(
@@ -1195,6 +1197,12 @@ fun QuadrinheiroApp(
                         onDismiss = { viewModel.setShowManualModal(false) }
                     )
                 }
+
+                // Host Flutuante de Modais e Sheets Liquid Glass (refração viva do app atrás da folha)
+                com.example.ui.components.LiquidGlassOverlayHost(
+                    state = overlayHostState,
+                    defaultBackdrop = mainContentBackdrop
+                )
 
                 // Host Flutuante de Menus Liquid Glass (ex.: "Mais Recentes" na Biblioteca e seletores de Ajustes)
                 com.example.ui.components.LiquidGlassMenuOverlayHost(

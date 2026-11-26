@@ -1,14 +1,18 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -17,9 +21,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.data.BannerArtwork
@@ -28,10 +34,17 @@ import com.example.data.BannerSearchException
 import com.example.data.CatalogBanners
 import com.example.ui.components.AppleSegmentedPicker
 import com.example.ui.components.AppleTextField
+import com.example.ui.components.IOSLoadingIndicator
+import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.contentMaterialSurface
+import com.example.ui.components.pressScaleFeedback
+import com.example.ui.components.rememberAdaptiveLiquidGlassInk
+import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
+import com.kyant.shapes.ContinuousCapsule
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BannerArtworkPicker(
     initialQuery: String,
@@ -41,6 +54,7 @@ internal fun BannerArtworkPicker(
     onChoose: (BannerArtwork) -> Unit
 ) {
     val t = LocalIOS27Theme.current
+    val settings = LocalAppSettings.current
     val context = LocalContext.current
     var query by rememberSaveable { mutableStateOf(initialQuery.take(100)) }
     var kind by rememberSaveable { mutableIntStateOf(if (initialKind == "character") 1 else 0) }
@@ -49,9 +63,11 @@ internal fun BannerArtworkPicker(
     var items by remember { mutableStateOf(emptyList<BannerArtwork>()) }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val cardShape = remember { ContinuousRoundedRectangle(18.dp) }
+    val artShape = remember { ContinuousRoundedRectangle(12.dp) }
 
     fun submit() {
-        val clean = query.trim().ifBlank { if (kind == 1) "Batman" else "Batman" }
+        val clean = query.trim().ifBlank { "Batman" }
         if (clean.length >= 2) {
             submitted = clean to if (kind == 1) "character" else "volume"
             generation++
@@ -97,90 +113,179 @@ internal fun BannerArtworkPicker(
             if (submitted == request && generation == token) loading = false
         }
     }
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
+
+    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.88f) {
         LazyColumn(
-            Modifier.fillMaxWidth().heightIn(max = 650.dp).imePadding().testTag("banner_artwork_picker"),
-            contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .testTag("banner_artwork_picker"),
+            contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Escolher banner", color = t.textPrimary, style = MaterialTheme.typography.titleLarge)
-                    TextButton(onClick = onClose) { Text("Fechar", color = t.accent) }
-                }
+                CurationSheetHeader(
+                    title = "Escolher banner",
+                    subtitle = "Busque uma arte horizontal ou abra sua galeria.",
+                    onClose = onClose,
+                    closeTag = "banner_picker_close"
+                )
             }
             item {
                 AppleSegmentedPicker(listOf("HQs", "Personagens"), kind, { next ->
-                    if (next != kind) { kind = next; submitted = null; errorMessage = null }
+                    if (next != kind) {
+                        kind = next; submitted = null; errorMessage = null
+                    }
                 }, Modifier.fillMaxWidth())
             }
             item {
                 AppleTextField(
-                    query,
-                    { query = it.take(100) },
-                    if (kind == 1) "Nome do personagem" else "Título da HQ",
-                    leadingIcon = Icons.Default.Search
+                    value = query,
+                    onChange = { query = it.take(100) },
+                    placeholder = if (kind == 1) "Nome do personagem" else "Título da HQ",
+                    shape = ContinuousCapsule,
+                    leadingIcon = Icons.Default.Search,
+                    useContentMaterial = false
                 )
             }
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LiquidGlassPillButton(
+                        text = "Buscar artes",
                         onClick = { submit() },
                         enabled = query.trim().length >= 2 && !loading,
-                        modifier = Modifier.heightIn(min = 44.dp).testTag("search_banner_artwork")
-                    ) {
-                        Text("Buscar artes", color = t.accent)
-                    }
-                    TextButton(
+                        emphasized = true,
+                        leadingIcon = Icons.Default.Search,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("search_banner_artwork")
+                    )
+                    LiquidGlassPillButton(
+                        text = "Abrir galeria",
                         onClick = onGallery,
-                        modifier = Modifier.heightIn(min = 44.dp)
+                        leadingIcon = Icons.Default.PhotoLibrary,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("gallery_banner_artwork")
+                    )
+                }
+            }
+            if (loading) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = "Buscando artes de banner"
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Abrir galeria", color = t.accent)
+                        IOSLoadingIndicator(modifier = Modifier.size(18.dp), color = t.accent)
+                        Text("Buscando artes horizontais…", color = t.textSecondary, fontSize = 13.sp)
                     }
                 }
             }
-            if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = t.accent) }
             if (errorMessage != null) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(errorMessage!!, color = t.textSecondary)
-                        TextButton(
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            errorMessage!!,
+                            color = t.textSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
+                        LiquidGlassPillButton(
+                            text = "Tentar novamente",
                             onClick = { submit() },
                             enabled = !loading && query.trim().length >= 2,
-                            modifier = Modifier.heightIn(min = 44.dp).testTag("retry_banner_artwork")
-                        ) {
-                            Text("Tentar novamente", color = t.accent)
-                        }
+                            leadingIcon = Icons.Default.Refresh,
+                            modifier = Modifier.testTag("retry_banner_artwork")
+                        )
                     }
                 }
             } else if (!loading && submitted != null && items.isEmpty()) {
-                item { Text("Nenhuma arte horizontal encontrada. Tente outra HQ ou personagem.", color = t.textSecondary) }
+                item {
+                    Text(
+                        "Nenhuma arte horizontal encontrada. Tente outra HQ ou personagem.",
+                        color = t.textSecondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                }
             } else if (submitted == null) {
-                item { Text("Busque uma HQ ou personagem para escolher uma arte horizontal.", color = t.textSecondary) }
+                item {
+                    Text(
+                        "Busque uma HQ ou personagem para escolher uma arte horizontal.",
+                        color = t.textSecondary,
+                        fontSize = 13.sp
+                    )
+                }
             }
             items(items, key = { it.url }) { art ->
+                val interaction = remember { MutableInteractionSource() }
+                val cardModifier = if (settings.reduceTransparency) {
+                    Modifier
+                        .clip(cardShape)
+                        .background(t.bgPrimary, cardShape)
+                        .border(0.85.dp, t.divider, cardShape)
+                } else {
+                    Modifier.contentMaterialSurface(shape = cardShape)
+                }
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(t.bgPrimary)
-                        .clickable(role = Role.Button) { onChoose(art) }
+                        .pressScaleFeedback(interaction, targetScale = 0.98f)
+                        .then(cardModifier)
+                        .focusable()
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                            role = Role.Button,
+                            onClickLabel = "Usar arte de ${art.title}"
+                        ) { onChoose(art) }
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     AsyncImage(
                         ImageRequest.Builder(context).data(art.url).size(600, 200).allowHardware(true).build(),
                         "Arte de ${art.title}",
-                        Modifier.fillMaxWidth().aspectRatio(3f).clip(RoundedCornerShape(10.dp)),
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(3f)
+                            .clip(artShape),
                         contentScale = ContentScale.Crop
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(art.title, Modifier.weight(1f), color = t.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Usar arte", color = t.accent)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 34.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            art.title,
+                            Modifier.weight(1f),
+                            color = t.textPrimary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "Usar arte",
+                            color = rememberAdaptiveLiquidGlassInk(t.accent, t.bgPrimary, 4.5f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
         }
     }
 }
-

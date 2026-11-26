@@ -1455,38 +1455,24 @@ internal fun CatalogMomentsSection(
                         Spacer(modifier = Modifier.width(8.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(s.accentColor.copy(alpha = 0.16f))
-                                    .clickable { onShareMoment(moment) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = LucideIcons.ShareIos,
-                                    contentDescription = "Compartilhar Momento",
-                                    tint = s.accentColor,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(if (s.isLight) Color.Black.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.08f))
-                                    .clickable { onRemoveMoment(moment.id) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remover momento",
-                                    tint = s.textSecondary.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(13.dp)
-                                )
-                            }
+                            LiquidGlassCircleButton(
+                                icon = LucideIcons.ShareIos,
+                                contentDescription = "Compartilhar Momento",
+                                onClick = { onShareMoment(moment) },
+                                size = 34.dp,
+                                iconSize = 15.dp,
+                                tint = s.accentColor
+                            )
+                            LiquidGlassCircleButton(
+                                icon = Icons.Default.Close,
+                                contentDescription = "Remover momento",
+                                onClick = { onRemoveMoment(moment.id) },
+                                size = 34.dp,
+                                iconSize = 15.dp,
+                                tint = s.textSecondary
+                            )
                         }
                     }
                 }

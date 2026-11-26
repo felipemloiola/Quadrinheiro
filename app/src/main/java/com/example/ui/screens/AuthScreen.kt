@@ -323,11 +323,17 @@ private fun AuthGlassScreenShellContent(
         ) {
             if (onDismissModal != null) {
                 val closeCd = stringResource(R.string.auth_cd_close_modal)
+                val appSettings = LocalAppSettings.current
+                val closeSurface = if (appSettings.reduceTransparency) {
+                    Modifier.background(themeColors.bgSecondary, CircleShape)
+                } else {
+                    Modifier.liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(44.dp)
-                        .liquidGlassNavSurface(shape = CircleShape, elevation = 4.dp)
+                        .size(48.dp)
+                        .then(closeSurface)
                         .clickable(role = Role.Button) { onDismissModal() }
                         .semantics { contentDescription = closeCd }
                         .testTag("auth_close_modal_button"),

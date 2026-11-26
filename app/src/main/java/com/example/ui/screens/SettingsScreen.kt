@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1582,16 +1583,23 @@ fun SettingsTabScreen(
 
                                         Box(
                                             modifier = Modifier
+                                                .heightIn(min = 48.dp)
                                                 .clip(RoundedCornerShape(999.dp))
                                                 .background(s.accentBg)
-                                                .clickable(enabled = !isTestingApis) {
+                                                .clickable(
+                                                    enabled = !isTestingApis,
+                                                    role = androidx.compose.ui.semantics.Role.Button,
+                                                    onClickLabel = "Verificar conexão com o catálogo"
+                                                ) {
                                                     viewModel.runOnlineApiDiagnostics()
                                                 }
-                                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                                                .testTag("settings_verify_connection_button"),
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Text(
                                                 text = if (isTestingApis) "Testando..." else "Verificar conexão",
-                                                fontSize = 12.sp,
+                                                fontSize = 12.5.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = s.accentText
                                             )
@@ -2129,8 +2137,13 @@ fun SettingsTabScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { viewModel.resetAppearanceDefaults() }
-                                        .padding(16.dp),
+                                        .heightIn(min = 48.dp)
+                                        .clickable(
+                                            role = androidx.compose.ui.semantics.Role.Button,
+                                            onClickLabel = "Restaurar aparência padrão"
+                                        ) { viewModel.resetAppearanceDefaults() }
+                                        .padding(16.dp)
+                                        .testTag("settings_reset_appearance_button"),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
@@ -2673,12 +2686,17 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp)
+                            .heightIn(min = 48.dp)
                             .inputWellSurface(RoundedCornerShape(14.dp))
-                            .clickable(enabled = !isAuthLoading) {
+                            .clickable(
+                                enabled = !isAuthLoading,
+                                role = androidx.compose.ui.semantics.Role.Button,
+                                onClickLabel = "Criar conta ou entrar com e-mail"
+                            ) {
                                 viewModel.openAuthModalForLinking(AuthMode.REGISTER)
                             }
-                            .padding(horizontal = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("settings_create_account_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -2705,12 +2723,17 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp)
+                            .heightIn(min = 48.dp)
                             .inputWellSurface(RoundedCornerShape(14.dp))
-                            .clickable(enabled = !isAuthLoading) {
+                            .clickable(
+                                enabled = !isAuthLoading,
+                                role = androidx.compose.ui.semantics.Role.Button,
+                                onClickLabel = "Sair do modo convidado"
+                            ) {
                                 viewModel.logout(context)
                             }
-                            .padding(horizontal = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                            .testTag("settings_guest_logout_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -2719,7 +2742,7 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                         ) {
                             Icon(
                                 imageVector = LucideIcons.LogOut,
-                                contentDescription = "Sair",
+                                contentDescription = null,
                                 tint = Color(0xFFF43F5E),
                                 modifier = Modifier.size(15.dp)
                             )
@@ -2739,12 +2762,17 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .heightIn(min = 48.dp)
                         .liquidGlassNavSurface(shape = RoundedCornerShape(14.dp), elevation = 3.dp)
-                        .clickable(enabled = !isSyncing && !isAuthLoading) {
+                        .clickable(
+                            enabled = !isSyncing && !isAuthLoading,
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClickLabel = "Vincular Google para backup na nuvem"
+                        ) {
                             viewModel.loginWithGoogle(context)
                         }
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .testTag("settings_link_google_button"),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -2775,10 +2803,15 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .heightIn(min = 48.dp)
                         .inputWellSurface(RoundedCornerShape(14.dp))
-                        .clickable(enabled = !isSyncing) { viewModel.syncNowWithCloud() }
-                        .padding(horizontal = 8.dp),
+                        .clickable(
+                            enabled = !isSyncing,
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClickLabel = "Sincronizar biblioteca com a nuvem"
+                        ) { viewModel.syncNowWithCloud() }
+                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                        .testTag("settings_sync_now_button"),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -2803,10 +2836,14 @@ private fun CloudSyncCard(viewModel: QuadrinheiroViewModel) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp)
+                        .heightIn(min = 48.dp)
                         .inputWellSurface(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.logout(context) }
-                        .padding(horizontal = 8.dp),
+                        .clickable(
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClickLabel = "Sair da conta"
+                        ) { viewModel.logout(context) }
+                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                        .testTag("settings_logout_button"),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(

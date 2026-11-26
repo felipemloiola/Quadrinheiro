@@ -113,17 +113,23 @@ import com.example.ui.components.LucideIcons
 import com.example.ui.components.SegmentOption
 import com.example.ui.components.StarRating
 import com.example.ui.components.UserAvatar
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.example.ui.components.LiquidGlassPillButton
 import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.inputWellSurface
 import com.example.ui.components.liquidGlass
 import com.example.ui.components.liquidGlassNavSurface
+import com.example.ui.components.liquidGlassPanelSurface
 import com.example.ui.components.pressScaleFeedback
+import com.example.ui.components.rememberAppHaptics
+import com.example.ui.components.tactileCardPress
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalAppleMaterials
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.PlusJakartaSansFamily
 import com.example.ui.theme.SpaceGroteskTabularFamily
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlin.math.roundToInt
 
 @Composable
@@ -319,11 +325,19 @@ fun HomeReadingNowTab(
                 val activeReadsRatio = ((readComicsList.size + readingNowList.size).toFloat() / 12f).coerceIn(0f, 1f)
                 val pct = (outerRatio * 100f).roundToInt().coerceIn(0, 100)
 
+                val goalsInteraction = remember { MutableInteractionSource() }
+                val homeHaptics = rememberAppHaptics()
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .contentMaterialSurface(RoundedCornerShape(26.dp)).testTag("home_goals")
-                        .clickable { onOpenStatistics() }
+                        .tactileCardPress(goalsInteraction, targetScale = 0.97f)
+                        .liquidGlassPanelSurface(ContinuousRoundedRectangle(26.dp))
+                        .testTag("home_goals")
+                        .clickable(interactionSource = goalsInteraction, indication = null) {
+                            homeHaptics.impactLight()
+                            onOpenStatistics()
+                        }
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -524,29 +538,12 @@ fun HomeReadingNowTab(
                         )
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .shadow(6.dp, RoundedCornerShape(999.dp))
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(s.accentBg)
-                            .clickable { onGoToSearch() }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = s.accentText,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        com.example.ui.components.HomeSkeletonText(
-                            text = "Buscar HQs Online",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = s.accentText
-                        )
-                    }
+                    LiquidGlassPillButton(
+                        text = "Buscar HQs Online",
+                        leadingIcon = Icons.Default.Search,
+                        emphasized = true,
+                        onClick = onGoToSearch
+                    )
                 }
             }
         } else {
@@ -653,10 +650,10 @@ private fun ComicGridCard(
         .roundToInt()
         .coerceIn(0, 100)
 
-    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
-            .pressScaleFeedback(interactionSource, targetScale = 0.965f)
+            .tactileCardPress(interactionSource, targetScale = 0.97f)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() },
         verticalArrangement = Arrangement.spacedBy(if (isCompact4Col) 4.dp else 6.dp)
     ) {
@@ -947,10 +944,26 @@ fun ShelfLibraryTab(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            AppleMenuPicker(
-                                modifier = Modifier.widthIn(max = 144.dp),
+                            com.example.ui.components.LiquidGlassCircleButton(
+                                icon = when (shelfLayout) {
+                                    "grid" -> Icons.AutoMirrored.Filled.FormatListBulleted
+                                    "list" -> LucideIcons.Layers
+                                    else -> Icons.Default.GridView
+                                },
+                                contentDescription = "Alternar Grade, Lista ou Sequências",
+                                onClick = onToggleShelfLayout,
+                                size = 44.dp,
+                                iconSize = 18.dp,
+                                tint = s.textPrimary
+                            )
+
+                            com.example.ui.components.AppleIconMenuButton(
                                 value = shelfSort,
                                 onChange = onChangeShelfSort,
+                                icon = LucideIcons.EllipsisCircle,
+                                contentDescription = "Ordenar biblioteca",
+                                buttonSize = 44.dp,
+                                iconSize = 22.dp,
                                 options = listOf(
                                     SegmentOption("RECENT", "Mais Recentes", Icons.Default.Schedule),
                                     SegmentOption("RATING", "Melhor Avaliação", Icons.Default.Star),
@@ -958,25 +971,6 @@ fun ShelfLibraryTab(
                                     SegmentOption("YEAR", "Ano de Lançamento", Icons.Default.CalendarMonth)
                                 )
                             )
-
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
-                                    .clickable { onToggleShelfLayout() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = when (shelfLayout) {
-                                        "grid" -> Icons.AutoMirrored.Filled.FormatListBulleted
-                                        "list" -> LucideIcons.Layers
-                                        else -> Icons.Default.GridView
-                                    },
-                                    contentDescription = "Alternar Grade, Lista ou Sequências",
-                                    tint = s.textPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
                         }
                     }
                 }

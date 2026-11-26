@@ -4,7 +4,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.progressSemantics
@@ -15,6 +14,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.LocalIOS27Theme
@@ -24,7 +27,8 @@ import com.example.ui.theme.LocalIOS27Theme
 fun IOSLoadingIndicator(
     modifier: Modifier = Modifier,
     color: Color = LocalIOS27Theme.current.textSecondary,
-    strokeWidth: Dp = 2.dp
+    strokeWidth: Dp = 2.dp,
+    accessibilityLabel: String = "Carregando"
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val transition = rememberInfiniteTransition(label = "iosActivity")
@@ -34,7 +38,17 @@ fun IOSLoadingIndicator(
         animationSpec = infiniteRepeatable(motion.tween(900, easing = LinearEasing)),
         label = "activityPhase"
     ).value
-    Canvas(modifier.size(24.dp).progressSemantics()) {
+    Canvas(
+        modifier
+            .size(24.dp)
+            .progressSemantics()
+            .semantics {
+                if (accessibilityLabel.isNotBlank()) {
+                    contentDescription = accessibilityLabel
+                    liveRegion = LiveRegionMode.Polite
+                }
+            }
+    ) {
         val radius = size.minDimension / 2f
         repeat(12) { index ->
             val age = (index - phase.toInt() + 24) % 12

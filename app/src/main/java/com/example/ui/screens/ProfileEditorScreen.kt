@@ -35,6 +35,8 @@ import com.example.model.ReaderProfile
 import com.example.model.AppSettings
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,11 +95,17 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
         }
     }
 
+    val editorBackdrop = rememberLayerBackdrop()
+    val bannerBackdrop = rememberLayerBackdrop()
+
     Box(Modifier.fillMaxSize().background(theme.bgPrimary)) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().testTag("profile_editor"),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 68.dp, bottom = 200.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(editorBackdrop)
+                .testTag("profile_editor"),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 76.dp, bottom = 200.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
@@ -129,21 +137,27 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                             .background(theme.bgSecondary)
                             .clickable(enabled = !imageBusy) { bannerSearchOpen = true }
                     ) {
-                        if (banner.isNotBlank()) {
-                            ProfileImage(banner, "Banner do perfil", Modifier.fillMaxSize())
-                        } else {
-                            Row(
-                                modifier = Modifier.align(Alignment.Center),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AddPhotoAlternate,
-                                    contentDescription = null,
-                                    tint = theme.textTertiary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text("Adicionar banner", color = theme.textTertiary, fontSize = 13.sp)
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .layerBackdrop(bannerBackdrop)
+                        ) {
+                            if (banner.isNotBlank()) {
+                                ProfileImage(banner, "Banner do perfil", Modifier.fillMaxSize())
+                            } else {
+                                Row(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddPhotoAlternate,
+                                        contentDescription = null,
+                                        tint = theme.textTertiary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text("Adicionar banner", color = theme.textTertiary, fontSize = 13.sp)
+                                }
                             }
                         }
                         if (banner.isNotBlank()) {
@@ -151,52 +165,46 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(10.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .height(30.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.52f))
-                                        .clickable(enabled = !imageBusy) {
-                                            scope.launch {
-                                                imageBusy = true
-                                                imageError = null
-                                                try {
-                                                    pendingBanner = com.example.data.CatalogBanners.bitmapFromBannerValue(banner)
-                                                } catch (cancel: kotlinx.coroutines.CancellationException) {
-                                                    throw cancel
-                                                } catch (_: Exception) {
-                                                    imageError = "Não foi possível reenquadrar este banner. Escolha outra arte ou foto."
-                                                } finally {
-                                                    imageBusy = false
-                                                }
+                                LiquidGlassPillButton(
+                                    text = "Ajustar",
+                                    onClick = {
+                                        scope.launch {
+                                            imageBusy = true
+                                            imageError = null
+                                            try {
+                                                pendingBanner = com.example.data.CatalogBanners.bitmapFromBannerValue(banner)
+                                            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                                throw cancel
+                                            } catch (_: Exception) {
+                                                imageError = "Não foi possível reenquadrar este banner. Escolha outra arte ou foto."
+                                            } finally {
+                                                imageBusy = false
                                             }
                                         }
-                                        .padding(horizontal = 10.dp)
-                                        .testTag("reframe_profile_banner"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(Icons.Default.Crop, contentDescription = "Reenquadrar", tint = Color.White, modifier = Modifier.size(14.dp))
-                                        Text("Ajustar", color = Color.White, fontSize = 12.sp, maxLines = 1)
-                                    }
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.52f))
-                                        .clickable(enabled = !imageBusy) { banner = "" }
-                                        .testTag("remove_profile_banner"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Remover banner", tint = Color.White, modifier = Modifier.size(15.dp))
-                                }
+                                    },
+                                    enabled = !imageBusy,
+                                    leadingIcon = Icons.Default.Crop,
+                                    onDarkScrim = true,
+                                    minHeight = 40.dp,
+                                    horizontalPadding = 14.dp,
+                                    verticalPadding = 8.dp,
+                                    backdropOverride = bannerBackdrop,
+                                    modifier = Modifier.testTag("reframe_profile_banner")
+                                )
+                                LiquidGlassCircleButton(
+                                    icon = Icons.Default.Close,
+                                    contentDescription = "Remover banner",
+                                    onClick = { banner = "" },
+                                    size = 40.dp,
+                                    iconSize = 18.dp,
+                                    onDarkScrim = true,
+                                    enabled = !imageBusy,
+                                    tag = "remove_profile_banner",
+                                    backdropOverride = bannerBackdrop
+                                )
                             }
                         }
                         if (imageBusy) {
@@ -227,49 +235,47 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
-                            .height(halfAvatar)
+                            .heightIn(min = halfAvatar)
                             .padding(start = 104.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val pillBg = theme.textPrimary.copy(alpha = if (theme.isDark) 0.10f else 0.07f)
-                        Box(
-                            modifier = Modifier
-                                .height(32.dp)
-                                .clip(CircleShape)
-                                .background(pillBg)
-                                .clickable(enabled = !imageBusy) { bannerSearchOpen = true }
-                                .padding(horizontal = 12.dp)
-                                .testTag("search_profile_banner"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.Search, contentDescription = null, tint = theme.textPrimary, modifier = Modifier.size(14.dp))
-                                Text("Buscar arte", color = theme.textPrimary, fontSize = 12.5.sp, maxLines = 1)
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .height(32.dp)
-                                .clip(CircleShape)
-                                .background(pillBg)
-                                .clickable(enabled = !imageBusy) {
-                                    bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                }
-                                .padding(horizontal = 12.dp)
-                                .testTag("gallery_profile_banner"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = theme.textPrimary, modifier = Modifier.size(14.dp))
-                                Text("Galeria", color = theme.textPrimary, fontSize = 12.5.sp, maxLines = 1)
-                            }
-                        }
+                        LiquidGlassPillButton(
+                            text = "Buscar arte",
+                            onClick = { bannerSearchOpen = true },
+                            enabled = !imageBusy,
+                            leadingIcon = Icons.Default.Search,
+                            minHeight = 40.dp,
+                            horizontalPadding = 12.dp,
+                            verticalPadding = 8.dp,
+                            modifier = Modifier.testTag("search_profile_banner")
+                        )
+                        LiquidGlassPillButton(
+                            text = "Galeria",
+                            onClick = {
+                                bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            enabled = !imageBusy,
+                            leadingIcon = Icons.Default.PhotoLibrary,
+                            minHeight = 40.dp,
+                            horizontalPadding = 12.dp,
+                            verticalPadding = 8.dp,
+                            modifier = Modifier.testTag("gallery_profile_banner")
+                        )
                     }
                 }
                 if (avatar.isBlank()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     com.example.model.AppleAvatarPreset.entries.forEach { choice ->
-                        Box(Modifier.size(44.dp).clip(CircleShape).clickable { preset = choice.id }, contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    role = androidx.compose.ui.semantics.Role.RadioButton,
+                                    onClickLabel = "Selecionar avatar ${choice.id}"
+                                ) { preset = choice.id },
+                            contentAlignment = Alignment.Center
+                        ) {
                             UserAvatar(profile.copy(avatarUrl = "", avatarPreset = choice.id), sizeDp = 36)
                         }
                     }
@@ -343,50 +349,50 @@ internal fun ProfileEditorScreen(profile: ReaderProfile, settings: AppSettings,
             }
         }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SettingsBackButton(onBack, label = "Perfil", collapsed = isScrolled)
-            AnimatedVisibility(
-                visible = isScrolled,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+        CompositionLocalProvider(LocalLiquidGlassBackdrop provides editorBackdrop) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Editar perfil",
-                    color = theme.textPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            TextButton(
-                enabled = name.isNotBlank() && !imageBusy,
-                onClick = {
-                    onSave(
-                        profile.copy(
-                            name = name.trim().take(80),
-                            bio = bio.trim().take(400),
-                            avatarUrl = avatar,
-                            favoriteUniverse = universe,
-                            avatarPreset = preset,
-                            yearlyGoal = yearly.toIntOrNull()?.coerceIn(1, 1000) ?: profile.yearlyGoal,
-                            dailyPagesGoal = daily.toIntOrNull()?.coerceIn(1, 2000) ?: profile.dailyPagesGoal
-                        ),
-                        banner
+                SettingsBackButton(onBack, label = "Perfil", collapsed = isScrolled)
+                AnimatedVisibility(
+                    visible = isScrolled,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    Text(
+                        "Editar perfil",
+                        color = theme.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
-                    onBack()
-                },
-                modifier = Modifier.testTag("save_profile").heightIn(min = 44.dp)
-            ) {
-                Text(
-                    "Salvar",
-                    color = if (name.isNotBlank() && !imageBusy) theme.accent else theme.textTertiary,
-                    fontWeight = FontWeight.SemiBold
+                }
+                LiquidGlassPillButton(
+                    text = "Salvar",
+                    enabled = name.isNotBlank() && !imageBusy,
+                    emphasized = true,
+                    horizontalPadding = 18.dp,
+                    verticalPadding = 10.dp,
+                    onClick = {
+                        onSave(
+                            profile.copy(
+                                name = name.trim().take(80),
+                                bio = bio.trim().take(400),
+                                avatarUrl = avatar,
+                                favoriteUniverse = universe,
+                                avatarPreset = preset,
+                                yearlyGoal = yearly.toIntOrNull()?.coerceIn(1, 1000) ?: profile.yearlyGoal,
+                                dailyPagesGoal = daily.toIntOrNull()?.coerceIn(1, 2000) ?: profile.dailyPagesGoal
+                            ),
+                            banner
+                        )
+                        onBack()
+                    },
+                    modifier = Modifier.testTag("save_profile")
                 )
             }
         }

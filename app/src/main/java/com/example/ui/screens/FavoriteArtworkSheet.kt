@@ -1,25 +1,46 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.model.ComicEntry
 import com.example.ui.components.*
+import com.example.ui.theme.LocalAppSettings
 import com.example.ui.theme.LocalIOS27Theme
+import com.example.ui.theme.contrastRatio
+import com.kyant.shapes.ContinuousRoundedRectangle
 import kotlinx.coroutines.CancellationException
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Apple iOS 26 HIG sheet for choosing a favorite character portrait or favorite comic cover.
+ * Uses clean edge-to-edge squircle artwork tiles with floating iOS selection checkmarks
+ * (no clunky nested gray cards or repetitive flat pills) and full-width non-truncating
+ * Liquid Glass action capsules.
+ */
 @Composable
 internal fun FavoriteArtworkSheet(
     comic: ComicEntry?,
@@ -31,11 +52,14 @@ internal fun FavoriteArtworkSheet(
     onRemove: () -> Unit
 ) {
     val t = LocalIOS27Theme.current
+    val settings = LocalAppSettings.current
+    val isLight = !t.isDark
     val current = comic?.coverUrl ?: ProfileShowcase.characterImage(portrait)
     var images by remember(current) { mutableStateOf(listOf(current).filter { it.isNotBlank() }) }
     var loading by remember { mutableStateOf(true) }
     var failed by remember { mutableStateOf(false) }
     var retryToken by remember { mutableIntStateOf(0) }
+    val artShape = remember { ContinuousRoundedRectangle(20.dp) }
 
     LaunchedEffect(comic?.id, comic?.externalId, character, portrait, retryToken) {
         loading = true
@@ -68,31 +92,129 @@ internal fun FavoriteArtworkSheet(
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = t.bgSecondary) {
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            SectionHeading(
-                if (comic?.let { it.externalId.ifBlank { it.id }.startsWith("cv-volume-") } == true) "Capas da coleção"
+    val checkInk = remember(t.accent) {
+        if (contrastRatio(Color.White, t.accent) >= contrastRatio(Color.Black, t.accent)) Color.White else Color.Black
+    }
+
+    CurationSheet(onDismiss = onClose, maxHeightFraction = 0.84f) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .testTag("favorite_artwork_sheet"),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            CurationSheetHeader(
+                title = if (comic?.let { it.externalId.ifBlank { it.id }.startsWith("cv-volume-") } == true) "Capas da coleção"
                 else if (comic != null) "Capa em destaque"
-                else "Imagem do personagem"
+                else "Imagem do personagem",
+                subtitle = if (comic != null) "Toque na capa que deseja exibir no perfil." else "Toque no retrato que deseja exibir no perfil.",
+                onClose = onClose,
+                closeTag = "favorite_artwork_close"
             )
             if (loading) {
-                LinearProgressIndicator(Modifier.fillMaxWidth(), color = t.accent)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "Carregando opções de imagem"
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IOSLoadingIndicator(modifier = Modifier.size(18.dp), color = t.accent)
+                    Text(
+                        text = "Carregando opções de imagem…",
+                        color = t.textSecondary,
+                        fontSize = 13.sp
+                    )
+                }
             }
             if (images.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { selectableGroup() },
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
+                ) {
                     items(images, key = { it }) { image ->
-                        Column(Modifier.width(112.dp).clickable(role = Role.Button) { onChoose(image) }) {
+                        val isSelected = image == current
+                        val interaction = remember { MutableInteractionSource() }
+                        val borderColor = when {
+                            isSelected -> t.accent
+                            settings.reduceTransparency -> t.divider
+                            isLight -> Color.Black.copy(alpha = 0.10f)
+                            else -> Color.White.copy(alpha = 0.18f)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .width(if (comic != null) 118.dp else 132.dp)
+                                .aspectRatio(if (comic != null) 2f / 3f else 1f)
+                                .pressScaleFeedback(interaction, targetScale = 0.94f)
+                                .clip(artShape)
+                                .border(
+                                    width = if (isSelected) 2.5.dp else 0.75.dp,
+                                    color = borderColor,
+                                    shape = artShape
+                                )
+                                .focusable()
+                                .semantics(mergeDescendants = true) {
+                                    selected = isSelected
+                                    role = Role.RadioButton
+                                    contentDescription = if (isSelected) "Imagem selecionada" else "Escolher esta imagem"
+                                }
+                                .clickable(
+                                    interactionSource = interaction,
+                                    indication = null,
+                                    role = Role.Button,
+                                    onClickLabel = if (isSelected) "Imagem atual selecionada" else "Escolher esta imagem"
+                                ) { onChoose(image) }
+                        ) {
                             if (comic != null) {
-                                BookCover(image, comic.displayTitle, spine3d = false, modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                                BookCover(
+                                    image,
+                                    comic.displayTitle,
+                                    spine3d = false,
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             } else {
-                                ProfileImage(image, character, Modifier.size(112.dp).clip(RoundedCornerShape(18.dp)), face = true)
+                                ProfileImage(
+                                    image,
+                                    character,
+                                    Modifier.fillMaxSize(),
+                                    face = true
+                                )
                             }
-                            Text(
-                                text = if (image == current) "Selecionada" else "Escolher",
-                                color = t.accent,
-                                modifier = Modifier.heightIn(min = 44.dp).padding(vertical = 12.dp),
-                                style = MaterialTheme.typography.bodySmall
-                            )
+
+                            // Native iOS Photos / Contact Poster selection badge in top-right corner
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) t.accent
+                                        else Color.Black.copy(alpha = 0.34f)
+                                    )
+                                    .border(
+                                        width = 1.25.dp,
+                                        color = Color.White.copy(alpha = if (isSelected) 0.92f else 0.65f),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = checkInk,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -100,7 +222,7 @@ internal fun FavoriteArtworkSheet(
             if (!loading && images.size <= 1) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -108,25 +230,47 @@ internal fun FavoriteArtworkSheet(
                         else "Não encontramos outras imagens nesta busca.",
                         color = t.textSecondary,
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     if (failed) {
-                        TextButton(
+                        LiquidGlassPillButton(
+                            text = "Tentar novamente",
                             onClick = { retryToken++ },
-                            modifier = Modifier.heightIn(min = 44.dp).testTag("retry_favorite_artwork")
-                        ) {
-                            Text("Tentar novamente", color = t.accent)
-                        }
+                            leadingIcon = Icons.Default.Refresh,
+                            modifier = Modifier.testTag("retry_favorite_artwork")
+                        )
                     }
                 }
             }
-            TextButton(onClick = onReplace, modifier = Modifier.heightIn(min = 44.dp)) {
-                Text(if (comic != null) "Trocar HQ" else "Trocar personagem", color = t.accent)
-            }
-            TextButton(onClick = onRemove, modifier = Modifier.heightIn(min = 44.dp)) {
-                Text("Remover dos favoritos", color = t.textSecondary)
+
+            // Stacked full-width iOS 26 Liquid Glass action capsules — zero text truncation
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                LiquidGlassPillButton(
+                    text = if (comic != null) "Trocar HQ" else "Trocar personagem",
+                    onClick = onReplace,
+                    emphasized = true,
+                    leadingIcon = Icons.Default.SwapHoriz,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("favorite_artwork_replace")
+                )
+                LiquidGlassPillButton(
+                    text = "Remover dos favoritos",
+                    onClick = onRemove,
+                    destructive = true,
+                    leadingIcon = Icons.Default.DeleteOutline,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("favorite_artwork_remove")
+                )
             }
         }
     }
 }
-

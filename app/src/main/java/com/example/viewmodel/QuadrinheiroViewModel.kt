@@ -2178,13 +2178,17 @@ class QuadrinheiroViewModel(
         }
     }
 
-    fun selectComicForSheet(comic: ComicEntry?) {
-        _infoModalComic.value = null
+    fun selectComicForSheet(comic: ComicEntry?, preserveInfoModal: Boolean = false) {
         if (comic == null) {
             _selectedComic.value = null
-            loadSequenceIssuesForComic(null)
+            if (_infoModalComic.value == null) {
+                loadSequenceIssuesForComic(null)
+            }
             _isSheetExpanded.value = false
             return
+        }
+        if (!preserveInfoModal) {
+            _infoModalComic.value = null
         }
         val localized = PortugueseComicTranslator.localizeComic(comic, allowNetworkTranslation = false)
         _selectedComic.value = localized
@@ -2235,8 +2239,14 @@ class QuadrinheiroViewModel(
      * - If chosenStatus == WANT_TO_READ, saves directly to Queue (Fila) without asking for rating, review, or date!
      * - Otherwise opens the sheet with rating = 0 (unless already rated in collection).
      */
-    fun openCatalogSheetForComic(itemData: ComicEntry, chosenStatus: ReadingStatus) {
-        _infoModalComic.value = null
+    fun openCatalogSheetForComic(
+        itemData: ComicEntry,
+        chosenStatus: ReadingStatus,
+        preserveInfoModal: Boolean = false
+    ) {
+        if (!preserveInfoModal) {
+            _infoModalComic.value = null
+        }
         val existing = _comics.value.firstOrNull { c ->
             (itemData.id.isNotBlank() && c.id == itemData.id) ||
                 (itemData.externalId.isNotBlank() && c.externalId == itemData.externalId)
@@ -2421,8 +2431,11 @@ class QuadrinheiroViewModel(
             QuadrinheiroSyncWorker.enqueueDirtySync(appContext)
         }
 
+        val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
         _selectedComic.value = null
-        _infoModalComic.value = null
+        if (!keepDetailUnderlying) {
+            _infoModalComic.value = null
+        }
         _showManualModal.value = false
         _isSheetExpanded.value = false
 
@@ -2469,8 +2482,11 @@ class QuadrinheiroViewModel(
                 runCatching { repo.deleteComic(uid, id) }
             }
         }
+        val keepDetailUnderlying = _selectedComic.value != null && _infoModalComic.value != null
         _selectedComic.value = null
-        _infoModalComic.value = null
+        if (!keepDetailUnderlying) {
+            _infoModalComic.value = null
+        }
         showNotice("Edição removida da Biblioteca")
     }
 

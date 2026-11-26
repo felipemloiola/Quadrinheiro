@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -190,159 +191,186 @@ fun ExploreScreen(
             com.example.data.EditorialDiscovery.load(appContext, retry = true)
         }
     }
-    BackHandler(collection != null) { collection = null }
-    Column(Modifier.fillMaxSize()) {
-        if (collection == null) Column(
-            Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Explorar", Modifier.weight(1f), color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                IconButton(onClick = { onSearch("") }) {
-                    Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
-                }
-            }
-            AppleSegmentedPicker(listOf("Descobrir", "Comunidade"), tab, { tab = it }, Modifier.fillMaxWidth())
-        }
-        if (collection == null && tab == 1) {
-            CommunityScreen(comics, profile, onLogin)
-        } else {
-            AnimatedContent(
-                collection,
-                transitionSpec = { fadeIn(motion.tween(180)) togetherWith fadeOut(motion.tween(120)) },
-                label = "explore_collection"
-            ) { selected ->
-                val expandedState = rememberLazyListState()
-                val isCollectionScrolled by remember(expandedState) {
-                    androidx.compose.runtime.derivedStateOf {
-                        expandedState.firstVisibleItemIndex > 0 || expandedState.firstVisibleItemScrollOffset > 24
+    @Composable
+    fun ExploreDiscoverContent(isPreview: Boolean) {
+        Column(Modifier.fillMaxSize()) {
+            Column(
+                Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Explorar",
+                        Modifier.weight(1f),
+                        color = theme.textPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 32.sp
+                    )
+                    IconButton(onClick = { if (!isPreview) onSearch("") }) {
+                        Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
                     }
                 }
-                Box(Modifier.fillMaxSize()) {
+                AppleSegmentedPicker(
+                    listOf("Descobrir", "Comunidade"),
+                    tab,
+                    { if (!isPreview) tab = it },
+                    Modifier.fillMaxWidth()
+                )
+            }
+            if (tab == 1) {
+                if (!isPreview) CommunityScreen(comics, profile, onLogin)
+            } else {
                 LazyColumn(
-                    state = if (selected == null) listState else expandedState,
-                    modifier = Modifier.fillMaxSize().testTag(if (selected == null) "explore_page" else "explore_collection"),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = if (selected == null) 16.dp else 68.dp, bottom = 208.dp),
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(if (isPreview) "explore_page_preview" else "explore_page"),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 208.dp),
                     verticalArrangement = Arrangement.spacedBy(26.dp)
                 ) {
-                    if (selected != null) {
-                        item(key = "selected_header", contentType = "explore_header") {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                    Text(selected, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
-                                }
-                                IconButton(onClick = { onSearch("") }) {
-                                    Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
-                                }
+                    item(key = "Para você", contentType = "explore_for_you_section") {
+                        ExploreForYouSection(
+                            recommendations = exploreRecommendationState.recommendations,
+                            catalogFallback = catalog,
+                            onExpand = { if (!isPreview) collection = "Para você" },
+                            onComic = { if (!isPreview) onComic(it) }
+                        )
+                    }
+                    item(key = "Para começar", contentType = "explore_shelf_section") {
+                        ExploreCatalogSection(
+                            title = "Para começar",
+                            entriesState = starterComicsState,
+                            onExpand = { if (!isPreview) openEditorial("Para começar") },
+                            onComic = { if (!isPreview) onComic(it) }
+                        )
+                    }
+                    item(key = "Universo DC", contentType = "explore_shelf_section") {
+                        ExploreCatalogSection(
+                            title = "Universo DC",
+                            entriesState = dcComicsState,
+                            onExpand = { if (!isPreview) openEditorial("Universo DC") },
+                            onComic = { if (!isPreview) onComic(it) }
+                        )
+                    }
+                    item(key = "Universo Marvel", contentType = "explore_shelf_section") {
+                        ExploreCatalogSection(
+                            title = "Universo Marvel",
+                            entriesState = marvelComicsState,
+                            onExpand = { if (!isPreview) openEditorial("Universo Marvel") },
+                            onComic = { if (!isPreview) onComic(it) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    val activeCollection = collection
+    com.example.ui.components.PredictiveBackRouteContainer(
+        canNavigateBack = activeCollection != null,
+        onBackCommit = { collection = null },
+        previousContent = {
+            Box(Modifier.fillMaxSize().background(theme.bgPrimary)) {
+                ExploreDiscoverContent(isPreview = true)
+            }
+        }
+    ) {
+        if (activeCollection == null) {
+            ExploreDiscoverContent(isPreview = false)
+        } else {
+            val expandedState = rememberLazyListState()
+            val isCollectionScrolled by remember(expandedState) {
+                androidx.compose.runtime.derivedStateOf {
+                    expandedState.firstVisibleItemIndex > 0 || expandedState.firstVisibleItemScrollOffset > 24
+                }
+            }
+            Box(Modifier.fillMaxSize().background(theme.bgPrimary)) {
+                LazyColumn(
+                    state = expandedState,
+                    modifier = Modifier.fillMaxSize().testTag("explore_collection"),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 72.dp, bottom = 208.dp),
+                    verticalArrangement = Arrangement.spacedBy(26.dp)
+                ) {
+                    item(key = "selected_header", contentType = "explore_header") {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(activeCollection, color = theme.textPrimary, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+                            }
+                            IconButton(onClick = { onSearch("") }) {
+                                Icon(Icons.Default.Search, "Buscar quadrinhos", tint = theme.textPrimary)
                             }
                         }
-                        val recs = exploreRecommendationState.recommendations
-                        val reasonMap = recs.associate { it.comic.id to it.reasonLabel }
-                        val entries = when (selected) {
-                            "Para você" -> recs.map { it.comic }
-                            "Para começar" -> starterComicsState.value
-                            "Universo DC" -> dcComicsState.value
-                            "Universo Marvel" -> marvelComicsState.value
-                            else -> emptyList()
-                        }
-                        items(
-                            items = entries.chunked(3),
-                            key = { it.first().id },
-                            contentType = { "explore_grid_row" }
-                        ) { row ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                row.forEach { comic ->
-                                    val reason = if (selected == "Para você") reasonMap[comic.id] else null
-                                    ExplorePoster(comic, Modifier.weight(1f), onComic, reason)
-                                }
-                                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                    val recs = exploreRecommendationState.recommendations
+                    val reasonMap = recs.associate { it.comic.id to it.reasonLabel }
+                    val entries = when (activeCollection) {
+                        "Para você" -> recs.map { it.comic }
+                        "Para começar" -> starterComicsState.value
+                        "Universo DC" -> dcComicsState.value
+                        "Universo Marvel" -> marvelComicsState.value
+                        else -> emptyList()
+                    }
+                    items(
+                        items = entries.chunked(3),
+                        key = { it.first().id },
+                        contentType = { "explore_grid_row" }
+                    ) { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            row.forEach { comic ->
+                                val reason = if (activeCollection == "Para você") reasonMap[comic.id] else null
+                                ExplorePoster(comic, Modifier.weight(1f), onComic, reason)
                             }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
-                        if (entries.isEmpty()) {
-                            item(key = "selected_empty", contentType = "explore_empty") {
-                                Text("Suas sugestões aparecem aqui com base nas leituras e nos favoritos.", color = theme.textSecondary)
-                            }
+                    }
+                    if (entries.isEmpty()) {
+                        item(key = "selected_empty", contentType = "explore_empty") {
+                            Text("Suas sugestões aparecem aqui com base nas leituras e nos favoritos.", color = theme.textSecondary)
                         }
-                        item(key = "explore_load_more", contentType = "explore_footer") {
-                            val scope = rememberCoroutineScope()
-                            var loadingMore by remember { mutableStateOf(false) }
-                            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                                if (loadingMore) {
-                                    CircularProgressIndicator(Modifier.size(22.dp), color = theme.accent, strokeWidth = 2.dp)
-                                } else {
-                                    TextButton(
-                                        onClick = {
-                                            loadingMore = true
-                                            scope.launch {
-                                                try {
-                                                    val univ = when (selected) {
-                                                        "Universo DC" -> "DC / Vertigo"
-                                                        "Universo Marvel" -> "Marvel"
-                                                        else -> profile.favoriteUniverse
-                                                    }
-                                                    ModernCatalog.loadMore(univ)
-                                                } finally {
-                                                    loadingMore = false
+                    }
+                    item(key = "explore_load_more", contentType = "explore_footer") {
+                        val scope = rememberCoroutineScope()
+                        var loadingMore by remember { mutableStateOf(false) }
+                        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            if (loadingMore) {
+                                CircularProgressIndicator(Modifier.size(22.dp), color = theme.accent, strokeWidth = 2.dp)
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        loadingMore = true
+                                        scope.launch {
+                                            try {
+                                                val univ = when (activeCollection) {
+                                                    "Universo DC" -> "DC / Vertigo"
+                                                    "Universo Marvel" -> "Marvel"
+                                                    else -> profile.favoriteUniverse
                                                 }
+                                                ModernCatalog.loadMore(univ)
+                                            } finally {
+                                                loadingMore = false
                                             }
-                                        },
-                                        modifier = Modifier.heightIn(min = 48.dp).testTag("explore_load_more_button")
-                                    ) {
-                                        Text("Carregar mais edições", color = theme.accent)
-                                    }
+                                        }
+                                    },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("explore_load_more_button")
+                                ) {
+                                    Text("Carregar mais edições", color = theme.accent)
                                 }
                             }
-                        }
-                    } else {
-                        item(key = "Para você", contentType = "explore_for_you_section") {
-                            ExploreForYouSection(
-                                recommendations = exploreRecommendationState.recommendations,
-                                catalogFallback = catalog,
-                                onExpand = { collection = "Para você" },
-                                onComic = onComic
-                            )
-                        }
-                        item(key = "Para começar", contentType = "explore_shelf_section") {
-                            ExploreCatalogSection(
-                                title = "Para começar",
-                                entriesState = starterComicsState,
-                                onExpand = { openEditorial("Para começar") },
-                                onComic = onComic
-                            )
-                        }
-                        item(key = "Universo DC", contentType = "explore_shelf_section") {
-                            ExploreCatalogSection(
-                                title = "Universo DC",
-                                entriesState = dcComicsState,
-                                onExpand = { openEditorial("Universo DC") },
-                                onComic = onComic
-                            )
-                        }
-                        item(key = "Universo Marvel", contentType = "explore_shelf_section") {
-                            ExploreCatalogSection(
-                                title = "Universo Marvel",
-                                entriesState = marvelComicsState,
-                                onExpand = { openEditorial("Universo Marvel") },
-                                onComic = onComic
-                            )
                         }
                     }
                 }
-                if (selected != null) {
-                    SettingsBackButton(
-                        onBack = { collection = null },
-                        collapsed = isCollectionScrolled,
-                        label = "Explorar",
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = 12.dp)
-                    )
-                }
-                }
+                SettingsBackButton(
+                    onBack = { collection = null },
+                    collapsed = isCollectionScrolled,
+                    label = "Explorar",
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 16.dp, top = 12.dp)
+                )
             }
         }
     }

@@ -79,17 +79,28 @@ import com.example.model.AppSettings
 import com.example.model.ComicEntry
 import com.example.model.ReaderProfile
 import com.example.model.ReadingStatus
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.CompositionLocalProvider
 import com.example.ui.components.AppleActivityRingsGauge
 import com.example.ui.components.AppleSegmentedPicker
+import com.example.ui.components.LiquidGlassCircleButton
+import com.example.ui.components.LiquidGlassPillButton
+import com.example.ui.components.LocalLiquidGlassBackdrop
 import com.example.ui.components.LucideIcons
 import com.example.ui.components.SegmentOption
 import com.example.ui.components.contentMaterialSurface
 import com.example.ui.components.liquidGlassNavSurface
+import com.example.ui.components.liquidGlassPanelSurface
+import com.example.ui.components.rememberAppHaptics
+import com.example.ui.components.tactileCardPress
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.LocalAppleMaterials
 import com.example.ui.theme.LocalIOS27Theme
 import com.example.ui.theme.LocalIsDarkTheme
 import com.example.ui.theme.SpaceGroteskTabularFamily
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.shapes.ContinuousRoundedRectangle
 import androidx.compose.ui.graphics.lerp
 import java.util.Calendar
 import java.util.Locale
@@ -549,12 +560,19 @@ fun DiaryExpandableLiquidGlassSummary(
         )
     }
 
+    val summaryInteraction = remember { MutableInteractionSource() }
+    val summaryHaptics = rememberAppHaptics()
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag("diary_monthly_summary_card")
-            .contentMaterialSurface(RoundedCornerShape(26.dp))
-            .clickable { onOpenFullStatistics() }
+            .tactileCardPress(summaryInteraction, targetScale = 0.97f)
+            .liquidGlassPanelSurface(ContinuousRoundedRectangle(26.dp))
+            .clickable(interactionSource = summaryInteraction, indication = null) {
+                summaryHaptics.impactLight()
+                onOpenFullStatistics()
+            }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -885,11 +903,15 @@ fun ReadingStatisticsScreen(
         }
     }
 
+    val haptics = rememberAppHaptics()
+    val statsBackdrop = rememberLayerBackdrop()
+
     Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
+            .layerBackdrop(statsBackdrop)
             .testTag("reading_statistics_screen"),
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -903,7 +925,7 @@ fun ReadingStatisticsScreen(
         item(key = "stats-top-bar", contentType = "stats_header") {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -921,40 +943,25 @@ fun ReadingStatisticsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .testTag("stats_share_goal_card_button")
-                                .size(34.dp)
-                                .liquidGlassNavSurface(CircleShape, elevation = 6.dp)
-                                .clickable { onShareGoalSummary("ANNUAL") },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.ShareIos,
-                                contentDescription = "Compartilhar Resumo da Meta",
-                                tint = moveColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                        LiquidGlassCircleButton(
+                            icon = LucideIcons.ShareIos,
+                            contentDescription = "Compartilhar Resumo da Meta",
+                            onClick = { onShareGoalSummary("ANNUAL") },
+                            size = 44.dp,
+                            iconSize = 18.dp,
+                            tint = moveColor,
+                            tag = "stats_share_goal_card_button"
+                        )
 
-                        Row(
-                            modifier = Modifier
-                                .testTag("stats_adjust_goals_button")
-                                .liquidGlassNavSurface(RoundedCornerShape(999.dp), elevation = 6.dp)
-                                .clickable { showGoalAdjuster = !showGoalAdjuster }
-                                .padding(horizontal = 13.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(
-                                text = if (showGoalAdjuster) "Concluir" else "Metas",
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = moveColor,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
+                        LiquidGlassPillButton(
+                            text = if (showGoalAdjuster) "Concluir" else "Metas",
+                            onClick = { showGoalAdjuster = !showGoalAdjuster },
+                            contentTint = moveColor,
+                            minHeight = 40.dp,
+                            horizontalPadding = 14.dp,
+                            verticalPadding = 8.dp,
+                            modifier = Modifier.testTag("stats_adjust_goals_button")
+                        )
                     }
                 }
 
@@ -979,7 +986,7 @@ fun ReadingStatisticsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .contentMaterialSurface(RoundedCornerShape(22.dp))
+                        .liquidGlassPanelSurface(ContinuousRoundedRectangle(22.dp))
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -992,12 +999,19 @@ fun ReadingStatisticsScreen(
                         val mOuter = (bucket.comicsRead.toFloat() / monthlyComicsGoal).coerceIn(0f, 1f)
                         val mInner = (bucket.pagesRead.toFloat() / monthlyPagesGoal.toFloat()).coerceIn(0f, 1f)
                         val mThird = if (bucket.pagesRead > 0 || bucket.comicsRead > 0) 1f else 0f
+                        val monthInteraction = remember(index) { MutableInteractionSource() }
 
                         Column(
                             modifier = Modifier
                                 .weight(1f)
+                                .tactileCardPress(monthInteraction, targetScale = 0.94f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .clickable { selectedMonthIndex = index }
+                                .clickable(interactionSource = monthInteraction, indication = null) {
+                                    if (selectedMonthIndex != index) {
+                                        haptics.selection()
+                                        selectedMonthIndex = index
+                                    }
+                                }
                                 .padding(vertical = 2.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -1038,8 +1052,8 @@ fun ReadingStatisticsScreen(
                 // Editor Interativo de Metas no estilo Apple Fitness: (-) 24 (+) OBRAS/ANO e (-) 30 (+) PÁGINAS/DIA
                 AnimatedVisibility(
                     visible = showGoalAdjuster,
-                    enter = expandVertically(motion.tween(260)) + fadeIn(motion.tween(220)),
-                    exit = shrinkVertically(motion.tween(220)) + fadeOut(motion.tween(180))
+                    enter = expandVertically(motion.ios26ModalSpring()) + fadeIn(motion.tween(200)),
+                    exit = shrinkVertically(motion.ios26ModalExitSpring()) + fadeOut(motion.tween(150))
                 ) {
                     AppleFitnessGoalAdjusterCard(
                         yearlyGoal = stats.yearlyGoal,
@@ -1064,7 +1078,7 @@ fun ReadingStatisticsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .contentMaterialSurface(RoundedCornerShape(28.dp))
+                    .liquidGlassPanelSurface(ContinuousRoundedRectangle(28.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
@@ -1279,7 +1293,7 @@ fun ReadingStatisticsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .contentMaterialSurface(RoundedCornerShape(28.dp))
+                    .liquidGlassPanelSurface(ContinuousRoundedRectangle(28.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -1565,7 +1579,7 @@ fun ReadingStatisticsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .contentMaterialSurface(RoundedCornerShape(28.dp))
+                    .liquidGlassPanelSurface(ContinuousRoundedRectangle(28.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
@@ -1765,7 +1779,7 @@ fun ReadingStatisticsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .contentMaterialSurface(RoundedCornerShape(28.dp))
+                    .liquidGlassPanelSurface(ContinuousRoundedRectangle(28.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -1933,15 +1947,17 @@ fun ReadingStatisticsScreen(
             }
         }
     }
-    SettingsBackButton(
-        onBack = onBack,
-        collapsed = backCollapsed,
-        label = "Resumo",
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 16.dp, top = 12.dp)
-            .testTag("stats_back_button")
-    )
+    CompositionLocalProvider(LocalLiquidGlassBackdrop provides statsBackdrop) {
+        SettingsBackButton(
+            onBack = onBack,
+            collapsed = backCollapsed,
+            label = "Resumo",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 12.dp)
+                .testTag("stats_back_button")
+        )
+    }
     }
 }
 
@@ -2014,10 +2030,17 @@ private fun AppleFitnessSparklineCard(
     val isDark = LocalIsDarkTheme.current
     val maxVal = (monthlyValues.maxOrNull() ?: 1).coerceAtLeast(1)
 
+    val cardInteraction = remember { MutableInteractionSource() }
+    val cardHaptics = rememberAppHaptics()
+
     Column(
         modifier = modifier
-            .contentMaterialSurface(RoundedCornerShape(24.dp))
-            .clickable { onClick() }
+            .tactileCardPress(cardInteraction, targetScale = 0.97f)
+            .liquidGlassPanelSurface(ContinuousRoundedRectangle(24.dp))
+            .clickable(interactionSource = cardInteraction, indication = null) {
+                cardHaptics.impactLight()
+                onClick()
+            }
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -2167,7 +2190,7 @@ private fun AppleFitnessGoalAdjusterCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .contentMaterialSurface(RoundedCornerShape(26.dp))
+            .liquidGlassPanelSurface(ContinuousRoundedRectangle(26.dp))
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -2245,7 +2268,10 @@ private fun AppleFitnessStepperRow(
     onIncrement: () -> Unit
 ) {
     val s = LocalAppleMaterials.current.scheme
+    val haptics = rememberAppHaptics()
     val iconTint = contrastingTextOn(color)
+    val decInteraction = remember { MutableInteractionSource() }
+    val incInteraction = remember { MutableInteractionSource() }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -2267,10 +2293,14 @@ private fun AppleFitnessStepperRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
+                    .tactileCardPress(decInteraction, targetScale = 0.92f)
                     .clip(CircleShape)
                     .background(color)
-                    .clickable { onDecrement() },
+                    .clickable(interactionSource = decInteraction, indication = null) {
+                        haptics.selection()
+                        onDecrement()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -2300,10 +2330,14 @@ private fun AppleFitnessStepperRow(
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
+                    .tactileCardPress(incInteraction, targetScale = 0.92f)
                     .clip(CircleShape)
                     .background(color)
-                    .clickable { onIncrement() },
+                    .clickable(interactionSource = incInteraction, indication = null) {
+                        haptics.selection()
+                        onIncrement()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

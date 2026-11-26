@@ -28,6 +28,10 @@ import androidx.compose.ui.unit.sp
 import com.example.model.*
 import com.example.ui.components.*
 import com.example.ui.theme.LocalIOS27Theme
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.shapes.ContinuousCapsule
+import com.kyant.shapes.ContinuousRoundedRectangle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,6 +151,7 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                         .fillMaxWidth()
                         .height(bannerHeight + halfAvatar)
                 ) {
+                    val profileBannerBackdrop = rememberLayerBackdrop()
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -154,22 +159,28 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                             .align(Alignment.TopCenter)
                     ) {
                         if (hasBanner) {
-                            ProfileImage(
-                                settings.profileBannerUrl,
-                                "Banner de " + profile.name,
-                                Modifier.fillMaxSize().testTag("profile_banner")
-                            )
                             Box(
-                                Modifier.fillMaxSize().background(
-                                    Brush.verticalGradient(
-                                        0.00f to Color.Black.copy(alpha = 0.28f),
-                                        0.38f to Color.Transparent,
-                                        0.68f to theme.bgPrimary.copy(alpha = 0.35f),
-                                        0.88f to theme.bgPrimary.copy(alpha = 0.78f),
-                                        1.00f to theme.bgPrimary
+                                Modifier
+                                    .fillMaxSize()
+                                    .layerBackdrop(profileBannerBackdrop)
+                            ) {
+                                ProfileImage(
+                                    settings.profileBannerUrl,
+                                    "Banner de " + profile.name,
+                                    Modifier.fillMaxSize().testTag("profile_banner")
+                                )
+                                Box(
+                                    Modifier.fillMaxSize().background(
+                                        Brush.verticalGradient(
+                                            0.00f to Color.Black.copy(alpha = 0.28f),
+                                            0.38f to Color.Transparent,
+                                            0.68f to theme.bgPrimary.copy(alpha = 0.35f),
+                                            0.88f to theme.bgPrimary.copy(alpha = 0.78f),
+                                            1.00f to theme.bgPrimary
+                                        )
                                     )
                                 )
-                            )
+                            }
                         }
                         Row(
                             modifier = Modifier
@@ -185,22 +196,17 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 32.sp
                             )
-                            IconButton(
+                            LiquidGlassCircleButton(
+                                icon = LucideIcons.Settings,
+                                contentDescription = "Ajustes",
                                 onClick = onSettings,
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .testTag("profile_settings")
-                                    .background(
-                                        if (hasBanner) Color.Black.copy(alpha = 0.38f) else theme.bgSecondary.copy(alpha = 0.85f),
-                                        CircleShape
-                                    )
-                            ) {
-                                Icon(
-                                    LucideIcons.Settings,
-                                    "Ajustes",
-                                    tint = if (hasBanner) Color.White else theme.textPrimary
-                                )
-                            }
+                                size = 44.dp,
+                                iconSize = 20.dp,
+                                tint = if (hasBanner) Color.White else theme.textPrimary,
+                                onDarkScrim = hasBanner,
+                                tag = "profile_settings",
+                                backdropOverride = if (hasBanner) profileBannerBackdrop else null
+                            )
                         }
                     }
 
@@ -236,29 +242,13 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).padding(end = 10.dp)
                         )
-                        val editProfileInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                        Box(
-                            modifier = Modifier
-                                .heightIn(min = 32.dp)
-                                .pressScaleFeedback(editProfileInteraction, targetScale = 0.96f)
-                                .clip(CircleShape)
-                                .background(theme.textPrimary.copy(alpha = if (theme.isDark) 0.10f else 0.07f))
-                                .clickable(
-                                    interactionSource = editProfileInteraction,
-                                    indication = null
-                                ) {
-                                    if (isGuest) onLogin() else editorOpen = true
-                                }
-                                .padding(horizontal = 14.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Editar perfil",
-                                color = theme.textPrimary.copy(alpha = 0.88f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        LiquidGlassPillButton(
+                            text = "Editar perfil",
+                            onClick = { if (isGuest) onLogin() else editorOpen = true },
+                            minHeight = 44.dp,
+                            horizontalPadding = 16.dp,
+                            verticalPadding = 10.dp
+                        )
                     }
                 }
 
@@ -286,24 +276,41 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
         item {
+            val comicSlotShape = remember { ContinuousRoundedRectangle(14.dp) }
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("HQs favoritas", "Escolha quatro histórias que dizem quem você é.")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     repeat(4) { slot ->
                         val comic = settings.profileFavoriteComicIds.getOrNull(slot)?.let(byId::get)
-                        Column(Modifier.weight(1f).testTag("favorite-comic-$slot"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(10.dp)).background(theme.bgSecondary)
-                                .clickable {
-                                    if (isGuest) {
-                                        onLogin()
-                                    } else {
-                                        characters = false
-                                        editSlot = slot
-                                        slotMenu = settings.profileFavoriteComicIds.getOrNull(slot) != null
-                                        query = ""
-                                    }
-                                }, contentAlignment = Alignment.Center) {
-                                if (comic != null) BookCover(comic.coverUrl, comic.displayTitle, modifier = Modifier.fillMaxSize())
+                        val slotInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .pressScaleFeedback(slotInteraction, targetScale = 0.96f)
+                                .testTag("favorite-comic-$slot"),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(2f / 3f)
+                                    .contentMaterialSurface(comicSlotShape)
+                                    .clickable(
+                                        interactionSource = slotInteraction,
+                                        indication = null
+                                    ) {
+                                        if (isGuest) {
+                                            onLogin()
+                                        } else {
+                                            characters = false
+                                            editSlot = slot
+                                            slotMenu = settings.profileFavoriteComicIds.getOrNull(slot) != null
+                                            query = ""
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (comic != null) BookCover(comic.coverUrl, comic.displayTitle, modifier = Modifier.fillMaxSize().clip(comicSlotShape))
                                 else Icon(Icons.Default.Add, "Escolher HQ favorita ${slot + 1}", tint = theme.textTertiary)
                             }
                             Text(comic?.displayTitle ?: "Escolher", color = theme.textSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -313,25 +320,43 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
         item {
+            val characterSlotShape = remember { ContinuousRoundedRectangle(16.dp) }
             Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SectionHeading("Personagens favoritos")
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     repeat(4) { slot ->
                         val name = settings.profileFavoriteCharacters.getOrNull(slot)
-                        Column(Modifier.weight(1f).clickable {
-                            if (isGuest) {
-                                onLogin()
-                            } else {
-                                characters = true
-                                editSlot = slot
-                                slotMenu = settings.profileFavoriteCharacters.getOrNull(slot) != null
-                                query = ""
-                            }
-                        }
-                            .testTag("favorite-character-$slot"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(theme.bgSecondary), contentAlignment = Alignment.Center) {
+                        val slotInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .pressScaleFeedback(slotInteraction, targetScale = 0.96f)
+                                .clickable(
+                                    interactionSource = slotInteraction,
+                                    indication = null
+                                ) {
+                                    if (isGuest) {
+                                        onLogin()
+                                    } else {
+                                        characters = true
+                                        editSlot = slot
+                                        slotMenu = settings.profileFavoriteCharacters.getOrNull(slot) != null
+                                        query = ""
+                                    }
+                                }
+                                .testTag("favorite-character-$slot"),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .contentMaterialSurface(characterSlotShape),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 if (name == null) Icon(Icons.Default.Add, "Escolher personagem ${slot + 1}", tint = theme.textTertiary)
-                                else if (!settings.profileShowcaseDetails["character:$name"].isNullOrBlank()) ProfileImage(settings.profileShowcaseDetails["character:$name"].orEmpty(), name, Modifier.fillMaxSize(), face = true)
+                                else if (!settings.profileShowcaseDetails["character:$name"].isNullOrBlank()) ProfileImage(settings.profileShowcaseDetails["character:$name"].orEmpty(), name, Modifier.fillMaxSize().clip(characterSlotShape), face = true)
                                 else Text(name.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1) }, color = theme.accent, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                             }
                             Text(name ?: "Escolher", color = theme.textSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -341,14 +366,14 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
             }
         }
         item {
-            Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().contentMaterialSurface(RoundedCornerShape(22.dp))) {
+            Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().contentMaterialSurface(ContinuousRoundedRectangle(22.dp))) {
                 ProfileLink("Biblioteca", "Estante e diário", Icons.AutoMirrored.Filled.MenuBook, onLibrary)
             }
         }
         if (reviews.isNotEmpty()) {
             item { Box(Modifier.padding(horizontal = 20.dp)) { SectionHeading("Suas resenhas") } }
             items(reviews, key = { "review-${it.id}" }) { comic ->
-                Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().contentMaterialSurface(RoundedCornerShape(20.dp)).clickable { onComic(comic) }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().contentMaterialSurface(ContinuousRoundedRectangle(20.dp)).clickable { onComic(comic) }.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(comic.displayTitle, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
                     Text(comic.review, color = theme.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
                 }
@@ -374,84 +399,53 @@ fun ReaderProfileScreen(comics: List<ComicEntry>, profile: ReaderProfile, settin
     }
     if (editSlot >= 0 && !slotMenu) {
         val close = { editSlot = -1; query = "" }
-        ModalBottomSheet(onDismissRequest = close, containerColor = theme.bgSecondary) {
-            Column(Modifier.fillMaxWidth().fillMaxHeight(.85f).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (characters) "Personagem favorito" else "HQ favorita", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
-                    TextButton(onClick = close) { Text("Fechar", color = theme.accent) }
-                }
-                AppleTextField(query, { query = it.take(100) }, "Buscar", leadingIcon = Icons.Default.Search)
-                fun select(value: String?, portrait: String? = null) {
-                    val old = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
-                    val next = old.toMutableList()
-                    if (value == null) { if (editSlot < next.size) next.removeAt(editSlot) }
-                    else { if (editSlot < next.size) next[editSlot] = value else next.add(value) }
-                    val clean = next.filter { it.isNotBlank() }.distinct().take(4)
-                    val nextIds = if (characters) settings.profileFavoriteComicIds else clean
-                    val nextCharacters = if (characters) clean else settings.profileFavoriteCharacters
-                    val details = settings.profileShowcaseDetails.toMutableMap()
-                    if (value != null) {
-                        if (characters && portrait != null) details["character:$value"] = characterResults.firstOrNull { it.name.take(60) == value }?.let(com.example.data.ProfileShowcase::characterSnapshot) ?: portrait
-                        if (!characters) byId[value]?.let { details["comic:$value"] = com.example.data.ProfileShowcase.comicSnapshot(it) }
-                    }
-                    val retained = details.filterKeys { key -> nextIds.any { key == "comic:$it" } || nextCharacters.any { key == "character:$it" } }
-                    onUpdateShowcase(nextIds, nextCharacters, retained); close()
-                }
-                if (editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size) TextButton(onClick = { select(null) }) { Text("Remover dos favoritos", color = theme.accent) }
-                val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).filterIndexed { index, _ -> index != editSlot }.toSet()
-                val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
-                val shownComics = remember(candidates, excluded, query, preferredLang) {
-                    val available = candidates.filter { it.id !in excluded }
-                    if (query.isBlank()) {
-                        available.take(80)
-                    } else {
-                        com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
-                            available,
-                            query,
-                            preferredLang
-                        ).take(80)
-                    }
-                }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
-                    if (characters) {
-                        if (characterLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
-                        if (characterError) item { Text("Não foi possível carregar os personagens. Confira sua conexão e tente outra busca.", color = theme.textSecondary) }
-                        items(characterResults.filter { it.name.take(60) !in excluded }, key = { it.id }) { result ->
-                            Row(Modifier.fillMaxWidth().clickable { select(result.name.take(60), result.image) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                ProfileImage(result.image, result.name, Modifier.size(62.dp).clip(RoundedCornerShape(14.dp)), face = true)
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(result.name, color = theme.textPrimary, fontSize = 15.sp)
-                                    if (!result.name.contains(result.originalName, true)) Text(result.originalName, color = theme.textSecondary, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                        if (!characterLoading && !characterError && characterResults.isEmpty()) item { Text("Nenhum personagem encontrado. Tente o nome em português ou inglês.", color = theme.textSecondary) }
-                    } else {
-                        if (comicLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = theme.accent) }
-                        items(shownComics, key = { it.id }) { comic ->
-                            val metaLine = remember(comic.authors, comic.publisher, comic.releaseYear, comic.pageCount) {
-                                listOfNotNull(
-                                    comic.authors.takeIf { it.isNotBlank() },
-                                    comic.publisher.takeIf { it.isNotBlank() },
-                                    comic.releaseYear.takeIf { it > 0 }?.toString(),
-                                    comic.pageCount.takeIf { it > 0 }?.let { "$it págs" }
-                                ).joinToString(" • ")
-                            }
-                            Row(Modifier.fillMaxWidth().clickable { select(comic.id) }.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                BookCover(comic.coverUrl, comic.displayTitle, spine3d = false, modifier = Modifier.size(44.dp, 66.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(comic.displayTitle, color = theme.textPrimary, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-                                    if (metaLine.isNotEmpty()) {
-                                        Text(metaLine, color = theme.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                        if (!comicLoading && shownComics.isEmpty()) item { Text("Nenhuma HQ encontrada. Tente outro título.", color = theme.textSecondary) }
-                    }
-                }
+        fun select(value: String?, portrait: String? = null) {
+            val old = if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds
+            val next = old.toMutableList()
+            if (value == null) { if (editSlot < next.size) next.removeAt(editSlot) }
+            else { if (editSlot < next.size) next[editSlot] = value else next.add(value) }
+            val clean = next.filter { it.isNotBlank() }.distinct().take(4)
+            val nextIds = if (characters) settings.profileFavoriteComicIds else clean
+            val nextCharacters = if (characters) clean else settings.profileFavoriteCharacters
+            val details = settings.profileShowcaseDetails.toMutableMap()
+            if (value != null) {
+                if (characters && portrait != null) details["character:$value"] = characterResults.firstOrNull { it.name.take(60) == value }?.let(com.example.data.ProfileShowcase::characterSnapshot) ?: portrait
+                if (!characters) byId[value]?.let { details["comic:$value"] = com.example.data.ProfileShowcase.comicSnapshot(it) }
+            }
+            val retained = details.filterKeys { key -> nextIds.any { key == "comic:$it" } || nextCharacters.any { key == "character:$it" } }
+            onUpdateShowcase(nextIds, nextCharacters, retained); close()
+        }
+        val excluded = (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds)
+            .filterIndexed { index, _ -> index != editSlot }.toSet()
+        val preferredLang = if ("PT" in settings.searchLanguage) "PT" else "EN"
+        val shownComics = remember(candidates, excluded, query, preferredLang) {
+            val available = candidates.filter { it.id !in excluded }
+            if (query.isBlank()) {
+                available.take(80)
+            } else {
+                com.example.data.CatalogSearchPolicy.filterAndRankForQuery(
+                    available,
+                    query,
+                    preferredLang
+                ).take(80)
             }
         }
+        val filteredCharacters = remember(characterResults, excluded) {
+            characterResults.filter { it.name.take(60) !in excluded }
+        }
+        FavoriteSelectionSheet(
+            characters = characters,
+            query = query,
+            onQueryChange = { query = it },
+            hasCurrentSelection = editSlot < (if (characters) settings.profileFavoriteCharacters else settings.profileFavoriteComicIds).size,
+            characterLoading = characterLoading,
+            characterError = characterError,
+            characterResults = filteredCharacters,
+            comicLoading = comicLoading,
+            shownComics = shownComics,
+            onSelect = { value, portrait -> select(value, portrait) },
+            onClose = close
+        )
     }
 }
 

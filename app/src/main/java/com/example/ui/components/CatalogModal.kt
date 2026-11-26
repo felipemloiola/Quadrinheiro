@@ -155,7 +155,7 @@ fun CatalogSheetModal(
     onDismiss: () -> Unit,
     onShareComic: (ComicEntry, SocialShareCardType, String?) -> Unit = { _, _, _ -> },
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
-    onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null
+    onLogin: () -> Unit = {}, closeTag:String="modal_cancel_button",onRegisterFromPage:((ComicEntry)->Unit)?=null,isRegistrationOverlayOpen:Boolean=false
 ) {
     val motion by androidx.compose.runtime.rememberUpdatedState(com.example.ui.theme.LocalAppMotion.current)
     val mat = LocalAppleMaterials.current
@@ -208,7 +208,7 @@ fun CatalogSheetModal(
         moments = draftMoments
     )
 
-    if (fullPage) {
+    if (false && fullPage) {
         val currentSnapshot = snapshotDraftComic()
         com.example.ui.screens.ComicDetailDialog(currentSnapshot, readerProfile, allUserComics,
             onClose = { fullPage = false },
@@ -727,6 +727,39 @@ fun CatalogSheetModal(
             }
         }
     }
+    if (fullPage) {
+        val currentSnapshot = snapshotDraftComic()
+        com.example.ui.screens.ComicDetailDialog(
+            comic = currentSnapshot,
+            profile = readerProfile,
+            library = allUserComics,
+            onClose = { fullPage = false },
+            onRegister = { next ->
+                if (onRegisterFromPage != null) {
+                    onRegisterFromPage(next)
+                } else {
+                    fullPage = false
+                    draftComic = next
+                    draftTitle = next.title
+                    draftAuthors = next.authors
+                    draftStatus = next.status
+                    draftCurrentPage = next.currentPage
+                    draftRating = next.rating
+                    draftFavorite = next.favorite
+                    draftReview = next.review
+                    draftReadDate = next.readDate
+                    draftRereadCount = next.rereadCount
+                    draftTags = next.tags
+                    draftMoments = next.moments
+                }
+            },
+            onCover = { draftComic = draftComic.copy(coverUrl = it) },
+            onLogin = onLogin,
+            onShare = { onShareComic(snapshotDraftComic(), SocialShareCardType.COMPLETED_READING, null) },
+            useDialogWindow = false,
+            isExternalOverlayOpen = isRegistrationOverlayOpen
+        )
+    }
 }
 
 /**
@@ -751,14 +784,14 @@ fun ComicInfoSynopsisSheetModal(
     readerProfile: com.example.model.ReaderProfile = com.example.model.ReaderProfile(),
     onLogin: () -> Unit = {},
     onCoverSelected: (ComicEntry, String) -> Unit = { _, _ -> },
-    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },onDeleteRegistration:(String)->Unit = {}
+    onSaveRegistration:(ComicEntry)->Unit = { onOpenCatalogWithStatus(it,it.status) },onDeleteRegistration:(String)->Unit = {},isRegistrationOverlayOpen:Boolean = false
 ) {
     var expanded by remember {mutableStateOf(false)}
     CatalogSheetModal(selectedComic=savedEntry ?: comic,isExistingInShelf=savedEntry!=null,isSheetExpanded=expanded,
         appSettings=appSettings,allUserComics=allUserComics,onlineSequencePool=onlineSequencePool,
         onSelectSequenceComic=onSelectSequenceComic,onUpdateComic={},onToggleExpand={expanded=!expanded},onSetExpanded={expanded=it},
         onSave=onSaveRegistration,onDelete=onDeleteRegistration,onDismiss=onDismiss,onShareComic=onShareComic,
-        readerProfile=readerProfile,onLogin=onLogin,closeTag="synopsis_close_button",onRegisterFromPage={next->
+        readerProfile=readerProfile,onLogin=onLogin,closeTag="synopsis_close_button",isRegistrationOverlayOpen=isRegistrationOverlayOpen,onRegisterFromPage={next->
             val saved=com.example.model.catalogEntryForEditing(next,allUserComics)
             if(saved!=null)onEditSavedComic(saved) else onOpenCatalogWithStatus(next,ReadingStatus.READ)
         })
@@ -835,7 +868,7 @@ fun ManualEntrySheetModal(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = s.textSecondary,
-                            modifier = Modifier.clickable { sheet.dismiss() }
+                            modifier = Modifier.heightIn(min = 48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Cancelar nova edição") { sheet.dismiss() }.padding(horizontal = 8.dp, vertical = 12.dp)
                         )
                         Text(
                             text = "Nova edição manual",
@@ -850,7 +883,9 @@ fun ManualEntrySheetModal(
                             color = s.accentColor,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(99.dp))
-                                .clickable { onSave() }
+                                .heightIn(min = 48.dp)
+                                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Salvar nova edição") { onSave() }
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
