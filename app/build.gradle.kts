@@ -77,7 +77,9 @@ android {
   }
 }
 
+val robolectricRepositoryUrl = providers.gradleProperty("robolectricRepositoryUrl")
 tasks.withType<Test>().configureEach {
+  robolectricRepositoryUrl.orNull?.let { systemProperty("robolectric.dependency.repo.url", it) }
   failFast = true
   timeout.set(Duration.ofMinutes(8))
   testLogging {
