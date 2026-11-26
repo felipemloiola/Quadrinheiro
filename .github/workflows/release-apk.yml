@@ -74,10 +74,32 @@ jobs:
       - name: Integrate updater and release version inputs
         run: python3 .github/scripts/configure_android_release.py
       - name: Version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          previous_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          previous_manifest="$RUNNER_TEMP/quadrinheiro-previous-update.json"
+          gh release download "$previous_tag" --repo "$GITHUB_REPOSITORY" --pattern update.json --output "$previous_manifest"
+          version_code=$(node - "$previous_manifest" <<'JS'
+          const { readFileSync } = require("node:fs");
+          const previous = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const certificate = readFileSync("docs/release-signing-sha256.txt", "utf8").trim().toLowerCase();
+          if (previous.applicationId !== "com.aistudio.quadrinheiro.lqglas" ||
+              previous.certificateSha256?.toLowerCase() !== certificate ||
+              !Number.isSafeInteger(previous.versionCode) || previous.versionCode < 1) {
+            throw new Error("The latest public release has an invalid Android update manifest.");
+          }
+          const code = Math.max(1000 + Number(process.env.GITHUB_RUN_NUMBER), previous.versionCode + 1);
+          if (!Number.isSafeInteger(code) || code > 2147483647) {
+            throw new Error("The next Android version code is out of range.");
+          }
+          console.log(code);
+          JS
+          )
+          echo "VERSION_CODE=$version_code" >> "$GITHUB_ENV"
           echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=v1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "PREVIOUS_RELEASE_TAG=$previous_tag" >> "$GITHUB_ENV"
       - name: Verify protected catalog service
         run: node --test catalog-service/test/*.test.cjs
       - name: Discover tests and assemble signed release
@@ -160,11 +182,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then echo '::error::Esta versão já foi publicada. Não sobrescrever APKs de uma versão existente.'; exit 1; fi
-          if gh release view --json tagName --jq .tagName > "$RUNNER_TEMP/latest-tag.txt" 2>/dev/null; then
-            latest=$(cat "$RUNNER_TEMP/latest-tag.txt")
-            if [[ "$latest" =~ ^v1\.0\.([0-9]+)$ ]]; then test "$GITHUB_RUN_NUMBER" -gt "${BASH_REMATCH[1]}" || { echo '::error::Não publicar versão anterior à atual.'; exit 1; }; fi
-          fi
-          gh release create "$RELEASE_TAG" dist/quadrinheiro.apk dist/update.json dist/SHA256SUMS.txt --target "$GITHUB_SHA" --title "Quadrinheiro $VERSION_NAME" --generate-notes
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$latest" = "$PREVIOUS_RELEASE_TAG" || { echo '::error::A versão pública mudou durante o build. Reexecute para recalcular o código Android.'; exit 1; }
+          if [[ "$latest" =~ ^v1\.0\.([0-9]+)$ ]]; then test "$GITHUB_RUN_NUMBER" -gt "${BASH_REMATCH[1]}" || { echo '::error::Não publicar versão anterior à atual.'; exit 1; }; fi
+          gh release create "$RELEASE_TAG" dist/quadrinheiro.apk dist/update.json dist/SHA256SUMS.txt --target "$GITHUB_SHA" --title "Quadrinheiro $VERSION_NAME" --generate-notes --latest
       - name: Delete temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/quadrinheiro-release.p12" "$RUNNER_TEMP/release-cert.der" app/google-services.json
