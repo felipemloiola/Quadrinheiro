@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -192,39 +194,61 @@ class PersonalCurationUiTest {
         compose.onNode(hasClickAction() and hasText(catalogComic.displayTitle)).assertIsDisplayed()
     }
     @Test fun focusEditorKeepsArtworkChangesInTheDraftUntilConfirmed() {
-        val items = library.map(ListComic::from).map {
-            it.copy(cover = "android.resource://android/${android.R.drawable.ic_menu_gallery}")
+        val editions = library.mapIndexed { index, comic ->
+            comic.copy(title = "Batman Absoluto (2024) ${index + 1}",
+                coverUrl = "android.resource://android/${android.R.drawable.ic_menu_gallery}")
         }
+        val items = editions.map(ListComic::from)
         val withoutCover = ListComic.from(library.first().copy(id = "without-cover"))
-        val list = ComicList(name = "Capa ajustável", items = items + withoutCover)
+        val list = ComicList(name = "Capa ajustável", items = items + withoutCover, coverKey = items[1].key)
         compose.runOnIdle { scope.launch { controller.save(list) } }
         compose.waitUntil(10000) { controller.state.value.lists.any { it.id == list.id } }
         compose.setContent {QuadrinheiroTheme(settings=AppSettings(reduceMotion=true,reduceTransparency=true)) {
-            PersonalListsScreen(library, controller, {}, {}, {})
+            PersonalListsScreen(editions, controller, {}, {}, {})
         }}
         compose.onNode(hasClickAction() and hasText(list.name)).performClick()
-        compose.onNodeWithContentDescription("Opções da lista").performClick()
+        compose.onNodeWithText("Editar").performClick()
         compose.onNodeWithText("Escolher capa").performClick()
         compose.onNodeWithTag("list_cover_choice_${withoutCover.key}").assertDoesNotExist()
-        compose.onNodeWithTag("list_cover_choice_${items.last().key}").performClick()
+
+        val firstEdition = compose.onNodeWithTag("list_cover_choice_${items[0].key}")
+        val secondEdition = compose.onNodeWithTag("list_cover_choice_${items[1].key}")
+        secondEdition.assertIsSelected()
+        firstEdition.assertIsNotSelected().performClick()
         compose.onNodeWithText("Ajustar capa").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Enquadramento da capa.",substring=true).performTouchInput {
+        compose.onAllNodesWithContentDescription("Fechar").onLast().performClick()
+        secondEdition.assertIsSelected()
+        firstEdition.assertIsNotSelected().performClick()
+
+        val crop = compose.onNodeWithContentDescription("Enquadramento da capa.", substring = true)
+        crop.performTouchInput {
             down(0,androidx.compose.ui.geometry.Offset(centerX-25,centerY))
             down(1,androidx.compose.ui.geometry.Offset(centerX+25,centerY))
             moveTo(0,androidx.compose.ui.geometry.Offset(centerX-70,centerY-20),delayMillis=120)
             moveTo(1,androidx.compose.ui.geometry.Offset(centerX+70,centerY-20),delayMillis=120)
             up(0);up(1)
         }
-        assertEquals("", storage.load("guest_local").lists.single().coverKey)
+        val zoomLabel = crop.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertNotEquals("Zoom 100%", zoomLabel)
+        assertEquals(items[1].key, storage.load("guest_local").lists.single().coverKey)
         compose.onNodeWithText("Usar capa").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Ajustar capa").fetchSemanticsNodes().isEmpty() }
-        assertEquals("", storage.load("guest_local").lists.single().coverKey)
+        assertEquals(items[1].key, storage.load("guest_local").lists.single().coverKey)
         compose.onNodeWithText("Salvar lista").performClick()
-        compose.waitUntil(10000) { controller.state.value.lists.single().coverKey == items.last().key }
+        compose.waitUntil(10000) { controller.state.value.lists.single().coverKey == items[0].key }
+        compose.waitUntil(5000) { compose.onAllNodesWithText("Salvar lista").fetchSemanticsNodes().isEmpty() }
         val saved = storage.load("guest_local").lists.single()
-        assertEquals(items.last().key, saved.coverKey)
+        assertEquals(items[0].key, saved.coverKey)
         assertTrue(saved.coverZoom > 1f)
         assertEquals(items + withoutCover, saved.items)
+
+        compose.onNodeWithText("Editar").performClick()
+        compose.onNodeWithText("Escolher capa").performClick()
+        secondEdition.assertIsNotSelected()
+        firstEdition.assertIsSelected().performClick()
+        crop.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, zoomLabel))
+        val actions = crop.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        assertEquals(4, actions.size)
     }
     @Test fun singleBookFeaturedListStaysCompact() {
         val list=ComicList(name="Uma HQ",items=listOf(ListComic.from(library.first())))

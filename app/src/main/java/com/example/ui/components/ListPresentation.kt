@@ -3,9 +3,15 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -24,10 +30,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -174,42 +184,114 @@ internal fun ListDetailSheet(list: ComicList, onClose: () -> Unit, onComic: (Com
     }
 }
 
+private val coverPickerPadding = 20.dp
+private val coverPickerSpacing = 16.dp
+private val coverChoicePadding = 12.dp
+private const val coverGridTitleLines = 2
+
 @Composable
-internal fun ListArtworkEditor(list:ComicList,onApply:(ComicList)->Unit,onClose:()->Unit) {
-    var selected by remember(list.id){mutableStateOf<ComicList?>(null)}
-    val t=LocalIOS27Theme.current
-    val pickerPanel=rememberCurationPanelState()
-    val coverRows = remember(list.items) { list.items.filter { it.cover.isNotBlank() }.chunked(2) }
+internal fun ListArtworkEditor(list: ComicList, onApply: (ComicList) -> Unit, onClose: () -> Unit) {
+    var selected by remember(list.id) { mutableStateOf<ComicList?>(null) }
+    val t = LocalIOS27Theme.current
+    val pickerPanel = rememberCurationPanelState()
+    val covers = remember(list.items) { list.items.filter { it.cover.isNotBlank() } }
     val currentCoverKey = remember(list.items, list.coverKey) { list.coverItem()?.key }
-    CurationSheet("Escolher capa",onClose,panel=pickerPanel) {
-        LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-            item {Text("Use uma HQ desta lista",color=t.textSecondary)}
-            items(coverRows,key={it.first().key}) {pair ->
-                Row(horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-                    pair.forEach {entry ->
-                        val isCurrent = currentCoverKey == entry.key
-                        val shape=RoundedCornerShape(18.dp)
-                        Column(Modifier.weight(1f).testTag("list_cover_choice_${entry.key}").clip(shape).contentMaterialSurface(shape)
-                            .then(if(isCurrent)Modifier.border(1.dp,t.textPrimary.copy(alpha=.6f),shape) else Modifier)
-                            .selectable(selected=isCurrent,enabled=pickerPanel.request==0,role=Role.RadioButton) {
-                            selected=if(list.coverKey==entry.key)list else list.copy(coverKey=entry.key,coverX=.5f,coverY=.5f,coverZoom=1f)
-                        }.semantics {stateDescription=if(isCurrent)"Capa atual" else "Usar esta capa"}.padding(12.dp)) {
-                            Box(Modifier.fillMaxWidth().aspectRatio(2f/3f)) {
-                                BookCover(entry.cover,entry.title,spine3d=false,modifier=Modifier.fillMaxSize().clearAndSetSemantics {})
-                                if(isCurrent) Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(26.dp)
-                                    .background(t.bgPrimary,androidx.compose.foundation.shape.CircleShape).padding(5.dp)) {
-                                    Icon(Icons.Default.Check,null,tint=t.textPrimary,modifier=Modifier.fillMaxSize())
-                                }
-                            }
-                            Text(entry.title,color=t.textPrimary,fontSize=14.sp,lineHeight=20.sp,fontWeight=FontWeight.Medium,modifier=Modifier.fillMaxWidth().padding(top=10.dp),minLines=2,maxLines=2,overflow=TextOverflow.Ellipsis)
+    CurationSheet("Escolher capa", onClose, panel = pickerPanel) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val textMeasurer = rememberTextMeasurer(cacheSize = 0)
+            val titleStyle = LocalTextStyle.current.merge(
+                TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+            )
+            val gridTitleWidth = with(LocalDensity.current) {
+                val gridWidth = constraints.maxWidth - 2 * coverPickerPadding.roundToPx()
+                (gridWidth - coverPickerSpacing.roundToPx()) / 2 - 2 * coverChoicePadding.roundToPx()
+            }
+            val useGrid = remember(covers, textMeasurer, titleStyle, gridTitleWidth) {
+                gridTitleWidth > 0 && covers.all { entry ->
+                    !textMeasurer.measure(
+                        entry.title,
+                        style = titleStyle,
+                        maxLines = coverGridTitleLines,
+                        constraints = Constraints(maxWidth = gridTitleWidth)
+                    ).hasVisualOverflow
+                }
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(if (useGrid) 2 else 1),
+                modifier = Modifier.fillMaxSize().selectableGroup(),
+                contentPadding = PaddingValues(coverPickerPadding),
+                horizontalArrangement = Arrangement.spacedBy(coverPickerSpacing),
+                verticalArrangement = Arrangement.spacedBy(coverPickerSpacing)
+            ) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text("Use uma HQ desta lista", color = t.textSecondary)
+                }
+                items(covers, key = { it.key }) { entry ->
+                    ListArtworkChoice(
+                        entry = entry,
+                        isCurrent = currentCoverKey == entry.key,
+                        enabled = pickerPanel.request == 0,
+                        useGrid = useGrid,
+                        titleStyle = titleStyle
+                    ) {
+                        selected = if (list.coverKey == entry.key) list else {
+                            list.copy(coverKey = entry.key, coverX = .5f, coverY = .5f, coverZoom = 1f)
                         }
                     }
-                    if(pair.size==1)Spacer(Modifier.weight(1f))
                 }
             }
         }
     }
-    selected?.let {cover -> CurationSubpage {
-        ListCoverCropDialog(cover,{onApply(it);onClose()},{selected=null})
-    }}
+    selected?.let { cover ->
+        CurationSubpage {
+            ListCoverCropDialog(cover, { onApply(it); onClose() }, { selected = null })
+        }
+    }
+}
+
+@Composable
+private fun ListArtworkChoice(
+    entry: ListComic,
+    isCurrent: Boolean,
+    enabled: Boolean,
+    useGrid: Boolean,
+    titleStyle: TextStyle,
+    onClick: () -> Unit
+) {
+    val t = LocalIOS27Theme.current
+    val shape = RoundedCornerShape(18.dp)
+    val card = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        .testTag("list_cover_choice_${entry.key}").clip(shape).contentMaterialSurface(shape)
+        .then(if (isCurrent) Modifier.border(1.dp, t.textPrimary.copy(alpha = .6f), shape) else Modifier)
+        .selectable(selected = isCurrent, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        .semantics { stateDescription = if (isCurrent) "Capa atual" else "Usar esta capa" }
+        .padding(coverChoicePadding)
+    if (useGrid) {
+        Column(card, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ListArtworkThumbnail(entry, isCurrent, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+            Text(
+                entry.title, Modifier.fillMaxWidth(), color = t.textPrimary, style = titleStyle,
+                minLines = coverGridTitleLines, maxLines = coverGridTitleLines
+            )
+        }
+    } else {
+        Row(card, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ListArtworkThumbnail(entry, isCurrent, Modifier.size(48.dp, 72.dp))
+            Text(entry.title, Modifier.weight(1f), color = t.textPrimary, style = titleStyle)
+        }
+    }
+}
+
+@Composable
+private fun ListArtworkThumbnail(entry: ListComic, isCurrent: Boolean, modifier: Modifier) {
+    val t = LocalIOS27Theme.current
+    Box(modifier) {
+        BookCover(entry.cover, entry.title, spine3d = false, modifier = Modifier.fillMaxSize().clearAndSetSemantics {})
+        if (isCurrent) {
+            Box(Modifier.align(Alignment.TopEnd).padding(5.dp).size(26.dp)
+                .background(t.bgPrimary, CircleShape).padding(5.dp)) {
+                Icon(Icons.Default.Check, null, tint = t.textPrimary, modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
 }
